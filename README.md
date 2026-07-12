@@ -2,6 +2,8 @@
 
 Customer-owned Supabase continuity and recovery. This repository contains the public landing page, evidence archive, technical diagrams, and the customer-run recovery utility.
 
+Live site: [https://portabase.dev](https://portabase.dev)
+
 ## Run locally
 
 ```powershell
@@ -15,7 +17,18 @@ npm run dev
 npm run build
 ```
 
-The static output is written to `dist/` and is ready for Cloudflare Pages.
+The static output is written to `dist/` and deployed to the isolated Netlify site behind Cloudflare DNS.
+
+## Deploy the landing page
+
+The repository is bound locally to the isolated Netlify project `portabase-dev`; `.netlify/state.json` is ignored. After a successful build:
+
+```powershell
+netlify status
+netlify deploy --prod --dir dist
+```
+
+Always confirm that `netlify status` reports `https://portabase.dev` before deploying. The explicit `netlify.toml` build/publish contract prevents the parent workspace's unrelated Netlify binding from determining this project's output.
 
 ## Square checkout
 

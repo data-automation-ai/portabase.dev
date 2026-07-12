@@ -5,12 +5,14 @@ dist/
 .env.*.local
 .env.aws.local
 .env.sandbox.local
-.secrets-map.json
+.secrets-map*.json
+.env.cloudflare.local
 portabase.config.json
 portabase-capsules/
 portabase-status/
 .portabase-sandbox-destination/
 .portabase/
+.netlify/
 supabase/.temp/
 research/evidence/original-attachments/
 *.log
