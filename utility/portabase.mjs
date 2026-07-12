@@ -60,8 +60,9 @@ async function ask(prompt, fallback = '') {
 
 async function loadConfig(path = flag('config', CONFIG_NAME)) {
   const fullPath = resolve(path);
-  if (!existsSync(fullPath)) throw new Error(`Config not found: ${fullPath}. Run "portabase init" first.`);
-  const config = JSON.parse(await readFile(fullPath, 'utf8'));
+  const runtime = process.env.PORTABASE_RUNTIME_CONFIG;
+  if (!existsSync(fullPath) && !runtime) throw new Error(`Config not found: ${fullPath}. Run "portabase init" first.`);
+  const config = runtime ? JSON.parse(runtime) : JSON.parse(await readFile(fullPath, 'utf8'));
   if (!config.projectRef) throw new Error('Config is missing projectRef.');
   if (!config.provider?.type) throw new Error('Config is missing provider.type.');
   return { path: fullPath, config };
@@ -434,7 +435,13 @@ async function transferCapsule(config, capsuleDir) {
   if (!resolveTool(upload[0])) throw new Error(`${upload[0]} CLI is not installed.`);
   await run(resolveTool(upload[0]), upload[1]);
   const verifyRemote = providerVerifyCommand(config, capsuleDir);
-  if (verifyRemote) await run(resolveTool(verifyRemote[0]), verifyRemote[1]);
+  if (verifyRemote && config.provider.type === 'aws') {
+    const result = spawnSync(resolveTool(verifyRemote[0]), verifyRemote[1], { encoding: 'utf8', windowsHide: true });
+    if (result.status !== 0) throw new Error(result.stderr || 'S3 destination verification failed.');
+    if (result.stdout.trim()) throw new Error('S3 destination differs from the local capsule after upload.');
+  } else if (verifyRemote) {
+    await run(resolveTool(verifyRemote[0]), verifyRemote[1]);
+  }
   return { destination: providerRemote(config, capsuleDir), verified: Boolean(verifyRemote) };
 }
 
@@ -554,6 +561,17 @@ async function openCapsule(capsuleDir, passphrase) {
   return { metadata, manifest, extracted, temp };
 }
 
+async function materializeCapsule(value) {
+  if (!String(value).startsWith('s3://')) return { capsuleDir: resolve(value), cleanup: null };
+  const aws = resolveTool('aws');
+  if (!aws) throw new Error('AWS CLI is required to retrieve an S3 recovery capsule.');
+  const temp = await mkdtemp(join(tmpdir(), 'portabase-s3-'));
+  const capsuleDir = join(temp, 'capsule');
+  await mkdir(capsuleDir);
+  await run(aws, ['s3', 'cp', value, capsuleDir, '--recursive', '--only-show-errors', '--checksum-mode', 'ENABLED']);
+  return { capsuleDir, cleanup: temp };
+}
+
 function targetFetch(path, options = {}) {
   const url = projectBaseUrl(process.env.PORTABASE_TARGET_SUPABASE_URL);
   const key = process.env.PORTABASE_TARGET_SERVICE_ROLE_KEY;
@@ -608,9 +626,10 @@ async function restoreFunctions(extracted, manifest, targetRef) {
 }
 
 async function restore() {
-  const capsuleDir = resolve(flag('capsule', argv[1] || '.'));
-  const opened = await openCapsule(capsuleDir, process.env.PORTABASE_ENCRYPTION_PASSPHRASE);
+  const materialized = await materializeCapsule(flag('capsule', argv[1] || '.'));
+  let opened;
   try {
+    opened = await openCapsule(materialized.capsuleDir, process.env.PORTABASE_ENCRYPTION_PASSPHRASE);
     const { manifest, metadata, extracted } = opened;
     console.log(`PortaBase guarded recovery plan\n\nSource: ${manifest.projectRef}\nCapsule: ${metadata.id}\nCapture status: ${manifest.status}\n`);
     for (const name of ['database', 'storage', 'functions']) {
@@ -632,7 +651,8 @@ async function restore() {
     await restoreFunctions(extracted, manifest, targetRef);
     console.log('\nRESTORE DATA PATH COMPLETE. Finish and verify the listed manual configuration before cutover.');
   } finally {
-    await rm(opened.temp, { recursive: true, force: true });
+    if (opened) await rm(opened.temp, { recursive: true, force: true });
+    if (materialized.cleanup) await rm(materialized.cleanup, { recursive: true, force: true });
   }
 }
 

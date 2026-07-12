@@ -1,0 +1,400 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Customer-owned PortaBase AWS Recovery vault, scheduled backup runner, and guarded restore workspace.
+
+Parameters:
+  ProjectRef:
+    Type: String
+    AllowedPattern: '^[a-z0-9]{20}$'
+    Description: Source Supabase project reference.
+  ContainerImage:
+    Type: String
+    Description: Immutable PortaBase runner image URI, preferably pinned by digest.
+  SourceSecretArn:
+    Type: String
+    Description: Secrets Manager JSON secret containing the required source and encryption fields.
+  TargetSecretArn:
+    Type: String
+    Description: Secrets Manager JSON secret reserved for a fresh recovery target. It may contain placeholders until a drill or incident.
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Private subnets with NAT or public subnets that can reach Supabase, S3, ECR, Logs, KMS, and Secrets Manager.
+  AssignPublicIp:
+    Type: String
+    Default: DISABLED
+    AllowedValues: [ENABLED, DISABLED]
+  ScheduleExpression:
+    Type: String
+    Default: rate(6 hours)
+  CapsulePrefix:
+    Type: String
+    Default: capsules
+    AllowedPattern: '^[A-Za-z0-9/_-]+$'
+  RetentionDays:
+    Type: Number
+    Default: 90
+    MinValue: 7
+  ObjectLockMode:
+    Type: String
+    Default: Disabled
+    AllowedValues: [Disabled, Governance]
+  ObjectLockDays:
+    Type: Number
+    Default: 7
+    MinValue: 1
+  AlertEmail:
+    Type: String
+    Default: ''
+    Description: Optional customer email for alarm subscription confirmation.
+  TaskCpu:
+    Type: String
+    Default: '1024'
+    AllowedValues: ['512', '1024', '2048', '4096']
+  TaskMemory:
+    Type: String
+    Default: '4096'
+    AllowedValues: ['1024', '2048', '3072', '4096', '5120', '8192', '16384']
+
+Conditions:
+  UseObjectLock: !Equals [!Ref ObjectLockMode, Governance]
+  HasAlertEmail: !Not [!Equals [!Ref AlertEmail, '']]
+
+Resources:
+  RecoveryKey:
+    Type: AWS::KMS::Key
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: !Sub PortaBase recovery vault key for ${ProjectRef}
+      EnableKeyRotation: true
+      PendingWindowInDays: 30
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AccountAdministration
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:root
+            Action: 'kms:*'
+            Resource: '*'
+
+  RecoveryKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub alias/portabase-${ProjectRef}
+      TargetKeyId: !Ref RecoveryKey
+
+  RecoveryBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt RecoveryKey.Arn
+            BucketKeyEnabled: true
+      VersioningConfiguration:
+        Status: Enabled
+      ObjectLockEnabled: !If [UseObjectLock, true, !Ref AWS::NoValue]
+      ObjectLockConfiguration: !If
+        - UseObjectLock
+        - ObjectLockEnabled: Enabled
+          Rule:
+            DefaultRetention:
+              Mode: GOVERNANCE
+              Days: !Ref ObjectLockDays
+        - !Ref AWS::NoValue
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      LifecycleConfiguration:
+        Rules:
+          - Id: CapsuleLifecycle
+            Status: Enabled
+            Prefix: !Sub ${CapsulePrefix}/
+            ExpirationInDays: !Ref RetentionDays
+            NoncurrentVersionExpiration:
+              NoncurrentDays: !Ref RetentionDays
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+
+  RecoveryBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref RecoveryBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt RecoveryBucket.Arn
+              - !Sub ${RecoveryBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub portabase-${ProjectRef}
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+
+  TaskSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Egress-only PortaBase recovery runner
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Sub /portabase/${ProjectRef}
+      RetentionInDays: 90
+
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: !Sub PortaBase ${ProjectRef}
+      KmsMasterKeyId: alias/aws/sns
+
+  AlertSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlertEmail
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: ReadInjectedSecrets
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: [!Ref SourceSecretArn, !Ref TargetSecretArn]
+              - Effect: Allow
+                Action: kms:Decrypt
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub secretsmanager.${AWS::Region}.${AWS::URLSuffix}
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: RecoveryVaultAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [s3:ListBucket, s3:GetBucketVersioning]
+                Resource: !GetAtt RecoveryBucket.Arn
+              - Effect: Allow
+                Action: [s3:GetObject, s3:GetObjectVersion, s3:PutObject]
+                Resource: !Sub ${RecoveryBucket.Arn}/${CapsulePrefix}/*
+              - Effect: Allow
+                Action: [kms:Encrypt, kms:Decrypt, kms:GenerateDataKey, kms:DescribeKey]
+                Resource: !GetAtt RecoveryKey.Arn
+
+  BackupTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub portabase-backup-${ProjectRef}
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      EphemeralStorage: { SizeInGiB: 50 }
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
+      ContainerDefinitions:
+        - Name: portabase
+          Image: !Ref ContainerImage
+          Essential: true
+          Command: [backup]
+          Environment:
+            - Name: PORTABASE_RUNTIME_CONFIG
+              Value: !Sub |
+                {"version":2,"projectRef":"${ProjectRef}","backupDirectory":"/work/capsules","statusDirectory":"/work/status","provider":{"type":"aws","bucket":"${RecoveryBucket}","prefix":"${CapsulePrefix}"},"capture":{"database":true,"storage":true,"functions":true},"encryption":{"passphraseEnv":"PORTABASE_ENCRYPTION_PASSPHRASE"},"retention":{"keepLast":30,"pruneAfterBackup":false}}
+          Secrets:
+            - Name: SUPABASE_DB_URL
+              ValueFrom: !Sub '${SourceSecretArn}:SUPABASE_DB_URL::'
+            - Name: SUPABASE_URL
+              ValueFrom: !Sub '${SourceSecretArn}:SUPABASE_URL::'
+            - Name: SUPABASE_SERVICE_ROLE_KEY
+              ValueFrom: !Sub '${SourceSecretArn}:SUPABASE_SERVICE_ROLE_KEY::'
+            - Name: SUPABASE_ACCESS_TOKEN
+              ValueFrom: !Sub '${SourceSecretArn}:SUPABASE_ACCESS_TOKEN::'
+            - Name: PORTABASE_ENCRYPTION_PASSPHRASE
+              ValueFrom: !Sub '${SourceSecretArn}:PORTABASE_ENCRYPTION_PASSPHRASE::'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: backup
+
+  RestoreTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub portabase-restore-${ProjectRef}
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities: [FARGATE]
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      EphemeralStorage: { SizeInGiB: 100 }
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
+      ContainerDefinitions:
+        - Name: portabase
+          Image: !Ref ContainerImage
+          Essential: true
+          Command: [help]
+          Secrets:
+            - Name: SUPABASE_ACCESS_TOKEN
+              ValueFrom: !Sub '${TargetSecretArn}:SUPABASE_ACCESS_TOKEN::'
+            - Name: PORTABASE_ENCRYPTION_PASSPHRASE
+              ValueFrom: !Sub '${SourceSecretArn}:PORTABASE_ENCRYPTION_PASSPHRASE::'
+            - Name: PORTABASE_TARGET_PROJECT_REF
+              ValueFrom: !Sub '${TargetSecretArn}:PORTABASE_TARGET_PROJECT_REF::'
+            - Name: PORTABASE_TARGET_SUPABASE_URL
+              ValueFrom: !Sub '${TargetSecretArn}:PORTABASE_TARGET_SUPABASE_URL::'
+            - Name: PORTABASE_TARGET_SERVICE_ROLE_KEY
+              ValueFrom: !Sub '${TargetSecretArn}:PORTABASE_TARGET_SERVICE_ROLE_KEY::'
+            - Name: PORTABASE_TARGET_DB_URL
+              ValueFrom: !Sub '${TargetSecretArn}:PORTABASE_TARGET_DB_URL::'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: restore
+
+  SchedulerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: scheduler.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: RunBackupTask
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ecs:RunTask
+                Resource: !Ref BackupTaskDefinition
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: [!GetAtt ExecutionRole.Arn, !GetAtt TaskRole.Arn]
+
+  BackupSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub portabase-${ProjectRef}
+      FlexibleTimeWindow: { Mode: 'OFF' }
+      ScheduleExpression: !Ref ScheduleExpression
+      State: ENABLED
+      Target:
+        Arn: !GetAtt Cluster.Arn
+        RoleArn: !GetAtt SchedulerRole.Arn
+        RetryPolicy:
+          MaximumEventAgeInSeconds: 3600
+          MaximumRetryAttempts: 2
+        EcsParameters:
+          TaskDefinitionArn: !Ref BackupTaskDefinition
+          LaunchType: FARGATE
+          PlatformVersion: LATEST
+          NetworkConfiguration:
+            AwsvpcConfiguration:
+              AssignPublicIp: !Ref AssignPublicIp
+              SecurityGroups: [!Ref TaskSecurityGroup]
+              Subnets: !Ref SubnetIds
+
+  FailureMetric:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref LogGroup
+      FilterPattern: '?"PortaBase failed" ?"PARTIAL:" ?"FAILED:"'
+      MetricTransformations:
+        - MetricNamespace: PortaBase
+          MetricName: !Sub BackupFailures-${ProjectRef}
+          MetricValue: '1'
+          DefaultValue: 0
+
+  FailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: !Sub PortaBase backup failure for ${ProjectRef}
+      Namespace: PortaBase
+      MetricName: !Sub BackupFailures-${ProjectRef}
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+
+Outputs:
+  RecoveryBucketName:
+    Value: !Ref RecoveryBucket
+  RecoveryKeyArn:
+    Value: !GetAtt RecoveryKey.Arn
+  ClusterArn:
+    Value: !GetAtt Cluster.Arn
+  BackupTaskDefinitionArn:
+    Value: !Ref BackupTaskDefinition
+  RestoreTaskDefinitionArn:
+    Value: !Ref RestoreTaskDefinition
+  BackupScheduleName:
+    Value: !Ref BackupSchedule
+  AlertTopicArn:
+    Value: !Ref AlertTopic

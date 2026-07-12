@@ -55,6 +55,6 @@ Essentials supports Google Drive, Dropbox, any compatible `rclone` remote, and l
 
 The restore command is a plan by default. Execution refuses the source project, requires a different target URL/ref, and requires `--execute --confirm-target <NEW_REF>`. Auth provider settings, API keys, external secrets, custom domains, and DNS still require explicit customer reconfiguration and verification.
 
-See [the Essentials runbook](docs/ESSENTIALS_RUNBOOK.md) and [the package architecture](docs/PACKAGE_ARCHITECTURE.md).
+See [the Essentials runbook](docs/ESSENTIALS_RUNBOOK.md), [the AWS Recovery runbook](aws/README.md), and [the package architecture](docs/PACKAGE_ARCHITECTURE.md).
 
 PortaBase is independent and is not affiliated with Supabase, Inc.

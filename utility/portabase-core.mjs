@@ -45,6 +45,10 @@ export function projectBaseUrl(value) {
 
 export function providerRemote(config, capsuleDir) {
   const provider = config.provider || {};
+  if (provider.type === 'aws') {
+    const prefix = String(provider.prefix || '').replace(/^\/+|\/+$/g, '');
+    return `s3://${provider.bucket}/${prefix ? `${prefix}/` : ''}${basename(capsuleDir)}`;
+  }
   const remote = provider.remote || (provider.type === 'google-drive' ? 'gdrive' : 'dropbox');
   const root = String(provider.path || '/PortaBase').replace(/^\/+|\/+$/g, '');
   return `${remote}:${root}/${basename(capsuleDir)}`;
@@ -57,7 +61,7 @@ export function providerCommand(config, capsuleDir) {
     case 'aws': {
       if (!provider.bucket) throw new Error('AWS provider requires bucket.');
       const target = `s3://${provider.bucket}/${prefix ? `${prefix}/` : ''}${basename(capsuleDir)}`;
-      return ['aws', ['s3', 'cp', capsuleDir, target, '--recursive', '--only-show-errors']];
+      return ['aws', ['s3', 'cp', capsuleDir, target, '--recursive', '--only-show-errors', '--checksum-algorithm', 'SHA256']];
     }
     case 'dropbox':
     case 'google-drive':
@@ -71,6 +75,9 @@ export function providerCommand(config, capsuleDir) {
 }
 
 export function providerVerifyCommand(config, capsuleDir) {
+  if (config.provider?.type === 'aws') {
+    return ['aws', ['s3', 'sync', capsuleDir, providerRemote(config, capsuleDir), '--dryrun', '--checksum-mode', 'ENABLED']];
+  }
   if (['dropbox', 'google-drive', 'rclone'].includes(config.provider?.type)) {
     return ['rclone', ['check', capsuleDir, providerRemote(config, capsuleDir), '--one-way', '--checksum']];
   }

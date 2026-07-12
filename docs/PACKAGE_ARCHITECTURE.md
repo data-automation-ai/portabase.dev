@@ -68,7 +68,7 @@ Use a dedicated customer-owned AWS account for recovery, separate from the appli
 
 ### Topology
 
-1. CloudFormation or Terraform creates the recovery account resources.
+1. The included CloudFormation template creates the recovery account resources. Customers with a Terraform standard can translate the same documented resource boundary.
 2. EventBridge Scheduler launches an ECS Fargate backup task at the configured interval.
 3. The task pulls authorized data directly from Supabase and writes encrypted capsules to S3.
 4. S3 Versioning preserves overwritten keys; lifecycle rules manage cost and retention.
@@ -115,7 +115,7 @@ At recovery time the customer still:
 | Execution | Customer machine/server | Scheduled ECS Fargate task |
 | Immutability | Encrypted append-only capsules | S3 Versioning plus optional Object Lock |
 | Monitoring | Local status and direct notification | CloudWatch metrics/logs plus SNS |
-| Infrastructure as code | Scheduler/install scripts | CloudFormation and Terraform |
+| Infrastructure as code | Scheduler/install scripts | Included CloudFormation stack |
 | Restore workspace | Customer machine | Predefined Fargate restore task |
 | Best description | Independent recovery copy | Recovery vault and restore workspace |
 

@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.env*
+.secrets-map.json
+portabase.config.json
+portabase-capsules
+portabase-status
+.portabase-sandbox-destination
+research
+public
+src

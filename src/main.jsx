@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './styles.css';
 
 const Arrow = () => <span aria-hidden="true">↗</span>;
-const checkoutUrl = import.meta.env.VITE_SQUARE_CHECKOUT_URL || 'mailto:escape@portabase.dev?subject=Purchase Portabase Escape Kit';
+const checkoutUrl = import.meta.env.VITE_SQUARE_CHECKOUT_URL || 'mailto:escape@portabase.dev?subject=Purchase PortaBase Essentials';
 
 const stories = [
   {
@@ -132,7 +132,7 @@ const auditItems = [
 ];
 
 function Logo() {
-  return <a className="logo" href="#top" aria-label="Portabase home"><span className="logo-mark"><i /><i /><i /></span><span>porta<b>base</b></span></a>;
+  return <a className="logo" href="#top" aria-label="PortaBase home"><span className="logo-mark"><i /><i /><i /></span><span>porta<b>base</b></span></a>;
 }
 
 function Header() {
@@ -257,19 +257,19 @@ function Escape() {
   return <section className="section escape" id="escape">
     <div className="shell">
       <div className="section-kicker green">THE PORTABASE ESCAPE PLAN</div>
-      <div className="escape-heading"><h2>When the front door fails,<br /><em>leave through your own.</em></h2><p>Portabase continuously assembles a recovery-ready copy of your Supabase application inside a cloud or storage account you own—then proves it can come back.</p></div>
+      <div className="escape-heading"><h2>When the front door fails,<br /><em>leave through your own.</em></h2><p>PortaBase continuously assembles an encrypted recovery copy of your Supabase application inside storage you own—without a PortaBase cloud account in the middle.</p></div>
       <div className="architecture">
         <div className="arch-node source"><small>RUNNING NORMALLY</small><b>Supabase</b><span>Database · Auth · Storage · Functions</span></div>
         <div className="arch-flow"><span>encrypted copy</span><i>→</i></div>
-        <div className="arch-node vault"><small>ONLY YOU CONTROL</small><b>Your recovery vault</b><span>AWS · GCP · Azure · Dropbox</span><div className="shield">✓</div></div>
+        <div className="arch-node vault"><small>ONLY YOU CONTROL</small><b>Your recovery vault</b><span>Google Drive · Dropbox · local/NAS · AWS S3</span><div className="shield">✓</div></div>
         <div className="arch-flow"><span>when needed</span><i>→</i></div>
         <div className="arch-node recovery"><small>FRESH RECOVERY TARGET</small><b>New Supabase</b><span>New account · New project · Restored</span></div>
       </div>
       <div className="steps">
-        <article><span>1</span><div><h3>Install without surrendering credentials</h3><p>The agent runs in your environment. Secrets are written directly to your chosen provider and never pass through Portabase.</p></div></article>
-        <article><span>2</span><div><h3>Capture the application—not just Postgres</h3><p>Database, Auth records, Storage objects, Function source, configuration inventory and checksums become one recovery capsule.</p></div></article>
-        <article><span>3</span><div><h3>Prove it with a separate restore</h3><p>Scheduled drills validate rows, policies, users, objects and endpoints. “Backup completed” is never confused with “recovery proven.”</p></div></article>
-        <article><span>4</span><div><h3>Create fresh, restore and cut over</h3><p>Create a new authorized Supabase account and empty project. Portabase pipes the database, Auth records, Storage objects and Functions into it, then helps switch your application address.</p></div></article>
+        <article><span>1</span><div><h3>Install without surrendering credentials</h3><p>The utility runs in your environment. Credentials stay in your environment and never pass through PortaBase.</p></div></article>
+        <article><span>2</span><div><h3>Capture the application—not just Postgres</h3><p>Database and Auth records, actual Storage objects, Function source, manifests and checksums become one encrypted recovery capsule.</p></div></article>
+        <article><span>3</span><div><h3>Verify more than an upload message</h3><p>PortaBase checks the destination copy, ciphertext, AES-GCM authentication and decrypted payload. A missing layer is labeled partial, never green.</p></div></article>
+        <article><span>4</span><div><h3>Create fresh, restore and cut over</h3><p>The guarded restore refuses the source project and requires an exact new target confirmation. Platform settings that cannot be exported remain on the checklist.</p></div></article>
       </div>
     </div>
   </section>;
@@ -291,7 +291,7 @@ function Audit() {
         {!started ? <div className="audit-placeholder"><div className="radar"><i /><i /><i /><b>?</b></div><span>8 questions. One uncomfortable answer.</span></div> : <>
           <div className="score-line"><div><span>RECOVERY SCORE</span><b>{score}<small>/100</small></b></div><strong className={`risk risk-${label.toLowerCase().replace(' ', '-')}`}>{complete ? label : 'IN PROGRESS'}</strong></div>
           <div className="audit-list">{auditItems.map(([key, title, help], index) => <div className="audit-item" key={key}><span>{index + 1}</span><div><b>{title}</b><small>{help}</small></div><div className="choice"><button className={answers[key] === true ? 'yes selected' : 'yes'} onClick={() => toggle(key, true)}>Yes</button><button className={answers[key] === false ? 'no selected' : 'no'} onClick={() => toggle(key, false)}>No</button></div></div>)}</div>
-          {complete && <div className="audit-result"><b>{score < 63 ? 'Your current plan depends on the thing that may fail.' : 'You have a foundation. Now prove the complete recovery path.'}</b><a href="mailto:escape@portabase.dev?subject=My Portabase recovery score">Build my escape plan <Arrow /></a></div>}
+          {complete && <div className="audit-result"><b>{score < 63 ? 'Your current plan depends on the thing that may fail.' : 'You have a foundation. Now prove the complete recovery path.'}</b><a href="mailto:escape@portabase.dev?subject=My PortaBase recovery score">Build my escape plan <Arrow /></a></div>}
         </>}
       </div>
     </div>
@@ -300,29 +300,29 @@ function Audit() {
 
 function Cutover() {
   return <section className="section cutover"><div className="shell cutover-card">
-    <div><div className="section-kicker green">RAPID CUTOVER</div><h2>Don’t rewrite your app<br />during an emergency.</h2><p>Portabase can establish a customer-controlled data address before disaster. Normal traffic reaches the original project. Recovery traffic switches to the fresh Supabase project.</p><a className="button button-light" href="mailto:escape@portabase.dev?subject=Rapid Cutover">Ask about Rapid Cutover <Arrow /></a></div>
-    <div className="route-demo"><div className="route-url">data.yourcompany.com <span>YOU CONTROL THIS</span></div><div className="route-lines"><i /><i /></div><div className="route-targets"><div><small>NORMAL</small><b>Original project</b><span className="online">● Online</span></div><div><small>ESCAPE</small><b>New Supabase</b><span>Fresh recovery target</span></div></div><div className="switch"><span>Cutover armed</span><b><i /></b></div></div>
+    <div><div className="section-kicker green">TWO RECOVERY PATHS</div><h2>Same capsule.<br />Different operating model.</h2><p>Essentials uses storage you already understand. AWS Recovery pre-provisions a dedicated vault, scheduled runner, alarms and guarded restore workspace for businesses that need stronger operational controls.</p><a className="button button-light" href="mailto:escape@portabase.dev?subject=Compare PortaBase packages">Compare the two paths <Arrow /></a></div>
+    <div className="route-demo"><div className="route-url">CUSTOMER-OWNED RECOVERY <span>NO PORTABASE CLOUD ACCOUNT</span></div><div className="route-lines"><i /><i /></div><div className="route-targets"><div><small>ESSENTIALS</small><b>Drive or Dropbox</b><span className="online">● Lowest setup friction</span></div><div><small>AWS RECOVERY</small><b>S3 + Fargate</b><span>Vault and restore workspace</span></div></div><div className="switch"><span>Your credentials · Your encryption key · Your destination</span><b><i /></b></div></div>
   </div></section>;
 }
 
 function Pricing() {
   return <section className="section pricing" id="pricing"><div className="shell pricing-grid">
-    <div className="price-copy"><div className="section-kicker green">ONE-TIME MEANS ONE TIME</div><h2>Pay $47 once.<br />Not $47 a month.</h2><p>There is no recurring Portabase subscription, no renewal and no monthly Portabase bill. Install it in infrastructure you control and keep using Supabase normally.</p><div className="one-time-math"><div><small>TODAY</small><b>$47</b></div><span>+</span><div><small>EVERY MONTH AFTER</small><b>$0</b></div></div><div className="price-note"><span>Required</span><p>You provide an AWS, Google Cloud, Microsoft Azure or Dropbox account for the external capsule. During recovery, you create and pay for a fresh Supabase account/project. Those provider charges are separate and paid directly by you.</p></div></div>
+    <div className="price-copy"><div className="section-kicker green">ONE-TIME MEANS ONE TIME</div><h2>Start simply.<br />Own the exit.</h2><p>PortaBase Essentials is a one-time utility license with no renewal and no monthly PortaBase bill. Install it on a machine you control and keep using Supabase normally.</p><div className="one-time-math"><div><small>ESSENTIALS TODAY</small><b>$47</b></div><span>+</span><div><small>PORTABASE / MONTH</small><b>$0</b></div></div><div className="aws-upsell"><span>AWS RECOVERY</span><b>Need a provisioned recovery account?</b><p>CloudFormation creates the S3/KMS vault, Fargate schedule, logs, alarms and dormant restore task inside your AWS account. It is a separate one-time package sized to your recovery requirements.</p><a href="mailto:escape@portabase.dev?subject=PortaBase AWS Recovery">Request AWS Recovery pricing <Arrow /></a></div><div className="price-note"><span>Required</span><p>Essentials uses your Google Drive, Dropbox or local/NAS storage. AWS Recovery uses your AWS account. Provider usage and a fresh Supabase target are paid directly by you.</p></div></div>
     <div className="price-card">
-      <div className="price-ribbon">NO MONTHLY PORTABASE FEE</div><div className="price-top"><span>PORTABASE ESCAPE KIT</span><div><b>$47</b><small>USD · PAY ONCE</small></div><p>Self-installed continuity for one Supabase project.</p></div>
-      <ul><li><span>✓</span> AWS, GCP, Azure or Dropbox recovery vault</li><li><span>✓</span> Database, Auth, Storage and Function capture</li><li><span>✓</span> Checksums and recovery manifest</li><li><span>✓</span> Guarded restore into a new Supabase project</li><li><span>✓</span> Browser-local recovery readiness check</li><li><span>✓</span> No Portabase credential custody or telemetry</li></ul>
-      <a className="button button-primary purchase" href={checkoutUrl}>Buy the escape kit — $47 <Arrow /></a>
+      <div className="price-ribbon">NO MONTHLY PORTABASE FEE</div><div className="price-top"><span>PORTABASE ESSENTIALS</span><div><b>$47</b><small>USD · PAY ONCE</small></div><p>Customer-run recovery utility for one Supabase project.</p></div>
+      <ul><li><span>✓</span> Google Drive, Dropbox or local/NAS destination</li><li><span>✓</span> Database/Auth, Storage objects and Function capture</li><li><span>✓</span> AES-256-GCM encrypted capsules</li><li><span>✓</span> Immutable transfer and destination verification</li><li><span>✓</span> Scheduling, durable status and guarded retention</li><li><span>✓</span> Dry-run-first restore into a fresh project</li><li><span>✓</span> No PortaBase credential custody or telemetry</li></ul>
+      <a className="button button-primary purchase" href={checkoutUrl}>Buy Essentials — $47 <Arrow /></a>
       <div className="square-trust"><span>Secure checkout by <b>Square</b></span><span><b>$0/month</b> · No renewal</span></div>
     </div>
   </div></section>;
 }
 
 function ThankYou() {
-  return <div className="thanks"><div className="thanks-card"><Logo /><div className="thanks-check">✓</div><div className="section-kicker green">ONE-TIME PAYMENT COMPLETE</div><h1>Your escape plan starts now.</h1><p>Square has processed your only Portabase payment. There is no monthly renewal. Check the email used at checkout for delivery and setup instructions.</p><a className="button button-primary" href="mailto:escape@portabase.dev?subject=Portabase purchase help">I need purchase help <Arrow /></a><small>Portabase never asks you to email Supabase or cloud credentials.</small></div></div>;
+  return <div className="thanks"><div className="thanks-card"><Logo /><div className="thanks-check">✓</div><div className="section-kicker green">ONE-TIME PAYMENT COMPLETE</div><h1>Your escape plan starts now.</h1><p>Square has processed your only PortaBase payment. There is no monthly renewal. Check the email used at checkout for delivery and setup instructions.</p><a className="button button-primary" href="mailto:escape@portabase.dev?subject=PortaBase purchase help">I need purchase help <Arrow /></a><small>PortaBase never asks you to email Supabase or cloud credentials.</small></div></div>;
 }
 
 function Footer() {
-  return <footer><div className="shell footer-main"><div><Logo /><p>Your Supabase escape plan.<br />Owned by you. Proven before you need it.</p></div><div><b>EXPLORE</b><a href="#reality">The reality</a><a href="#stories">Real incidents</a><a href="#escape">Escape plan</a><a href="#audit">Risk check</a><a href="#pricing">Purchase · $47</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><span>Independent product.<br />Not affiliated with Supabase.</span><span>Payments securely processed by Square. Zero-custody refers to infrastructure credentials, not transaction records required to fulfill a purchase.</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your cloud. Your way out.</span></div></footer>;
+  return <footer><div className="shell footer-main"><div><Logo /><p>Your Supabase escape plan.<br />Owned by you. Proven before you need it.</p></div><div><b>EXPLORE</b><a href="#reality">The reality</a><a href="#stories">Real incidents</a><a href="#escape">Escape plan</a><a href="#audit">Risk check</a><a href="#pricing">Purchase · $47</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><span>Independent product.<br />Not affiliated with Supabase.</span><span>Payments securely processed by Square. Zero-custody refers to infrastructure credentials and capsule contents, not transaction records required to fulfill a purchase.</span></div></div><div className="shell footer-bottom"><span>© 2026 PortaBase</span><span>Your keys. Your cloud. Your way out.</span></div></footer>;
 }
 
 function App() {

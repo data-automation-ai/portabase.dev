@@ -9,6 +9,8 @@ import {
   encryptFile,
   isCapsuleName,
   providerCommand,
+  providerRemote,
+  providerVerifyCommand,
   projectBaseUrl,
   safeObjectPath,
   supabaseHeaders,
@@ -27,6 +29,11 @@ test('AWS upload command targets the customer bucket', () => {
   const [command, args] = providerCommand({ provider: { type: 'aws', bucket: 'customer-vault', prefix: 'prod' } }, 'C:\\capsule');
   assert.equal(command, 'aws');
   assert.ok(args.some(value => String(value).includes('s3://customer-vault/prod/')));
+  assert.ok(args.includes('SHA256'));
+  assert.match(providerRemote({ provider: { type: 'aws', bucket: 'customer-vault', prefix: 'prod' } }, 'C:\\capsule'), /^s3:\/\/customer-vault\/prod\//);
+  const [, verifyArgs] = providerVerifyCommand({ provider: { type: 'aws', bucket: 'customer-vault', prefix: 'prod' } }, 'C:\\capsule');
+  assert.ok(verifyArgs.includes('--dryrun'));
+  assert.ok(verifyArgs.includes('ENABLED'));
 });
 
 test('Dropbox upload uses customer rclone remote', () => {
