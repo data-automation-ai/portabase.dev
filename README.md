@@ -70,4 +70,6 @@ The restore command is a plan by default. Execution refuses the source project, 
 
 See [the Essentials runbook](docs/ESSENTIALS_RUNBOOK.md), [the AWS Recovery runbook](aws/README.md), and [the package architecture](docs/PACKAGE_ARCHITECTURE.md).
 
+The isolated Supabase scale-test dataset and its verified backup measurements are documented in [the mock warehouse report](docs/MOCK_WAREHOUSE.md).
+
 PortaBase is independent and is not affiliated with Supabase, Inc.
