@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "projectRef": "abcdefghijklmnopqrst",
+  "backupDirectory": "./portabase-capsules",
+  "provider": {
+    "type": "aws",
+    "bucket": "my-company-portabase",
+    "prefix": "supabase/production",
+    "region": "us-east-1"
+  },
+  "capture": {
+    "database": true,
+    "storage": true,
+    "functions": true
+  }
+}
