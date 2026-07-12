@@ -1,6 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { providerCommand, safeObjectPath } from './portabase.mjs';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  capsuleName,
+  decryptFile,
+  encryptFile,
+  isCapsuleName,
+  providerCommand,
+  projectBaseUrl,
+  safeObjectPath,
+  supabaseHeaders,
+  validateRestoreTarget,
+} from './portabase-core.mjs';
 
 test('safeObjectPath accepts nested object names', () => {
   assert.match(safeObjectPath('avatars/user/photo.jpg'), /avatars.+user.+photo\.jpg/);
@@ -20,4 +33,53 @@ test('Dropbox upload uses customer rclone remote', () => {
   const [command, args] = providerCommand({ provider: { type: 'dropbox', remote: 'mydropbox', path: '/Portabase' } }, '/tmp/capsule');
   assert.equal(command, 'rclone');
   assert.ok(args.some(value => String(value).startsWith('mydropbox:')));
+  assert.ok(args.includes('--immutable'));
+});
+
+test('modern Supabase keys are not incorrectly sent as JWT bearer tokens', () => {
+  const modern = supabaseHeaders('sb_secret_example');
+  assert.equal(modern.apikey, 'sb_secret_example');
+  assert.equal(modern.Authorization, undefined);
+  const legacy = supabaseHeaders('legacy.jwt.value');
+  assert.equal(legacy.Authorization, 'Bearer legacy.jwt.value');
+});
+
+test('project URL normalization accepts stored REST and Storage endpoint URLs', () => {
+  assert.equal(projectBaseUrl('https://project.supabase.co/rest/v1/'), 'https://project.supabase.co');
+  assert.equal(projectBaseUrl('https://project.supabase.co/storage/v1'), 'https://project.supabase.co');
+  assert.equal(projectBaseUrl('https://project.supabase.co'), 'https://project.supabase.co');
+});
+
+test('restore target guards refuse source and mismatched confirmation', () => {
+  assert.throws(() => validateRestoreTarget('source', 'source', 'source'), /source project/);
+  assert.throws(() => validateRestoreTarget('source', 'target', 'wrong'), /exactly match/);
+  assert.throws(() => validateRestoreTarget('source', 'target', 'target', 'https://other.supabase.co'), /does not match/);
+  assert.equal(validateRestoreTarget('source', 'target', 'target', 'https://target.supabase.co'), true);
+});
+
+test('capsule names are recognized only for the configured project', () => {
+  const name = capsuleName('abcdefghijklmnopqrst', new Date('2026-07-12T12:34:56.000Z'));
+  assert.equal(name, 'abcdefghijklmnopqrst-2026-07-12T12-34-56Z');
+  assert.equal(isCapsuleName('abcdefghijklmnopqrst', name), true);
+  assert.equal(isCapsuleName('different', name), false);
+  assert.equal(isCapsuleName('abcdefghijklmnopqrst', '.work-' + name), false);
+});
+
+test('encrypted capsules authenticate and reject the wrong passphrase', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'portabase-test-'));
+  try {
+    const source = join(root, 'plain.tar.gz');
+    const encrypted = join(root, 'capsule.pbase');
+    const restored = join(root, 'restored.tar.gz');
+    await writeFile(source, Buffer.from('customer-owned recovery data'));
+    const metadata = await encryptFile(source, encrypted, 'correct horse battery staple', 'capsule-id');
+    await decryptFile(encrypted, restored, 'correct horse battery staple', metadata);
+    assert.deepEqual(await readFile(restored), await readFile(source));
+    await assert.rejects(
+      decryptFile(encrypted, join(root, 'wrong.tar.gz'), 'this passphrase is definitely wrong', metadata),
+      /authenticate|Unsupported state/i,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

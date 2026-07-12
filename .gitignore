@@ -9,5 +9,8 @@ dist/
 portabase.config.json
 portabase-capsules/
 portabase-status/
+.portabase-sandbox-destination/
+.portabase/
+supabase/.temp/
 research/evidence/original-attachments/
 *.log

@@ -1,16 +1,29 @@
 {
-  "version": 1,
+  "version": 2,
   "projectRef": "abcdefghijklmnopqrst",
   "backupDirectory": "./portabase-capsules",
+  "statusDirectory": "./portabase-status",
   "provider": {
-    "type": "aws",
-    "bucket": "my-company-portabase",
-    "prefix": "supabase/production",
-    "region": "us-east-1"
+    "type": "google-drive",
+    "remote": "gdrive",
+    "path": "/PortaBase"
   },
   "capture": {
     "database": true,
     "storage": true,
     "functions": true
+  },
+  "encryption": {
+    "passphraseEnv": "PORTABASE_ENCRYPTION_PASSPHRASE"
+  },
+  "retention": {
+    "keepLast": 30,
+    "pruneAfterBackup": false
+  },
+  "schedule": {
+    "everyHours": 6
+  },
+  "alerts": {
+    "webhookEnv": "PORTABASE_ALERT_WEBHOOK_URL"
   }
 }

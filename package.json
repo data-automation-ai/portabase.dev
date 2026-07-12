@@ -1,7 +1,7 @@
 {
   "name": "portabase-dev",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "bin": {
     "portabase": "utility/portabase.mjs"
@@ -17,7 +17,8 @@
   },
   "dependencies": {
     "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react-dom": "19.2.7",
+    "supabase": "2.109.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "6.0.3",
