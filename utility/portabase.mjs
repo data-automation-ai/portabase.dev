@@ -641,7 +641,7 @@ ${secretNames?.length ? `<div class="secrets"><b>Recovery checklist: ${number(se
   await writeFile(join(capsuleDir, 'TRIAL-REPORT.html'), html);
 }
 
-async function writeChecksums(capsuleDir) {
+export async function writeChecksums(capsuleDir) {
   const files = (await listFiles(capsuleDir)).filter(path => basename(path) !== 'checksums.sha256').sort();
   const lines = [];
   for (const path of files) lines.push(`${await hashFile(path)}  ${relative(capsuleDir, path).split(sep).join('/')}`);
@@ -674,7 +674,7 @@ async function sendAlert(config, state) {
   }
 }
 
-async function transferCapsule(config, capsuleDir) {
+export async function transferCapsule(config, capsuleDir) {
   if (config.provider.type === 'local') {
     if (!config.provider.path) return { destination: capsuleDir, verified: true };
     const target = join(resolve(config.provider.path), basename(capsuleDir));

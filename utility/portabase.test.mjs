@@ -59,7 +59,8 @@ test('AWS upload command targets the customer bucket', () => {
   assert.match(providerRemote({ provider: { type: 'aws', bucket: 'customer-vault', prefix: 'prod' } }, 'C:\\capsule'), /^s3:\/\/customer-vault\/prod\//);
   const [, verifyArgs] = providerVerifyCommand({ provider: { type: 'aws', bucket: 'customer-vault', prefix: 'prod' } }, 'C:\\capsule');
   assert.ok(verifyArgs.includes('--dryrun'));
-  assert.ok(verifyArgs.includes('ENABLED'));
+  assert.ok(verifyArgs.includes('--size-only'));
+  assert.ok(!verifyArgs.includes('--checksum-mode'), 'checksum-mode is download-only in the AWS CLI and breaks upload verification');
 });
 
 test('Dropbox upload uses customer rclone remote', () => {

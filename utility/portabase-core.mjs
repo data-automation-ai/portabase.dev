@@ -87,7 +87,10 @@ export function providerCommand(config, capsuleDir) {
 
 export function providerVerifyCommand(config, capsuleDir) {
   if (config.provider?.type === 'aws') {
-    return ['aws', ['s3', 'sync', capsuleDir, providerRemote(config, capsuleDir), '--dryrun', '--checksum-mode', 'ENABLED']];
+    // --checksum-mode is download-only in the AWS CLI; upload integrity is already
+    // end-to-end verified by --checksum-algorithm SHA256 on the cp. This dry run
+    // confirms every capsule file exists at the destination at the right size.
+    return ['aws', ['s3', 'sync', capsuleDir, providerRemote(config, capsuleDir), '--dryrun', '--size-only']];
   }
   if (['dropbox', 'google-drive', 'rclone'].includes(config.provider?.type)) {
     return ['rclone', ['check', capsuleDir, providerRemote(config, capsuleDir), '--one-way', '--checksum']];
