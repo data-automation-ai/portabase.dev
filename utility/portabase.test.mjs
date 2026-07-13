@@ -9,6 +9,8 @@ import {
   decryptFile,
   editionFor,
   encryptFile,
+  formatBytes,
+  trialProtectionLedger,
   isCapsuleName,
   providerCommand,
   providerRemote,
@@ -21,6 +23,7 @@ import {
   validateDrillCapsule,
   validateRestoreTarget,
 } from './portabase-core.mjs';
+import { cleanSchemaLine } from './portabase.mjs';
 
 test('trial edition cannot be accidentally promoted by a missing flag', () => {
   assert.equal(editionFor({ trialFlag: true, environment: '' }), 'trial');
@@ -34,6 +37,18 @@ test('safeObjectPath accepts nested object names', () => {
 
 test('safeObjectPath blocks traversal', () => {
   assert.throws(() => safeObjectPath('../secret.txt'), /Unsafe object path/);
+});
+
+test('schema cleanup preserves PL/pgSQL function definitions and bodies', () => {
+  assert.equal(cleanSchemaLine('    LANGUAGE "plpgsql"'), '    LANGUAGE "plpgsql"');
+  assert.equal(cleanSchemaLine('  select * from storage.objects;'), '  select * from storage.objects;');
+  assert.equal(cleanSchemaLine('CREATE FUNCTION "public"."touch"() RETURNS trigger'), 'CREATE OR REPLACE FUNCTION "public"."touch"() RETURNS trigger');
+});
+
+test('schema cleanup filters grants only when they reference an excluded schema', () => {
+  assert.match(cleanSchemaLine('GRANT SELECT ON TABLE "auth"."users" TO "reader";'), /^-- /);
+  assert.match(cleanSchemaLine('GRANT USAGE ON SCHEMA "storage" TO "reader";'), /^-- /);
+  assert.equal(cleanSchemaLine('GRANT SELECT ON TABLE "public"."orders" TO "reader";'), 'GRANT SELECT ON TABLE "public"."orders" TO "reader";');
 });
 
 test('AWS upload command targets the customer bucket', () => {
@@ -109,6 +124,82 @@ test('capsule names are recognized only for the configured project', () => {
   assert.equal(isCapsuleName('abcdefghijklmnopqrst', name), true);
   assert.equal(isCapsuleName('different', name), false);
   assert.equal(isCapsuleName('abcdefghijklmnopqrst', '.work-' + name), false);
+});
+
+test('trial protection ledger exposes the gap between found and protected', () => {
+  const ledger = trialProtectionLedger({
+    database: { complete: true, limited: true, files: ['roles.sql', 'schema.sql'], summary: { tables: 23, rows: 48112, approximateRows: true, authUsers: 1204, policies: 6, databaseFunctions: 2, triggers: 3 } },
+    storage: { objectCount: 5, totalBytes: 51200, inventory: { bucketCount: 4, objectCount: 890, totalBytes: 3435973836 } },
+    functions: { count: 2, names: ['a', 'b'], availableCount: 7, available: ['a', 'b', 'c', 'd', 'e', 'f', 'g'], secretNames: ['STRIPE_KEY', 'RESEND_KEY'] },
+  });
+  const byLayer = Object.fromEntries(ledger.rows.map(row => [row.layer, row]));
+  assert.equal(byLayer['Database rows'].found, 48112);
+  assert.equal(byLayer['Database rows'].protected, 0);
+  assert.equal(byLayer['Database rows'].approximate, true);
+  assert.equal(byLayer['Auth users'].protected, 0);
+  assert.equal(byLayer['Storage files'].found, 890);
+  assert.equal(byLayer['Storage files'].protected, 5);
+  assert.equal(byLayer['Edge Functions'].found, 7);
+  assert.equal(byLayer['Edge Functions'].protected, 2);
+  assert.equal(byLayer['Secret values'].byDesign, true);
+  assert.deepEqual(ledger.unprotectedLayers, ['Database rows', 'Auth users', 'Storage files', 'Edge Functions']);
+});
+
+test('trial protection ledger treats secrets as by-design, never as a failure', () => {
+  const ledger = trialProtectionLedger({
+    database: { complete: true, limited: false, summary: { tables: 2, rows: 10, approximateRows: false, authUsers: 3, policies: 0, databaseFunctions: 0, triggers: 0 } },
+    storage: { objectCount: 4, totalBytes: 100, inventory: { bucketCount: 1, objectCount: 4, totalBytes: 100 } },
+    functions: { count: 1, names: ['a'], availableCount: 1, available: ['a'], secretNames: ['ONLY_SECRET'] },
+  });
+  assert.deepEqual(ledger.unprotectedLayers, []);
+  const secrets = ledger.rows.find(row => row.layer === 'Secret values');
+  assert.equal(secrets.found, 1);
+  assert.equal(secrets.protected, 0);
+});
+
+test('ledger degrades gracefully when a layer was skipped or unknown', () => {
+  const ledger = trialProtectionLedger({
+    database: { complete: false, limited: true },
+    storage: { objectCount: 0 },
+    functions: { complete: false, skipped: true, reason: 'SUPABASE_ACCESS_TOKEN not provided' },
+  });
+  const byLayer = Object.fromEntries(ledger.rows.map(row => [row.layer, row]));
+  assert.equal(byLayer['Database rows'].found, null);
+  assert.equal(byLayer['Edge Functions'].found, null);
+  assert.equal(byLayer['Secret values'].found, null);
+  assert.deepEqual(ledger.unprotectedLayers, []);
+});
+
+test('byte formatting stays human readable across magnitudes', () => {
+  assert.equal(formatBytes(0), '0 B');
+  assert.equal(formatBytes(51200), '50.0 KB');
+  assert.equal(formatBytes(3435973836), '3.2 GB');
+});
+
+test('trial report renders the full inventory ledger and never claims completeness', async () => {
+  const { writeTrialReport } = await import('./portabase.mjs');
+  const root = await mkdtemp(join(tmpdir(), 'portabase-report-'));
+  try {
+    await writeTrialReport(root, {
+      projectRef: 'abcdefghijklmnopqrst',
+      contents: {
+        database: { complete: true, limited: true, files: ['roles.sql', 'schema.sql'], summary: { tables: 23, rows: 48112, approximateRows: true, authUsers: 1204, policies: 6, databaseFunctions: 2, triggers: 3 } },
+        storage: { objectCount: 5, totalBytes: 51200, inventory: { bucketCount: 4, objectCount: 890, totalBytes: 3435973836 } },
+        functions: { count: 2, names: ['a', 'b'], availableCount: 7, available: ['a', 'b', 'c', 'd', 'e', 'f', 'g'], secretNames: ['STRIPE_KEY', '<script>alert(1)</script>'] },
+      },
+    });
+    const html = await readFile(join(root, 'TRIAL-REPORT.html'), 'utf8');
+    assert.match(html, /~48,112/);
+    assert.match(html, /890/);
+    assert.match(html, /3\.2 GB/);
+    assert.match(html, /5 of 890 Storage files/);
+    assert.match(html, /0 of ~48,112/);
+    assert.match(html, /Computed locally\. Transmitted nowhere\./);
+    assert.match(html, /STRIPE_KEY/);
+    assert.ok(!html.includes('<script>alert(1)</script>'), 'secret names must be HTML-escaped');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('encrypted capsules authenticate and reject the wrong passphrase', async () => {

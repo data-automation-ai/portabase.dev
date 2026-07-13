@@ -248,6 +248,17 @@ function registerIpc() {
     await shell.openExternal(url);
     return true;
   });
+  ipcMain.handle('portabase:open-report', async (event, reportPath) => {
+    if (!validateSender(event)) throw new Error('Untrusted renderer.');
+    if (typeof reportPath !== 'string' || reportPath.length > 2048) throw new Error('Invalid report path.');
+    const resolved = path.resolve(reportPath.trim());
+    const isTrialReport = path.basename(resolved) === 'TRIAL-REPORT.html';
+    const isEvidence = resolved.startsWith(userFile('recovery-evidence') + path.sep) && resolved.endsWith('.html');
+    if ((!isTrialReport && !isEvidence) || !existsSync(resolved)) throw new Error('Only PortaBase-generated reports can be opened.');
+    const problem = await shell.openPath(resolved);
+    if (problem) throw new Error(problem);
+    return true;
+  });
 }
 
 function createWindow() {

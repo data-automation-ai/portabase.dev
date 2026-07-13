@@ -15,9 +15,14 @@ function show(page) {
   $(page).classList.add('active');
   document.querySelector(`.nav[data-page="${page}"]`)?.classList.add('active');
 }
+let lastReportPath = null;
 function result(text, failed = false) {
   $('output').textContent = text || 'Task finished without output.';
   $('output').classList.toggle('failed', failed);
+  const match = [...String(text || '').matchAll(/(?:TRIAL REPORT|HUMAN REPORT): (.+\.html)\s*$/gm)].at(-1);
+  lastReportPath = match ? match[1].trim() : null;
+  $('openReport').hidden = !lastReportPath;
+  $('openReport').textContent = lastReportPath && lastReportPath.endsWith('TRIAL-REPORT.html') ? 'Open the trial protection ledger' : 'Open the recovery evidence report';
   show('results');
 }
 async function run(command, args, secrets) {
@@ -25,6 +30,10 @@ async function run(command, args, secrets) {
   const response = await window.portabase.run({ command, args, secrets });
   result(response.output, response.code !== 0);
 }
+$('openReport').addEventListener('click', async () => {
+  try { if (lastReportPath) await window.portabase.openReport(lastReportPath); }
+  catch (error) { $('output').textContent = `${$('output').textContent}\n\n${error.message}`; }
+});
 
 document.querySelectorAll('.nav').forEach(button => button.addEventListener('click', () => show(button.dataset.page)));
 document.querySelector('[data-pick="destination"]').addEventListener('click', async () => { $('destination').value = await window.portabase.chooseDirectory() || $('destination').value; });

@@ -31,10 +31,12 @@ import {
   providerCommand,
   providerRemote,
   providerVerifyCommand,
+  formatBytes,
   recoveryEvidenceStatus,
   safeObjectPath,
   supabaseHeaders,
   TRIAL_LIMITS,
+  trialProtectionLedger,
   validateBlankRestoreInventory,
   validateDrillCapsule,
   validateRestoreTarget,
@@ -212,7 +214,7 @@ async function captureDatabase(rawDir, limits = null) {
   await run(supabase, [...common, '--file', join(dbDir, 'schema.sql')]);
   if (!limits?.databaseSchemaOnly) await run(supabase, [...common, '--file', join(dbDir, 'data.sql'), '--use-copy', '--data-only']);
   const files = limits?.databaseSchemaOnly ? ['roles.sql', 'schema.sql'] : ['roles.sql', 'schema.sql', 'data.sql'];
-  const inventory = resolveTool('psql') ? await captureDatabaseInventory(dbUrl, join(dbDir, 'database-inventory.json')) : null;
+  const inventory = resolveTool('psql') ? await captureDatabaseInventory(dbUrl, join(dbDir, 'database-inventory.json'), { estimateRows: Boolean(limits) }) : null;
   return {
     complete: Boolean(inventory),
     reason: inventory ? null : 'Database dump captured, but psql was unavailable for exact recovery inventory.',
@@ -220,6 +222,20 @@ async function captureDatabase(rawDir, limits = null) {
     limitation: limits ? 'schema only; table rows are not included' : null,
     files,
     inventory: Boolean(inventory),
+    summary: inventorySummary(inventory),
+  };
+}
+
+function inventorySummary(inventory) {
+  if (!inventory) return null;
+  return {
+    tables: inventory.tables.length,
+    rows: inventory.tables.reduce((total, table) => total + (Number(table.rows) || 0), 0),
+    approximateRows: Boolean(inventory.approximateRows),
+    authUsers: Number(inventory.authUsers) || 0,
+    policies: Number(inventory.policies) || 0,
+    databaseFunctions: Number(inventory.databaseFunctions) || 0,
+    triggers: Number(inventory.triggers) || 0,
   };
 }
 
@@ -252,13 +268,20 @@ function psqlValue(dbUrl, sql) {
   return result.stdout.trim();
 }
 
-async function captureDatabaseInventory(dbUrl, outputPath = null) {
-  const tablesJson = psqlValue(dbUrl, `SELECT COALESCE(json_agg(json_build_object('schema', schemaname, 'name', tablename) ORDER BY schemaname, tablename), '[]'::json)::text FROM pg_catalog.pg_tables WHERE ${APPLICATION_SCHEMA_SQL};`);
-  const tables = JSON.parse(tablesJson || '[]');
-  for (const table of tables) {
-    const count = psqlValue(dbUrl, `SELECT count(*)::text FROM ${quoteIdentifier(table.schema)}.${quoteIdentifier(table.name)};`);
-    table.rows = Number(count);
-    if (!Number.isSafeInteger(table.rows) || table.rows < 0) throw new Error(`Invalid row count for ${table.schema}.${table.name}.`);
+async function captureDatabaseInventory(dbUrl, outputPath = null, { estimateRows = false } = {}) {
+  let tables;
+  if (estimateRows) {
+    const tablesJson = psqlValue(dbUrl, `SELECT COALESCE(json_agg(json_build_object('schema', schemaname, 'name', tablename, 'rows', GREATEST(c.reltuples, 0)::bigint) ORDER BY schemaname, tablename), '[]'::json)::text FROM pg_catalog.pg_tables t JOIN pg_catalog.pg_namespace n ON n.nspname = t.schemaname JOIN pg_catalog.pg_class c ON c.relnamespace = n.oid AND c.relname = t.tablename AND c.relkind IN ('r','p') WHERE ${APPLICATION_SCHEMA_SQL};`);
+    tables = JSON.parse(tablesJson || '[]');
+    for (const table of tables) table.rows = Number(table.rows) || 0;
+  } else {
+    const tablesJson = psqlValue(dbUrl, `SELECT COALESCE(json_agg(json_build_object('schema', schemaname, 'name', tablename) ORDER BY schemaname, tablename), '[]'::json)::text FROM pg_catalog.pg_tables WHERE ${APPLICATION_SCHEMA_SQL};`);
+    tables = JSON.parse(tablesJson || '[]');
+    for (const table of tables) {
+      const count = psqlValue(dbUrl, `SELECT count(*)::text FROM ${quoteIdentifier(table.schema)}.${quoteIdentifier(table.name)};`);
+      table.rows = Number(count);
+      if (!Number.isSafeInteger(table.rows) || table.rows < 0) throw new Error(`Invalid row count for ${table.schema}.${table.name}.`);
+    }
   }
   const metricSql = `SELECT json_build_object(
     'authUsers', (SELECT count(*) FROM auth.users),
@@ -268,7 +291,7 @@ async function captureDatabaseInventory(dbUrl, outputPath = null) {
     'extensions', (SELECT COALESCE(json_agg(extname ORDER BY extname), '[]'::json) FROM pg_catalog.pg_extension)
   )::text;`;
   const metrics = JSON.parse(psqlValue(dbUrl, metricSql));
-  const inventory = { capturedAt: new Date().toISOString(), tables, ...metrics };
+  const inventory = { capturedAt: new Date().toISOString(), approximateRows: estimateRows, tables, ...metrics };
   if (outputPath) await writeFile(outputPath, `${JSON.stringify(inventory, null, 2)}\n`);
   return inventory;
 }
@@ -318,8 +341,20 @@ async function transformSql(source, target, transform, prefix = '', suffix = '')
 const SCHEMA_EXCLUDES = 'information_schema|pg_*|_analytics|_realtime|_supavisor|auth|etl|extensions|pgbouncer|realtime|storage|supabase_functions|supabase_migrations|cron|dbdev|graphql|graphql_public|net|pgmq|pgsodium|pgsodium_masks|pgtle|repack|tiger|tiger_data|timescaledb_*|_timescaledb_*|topology|vault';
 const DATA_EXCLUDES = 'information_schema|pg_*|graphql|graphql_public|pgsodium|pgsodium_masks|pgtle|repack|tiger|tiger_data|timescaledb_*|_timescaledb_*|topology|vault|etl|extensions|pgbouncer|realtime|storage|supabase_functions|supabase_migrations|_analytics|_realtime|_supavisor';
 const RESERVED_ROLES = '(anon|authenticated|authenticator|cli_login_.*|dashboard_user|pgbouncer|postgres|service_role|supabase_.*|pgsodium_keyholder|pgsodium_keyiduser|pgsodium_keymaker|pgtle_admin)';
+const EXACT_EXCLUDED_SCHEMAS = new Set(SCHEMA_EXCLUDES.split('|').filter(name => !name.includes('*')));
 
-function cleanSchemaLine(line) {
+function isExcludedSchemaName(name) {
+  return EXACT_EXCLUDED_SCHEMAS.has(name) || name.startsWith('pg_') || name.startsWith('timescaledb_') || name.startsWith('_timescaledb_');
+}
+
+function grantSchemaName(line) {
+  if (!/^(GRANT|REVOKE) /.test(line)) return null;
+  return line.match(/\bIN SCHEMA "([^"]+)"/)?.[1]
+    || line.match(/\bON (?:SCHEMA|TABLE|SEQUENCE|FUNCTION|PROCEDURE|ROUTINE|TYPE) "([^"]+)"/)?.[1]
+    || null;
+}
+
+export function cleanSchemaLine(line) {
   if (/^\\(un)?restrict /.test(line)) return `-- ${line}`;
   if (/^CREATE SCHEMA "/.test(line)) line = line.replace('CREATE SCHEMA "', 'CREATE SCHEMA IF NOT EXISTS "');
   if (/^CREATE TABLE "/.test(line)) line = line.replace('CREATE TABLE "', 'CREATE TABLE IF NOT EXISTS "');
@@ -331,7 +366,8 @@ function cleanSchemaLine(line) {
   if (/^(CREATE EVENT TRIGGER |         WHEN TAG IN |   EXECUTE FUNCTION |ALTER EVENT TRIGGER |ALTER PUBLICATION "supabase_realtime_|ALTER FOREIGN DATA WRAPPER )/.test(line)) return `-- ${line}`;
   if (/^ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_admin"/.test(line)) return `-- ${line}`;
   if (/^GRANT ALL ON FOREIGN DATA WRAPPER .+ TO "postgres" WITH GRANT OPTION/.test(line)) return `-- ${line}`;
-  if (new RegExp(`^(GRANT|REVOKE) .+ ON .+ "${SCHEMA_EXCLUDES}"`).test(line)) return `-- ${line}`;
+  const referencedSchema = grantSchemaName(line);
+  if (referencedSchema && isExcludedSchemaName(referencedSchema)) return `-- ${line}`;
   line = line.replace(/^(CREATE EXTENSION IF NOT EXISTS "(?:pg_tle|pgsodium|pgmq)").+/, '$1;');
   if (/^COMMENT ON EXTENSION /.test(line) || /^CREATE POLICY "cron_job_/.test(line) || /^ALTER TABLE "cron"/.test(line) || /^SET transaction_timeout = 0;/.test(line)) return `-- ${line}`;
   return line.startsWith('-- ') ? null : line;
@@ -368,7 +404,7 @@ async function captureDatabaseNative(dbUrl, dbDir, limits = null) {
     await rm(rawSchema, { force: true });
     await rm(rawData, { force: true });
   }
-  const inventory = resolveTool('psql') ? await captureDatabaseInventory(dbUrl, join(dbDir, 'database-inventory.json')) : null;
+  const inventory = resolveTool('psql') ? await captureDatabaseInventory(dbUrl, join(dbDir, 'database-inventory.json'), { estimateRows: Boolean(limits) }) : null;
   const files = [
     'roles.sql',
     'schema.sql',
@@ -383,6 +419,7 @@ async function captureDatabaseNative(dbUrl, dbDir, limits = null) {
     engine: 'native-postgresql-client',
     files,
     inventory: Boolean(inventory),
+    summary: inventorySummary(inventory),
   };
 }
 
@@ -411,6 +448,16 @@ async function captureStorage(rawDir, limits = null) {
   await mkdir(storageDir, { recursive: true });
   const buckets = await (await checkedSourceFetch('/storage/v1/bucket')).json();
   const manifest = { capturedAt: new Date().toISOString(), buckets: [], objectCount: 0, totalBytes: 0 };
+  const inventory = { bucketCount: buckets.length, objectCount: 0, totalBytes: 0, buckets: [] };
+  const listedObjects = new Map();
+  for (const bucket of buckets) {
+    const objects = await listBucketObjects(bucket.id);
+    const bytes = objects.reduce((total, object) => total + (Number(object.metadata?.size) || 0), 0);
+    listedObjects.set(bucket.id, objects);
+    inventory.buckets.push({ id: bucket.id, objectCount: objects.length, totalBytes: bytes });
+    inventory.objectCount += objects.length;
+    inventory.totalBytes += bytes;
+  }
   const selectedBuckets = limits ? buckets.slice(0, limits.maxStorageBuckets) : buckets;
   for (const bucket of selectedBuckets) {
     const record = {
@@ -421,7 +468,7 @@ async function captureStorage(rawDir, limits = null) {
       allowedMimeTypes: bucket.allowed_mime_types ?? null,
       objects: [],
     };
-    for (const object of await listBucketObjects(bucket.id)) {
+    for (const object of listedObjects.get(bucket.id)) {
       if (limits && manifest.objectCount >= limits.maxStorageObjects) break;
       const target = join(storageDir, safeObjectPath(bucket.id), safeObjectPath(object.fullName));
       await mkdir(dirname(target), { recursive: true });
@@ -435,8 +482,9 @@ async function captureStorage(rawDir, limits = null) {
     }
     manifest.buckets.push(record);
   }
+  manifest.sourceInventory = inventory;
   await writeFile(join(storageDir, 'storage-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-  return { complete: true, limited: Boolean(limits), limitation: limits ? `first ${limits.maxStorageObjects} objects across ${limits.maxStorageBuckets} buckets` : null, bucketCount: manifest.buckets.length, objectCount: manifest.objectCount, totalBytes: manifest.totalBytes };
+  return { complete: true, limited: Boolean(limits), limitation: limits ? `first ${limits.maxStorageObjects} objects across ${limits.maxStorageBuckets} buckets` : null, bucketCount: manifest.buckets.length, objectCount: manifest.objectCount, totalBytes: manifest.totalBytes, inventory };
 }
 
 async function captureFunctions(config, rawDir, limits = null) {
@@ -454,7 +502,38 @@ async function captureFunctions(config, rawDir, limits = null) {
   for (const fn of functions) {
     await run(supabase, ['functions', 'download', fn.name, '--project-ref', config.projectRef, '--workdir', functionsDir], { cwd: functionsDir, env: process.env });
   }
-  return { complete: true, limited: Boolean(limits), limitation: limits ? `first ${limits.maxFunctions} Functions` : null, count: functions.length, names: functions.map(fn => fn.name) };
+  return {
+    complete: true,
+    limited: Boolean(limits),
+    limitation: limits ? `first ${limits.maxFunctions} Functions` : null,
+    count: functions.length,
+    names: functions.map(fn => fn.name),
+    availableCount: availableFunctions.length,
+    available: availableFunctions.map(fn => fn.name),
+    secretNames: listSecretNames(supabase, config.projectRef),
+  };
+}
+
+function listSecretNames(supabase, projectRef) {
+  try {
+    const result = spawnSync(supabase, ['secrets', 'list', '--project-ref', projectRef, '--output', 'json'], {
+      encoding: 'utf8', env: process.env, windowsHide: true,
+    });
+    if (result.status === 0) {
+      const parsed = JSON.parse(result.stdout || '[]');
+      if (Array.isArray(parsed)) return parsed.map(secret => String(secret.name || secret)).filter(Boolean).sort();
+    }
+    const plain = spawnSync(supabase, ['secrets', 'list', '--project-ref', projectRef], {
+      encoding: 'utf8', env: process.env, windowsHide: true,
+    });
+    if (plain.status !== 0) return null;
+    return plain.stdout.split(/\r?\n/)
+      .map(line => line.split('|')[0].trim())
+      .filter(name => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) && name !== 'NAME')
+      .sort();
+  } catch {
+    return null;
+  }
 }
 
 async function listFiles(root) {
@@ -467,13 +546,33 @@ async function listFiles(root) {
   return found;
 }
 
-async function writeTrialReport(capsuleDir, metadata) {
+export async function writeTrialReport(capsuleDir, metadata) {
   const purchaseUrl = process.env.PORTABASE_PURCHASE_URL || 'https://portabase.dev/buy';
+  const escape = value => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+  const number = value => Number(value ?? 0).toLocaleString('en-US');
   const contents = metadata.contents || {};
+  const ledger = trialProtectionLedger(contents);
+  const ledgerRows = ledger.rows.map(row => {
+    const found = row.found === null ? 'Unknown' : `${row.approximate ? '~' : ''}${number(row.found)}${row.foundBytes != null ? ` · ${formatBytes(row.foundBytes)}` : ''}`;
+    const saved = `${number(row.protected)}${row.protectedBytes != null ? ` · ${formatBytes(row.protectedBytes)}` : ''}`;
+    const exposed = !row.byDesign && Number(row.found) > Number(row.protected);
+    const full = !row.byDesign && row.found !== null && Number(row.found) <= Number(row.protected);
+    const state = row.byDesign ? 'design' : exposed ? 'exposed' : full ? 'saved' : 'unknown';
+    return `<tr class="${state}"><td><b>${escape(row.layer)}</b>${row.note ? `<span>${escape(row.note)}</span>` : ''}</td><td>${escape(found)} <i>${escape(row.unit)}</i></td><td>${escape(saved)} <i>${escape(row.unit)}</i></td></tr>`;
+  }).join('');
+  const summary = contents.database?.summary;
+  const storageInventory = contents.storage?.inventory;
+  const recoverLine = `A restore from this trial capsule would recover your database structure, ${number(contents.storage?.objectCount)} of ${storageInventory ? number(storageInventory.objectCount) : 'your'} Storage files, ${number(contents.functions?.count)} of ${contents.functions?.availableCount != null ? number(contents.functions.availableCount) : 'your'} Edge Functions, and 0 of ${summary ? `${summary.approximateRows ? '~' : ''}${number(summary.rows)}` : 'your'} database rows.`;
+  const secretNames = contents.functions?.secretNames;
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PortaBase trial result</title><style>body{margin:0;background:#090a0c;color:#fff;font-family:Segoe UI,sans-serif}.card{width:min(720px,calc(100% - 32px));margin:8vh auto;background:#141519;border:1px solid #303136;padding:40px;box-sizing:border-box}small{font:11px Consolas,monospace;color:#ff4b3e;letter-spacing:.12em}h1{font-size:48px;line-height:1;margin:18px 0}p{color:#aaa;line-height:1.65}.limits{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#34353a;margin:30px 0}.limits div{background:#1a1b1f;padding:20px}.limits b,.limits span{display:block}.limits span{font-size:12px;color:#888;margin-top:8px}.warning{border-left:3px solid #ff4b3e;padding:15px 20px;background:#1b1515}.buy{display:inline-block;background:#c9ff4a;color:#111;text-decoration:none;padding:16px 22px;font-weight:800;margin-top:28px;border-radius:4px}@media(max-width:600px){.card{padding:25px}.limits{grid-template-columns:1fr}h1{font-size:38px}}</style></head>
-<body><main class="card"><small>PORTABASE LIMITED TRIAL</small><h1>The real workflow ran.</h1><p>Your sample capsule was encrypted, copied to your destination, and verified. PortaBase never received your credentials, passphrase, provider tokens, or capsule contents.</p><div class="limits"><div><b>Database</b><span>Structure only; no table rows</span></div><div><b>Storage</b><span>${contents.storage?.objectCount ?? 0} of up to ${TRIAL_LIMITS.maxStorageObjects} objects</span></div><div><b>Functions</b><span>${contents.functions?.count ?? 0} of up to ${TRIAL_LIMITS.maxFunctions}</span></div></div><p class="warning"><b>This is not a complete recovery backup.</b><br>The trial deliberately omits database rows and most files. Buy Essentials before depending on PortaBase for business recovery.</p><a class="buy" href="${purchaseUrl}">Buy the full backup &amp; recovery software — $147 →</a></main></body></html>`;
+<title>PortaBase trial result</title><style>body{margin:0;background:#090a0c;color:#fff;font-family:Segoe UI,sans-serif}.card{width:min(860px,calc(100% - 32px));margin:6vh auto;background:#141519;border:1px solid #303136;padding:40px;box-sizing:border-box}small{font:11px Consolas,monospace;color:#ff4b3e;letter-spacing:.12em}h1{font-size:44px;line-height:1;margin:18px 0}p{color:#aaa;line-height:1.65}table{width:100%;border-collapse:collapse;margin:30px 0;background:#101115}td,th{border:1px solid #303136;padding:14px 16px;text-align:left;vertical-align:top}th{font:11px Consolas,monospace;letter-spacing:.1em;color:#888}td b{display:block;font-size:15px}td span{display:block;font-size:11px;color:#82837e;margin-top:6px;max-width:340px}td i{font-style:normal;font-size:10px;color:#6d6e72;text-transform:uppercase}tr.exposed td:nth-child(2){color:#ff7066;font-weight:700}tr.exposed td:nth-child(3){color:#ff4b3e;font-weight:700}tr.saved td:nth-child(3){color:#c9ff4a;font-weight:700}tr.design td{color:#9a9b96}.recover{border-left:3px solid #ff4b3e;padding:15px 20px;background:#1b1515;font-size:15px;line-height:1.6}.privacy{border:1px solid #2c3f1d;background:#131a0d;padding:13px 18px;margin-top:22px;color:#a8c47e;font-size:12px;line-height:1.6}.secrets{margin-top:22px;padding:18px;border:1px solid #303136;background:#101115}.secrets b{font-size:13px}.secrets code{display:block;margin-top:10px;color:#8fb0c9;font-size:12px;line-height:1.8;word-break:break-all}.buy{display:inline-block;background:#c9ff4a;color:#111;text-decoration:none;padding:16px 22px;font-weight:800;margin-top:28px;border-radius:4px}@media(max-width:600px){.card{padding:22px}h1{font-size:34px}td,th{padding:10px}}</style></head>
+<body><main class="card"><small>PORTABASE LIMITED TRIAL · PROTECTION LEDGER</small><h1>The real workflow ran.<br>Here is everything it found.</h1><p>Your sample capsule was captured, encrypted, transferred to your destination, and verified — the exact workflow a complete backup uses. The inventory below is everything PortaBase found in project <b>${escape(metadata.projectRef)}</b>.</p>
+<table><tr><th>LAYER</th><th>IN YOUR PROJECT</th><th>IN THIS TRIAL CAPSULE</th></tr>${ledgerRows}</table>
+<p class="recover"><b>${escape(recoverLine)}</b><br>Everything in red is currently unprotected against an account lockout, deletion, or billing freeze.</p>
+${secretNames?.length ? `<div class="secrets"><b>Recovery checklist: ${number(secretNames.length)} secret name${secretNames.length === 1 ? '' : 's'} inventoried (values are never exported)</b><code>${secretNames.map(escape).join(' · ')}</code></div>` : ''}
+<p class="privacy"><b>Computed locally. Transmitted nowhere.</b> This report, the inventory behind it, and your credentials never left this computer. PortaBase has no server that could receive them.</p>
+<a class="buy" href="${escape(purchaseUrl)}">Protect all of it — Essentials, $147 once →</a></main></body></html>`;
   await writeFile(join(capsuleDir, 'TRIAL-REPORT.html'), html);
 }
 
@@ -614,6 +713,7 @@ async function backup() {
     await sendAlert(config, state);
     console.log(`\n${manifest.status}: ${capsuleDir}`);
     console.log(`VERIFIED DESTINATION: ${transfer.destination}`);
+    if (trial) console.log(`TRIAL REPORT: ${join(capsuleDir, 'TRIAL-REPORT.html')}`);
     if (!['COMPLETE', 'TRIAL'].includes(manifest.status)) process.exitCode = 3;
   } catch (error) {
     const state = { state: 'FAILED', capsule: id, failedAt: new Date().toISOString(), error: error.message };
@@ -862,6 +962,9 @@ async function restore() {
       console.log(`${item?.complete ? 'READY' : 'GAP  '}  ${name}${item?.reason ? ` — ${item.reason}` : ''}${item?.error ? ` — ${item.error}` : ''}`);
     }
     console.log('\nManual reconfiguration remains: Auth providers/templates, project API keys, Realtime settings, external secrets, custom domains, and DNS cutover.');
+    if (manifest.contents.functions?.secretNames?.length) {
+      console.log(`Secrets to re-create on the new project (names only; values were never exported): ${manifest.contents.functions.secretNames.join(', ')}`);
+    }
     if (drill) validateDrillCapsule(manifest.edition);
     if (!writesTarget && !hasFlag('preflight')) {
       console.log('\nDRY RUN ONLY. No target was changed. Add --execute --confirm-target <NEW_REF> after reviewing this plan.');

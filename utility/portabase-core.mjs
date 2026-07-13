@@ -164,6 +164,74 @@ export function recoveryEvidenceStatus({ mode, captureStatus, database, storage,
   return captureStatus === 'COMPLETE' ? 'RECOVERY_DATA_PATH_VERIFIED' : 'FAILED';
 }
 
+export function formatBytes(bytes) {
+  const value = Number(bytes) || 0;
+  if (value < 1024) return `${value} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let scaled = value;
+  let unit = -1;
+  do { scaled /= 1024; unit += 1; } while (scaled >= 1024 && unit < units.length - 1);
+  return `${scaled >= 100 ? Math.round(scaled) : scaled.toFixed(1)} ${units[unit]}`;
+}
+
+export function trialProtectionLedger(contents = {}) {
+  const database = contents.database || {};
+  const storage = contents.storage || {};
+  const functions = contents.functions || {};
+  const summary = database.summary || null;
+  const inventory = storage.inventory || null;
+  const schemaOnly = Boolean(database.limited);
+  const rows = [];
+  rows.push({
+    layer: 'Database structure',
+    found: summary ? summary.tables : null,
+    protected: database.complete || database.files?.includes('schema.sql') ? (summary ? summary.tables : null) : 0,
+    unit: 'tables',
+    note: 'Schema, policies, triggers, and database functions',
+  });
+  rows.push({
+    layer: 'Database rows',
+    found: summary ? summary.rows : null,
+    protected: schemaOnly ? 0 : (summary ? summary.rows : null),
+    unit: 'rows',
+    approximate: Boolean(summary?.approximateRows),
+    note: schemaOnly ? 'Trial captures structure only' : null,
+  });
+  rows.push({
+    layer: 'Auth users',
+    found: summary ? summary.authUsers : null,
+    protected: schemaOnly ? 0 : (summary ? summary.authUsers : null),
+    unit: 'users',
+    note: schemaOnly ? 'User records are table rows; the trial does not include them' : null,
+  });
+  rows.push({
+    layer: 'Storage files',
+    found: inventory ? inventory.objectCount : null,
+    protected: Number(storage.objectCount) || 0,
+    unit: 'files',
+    foundBytes: inventory ? inventory.totalBytes : null,
+    protectedBytes: Number(storage.totalBytes) || 0,
+  });
+  rows.push({
+    layer: 'Edge Functions',
+    found: Number.isInteger(functions.availableCount) ? functions.availableCount : (functions.skipped ? null : Number(functions.count) || 0),
+    protected: functions.skipped ? 0 : Number(functions.count) || 0,
+    unit: 'functions',
+    note: functions.skipped ? 'Skipped: no access token was provided' : null,
+  });
+  const secretCount = Array.isArray(functions.secretNames) ? functions.secretNames.length : null;
+  rows.push({
+    layer: 'Secret values',
+    found: secretCount,
+    protected: 0,
+    unit: 'secrets',
+    byDesign: true,
+    note: 'Never captured, by design. Capsules stay safe to store anywhere; secret NAMES are inventoried so recovery day has a checklist.',
+  });
+  const unprotected = rows.filter(row => !row.byDesign && Number(row.found) > Number(row.protected));
+  return { rows, unprotectedLayers: unprotected.map(row => row.layer) };
+}
+
 export function capsuleName(projectRef, date = new Date()) {
   const stamp = date.toISOString().replaceAll(':', '-').replace('.000Z', 'Z');
   return `${projectRef}-${stamp}`;

@@ -14,4 +14,5 @@ contextBridge.exposeInMainWorld('portabase', Object.freeze({
   installSchedule: everyHours => ipcRenderer.invoke('portabase:install-schedule', everyHours),
   removeSchedule: () => ipcRenderer.invoke('portabase:remove-schedule'),
   open: url => ipcRenderer.invoke('portabase:open', url),
+  openReport: reportPath => ipcRenderer.invoke('portabase:open-report', reportPath),
 }));
