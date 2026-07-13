@@ -35,6 +35,8 @@ pre{white-space:pre-wrap;background:#08090b;border:1px solid var(--line);padding
 .flowPanel canvas{width:100%;height:auto;display:block}
 .flowLabel{border-top:1px solid var(--line);margin-top:10px;padding:11px 6px 2px;font:13px ui-monospace,Consolas,monospace;color:var(--muted);min-height:20px}
 .flowLabel.good{color:var(--acid)}.flowLabel.bad{color:var(--red)}
+.destChoice button.selected{border-color:var(--acid);color:var(--acid)}
+.cloudStatus{align-self:center;font-size:11px;color:var(--muted)}
 .cliDoc{min-height:0;font-size:12.5px;line-height:1.7}
 code{background:#0f1115;border:1px solid var(--line);border-radius:4px;padding:2px 6px;font-size:12px}
 @media(max-width:900px){main{grid-template-columns:210px 1fr}.page{padding:38px 32px}.grid,.comfortCards{grid-template-columns:1fr}.wide{grid-column:auto}}

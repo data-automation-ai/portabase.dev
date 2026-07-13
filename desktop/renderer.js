@@ -227,9 +227,29 @@ $('gSaved').addEventListener('change', () => {
   unlock('gStep4', ready);
   guidedStatus('gStep3Status', ready ? 'Passphrase confirmed. One step left.' : 'Generate and save your passphrase to continue.', ready);
 });
+const DEST_LABEL = {
+  null: 'Backups will be kept in your Documents folder.',
+  'google-drive': 'Connected. Backups will be verified inside your Google Drive.',
+  dropbox: 'Connected. Backups will be verified inside your Dropbox.',
+};
+guided.cloud = null;
+async function chooseGuidedCloud(provider, button) {
+  try {
+    if (provider) {
+      guidedStatus('gDestStatus', 'Your browser is opening — sign in and approve access. PortaBase never sees that password.');
+      await window.portabase.connectCloud(provider);
+    }
+    guided.cloud = provider;
+    document.querySelectorAll('#gStep4 .destChoice button').forEach(b => b.classList.toggle('selected', b === button));
+    guidedStatus('gDestStatus', DEST_LABEL[provider], Boolean(provider));
+  } catch (error) { guidedStatus('gDestStatus', error.message); }
+}
+$('gDestLocal').addEventListener('click', () => chooseGuidedCloud(null, $('gDestLocal')));
+$('gDestDrive').addEventListener('click', () => chooseGuidedCloud('google-drive', $('gDestDrive')));
+$('gDestDropbox').addEventListener('click', () => chooseGuidedCloud('dropbox', $('gDestDropbox')));
 async function guidedSaveAll() {
   const ref = $('gProject').value;
-  await window.portabase.saveConfig({ projectRef: ref, destination: '' });
+  await window.portabase.saveConfig({ projectRef: ref, destination: '', cloud: guided.cloud });
   await window.portabase.saveSecrets({
     SUPABASE_DB_URL: guided.credentials.dbUrl, SUPABASE_URL: guided.credentials.url,
     SUPABASE_SERVICE_ROLE_KEY: guided.credentials.adminKey, SUPABASE_ACCESS_TOKEN: guided.token,
@@ -259,7 +279,21 @@ $('gSchedule').addEventListener('click', async () => {
 });
 
 /* ---- Standard + recovery pages (unchanged behavior) ---- */
-document.querySelector('[data-pick="destination"]').addEventListener('click', async () => { $('destination').value = await window.portabase.chooseDirectory() || $('destination').value; });
+let standardCloud = null;
+async function connectStandardCloud(provider) {
+  try {
+    $('cloudStatus').textContent = 'Browser opening — approve access…';
+    await window.portabase.connectCloud(provider);
+    standardCloud = provider;
+    $('cloudStatus').textContent = `${provider === 'google-drive' ? 'Google Drive' : 'Dropbox'} connected — Save securely to use it.`;
+  } catch (error) { $('cloudStatus').textContent = error.message; }
+}
+$('connectDrive').addEventListener('click', () => connectStandardCloud('google-drive'));
+$('connectDropbox').addEventListener('click', () => connectStandardCloud('dropbox'));
+document.querySelector('[data-pick="destination"]').addEventListener('click', async () => {
+  const picked = await window.portabase.chooseDirectory();
+  if (picked) { $('destination').value = picked; standardCloud = null; $('cloudStatus').textContent = ''; }
+});
 document.querySelector('[data-pick="capsule"]').addEventListener('click', async () => { $('capsule').value = await window.portabase.chooseCapsule() || $('capsule').value; });
 $('buy').addEventListener('click', () => window.portabase.open('https://portabase.dev/buy'));
 $('newAccount').addEventListener('click', () => window.portabase.open('https://supabase.com/dashboard/sign-up'));
@@ -291,21 +325,21 @@ $('refreshProject').addEventListener('click', async () => {
 });
 $('saveSource').addEventListener('click', async () => {
   try {
-    await window.portabase.saveConfig({ projectRef: $('projectRef').value, destination: $('destination').value });
+    await window.portabase.saveConfig({ projectRef: $('projectRef').value, destination: $('destination').value, cloud: standardCloud });
     await window.portabase.saveSecrets(secretValues());
     result('Saved locally using protected operating-system storage. PortaBase did not transmit these values.');
   } catch (error) { result(error.message, true); }
 });
 $('doctor').addEventListener('click', async () => {
-  try { await window.portabase.saveConfig({ projectRef: $('projectRef').value, destination: $('destination').value }); await run('doctor', [], secretValues()); }
+  try { await window.portabase.saveConfig({ projectRef: $('projectRef').value, destination: $('destination').value, cloud: standardCloud }); await run('doctor', [], secretValues()); }
   catch (error) { result(error.message, true); }
 });
 $('trial').addEventListener('click', async () => {
-  try { await window.portabase.saveConfig({ projectRef: $('projectRef').value, destination: $('destination').value }); await run('backup', ['--trial'], secretValues()); }
+  try { await window.portabase.saveConfig({ projectRef: $('projectRef').value, destination: $('destination').value, cloud: standardCloud }); await run('backup', ['--trial'], secretValues()); }
   catch (error) { result(error.message, true); }
 });
 $('fullBackup').addEventListener('click', async () => {
-  try { await window.portabase.saveConfig({ projectRef: $('projectRef').value, destination: $('destination').value }); await run('backup', [], secretValues()); }
+  try { await window.portabase.saveConfig({ projectRef: $('projectRef').value, destination: $('destination').value, cloud: standardCloud }); await run('backup', [], secretValues()); }
   catch (error) { result(error.message, true); }
 });
 $('importLicense').addEventListener('click', async () => {

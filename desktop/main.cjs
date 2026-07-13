@@ -118,15 +118,33 @@ async function runCli(command, args, runtimeSecrets = {}, onChunk = null) {
   });
 }
 
-function runProcess(command, args) {
+function runProcess(command, args, options = {}) {
   return new Promise((resolveRun, reject) => {
-    const child = spawn(command, args, { shell: false, windowsHide: true });
+    const child = spawn(command, args, { shell: false, windowsHide: true, ...options });
     let output = '';
     child.stdout?.on('data', chunk => { output += chunk; });
     child.stderr?.on('data', chunk => { output += chunk; });
     child.once('error', reject);
     child.once('close', code => code === 0 ? resolveRun(output) : reject(new Error(output.trim() || `${path.basename(command)} exited with code ${code}`)));
   });
+}
+
+const CLOUD_REMOTES = { 'google-drive': ['portabase-gdrive', 'drive'], dropbox: ['portabase-dropbox', 'dropbox'] };
+
+function bundledRclone() {
+  const packaged = app.isPackaged ? path.join(process.resourcesPath, 'tools', process.platform === 'win32' ? 'rclone.exe' : 'rclone') : null;
+  if (packaged && existsSync(packaged)) return packaged;
+  return process.platform === 'win32' ? 'rclone.exe' : 'rclone';
+}
+
+async function connectCloud(provider) {
+  const selected = CLOUD_REMOTES[provider];
+  if (!selected) throw new Error('Unsupported cloud provider.');
+  const [remote, type] = selected;
+  await runProcess(bundledRclone(), ['config', 'create', remote, type], { timeout: 300000 });
+  const remotes = await runProcess(bundledRclone(), ['listremotes']);
+  if (!remotes.split(/\r?\n/).includes(`${remote}:`)) throw new Error('The cloud sign-in did not complete. Try again and approve access in your browser.');
+  return { remote, provider };
 }
 
 async function installDesktopSchedule(everyHours) {
@@ -199,14 +217,21 @@ function registerIpc() {
     if (!validateSender(event)) throw new Error('Untrusted renderer.');
     return listProjects(token);
   });
+  ipcMain.handle('portabase:connect-cloud', async (event, provider) => {
+    if (!validateSender(event)) throw new Error('Untrusted renderer.');
+    return connectCloud(String(provider || ''));
+  });
   ipcMain.handle('portabase:save-config', async (event, config) => {
     if (!validateSender(event)) throw new Error('Untrusted renderer.');
+    const cloud = CLOUD_REMOTES[config?.cloud] ? config.cloud : null;
     const clean = {
       version: 2,
       projectRef: String(config?.projectRef || '').trim(),
       backupDirectory: String(config?.backupDirectory || path.join(app.getPath('documents'), 'PortaBase Capsules')),
       statusDirectory: String(config?.statusDirectory || path.join(app.getPath('userData'), 'status')),
-      provider: { type: 'local', path: String(config?.destination || path.join(app.getPath('documents'), 'PortaBase Independent Copy')) },
+      provider: cloud
+        ? { type: cloud, remote: CLOUD_REMOTES[cloud][0], path: '/PortaBase' }
+        : { type: 'local', path: String(config?.destination || path.join(app.getPath('documents'), 'PortaBase Independent Copy')) },
       capture: { database: true, storage: true, functions: true },
       encryption: { passphraseEnv: 'PORTABASE_ENCRYPTION_PASSPHRASE' },
       retention: { keepLast: 30, pruneAfterBackup: false },

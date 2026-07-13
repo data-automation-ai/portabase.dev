@@ -52,9 +52,11 @@
         <label class="confirm"><input type="checkbox" id="gSaved"> I saved this passphrase somewhere safe that is not this computer.</label>
         <p id="gStep3Status" class="statusline">Generate and save your passphrase to continue.</p>
       </div>
-      <div class="step locked" id="gStep4"><b>Step 4 · Protect it</b><p>PortaBase will read your app, encrypt a recovery copy on this computer, verify it, and show you exactly what is protected. Watch it happen live.</p>
+      <div class="step locked" id="gStep4"><b>Step 4 · Where should your safety copy live?</b><p>Anywhere Supabase isn’t. Your Google Drive or Dropbox works beautifully — you sign in with your own browser, and PortaBase verifies every backup actually arrived there.</p>
+        <div class="stepActions destChoice"><button id="gDestLocal" class="secondary selected">This computer</button><button id="gDestDrive" class="secondary">My Google Drive</button><button id="gDestDropbox" class="secondary">My Dropbox</button></div>
+        <p id="gDestStatus" class="statusline">Backups will be kept in your Documents folder.</p>
         <div class="stepActions"><button id="gProtect" class="primary">Protect my app now</button><button id="gSchedule" class="secondary">Also protect it automatically every 6 hours</button></div>
-        <p id="gStep4Status" class="statusline">Everything runs and stays on this computer.</p>
+        <p id="gStep4Status" class="statusline">Everything runs and stays under your control.</p>
       </div>
     </section>
 
@@ -70,6 +72,7 @@
         <label>Personal access token<input id="sourceAccess" type="password"></label>
         <label class="wide">Encryption passphrase<input id="passphrase" type="password" placeholder="At least 16 characters; keep a separate copy"></label>
         <label class="wide">Independent destination<div class="picker"><input id="destination" readonly><button data-pick="destination">Choose…</button></div></label>
+        <div class="wide stepActions destChoice"><button id="connectDrive" class="secondary">Connect Google Drive</button><button id="connectDropbox" class="secondary">Connect Dropbox</button><span id="cloudStatus" class="cloudStatus"></span></div>
       </div>
       <div class="actions"><button id="saveSource" class="secondary">Save securely</button><button id="doctor" class="secondary">Check readiness</button><button id="trial" class="secondary">Run limited trial backup</button><button id="fullBackup" class="primary">Run complete licensed backup</button></div>
       <div class="step"><b>Automatic protection</b><p>The installed PortaBase application can run headlessly every six hours. The OS schedule contains no passwords or tokens; PortaBase reads them from your protected credential store at run time.</p><div class="stepActions"><button id="installSchedule" class="primary">Install 6-hour schedule</button><button id="removeSchedule" class="secondary">Remove schedule</button></div></div>

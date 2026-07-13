@@ -28,7 +28,25 @@ $supabase = Get-ChildItem -LiteralPath (Join-Path $repo 'node_modules\@supabase'
 if (-not $supabase) { throw 'The Windows Supabase CLI package is missing. Run npm install on Windows first.' }
 Copy-Item -LiteralPath $supabase.FullName -Destination (Join-Path $vendor 'supabase.exe') -Force
 
+$rcloneTarget = Join-Path $vendor 'rclone.exe'
+$localRclone = Get-Command rclone.exe -ErrorAction SilentlyContinue
+if ($localRclone -and ((& $localRclone.Source version) -join ' ') -match 'os/arch: windows/amd64') {
+  Copy-Item -LiteralPath $localRclone.Source -Destination $rcloneTarget -Force
+} else {
+  $rcloneZip = Join-Path $env:TEMP 'portabase-rclone-amd64.zip'
+  $rcloneExtract = Join-Path $env:TEMP 'portabase-rclone-amd64'
+  Invoke-WebRequest -Uri 'https://downloads.rclone.org/rclone-current-windows-amd64.zip' -OutFile $rcloneZip
+  if (Test-Path -LiteralPath $rcloneExtract) { Remove-Item -LiteralPath $rcloneExtract -Recurse -Force }
+  Expand-Archive -LiteralPath $rcloneZip -DestinationPath $rcloneExtract
+  $rcloneExe = Get-ChildItem -LiteralPath $rcloneExtract -Recurse -Filter 'rclone.exe' -File | Select-Object -First 1
+  if (-not $rcloneExe) { throw 'rclone.exe was not found in the downloaded archive.' }
+  Copy-Item -LiteralPath $rcloneExe.FullName -Destination $rcloneTarget -Force
+  $rcloneLicense = Get-ChildItem -LiteralPath $rcloneExtract -Recurse -Filter 'COPYING*' -File | Select-Object -First 1
+  if ($rcloneLicense) { Copy-Item -LiteralPath $rcloneLicense.FullName -Destination (Join-Path $vendor 'rclone-license.txt') -Force }
+}
+
 foreach ($required in 'pg_dump.exe','pg_dumpall.exe','psql.exe') {
   if (-not (Test-Path -LiteralPath (Join-Path $postgresTarget $required))) { throw "Missing staged tool: $required" }
 }
-Write-Host "Staged PostgreSQL tools from $pgBin and the pinned Supabase CLI."
+if (-not (Test-Path -LiteralPath $rcloneTarget)) { throw 'Missing staged tool: rclone.exe' }
+Write-Host "Staged PostgreSQL tools from $pgBin, rclone, and the pinned Supabase CLI."

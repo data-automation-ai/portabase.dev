@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('portabase', Object.freeze({
   run: request => ipcRenderer.invoke('portabase:run', request),
   listOrganizations: token => ipcRenderer.invoke('portabase:list-organizations', token),
   listProjects: token => ipcRenderer.invoke('portabase:list-projects', token),
+  connectCloud: provider => ipcRenderer.invoke('portabase:connect-cloud', provider),
   saveSettings: settings => ipcRenderer.invoke('portabase:save-settings', settings),
   createProject: request => ipcRenderer.invoke('portabase:create-project', request),
   projectCredentials: request => ipcRenderer.invoke('portabase:project-credentials', request),
