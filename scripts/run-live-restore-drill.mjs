@@ -43,16 +43,31 @@ function runTool(file, args, env, label) {
 }
 
 async function management(path, token, options = {}, accepted = [200, 201]) {
-  const response = await fetch(`https://api.supabase.com/v1${path}`, {
-    ...options,
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(options.headers || {}) },
-    signal: options.signal || AbortSignal.timeout(30000),
-  });
-  const text = await response.text();
-  let body = {};
-  try { body = text ? JSON.parse(text) : {}; } catch { body = {}; }
-  if (!accepted.includes(response.status)) throw new Error(`Supabase Management API ${path} failed with HTTP ${response.status}: ${String(body.message || body.error || body.msg || '').slice(0, 180)}`);
-  return body;
+  const method = String(options.method || 'GET').toUpperCase();
+  const attempts = path === '/projects' && method === 'POST' ? 1 : 6;
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(`https://api.supabase.com/v1${path}`, {
+        ...options,
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(options.headers || {}) },
+        signal: options.signal || AbortSignal.timeout(30000),
+      });
+      const text = await response.text();
+      let body = {};
+      try { body = text ? JSON.parse(text) : {}; } catch { body = {}; }
+      if (accepted.includes(response.status)) return body;
+      const error = new Error(`Supabase Management API ${path} failed with HTTP ${response.status}: ${String(body.message || body.error || body.msg || '').slice(0, 180)}`);
+      if (response.status !== 429 && response.status < 500) throw error;
+      lastError = error;
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts || (/HTTP 4\d\d/.test(error.message) && !/HTTP 429/.test(error.message))) throw error;
+    }
+    console.log(`RETRY  Supabase Management API ${path} (${attempt}/${attempts})`);
+    await new Promise(resolveWait => setTimeout(resolveWait, attempt * 3000));
+  }
+  throw lastError;
 }
 
 async function waitForProject(ref, token, predicate, description, timeoutMs = 12 * 60 * 1000) {
@@ -80,14 +95,15 @@ async function restoreProject(ref, token) {
 }
 
 async function createTarget(token, dbPassword) {
-  const body = JSON.stringify({ name: `portabase-live-drill-${new Date().toISOString().slice(0, 10)}`, organization_slug: ORGANIZATION_SLUG, db_pass: dbPassword, region: REGION });
+  const targetName = `portabase-live-drill-${new Date().toISOString().slice(0, 10)}-${randomBytes(3).toString('hex')}`;
+  const body = JSON.stringify({ name: targetName, organization_slug: ORGANIZATION_SLUG, db_pass: dbPassword, region: REGION });
   const started = Date.now();
   while (Date.now() - started < 6 * 60 * 1000) {
     try {
       return await management('/projects', token, { method: 'POST', body });
     } catch (error) {
       if (!/HTTP 400|HTTP 409|project limit|quota/i.test(error.message)) throw error;
-      console.log('WAIT  free project slot has not been released yet');
+      console.log(`WAIT  target creation rejected temporarily: ${error.message.replace(/:.*/, '')}`);
       await new Promise(resolveWait => setTimeout(resolveWait, 15000));
     }
   }
