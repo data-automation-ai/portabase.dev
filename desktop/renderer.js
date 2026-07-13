@@ -17,7 +17,8 @@ function show(page) {
 }
 
 /* ---- Live flow visualization ---- */
-const flow = { running: false, phase: 'idle', item: '', particles: [], done: false, failed: false };
+const flow = { running: false, phase: 'idle', item: '', particles: [], done: false, failed: false, tables: [], tableTotal: 0, tableIndex: 0, chips: [], lastChipAt: 0 };
+const formatRows = rows => rows >= 1e6 ? `${(rows / 1e6).toFixed(1)}M` : rows >= 1e3 ? `${(rows / 1e3).toFixed(1)}k` : String(rows);
 const PHASE_TEXT = {
   capture: item => `Preparing to capture ${item}…`,
   database: item => item?.includes('.') ? `Reading table ${item}` : `Capturing database ${item || ''}`,
@@ -33,10 +34,17 @@ function setFlow(phase, item) {
   flow.phase = phase; flow.item = item || '';
   flow.done = phase === 'done'; flow.failed = phase === 'failed';
   flow.running = !flow.done && !flow.failed && phase !== 'idle';
+  if (phase !== 'database') { flow.chips = []; }
+  if (phase === 'idle' || phase === 'capture') { flow.tables = []; flow.tableTotal = 0; flow.tableIndex = 0; }
   const text = PHASE_TEXT[phase] ? PHASE_TEXT[phase](item) : 'Working…';
   $('flowLabel').textContent = text;
   $('flowLabel').classList.toggle('good', flow.done);
   $('flowLabel').classList.toggle('bad', flow.failed);
+}
+function announceTable(index) {
+  const table = flow.tables[index];
+  if (!table) return;
+  $('flowLabel').textContent = `Capturing your table ${Math.min(index + 1, flow.tableTotal)} of ${flow.tableTotal} — ${table.item} (~${formatRows(table.rows)} rows)`;
 }
 function drawFlow() {
   const canvas = $('flowCanvas');
@@ -54,6 +62,27 @@ function drawFlow() {
     const firstLeg = flow.phase !== 'transfer';
     flow.particles.push({ x: firstLeg ? nodes[0].x + 52 : nodes[1].x, leg: firstLeg ? 0 : 1, speed: 2 + Math.random() * 2.5, drift: (Math.random() - 0.5) * 26 });
   }
+  if (flow.phase === 'database' && flow.tables.length && flow.chips.length < 3 && performance.now() - flow.lastChipAt > 420) {
+    const table = flow.tables[flow.tableIndex % flow.tables.length];
+    flow.chips.push({ text: `${table.item} · ${formatRows(table.rows)} rows`, x: nodes[0].x + 56, lane: (flow.tableIndex % 3) - 1 });
+    announceTable(flow.tableIndex);
+    flow.tableIndex += 1;
+    flow.lastChipAt = performance.now();
+  }
+  flow.chips = flow.chips.filter(chip => {
+    chip.x += 2.1;
+    if (chip.x >= nodes[1].x - 58) return false;
+    const y = midY + chip.lane * 26 - 13;
+    context.font = '10px ui-monospace,Consolas,monospace';
+    const width = context.measureText(chip.text).width + 14;
+    context.globalAlpha = 0.92;
+    context.fillStyle = '#10241b'; context.strokeStyle = '#3ecf8e'; context.lineWidth = 1;
+    context.beginPath(); context.roundRect(chip.x, y, width, 19, 9); context.fill(); context.stroke();
+    context.fillStyle = '#9fe8c6'; context.textAlign = 'left';
+    context.fillText(chip.text, chip.x + 7, y + 13);
+    context.globalAlpha = 1;
+    return true;
+  });
   flow.particles = flow.particles.filter(p => {
     p.x += p.speed;
     const end = p.leg === 0 ? nodes[1].x : nodes[2].x - 52;
@@ -92,7 +121,21 @@ window.portabase.onStream(chunk => {
   streamBuffer = lines.pop();
   for (const line of lines) {
     if (line.startsWith('@portabase ')) {
-      try { const event = JSON.parse(line.slice(11)); setFlow(event.phase, event.item ?? event.status); } catch { /* ignore malformed event */ }
+      try {
+        const event = JSON.parse(line.slice(11));
+        if (event.phase === 'database-manifest') {
+          flow.tables = Array.isArray(event.tables) ? event.tables : [];
+          flow.tableTotal = Number(event.count) || flow.tables.length;
+          flow.tableIndex = 0;
+        } else if (event.phase === 'database' && String(event.item || '').includes('.')) {
+          const exact = flow.tables.findIndex(table => table.item === event.item);
+          if (exact >= 0) flow.tableIndex = exact;
+          setFlow('database', event.item);
+          announceTable(exact >= 0 ? exact : flow.tableIndex);
+        } else {
+          setFlow(event.phase, event.item ?? event.status);
+        }
+      } catch { /* ignore malformed event */ }
     } else if (line.trim()) {
       $('output').textContent += `${line}\n`;
     }

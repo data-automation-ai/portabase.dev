@@ -213,6 +213,7 @@ async function captureDatabase(rawDir, limits = null) {
   }
   const supabase = resolveTool('supabase');
   if (!supabase) throw new Error('Install PostgreSQL client tools or the Supabase CLI for database capture.');
+  announceApplicationTables(dbUrl);
   const common = ['db', 'dump', '--db-url', dbUrl];
   await run(supabase, [...common, '--file', join(dbDir, 'roles.sql'), '--role-only']);
   await run(supabase, [...common, '--file', join(dbDir, 'schema.sql')]);
@@ -272,12 +273,30 @@ function psqlValue(dbUrl, sql) {
   return result.stdout.trim();
 }
 
+function estimateApplicationTables(dbUrl) {
+  const tablesJson = psqlValue(dbUrl, `SELECT COALESCE(json_agg(json_build_object('schema', schemaname, 'name', tablename, 'rows', GREATEST(c.reltuples, 0)::bigint) ORDER BY schemaname, tablename), '[]'::json)::text FROM pg_catalog.pg_tables t JOIN pg_catalog.pg_namespace n ON n.nspname = t.schemaname JOIN pg_catalog.pg_class c ON c.relnamespace = n.oid AND c.relname = t.tablename AND c.relkind IN ('r','p') WHERE ${APPLICATION_SCHEMA_SQL};`);
+  const tables = JSON.parse(tablesJson || '[]');
+  for (const table of tables) table.rows = Number(table.rows) || 0;
+  return tables;
+}
+
+function announceApplicationTables(dbUrl) {
+  if (!hasFlag('progress') || !resolveTool('psql')) return;
+  try {
+    const tables = estimateApplicationTables(dbUrl);
+    progress({
+      phase: 'database-manifest',
+      count: tables.length,
+      totalRows: tables.reduce((total, table) => total + table.rows, 0),
+      tables: tables.slice(0, 120).map(table => ({ item: `${table.schema}.${table.name}`, rows: table.rows })),
+    });
+  } catch { /* the animation manifest is optional; capture proceeds regardless */ }
+}
+
 async function captureDatabaseInventory(dbUrl, outputPath = null, { estimateRows = false } = {}) {
   let tables;
   if (estimateRows) {
-    const tablesJson = psqlValue(dbUrl, `SELECT COALESCE(json_agg(json_build_object('schema', schemaname, 'name', tablename, 'rows', GREATEST(c.reltuples, 0)::bigint) ORDER BY schemaname, tablename), '[]'::json)::text FROM pg_catalog.pg_tables t JOIN pg_catalog.pg_namespace n ON n.nspname = t.schemaname JOIN pg_catalog.pg_class c ON c.relnamespace = n.oid AND c.relname = t.tablename AND c.relkind IN ('r','p') WHERE ${APPLICATION_SCHEMA_SQL};`);
-    tables = JSON.parse(tablesJson || '[]');
-    for (const table of tables) table.rows = Number(table.rows) || 0;
+    tables = estimateApplicationTables(dbUrl);
   } else {
     const tablesJson = psqlValue(dbUrl, `SELECT COALESCE(json_agg(json_build_object('schema', schemaname, 'name', tablename) ORDER BY schemaname, tablename), '[]'::json)::text FROM pg_catalog.pg_tables WHERE ${APPLICATION_SCHEMA_SQL};`);
     tables = JSON.parse(tablesJson || '[]');
@@ -429,6 +448,7 @@ async function captureDatabaseNative(dbUrl, dbDir, limits = null) {
   const rawRoles = join(dbDir, '.roles.raw.sql');
   const rawSchema = join(dbDir, '.schema.raw.sql');
   const rawData = join(dbDir, '.data.raw.sql');
+  announceApplicationTables(dbUrl);
   try {
     progress({ phase: 'database', item: 'roles' });
     await runDumpToFile(pgDumpAll, ['--roles-only', '--role', 'postgres', '--quote-all-identifiers', '--no-role-passwords', '--no-comments'], rawRoles, { env });
