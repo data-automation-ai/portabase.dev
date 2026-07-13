@@ -42,7 +42,7 @@ Use a deliberately understandable workload:
 8. Run `restore --preflight`. PortaBase must report zero application tables, zero Auth users, zero Storage buckets, and zero Edge Functions. This step does not write.
 9. Confirm the destination ref twice: once in the environment and once with `--confirm-target <NEW_REF>`.
 10. Execute the restore. PortaBase repeats the blank-target inventory immediately before the first write.
-10. Run the read-only acceptance checks below and save the results with the capsule evidence.
+11. Run the read-only acceptance checks below and save the results with the capsule evidence.
 
 ## Acceptance checks
 
@@ -62,6 +62,19 @@ The drill passes only when all of these are true:
 
 Any mismatch is a failed drill. Do not soften it to “partial success” in marketing copy.
 
-## Current status
+## Verified live drill — July 13, 2026
 
-As of July 13, 2026, the isolated source capsule has proved database, Storage, and two-Function capture; encrypted transfer; destination checksum verification; authenticated decryption; and dry-run restore planning. It has **not yet proved a live write and acceptance pass against a fresh Supabase destination project**. A new disposable target is required to finish that proof safely.
+The full drill passed against a newly provisioned, blank Supabase project. PortaBase captured and independently decrypted a 61 MB encrypted capsule, paused only the synthetic source after verification, provisioned a distinct target, proved the target was empty, executed the guarded restore, ran acceptance checks, paused the disposable target, and returned the source to `ACTIVE_HEALTHY`.
+
+The verified recovery included:
+
+- database schema, constraints, policies, triggers, views, functions, and more than 1.77 million table rows from the complete source workload;
+- the fixture's exact 3 customers, 4 orders, 7 line items, zero orphan rows, and `$516.90` aggregate;
+- one tagged synthetic Auth user;
+- two private Storage buckets and six objects with matching paths, sizes, MIME types, and hashes;
+- four deployed Edge Functions, including successful HTTP 200 probes of `drill-health` and `drill-order-total`;
+- an evidence result of `RECOVERY_DATA_PATH_VERIFIED`.
+
+The test also proved the failure controls. An earlier partial target was never reused, a malformed schema export failed closed before being described as recovered, an interrupted SSL database export never paused the source, and a later clean run completed after the exporter gained bounded retries that discard partial dump files.
+
+This result proves the automated data recovery path. It does not turn provider-owned configuration into a false promise: Auth provider credentials and templates, newly issued project/API keys, external secrets, custom domains, Realtime settings, and DNS/application cutover still require guided manual intervention.

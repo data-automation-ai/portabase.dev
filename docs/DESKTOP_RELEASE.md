@@ -4,7 +4,7 @@
 
 Install dependencies on the build machine, ensure PostgreSQL client tools are on `PATH`, then run `npm run desktop:win`. The staging script embeds the current platform's pinned Supabase CLI and PostgreSQL tools. Public distribution requires an Authenticode code-signing certificate. Verify the final installer with `Get-AuthenticodeSignature` and publish its SHA-256 hash.
 
-The July 13, 2026 engineering build produced and smoke-launched `PortaBase-Setup-0.3.0-unsigned.exe` (SHA-256 `8A9CB79E405816B2BFB73E0C43BD31715CDFC7E4FDDC03074D8C55819D1C63A0`). Authenticode status is `NotSigned`; this is an engineering artifact, not a public release.
+The July 13, 2026 post-drill engineering build produced `PortaBase-Setup-0.3.1-unsigned.exe` (SHA-256 `44BF6FD0A89892A427D141B429E323239E9BF9CEE475359AEC2C203F84676C4C`). Its bundled PostgreSQL 18.4 and Supabase CLI 2.109.1 executables ran successfully. Authenticode status is `NotSigned`; this is an engineering artifact, not a public release.
 
 ## macOS
 
@@ -16,7 +16,7 @@ On the oldest supported Linux build image, install PostgreSQL client tools and a
 
 The July 13, 2026 EC2 clean build produced and package-smoke-tested:
 
-- `PortaBase-0.3.0-x86_64.AppImage` — SHA-256 `869734B02B7A21190E3AB532E45D8DB527BBADBFF1D6BF189F0D88C5724CE5CB`
-- `PortaBase-0.3.0-amd64.deb` — SHA-256 `6CF869162F2F3C76E9516B51DD7572FB39E731640BDAED20E52EB808DA6D19DF`
+- `PortaBase-0.3.1-x86_64.AppImage` — SHA-256 `70A0C5DECFC9BE41045704DD52CEB2683D2020AA04295000D40D7AC4C7FA4DEB`
+- `PortaBase-0.3.1-amd64.deb` — SHA-256 `1472101BDE82A932FC2CDCB9086FDABE5B1BAA85FFAF823B55BA0BBB561B7545`
 
-The AppImage was extracted without installation; its bundled PostgreSQL 16.14 and Supabase CLI 2.109.1 executables ran successfully. The Debian control record was verified as package `portabase` version `0.3.0`, with the expected maintainer, homepage, and runtime dependencies. A graphical clean-install and keyring acceptance pass remains required before public release.
+The AppImage was extracted without installation; its bundled PostgreSQL 16.14 and Supabase CLI 2.109.1 executables ran successfully, and the packaged tools contained no dependency symlinks back to the builder. The Debian control record was verified as package `portabase` version `0.3.1`, with the expected maintainer, homepage, and runtime dependencies. A graphical clean-install and keyring acceptance pass remains required before public release.

@@ -14,8 +14,8 @@ For the release build, set electron-builder `forceCodeSigning: true`; without th
 Verify on a clean Windows VM:
 
 ```powershell
-Get-AuthenticodeSignature .\PortaBase-Setup-0.3.0.exe | Format-List Status,StatusMessage,SignerCertificate,TimeStamperCertificate
-signtool verify /pa /v .\PortaBase-Setup-0.3.0.exe
+Get-AuthenticodeSignature .\PortaBase-Setup-0.3.1.exe | Format-List Status,StatusMessage,SignerCertificate,TimeStamperCertificate
+signtool verify /pa /v .\PortaBase-Setup-0.3.1.exe
 ```
 
 The required outcome is `Valid`/exit code zero, the expected PortaBase publisher identity, a valid timestamp, and a successful install/uninstall. See [Microsoft SignTool](https://learn.microsoft.com/windows/win32/seccrypto/signtool), [Microsoft signature verification](https://learn.microsoft.com/windows/win32/seccrypto/using-signtool-to-verify-a-file-signature), and [electron-builder Windows signing](https://www.electron.build/docs/features/code-signing/code-signing-win/).
@@ -33,7 +33,7 @@ Verify on a clean current macOS machine:
 ```bash
 codesign --verify --deep --strict --verbose=2 "PortaBase.app"
 spctl --assess --type execute --verbose=4 "PortaBase.app"
-xcrun stapler validate "PortaBase-0.3.0.dmg"
+xcrun stapler validate "PortaBase-0.3.1.dmg"
 ```
 
 Apple requires Developer ID signing and notarization for modern direct distribution; `notarytool` and `stapler` are the supported command-line tools. See [Apple Developer ID](https://developer.apple.com/support/developer-id/), [Apple notarization](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution), and [electron-builder macOS signing](https://www.electron.build/docs/features/code-signing/code-signing-mac/).
