@@ -12,13 +12,28 @@ for tool in pg_dump pg_dumpall psql; do
 done
 pg_bin="$(dirname "$(command -v pg_dump)")"
 for tool in pg_dump pg_dumpall psql; do cp "${pg_bin}/${tool}" "${vendor}/postgres/bin/${tool}"; done
-find "${pg_bin}" -maxdepth 1 -type f \( -name '*.so*' -o -name '*.dylib' \) -exec cp {} "${vendor}/postgres/bin/" \;
 
 pg_prefix="$(cd "${pg_bin}/.." && pwd)"
-if [[ -d "${pg_prefix}/lib" ]]; then
-  mkdir -p "${vendor}/postgres/lib"
-  cp -a "${pg_prefix}/lib/." "${vendor}/postgres/lib/"
-fi
+mkdir -p "${vendor}/postgres/lib"
+case "$(uname -s)" in
+  Linux)
+    command -v ldd >/dev/null || { echo "Missing ldd; cannot stage PostgreSQL runtime libraries." >&2; exit 1; }
+    {
+      for tool in pg_dump pg_dumpall psql; do
+        ldd "${pg_bin}/${tool}" 2>/dev/null || true
+      done
+    } | awk '/=> \/[^ ]+/ { print $3 } /^\/[^ ]+/ { print $1 }' | sort -u | while IFS= read -r library; do
+      [[ -f "${library}" ]] && cp -L "${library}" "${vendor}/postgres/lib/$(basename "${library}")"
+    done
+    ;;
+  Darwin)
+    # Homebrew PostgreSQL clients normally keep their non-system dylibs together.
+    # Dereference links so the package never contains a path back to the build Mac.
+    if [[ -d "${pg_prefix}/lib" ]]; then
+      find "${pg_prefix}/lib" -maxdepth 1 \( -type f -o -type l \) -name '*.dylib' -exec sh -c 'for library do cp -L "$library" "$1/$(basename "$library")"; done' sh "${vendor}/postgres/lib" {} +
+    fi
+    ;;
+esac
 for notice in commandlinetools_3rd_party_licenses.txt server_license.txt COPYRIGHT; do
   [[ -f "${pg_prefix}/${notice}" ]] && cp "${pg_prefix}/${notice}" "${vendor}/postgres/${notice}"
 done

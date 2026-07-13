@@ -1,9 +1,14 @@
 {
-  "name": "portabase-dev",
+  "name": "portabase",
   "private": true,
   "version": "0.3.0",
   "description": "Customer-owned, encrypted Supabase backup and guarded recovery software.",
-  "author": "PortaBase",
+  "homepage": "https://portabase.dev",
+  "author": {
+    "name": "PortaBase",
+    "email": "support@portabase.dev"
+  },
+  "desktopName": "PortaBase",
   "type": "module",
   "main": "desktop/main.cjs",
   "bin": {
@@ -86,7 +91,11 @@
         "AppImage",
         "deb"
       ],
-      "category": "Utility"
+      "category": "Utility",
+      "maintainer": "PortaBase <support@portabase.dev>",
+      "syncDesktopName": true,
+      "executableName": "portabase",
+      "artifactName": "PortaBase-${version}-${arch}.${ext}"
     },
     "deb": {
       "depends": [

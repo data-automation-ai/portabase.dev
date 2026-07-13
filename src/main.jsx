@@ -287,6 +287,8 @@ function Reality() {
           <div><b>08</b><strong>Regulated data crosses a line</strong><p>Storing payment-card information without prior written approval, or protected health information without the required agreement, can breach the platform terms even if the application itself is legitimate.</p></div>
           <div><b>09</b><strong>An API key leaks. Attackers use it.</strong><p>A service-role key, database password, access token, or administrator login is exposed through no fault of your own. Bots can steal data, generate abusive traffic, attack other systems, or turn a normal $500 monthly bill into $50,000. The leak may be innocent. The bleeding can still be fatal.</p></div>
           <div><b>10</b><strong>Law or a provider intervenes</strong><p>Supabase’s terms permit suspension when service would violate law or when a required third-party vendor suspends the component Supabase depends on.</p></div>
+          <div><b>11</b><strong>The only owner loses identity access</strong><p>The company email expires, a domain lapses, GitHub or SSO access changes, an authenticator is lost, or the sole administrator leaves. The database may still be running while every person able to manage or recover it is locked outside.</p></div>
+          <div><b>12</b><strong>A trusted administrator makes one fatal click</strong><p>A cofounder, contractor, compromised administrator, or exhausted employee removes an owner, transfers the wrong organization, or deletes a production project. Legitimate authority does not guarantee legitimate intent—or a reversible result.</p></div>
         </div>
         <div className="billing-emergency">
           <div><span>THE $50,000 DECISION</span><strong>$500 <i>→</i> $50,000</strong></div>

@@ -11,6 +11,7 @@ PortaBase uses Square-hosted Checkout for the one-time $147 Essentials license. 
 | `SQUARE_WEBHOOK_SIGNATURE_KEY` | `square.webhook_signature_key` | No |
 | `SQUARE_ENV` | not secret; `production` or `sandbox` | No |
 | `PORTABASE_SITE_URL` | not secret; `https://portabase.dev` | No |
+| `PORTABASE_LICENSE_PRIVATE_KEY` | `portabase-license-private-key` flat bundle record | No |
 
 The functions resolve the three private values from AWS Secrets Manager secret `secrets-bundle` first, then from same-named Netlify environment variables as a temporary fallback. Never create a `VITE_SQUARE_*` variable.
 
@@ -24,9 +25,15 @@ The functions resolve the three private values from AWS Secrets Manager secret `
 6. Set `SQUARE_ENV=sandbox` for the end-to-end sandbox test. Complete a checkout, confirm `/thanks` verifies the order, and confirm Square receives HTTP 200 from the webhook.
 7. Replace the sandbox values with production values, set `SQUARE_ENV=production`, redeploy, and perform one controlled live purchase/refund test.
 
-## Fulfillment gate
+## Fulfillment
 
-The current webhook verifies and records completed payment events, but it does not yet mint an offline signed license or send a protected download. Until the native license verifier and signing-key workflow in `LICENSING_ARCHITECTURE.md` are complete, fulfillment is manual. Do not describe checkout as automatic software delivery.
+After the success page re-verifies the completed order, the customer selects Windows, macOS, or Linux and calls `/api/license/claim`. A strongly consistent Netlify Blobs claim record binds the order to the first selected platform. The function then signs and returns the lifetime offline license file; the same platform can download it again, while a different platform receives HTTP 409. This protects the one-platform purchase without sending product credentials or backup metadata to PortaBase.
+
+The application imports and verifies the license locally. Keep a separate protected copy of the license file with the customer's recovery documentation.
+
+## Deployment gate
+
+Netlify site-wide password protection intercepts anonymous webhook traffic. While the temporary site password is enabled, Square cannot deliver `/api/square/webhook` events. Remove or replace that blanket lock with route-aware access control before enabling public checkout, then repeat the signed webhook acceptance test.
 
 ## Fail-closed behavior
 
@@ -37,3 +44,4 @@ Checkout returns HTTP 503 when payment configuration is missing. Order verificat
 - `POST /api/square/checkout` creates a new idempotent Square payment link.
 - `GET /api/square/order?order_id=...` verifies the completed Square order.
 - `POST /api/square/webhook` validates and accepts subscribed Square payment events.
+- `POST /api/license/claim` re-verifies a completed order, binds its platform, and returns the signed lifetime license.

@@ -2,14 +2,19 @@
 
 Electron is the interface, not the protection boundary. ASAR files can be unpacked and JavaScript obfuscation is not meaningful license enforcement.
 
-## Intended paid-license design
+## Implemented paid-license design
 
-1. Move trial-limit enforcement, capsule capture, and restore execution into a compiled Rust core shared by Windows, macOS, and Linux.
-2. Generate an Ed25519 signing key pair once. Store the private key only in the PortaBase AWS `secrets-bundle`; embed only the public key in the native core.
-3. After Square confirms a completed $147 Essentials order, mint a lifetime signed license containing a random license ID, edition, issue date, free-update entitlement, and reasonable device allowance.
-4. Let the desktop app import the small license file and verify it entirely offline. No Supabase key, cloud credential, passphrase, capsule, machine inventory, or backup metadata is sent to PortaBase.
-5. Enforce the indefinite trial limits inside the native core. A missing, altered, or incorrectly signed license remains trial edition. Paid licenses do not expire or become ineligible for future software versions.
-6. Code-sign every platform binary and publish hashes. The app should distinguish an authentic PortaBase build from a modified redistribution.
+1. PortaBase has an Ed25519 signing key pair. The private key is held in the PortaBase AWS `secrets-bundle`, with an encrypted Netlify function environment fallback; only the public key ships with the application.
+2. After Square confirms a completed $147 Essentials order, `/api/license/claim` atomically binds the order to the customer's selected platform and mints a lifetime signed license with free future updates.
+3. The desktop app imports the small license file and verifies it entirely offline. No Supabase key, cloud credential, passphrase, capsule, machine inventory, or backup metadata is sent to PortaBase.
+4. Missing, malformed, altered, or wrong-platform licenses fail closed to the indefinite trial limits. Emergency restore is never disabled by a commercial-license check.
+5. A customer can retain and reuse the same license file on customer-owned machines for its selected platform; the purchase is not coupled to a PortaBase login service.
+
+## Hardening still required
+
+1. Move trial-limit enforcement, capsule capture, and restore execution into a compiled Rust core shared by Windows, macOS, and Linux. The current JavaScript/ASAR implementation deters casual copying but can be patched by a determined attacker.
+2. Code-sign every platform binary and publish hashes. macOS additionally requires Developer ID signing, notarization, and ticket stapling.
+3. Complete controlled Square sandbox and live-purchase/refund acceptance tests before enabling public checkout.
 
 ## Customer-fair policy
 
@@ -20,6 +25,6 @@ Electron is the interface, not the protection boundary. ASAR files can be unpack
 - A hardware change must not make an existing recovery capsule unreadable.
 - The encryption passphrase and capsule format are independent of the commercial license.
 
-## Release blocker
+## Public-release blocker
 
-The current JavaScript reference engine and unsigned desktop installer prove functionality, not copy protection. Do not claim protected paid distribution until the native verifier, signing-key ceremony, Square fulfillment path, device policy, signed installers, and recovery tests are complete.
+Signed offline fulfillment is implemented, but the installers remain unsigned and the recovery acceptance suite has not yet completed a live write-and-verify restore into a new disposable Supabase account. Do not claim a signed production release or proven one-click disaster recovery until those gates pass. Do not describe the JavaScript implementation as unbreakable copy protection.
