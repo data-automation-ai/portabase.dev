@@ -11,13 +11,54 @@
   <header><div class="brand"><b>PORTA</b>BASE <span>DESKTOP</span></div><div id="security">Checking protected storage…</div></header>
   <main>
     <aside>
-      <button class="nav active" data-page="protect">1. Protect this project</button>
-      <button class="nav" data-page="recover">2. Recover somewhere new</button>
+      <button class="nav" data-page="guided" id="navGuided">Guided protection</button>
+      <button class="nav" data-page="protect">Protect this project</button>
+      <button class="nav" data-page="recover">Recover somewhere new</button>
+      <button class="nav" data-page="cli">Command line</button>
       <button class="nav" data-page="results">Activity and proof</button>
+      <button class="nav subtle" data-page="comfort">Change experience level</button>
       <div class="ownership"><b>Your machine. Your keys.</b><p>PortaBase has no account, credential vault, or route into your backups.</p></div>
       <button id="buy" class="buy">Buy PortaBase for this platform · $147</button>
     </aside>
-    <section id="protect" class="page active">
+
+    <section id="comfort" class="page">
+      <p class="eyebrow">WELCOME</p><h1>You built something worth protecting.<br>How do you like to work?</h1>
+      <p class="lead">Every path uses the same engine, the same encryption, and the same safety guards. This only changes how much PortaBase explains and how much it handles for you. You can switch anytime.</p>
+      <div class="comfortCards">
+        <button class="comfortCard" data-level="guided"><b>I just built an app</b><p>You made something real — we’ll handle the database plumbing. One token, a few guided steps, and your app is protected.</p><span>GUIDED · RECOMMENDED FOR BUILDERS</span></button>
+        <button class="comfortCard" data-level="standard"><b>I know my way around</b><p>You know what a token is and can find your connection string. One screen with every field, validated as you go.</p><span>STANDARD</span></button>
+        <button class="comfortCard" data-level="cli"><b>Give me the CLI</b><p>Scriptable commands, JSON output, meaningful exit codes, cron-ready. The app stays out of your way.</p><span>EXPERT</span></button>
+      </div>
+    </section>
+
+    <section id="guided" class="page">
+      <p class="eyebrow">GUIDED PROTECTION</p><h1>Let’s protect your app.<br>Four steps, all on this computer.</h1>
+      <p class="lead">Nothing you paste here is sent to PortaBase — there is nowhere to send it. Your token talks directly to Supabase; everything else stays on this machine.</p>
+      <div class="step automated" id="gStep1"><b>Step 1 · Connect with one token</b><p>A Personal Access Token lets PortaBase find your apps by name so you never have to hunt for technical details. Create one, then paste it below.</p>
+        <div class="stepActions"><button id="gOpenTokens" class="secondary">Open the Supabase token page</button></div>
+        <div class="grid compact"><label class="wide">Personal Access Token<input id="gToken" type="password" placeholder="Paste your token — it stays on this computer"></label></div>
+        <div class="stepActions"><button id="gConnect" class="primary">Connect</button></div>
+        <p id="gStep1Status" class="statusline">Waiting to connect.</p>
+      </div>
+      <div class="step locked" id="gStep2"><b>Step 2 · Choose your app</b><p>These are the apps on your Supabase account. Pick the one to protect.</p>
+        <div class="grid compact"><label class="wide">Your app<select id="gProject"><option value="">Connect first</option></select></label>
+          <label class="wide">Database password<input id="gDbPassword" type="password" placeholder="From your app’s database settings page"></label></div>
+        <div class="stepActions"><button id="gOpenDbSettings" class="secondary">Open my app’s password page</button><button id="gPrepare" class="primary">Check my app’s connection</button></div>
+        <p id="gStep2Status" class="statusline">Pick your app, then paste (or reset) its database password.</p>
+      </div>
+      <div class="step locked" id="gStep3"><b>Step 3 · Your secret key to the backups</b><p>Backups are encrypted with a passphrase only you hold. We’ll generate a strong one — save it somewhere that is not this computer (password manager, printed note). Without it, nobody can open your backups. Not even you.</p>
+        <div class="grid compact"><label class="wide">Encryption passphrase<input id="gPassphrase" placeholder="Click Generate, then save it somewhere safe"></label></div>
+        <div class="stepActions"><button id="gGenerate" class="secondary">Generate a strong passphrase</button></div>
+        <label class="confirm"><input type="checkbox" id="gSaved"> I saved this passphrase somewhere safe that is not this computer.</label>
+        <p id="gStep3Status" class="statusline">Generate and save your passphrase to continue.</p>
+      </div>
+      <div class="step locked" id="gStep4"><b>Step 4 · Protect it</b><p>PortaBase will read your app, encrypt a recovery copy on this computer, verify it, and show you exactly what is protected. Watch it happen live.</p>
+        <div class="stepActions"><button id="gProtect" class="primary">Protect my app now</button><button id="gSchedule" class="secondary">Also protect it automatically every 6 hours</button></div>
+        <p id="gStep4Status" class="statusline">Everything runs and stays on this computer.</p>
+      </div>
+    </section>
+
+    <section id="protect" class="page">
       <p class="eyebrow">PROTECT THIS PROJECT</p><h1>Make the independent copy before access disappears.</h1>
       <p class="lead">The trial runs the real workflow indefinitely, but saves only structure, five Storage objects, and two Functions.</p>
       <div class="step automated"><b id="licenseStatus">Trial edition · limited payload</b><p>A paid PortaBase license is a small signed file. It verifies entirely on this computer and never expires.</p><div class="stepActions"><button id="importLicense" class="secondary">Import purchased license</button></div></div>
@@ -33,6 +74,7 @@
       <div class="actions"><button id="saveSource" class="secondary">Save securely</button><button id="doctor" class="secondary">Check readiness</button><button id="trial" class="secondary">Run limited trial backup</button><button id="fullBackup" class="primary">Run complete licensed backup</button></div>
       <div class="step"><b>Automatic protection</b><p>The installed PortaBase application can run headlessly every six hours. The OS schedule contains no passwords or tokens; PortaBase reads them from your protected credential store at run time.</p><div class="stepActions"><button id="installSchedule" class="primary">Install 6-hour schedule</button><button id="removeSchedule" class="secondary">Remove schedule</button></div></div>
     </section>
+
     <section id="recover" class="page">
       <p class="eyebrow">RECOVER INTO A NEW PROJECT</p><h1>A backup matters only if it opens somewhere else.</h1>
       <p class="lead">We guide and automate as much as Supabase permits. A few identity, billing, and third-party security steps must remain manual under Supabase’s rules.</p>
@@ -59,7 +101,35 @@
       <div class="danger"><b>Write guard</b><p>First create a dry-run plan. To execute, type the exact new project reference below. PortaBase refuses the original source project.</p><input id="typedRef" placeholder="Type the NEW project reference"></div>
       <div class="actions"><button id="dryRun" class="secondary">Build no-write restore plan</button><button id="drillRestore" class="secondary">Run limited restore drill</button><button id="executeRestore" class="dangerButton">Restore complete capsule</button></div>
     </section>
-    <section id="results" class="page"><p class="eyebrow">ACTIVITY AND PROOF</p><h1>Evidence, not a green checkmark.</h1><div class="stepActions"><button id="openReport" class="primary" hidden>Open the report</button></div><pre id="output">No task has run in this session.</pre></section>
+
+    <section id="cli" class="page">
+      <p class="eyebrow">COMMAND LINE</p><h1>Scriptable, JSON-speaking, cron-ready.</h1>
+      <p class="lead">The desktop app is a thin shell over the same CLI. Point your automation at it directly — secrets come from environment variables, results come back as JSON, and every destructive operation is dry-run by default.</p>
+      <pre class="cliDoc">portabase doctor              # readiness checks; exit 2 on missing pieces
+portabase probe --target db   # single JSON line: {"ok":true,...} — token|db|storage|tools|all
+portabase backup --json       # capture+encrypt+transfer+verify; last stdout line is JSON
+portabase backup --progress   # stream "@portabase {...}" machine events while running
+portabase status              # last durable result as JSON; exit 5 unless healthy
+portabase verify --decrypt    # checksums + authenticated decryption proof
+portabase restore --capsule DIR                  # no-write recovery plan
+portabase restore --capsule DIR --preflight      # plan + live blank-target checks
+portabase restore --capsule DIR --execute \
+  --confirm-target NEW_REF --json                # guarded write, evidence as JSON
+portabase prune --keep 30 --execute              # guarded retention
+
+Secrets (environment only, never written to disk by the CLI):
+  SUPABASE_DB_URL  SUPABASE_URL  SUPABASE_SERVICE_ROLE_KEY
+  SUPABASE_ACCESS_TOKEN  PORTABASE_ENCRYPTION_PASSPHRASE
+Exit codes: 0 ok · 1 failure · 2 doctor gaps · 3 partial capture ·
+            4 verify failure · 5 unhealthy status · 6 probe failure</pre>
+      <p class="lead">Config lives in <code>portabase.config.json</code>; schedule with cron/systemd/schtasks calling <code>backup</code>. The install-schedule command prints the exact entry.</p>
+    </section>
+
+    <section id="results" class="page"><p class="eyebrow">ACTIVITY AND PROOF</p><h1>Evidence, not a green checkmark.</h1>
+      <div class="flowPanel"><canvas id="flowCanvas" width="820" height="180"></canvas><div id="flowLabel" class="flowLabel">Idle — nothing is running.</div></div>
+      <div class="stepActions"><button id="openReport" class="primary" hidden>Open the report</button></div>
+      <pre id="output">No task has run in this session.</pre>
+    </section>
   </main>
   <script src="renderer.js"></script>
 </body>

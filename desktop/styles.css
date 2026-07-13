@@ -21,4 +21,20 @@ input:focus,select:focus{outline:1px solid var(--acid);border-color:var(--acid)}
 button{font:inherit}.secondary,.primary,.dangerButton,.picker button{padding:11px 16px;border-radius:5px;cursor:pointer}.secondary,.picker button{background:#252831;border:1px solid #3b404b;color:var(--text)}.dangerButton{background:#4d1d1d;border:1px solid #91413b;color:#fff}
 .step,.danger{margin-top:24px;padding:18px;border:1px solid var(--line);background:var(--panel);border-radius:7px}.step.automated{border-color:#4d6530}.step p,.danger p{color:var(--muted);line-height:1.55}.statusline{border-top:1px solid var(--line);padding-top:13px;margin-bottom:0}.danger{border-color:#713531}
 pre{white-space:pre-wrap;background:#08090b;border:1px solid var(--line);padding:22px;min-height:400px;border-radius:7px;color:#d6d7d0;line-height:1.55;overflow:auto}pre.failed{border-color:#713531;color:#ffaaa3}
-@media(max-width:900px){main{grid-template-columns:210px 1fr}.page{padding:38px 32px}.grid{grid-template-columns:1fr}.wide{grid-column:auto}}
+.nav.subtle{font-size:11px;color:#6d6e72;padding:8px 14px}
+.comfortCards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:34px}
+.comfortCard{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:24px 20px 20px;text-align:left;color:var(--text);cursor:pointer;display:flex;flex-direction:column;gap:10px;transition:border-color .15s,transform .15s}
+.comfortCard:hover{border-color:var(--acid);transform:translateY(-3px)}
+.comfortCard b{font-size:17px}.comfortCard p{color:var(--muted);font-size:12.5px;line-height:1.55;margin:0}
+.comfortCard span{margin-top:auto;font-size:9px;letter-spacing:.13em;color:var(--acid)}
+.step.locked{opacity:.38;pointer-events:none}
+.statusline.good{color:var(--acid)}
+.confirm{flex-direction:row;align-items:center;gap:9px;margin-top:14px;font-size:13px;color:#c7c7c2}
+.confirm input{width:auto}
+.flowPanel{margin-top:22px;background:#08090b;border:1px solid var(--line);border-radius:9px;padding:14px;overflow:hidden}
+.flowPanel canvas{width:100%;height:auto;display:block}
+.flowLabel{border-top:1px solid var(--line);margin-top:10px;padding:11px 6px 2px;font:13px ui-monospace,Consolas,monospace;color:var(--muted);min-height:20px}
+.flowLabel.good{color:var(--acid)}.flowLabel.bad{color:var(--red)}
+.cliDoc{min-height:0;font-size:12.5px;line-height:1.7}
+code{background:#0f1115;border:1px solid var(--line);border-radius:4px;padding:2px 6px;font-size:12px}
+@media(max-width:900px){main{grid-template-columns:210px 1fr}.page{padding:38px 32px}.grid,.comfortCards{grid-template-columns:1fr}.wide{grid-column:auto}}

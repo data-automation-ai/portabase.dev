@@ -60,6 +60,10 @@ function hasFlag(name) {
   return argv.includes(`--${name}`);
 }
 
+function progress(event) {
+  if (hasFlag('progress')) console.log(`@portabase ${JSON.stringify(event)}`);
+}
+
 async function ask(prompt, fallback = '') {
   const rl = createInterface({ input, output });
   const answer = await rl.question(`${prompt}${fallback ? ` [${fallback}]` : ''}: `);
@@ -281,6 +285,7 @@ async function captureDatabaseInventory(dbUrl, outputPath = null, { estimateRows
       const count = psqlValue(dbUrl, `SELECT count(*)::text FROM ${quoteIdentifier(table.schema)}.${quoteIdentifier(table.name)};`);
       table.rows = Number(count);
       if (!Number.isSafeInteger(table.rows) || table.rows < 0) throw new Error(`Invalid row count for ${table.schema}.${table.name}.`);
+      progress({ phase: 'database', item: `${table.schema}.${table.name}`, rows: table.rows });
     }
   }
   const metricSql = `SELECT json_build_object(
@@ -299,28 +304,62 @@ async function captureDatabaseInventory(dbUrl, outputPath = null, { estimateRows
 function runToFile(name, commandArgs, outputPath, options = {}) {
   return new Promise((resolveRun, reject) => {
     const outputFile = createWriteStream(outputPath, { flags: 'wx' });
-    let exited = false;
+    let exitCode = null;
     let closed = false;
-    let failed = false;
-    const finish = () => { if (!failed && exited && closed) resolveRun(); };
+    let processError = null;
+    let outputError = null;
+    let stderr = '';
+    const finish = () => {
+      if (!closed || (exitCode === null && !processError)) return;
+      if (outputError) reject(outputError);
+      else if (processError) reject(processError);
+      else if (exitCode !== 0) {
+        const detail = stderr.trim().slice(-2000);
+        reject(new Error(`${basename(name)} exited with code ${exitCode}${detail ? `: ${detail}` : ''}`));
+      } else resolveRun();
+    };
     const child = spawn(name, commandArgs, {
       stdio: ['ignore', 'pipe', 'pipe'], shell: false, windowsHide: true, ...options,
     });
     child.stdout.pipe(outputFile);
-    child.stderr.pipe(process.stderr);
+    child.stderr.on('data', chunk => {
+      const text = chunk.toString();
+      stderr = `${stderr}${text}`.slice(-4000);
+      process.stderr.write(text);
+    });
     outputFile.once('close', () => { closed = true; finish(); });
-    outputFile.once('error', error => { failed = true; reject(error); });
-    child.once('error', error => { failed = true; reject(error); });
+    outputFile.once('error', error => { outputError = error; closed = true; finish(); });
+    child.once('error', error => {
+      processError = error;
+      outputFile.destroy();
+      finish();
+    });
     child.once('exit', code => {
-      if (code !== 0) {
-        failed = true;
-        reject(new Error(`${basename(name)} exited with code ${code}`));
-      } else {
-        exited = true;
-        finish();
-      }
+      exitCode = code ?? -1;
+      finish();
     });
   });
+}
+
+async function runDumpToFile(name, commandArgs, outputPath, options = {}) {
+  const configured = Number.parseInt(process.env.PORTABASE_DATABASE_DUMP_ATTEMPTS || '3', 10);
+  const attempts = Number.isSafeInteger(configured) ? Math.min(Math.max(configured, 1), 5) : 3;
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    await rm(outputPath, { force: true });
+    try {
+      await runToFile(name, commandArgs, outputPath, options);
+      return;
+    } catch (error) {
+      lastError = error;
+      await rm(outputPath, { force: true });
+      if (attempt === attempts) break;
+      const delayMs = attempt * 3000;
+      console.warn(`Database export attempt ${attempt}/${attempts} failed. Retrying in ${delayMs / 1000}s: ${error.message}`);
+      await new Promise(resolveDelay => setTimeout(resolveDelay, delayMs));
+    }
+  }
+  throw new Error(`Database export failed after ${attempts} attempts: ${lastError?.message || 'unknown error'}`);
 }
 
 async function transformSql(source, target, transform, prefix = '', suffix = '') {
@@ -391,12 +430,15 @@ async function captureDatabaseNative(dbUrl, dbDir, limits = null) {
   const rawSchema = join(dbDir, '.schema.raw.sql');
   const rawData = join(dbDir, '.data.raw.sql');
   try {
-    await runToFile(pgDumpAll, ['--roles-only', '--role', 'postgres', '--quote-all-identifiers', '--no-role-passwords', '--no-comments'], rawRoles, { env });
+    progress({ phase: 'database', item: 'roles' });
+    await runDumpToFile(pgDumpAll, ['--roles-only', '--role', 'postgres', '--quote-all-identifiers', '--no-role-passwords', '--no-comments'], rawRoles, { env });
     await transformSql(rawRoles, join(dbDir, 'roles.sql'), cleanRoleLine, '', 'RESET ALL;\n');
-    await runToFile(pgDump, ['--schema-only', '--quote-all-identifiers', '--role', 'postgres', '--exclude-schema', SCHEMA_EXCLUDES], rawSchema, { env });
+    progress({ phase: 'database', item: 'schema' });
+    await runDumpToFile(pgDump, ['--schema-only', '--quote-all-identifiers', '--role', 'postgres', '--exclude-schema', SCHEMA_EXCLUDES], rawSchema, { env });
     await transformSql(rawSchema, join(dbDir, 'schema.sql'), cleanSchemaLine);
     if (!limits?.databaseSchemaOnly) {
-      await runToFile(pgDump, ['--data-only', '--quote-all-identifiers', '--role', 'postgres', '--exclude-schema', DATA_EXCLUDES, '--exclude-table', 'auth.schema_migrations', '--exclude-table', 'storage.migrations', '--exclude-table', 'supabase_functions.migrations', '--schema', '*'], rawData, { env });
+      progress({ phase: 'database', item: 'table rows' });
+      await runDumpToFile(pgDump, ['--data-only', '--quote-all-identifiers', '--role', 'postgres', '--exclude-schema', DATA_EXCLUDES, '--exclude-table', 'auth.schema_migrations', '--exclude-table', 'storage.migrations', '--exclude-table', 'supabase_functions.migrations', '--schema', '*'], rawData, { env });
       await transformSql(rawData, join(dbDir, 'data.sql'), line => /^\\(un)?restrict /.test(line) ? `-- ${line}` : line, 'SET session_replication_role = replica;\n', 'RESET ALL;\n');
     }
   } finally {
@@ -451,6 +493,7 @@ async function captureStorage(rawDir, limits = null) {
   const inventory = { bucketCount: buckets.length, objectCount: 0, totalBytes: 0, buckets: [] };
   const listedObjects = new Map();
   for (const bucket of buckets) {
+    progress({ phase: 'scan', item: bucket.id });
     const objects = await listBucketObjects(bucket.id);
     const bytes = objects.reduce((total, object) => total + (Number(object.metadata?.size) || 0), 0);
     listedObjects.set(bucket.id, objects);
@@ -479,6 +522,7 @@ async function captureStorage(rawDir, limits = null) {
       record.objects.push({ name: object.fullName, size: info.size, sha256: await hashFile(target), updatedAt: object.updated_at || null, contentType: object.metadata?.mimetype || null });
       manifest.objectCount += 1;
       manifest.totalBytes += info.size;
+      progress({ phase: 'storage', item: `${bucket.id}/${object.fullName}`, bytes: info.size });
     }
     manifest.buckets.push(record);
   }
@@ -500,6 +544,7 @@ async function captureFunctions(config, rawDir, limits = null) {
   const availableFunctions = JSON.parse(result.stdout || '[]');
   const functions = limits ? availableFunctions.slice(0, limits.maxFunctions) : availableFunctions;
   for (const fn of functions) {
+    progress({ phase: 'functions', item: fn.name });
     await run(supabase, ['functions', 'download', fn.name, '--project-ref', config.projectRef, '--workdir', functionsDir], { cwd: functionsDir, env: process.env });
   }
   return {
@@ -676,6 +721,7 @@ async function backup() {
       }
       try {
         console.log(`Capturing ${name}...`);
+        progress({ phase: 'capture', item: name });
         manifest.contents[name] = await capture();
       } catch (error) {
         manifest.contents[name] = { complete: false, error: error.message };
@@ -688,6 +734,7 @@ async function backup() {
     await writeFile(join(rawDir, 'RECOVER.md'), '# PortaBase recovery capsule\n\nRestore only into a fresh, explicitly confirmed Supabase target. Run `portabase restore --capsule <directory>` for a dry-run recovery plan.\n');
     const tar = resolveTool('tar');
     if (!tar) throw new Error('tar is required to create the encrypted capsule.');
+    progress({ phase: 'encrypt' });
     await run(tar, ['-czf', archive, '-C', rawDir, '.']);
     await mkdir(capsuleDir, { recursive: false });
     const encryption = await encryptFile(archive, join(capsuleDir, 'capsule.pbase'), passphrase, id);
@@ -707,6 +754,7 @@ async function backup() {
     await writeFile(join(capsuleDir, 'RECOVER.txt'), 'This capsule is encrypted. Keep PORTABASE_ENCRYPTION_PASSPHRASE outside the backup destination. Use PortaBase restore without --execute to inspect the recovery plan.\n');
     if (trial) await writeTrialReport(capsuleDir, capsuleMetadata);
     await writeChecksums(capsuleDir);
+    progress({ phase: 'transfer', item: config.provider.type });
     const transfer = await transferCapsule(config, capsuleDir);
     const state = { state: manifest.status, capsule: id, completedAt: new Date().toISOString(), destination: transfer.destination, verified: transfer.verified, errors: manifest.errors };
     await writeStatus(config, state);
@@ -714,11 +762,15 @@ async function backup() {
     console.log(`\n${manifest.status}: ${capsuleDir}`);
     console.log(`VERIFIED DESTINATION: ${transfer.destination}`);
     if (trial) console.log(`TRIAL REPORT: ${join(capsuleDir, 'TRIAL-REPORT.html')}`);
+    progress({ phase: 'done', status: manifest.status });
+    if (hasFlag('json')) console.log(JSON.stringify({ ...state, contents: manifest.contents }));
     if (!['COMPLETE', 'TRIAL'].includes(manifest.status)) process.exitCode = 3;
   } catch (error) {
     const state = { state: 'FAILED', capsule: id, failedAt: new Date().toISOString(), error: error.message };
     await writeStatus(config, state);
     await sendAlert(config, state);
+    progress({ phase: 'failed', item: error.message });
+    if (hasFlag('json')) console.log(JSON.stringify(state));
     throw error;
   } finally {
     await rm(workDir, { recursive: true, force: true });
@@ -1006,6 +1058,7 @@ async function restore() {
       console.log('\nRECOVERY DATA PATH VERIFIED. Finish and verify the listed manual configuration before cutover.');
     }
     await writeRecoveryEvidence(evidence);
+    if (hasFlag('json')) console.log(JSON.stringify(evidence));
   } catch (error) {
     evidence.status = 'FAILED';
     evidence.error = error.message;
@@ -1083,6 +1136,66 @@ async function plan() {
   console.log('Credentials and encryption keys remain local. No PortaBase API or telemetry endpoint is contacted.');
 }
 
+async function probeToken() {
+  const token = process.env.SUPABASE_ACCESS_TOKEN;
+  if (!token) return { ok: false, detail: 'SUPABASE_ACCESS_TOKEN is not set.' };
+  try {
+    const response = await fetch('https://api.supabase.com/v1/projects', {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) return { ok: false, detail: `Supabase rejected the token (HTTP ${response.status}).` };
+    const projects = await response.json();
+    return { ok: true, detail: `Token accepted; ${Array.isArray(projects) ? projects.length : 0} project(s) visible.` };
+  } catch (error) {
+    return { ok: false, detail: `Could not reach the Supabase Management API: ${error.message}` };
+  }
+}
+
+function probeDatabase() {
+  if (!process.env.SUPABASE_DB_URL) return { ok: false, detail: 'SUPABASE_DB_URL is not set.' };
+  if (!resolveTool('psql')) return { ok: false, detail: 'psql is not available for a live connection test.' };
+  try {
+    psqlValue(process.env.SUPABASE_DB_URL, 'SELECT 1;');
+    return { ok: true, detail: 'Database connection and credentials work.' };
+  } catch (error) {
+    return { ok: false, detail: error.message };
+  }
+}
+
+async function probeStorage() {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return { ok: false, detail: 'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are not both set.' };
+  }
+  const health = await authenticatedHealth();
+  return health.ok
+    ? { ok: true, detail: 'Storage API accepted the service key.' }
+    : { ok: false, detail: `Storage API check failed${health.status ? ` (HTTP ${health.status})` : ''}${health.error ? `: ${health.error}` : ''}.` };
+}
+
+function probeTools() {
+  const required = ['tar', 'pg_dump', 'psql'];
+  const missing = required.filter(name => !resolveTool(name));
+  if (missing.includes('pg_dump') && resolveTool('supabase')) {
+    return { ok: !missing.includes('tar'), detail: missing.includes('tar') ? 'Missing tools: tar.' : 'Postgres tools missing; the Supabase CLI fallback will be used.' };
+  }
+  return missing.length
+    ? { ok: false, detail: `Missing tools: ${missing.join(', ')}.` }
+    : { ok: true, detail: 'Capture tools are available.' };
+}
+
+async function probe() {
+  const target = flag('target', 'all');
+  const probes = { token: probeToken, db: probeDatabase, storage: probeStorage, tools: probeTools };
+  const selected = target === 'all' ? Object.keys(probes) : [target];
+  if (selected.some(name => !probes[name])) throw new Error(`Unknown probe target: ${target}. Use token, db, storage, tools, or all.`);
+  const results = {};
+  for (const name of selected) results[name] = await probes[name]();
+  const ok = Object.values(results).every(result => result.ok);
+  console.log(JSON.stringify({ ok, probes: results }));
+  if (!ok) process.exitCode = 6;
+}
+
 function help() {
   console.log(`PortaBase ${VERSION}\n\nEncrypted, customer-owned Supabase recovery capsules. No telemetry. No credential custody.\n\nCommands:\n  init                Create a non-secret Essentials configuration\n  doctor              Test tools, credentials, destination, and live authorization\n  plan                Show the capture and destination plan\n  backup              Capture, encrypt, transfer, and verify a capsule\n                      Missing/invalid license fails closed to trial limits\n                      Add --license <file> for an offline signed paid license\n  verify              Verify checksums; add --decrypt for authenticated decryption\n  status              Show the last durable backup result\n  prune               Preview retention; add --execute to delete recognized capsules\n  install-schedule    Preview a scheduled backup; add --execute to install\n  remove-schedule     Preview task removal; add --execute to remove\n  restore             Decrypt and plan restore; execution requires two target guards\n\nRequired secrets stay in environment variables and are never written into a capsule.\n`);
 }
@@ -1099,6 +1212,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     else if (command === 'install-schedule') await installSchedule();
     else if (command === 'remove-schedule') await removeSchedule();
     else if (command === 'restore') await restore();
+    else if (command === 'probe') await probe();
     else help();
   } catch (error) {
     console.error(`\nPortaBase failed: ${error.message}`);

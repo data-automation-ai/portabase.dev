@@ -4,7 +4,7 @@ const { existsSync } = require('node:fs');
 const { appendFile, copyFile, mkdir, readFile, rm, writeFile } = require('node:fs/promises');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
-const { listOrganizations, createProject, projectCredentials } = require('./provisioning.cjs');
+const { listOrganizations, listProjects, createProject, projectCredentials } = require('./provisioning.cjs');
 const { definitions: scheduleDefinitions } = require('./scheduler.cjs');
 
 app.enableSandbox();
@@ -15,7 +15,7 @@ const ALLOWED_EXTERNAL = new Set([
   'https://supabase.com/dashboard/account/tokens',
   'https://portabase.dev/buy',
 ]);
-const COMMANDS = new Set(['doctor', 'backup', 'restore', 'verify', 'status']);
+const COMMANDS = new Set(['doctor', 'backup', 'restore', 'verify', 'status', 'probe']);
 const SECRET_KEYS = new Set([
   'SUPABASE_DB_URL', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY',
   'SUPABASE_ACCESS_TOKEN', 'PORTABASE_ENCRYPTION_PASSPHRASE',
@@ -83,7 +83,7 @@ async function inspectInstalledLicense(path = licenseFile()) {
   return inspectLicense(path, process.platform);
 }
 
-async function runCli(command, args, runtimeSecrets = {}) {
+async function runCli(command, args, runtimeSecrets = {}, onChunk = null) {
   if (!COMMANDS.has(command)) throw new Error('Unsupported command.');
   if (!Array.isArray(args) || args.some(value => typeof value !== 'string' || value.length > 2048)) throw new Error('Invalid arguments.');
   const saved = (await loadSecrets()).values;
@@ -107,8 +107,12 @@ async function runCli(command, args, runtimeSecrets = {}) {
       windowsHide: true,
     });
     let output = '';
-    child.stdout.on('data', chunk => { output += chunk; });
-    child.stderr.on('data', chunk => { output += chunk; });
+    const receive = chunk => {
+      output += chunk;
+      if (onChunk) { try { onChunk(String(chunk)); } catch { /* renderer gone */ } }
+    };
+    child.stdout.on('data', receive);
+    child.stderr.on('data', receive);
     child.on('error', error => resolveRun({ code: -1, output: error.message }));
     child.on('close', code => resolveRun({ code, output: output.slice(-100000) }));
   });
@@ -175,7 +179,25 @@ async function runScheduledBackup() {
 function registerIpc() {
   ipcMain.handle('portabase:state', async event => {
     if (!validateSender(event)) throw new Error('Untrusted renderer.');
-    return { secureStorage: Boolean(secureBackend()), config: await readJson(userFile('portabase.config.json'), null), license: await inspectInstalledLicense() };
+    const settings = await readJson(userFile('settings.json'));
+    return {
+      secureStorage: Boolean(secureBackend()),
+      config: await readJson(userFile('portabase.config.json'), null),
+      license: await inspectInstalledLicense(),
+      comfortLevel: ['guided', 'standard', 'cli'].includes(settings.comfortLevel) ? settings.comfortLevel : null,
+    };
+  });
+  ipcMain.handle('portabase:save-settings', async (event, settings) => {
+    if (!validateSender(event)) throw new Error('Untrusted renderer.');
+    const comfortLevel = ['guided', 'standard', 'cli'].includes(settings?.comfortLevel) ? settings.comfortLevel : null;
+    if (!comfortLevel) throw new Error('Choose an experience level.');
+    await mkdir(app.getPath('userData'), { recursive: true });
+    await writeFile(userFile('settings.json'), `${JSON.stringify({ comfortLevel }, null, 2)}\n`, { mode: 0o600 });
+    return { comfortLevel };
+  });
+  ipcMain.handle('portabase:list-projects', async (event, token) => {
+    if (!validateSender(event)) throw new Error('Untrusted renderer.');
+    return listProjects(token);
   });
   ipcMain.handle('portabase:save-config', async (event, config) => {
     if (!validateSender(event)) throw new Error('Untrusted renderer.');
@@ -200,7 +222,10 @@ function registerIpc() {
   });
   ipcMain.handle('portabase:run', async (event, request) => {
     if (!validateSender(event)) throw new Error('Untrusted renderer.');
-    return runCli(request?.command, request?.args || [], request?.secrets || {});
+    const sender = event.sender;
+    return runCli(request?.command, request?.args || [], request?.secrets || {}, chunk => {
+      if (!sender.isDestroyed()) sender.send('portabase:stream', chunk);
+    });
   });
   ipcMain.handle('portabase:list-organizations', async (event, token) => {
     if (!validateSender(event)) throw new Error('Untrusted renderer.');
@@ -244,7 +269,8 @@ function registerIpc() {
     return removeDesktopSchedule();
   });
   ipcMain.handle('portabase:open', async (event, url) => {
-    if (!validateSender(event) || !ALLOWED_EXTERNAL.has(url)) throw new Error('External link is not allowed.');
+    const projectSettingsPage = /^https:\/\/supabase\.com\/dashboard\/project\/[a-z0-9]{20}\/settings\/database$/.test(String(url));
+    if (!validateSender(event) || (!ALLOWED_EXTERNAL.has(url) && !projectSettingsPage)) throw new Error('External link is not allowed.');
     await shell.openExternal(url);
     return true;
   });

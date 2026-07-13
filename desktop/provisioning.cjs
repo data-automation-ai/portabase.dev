@@ -22,6 +22,20 @@ async function listOrganizations(token, fetchImpl) {
   return organizations.map(item => ({ id: String(item.id || ''), slug: String(item.slug || item.id || ''), name: String(item.name || item.slug || item.id || '') })).filter(item => item.slug && item.name);
 }
 
+async function listProjects(token, fetchImpl) {
+  const projects = await request('/projects', token, {}, fetchImpl);
+  if (!Array.isArray(projects)) throw new Error('Supabase returned an invalid project list.');
+  return projects
+    .map(item => ({
+      ref: String(item.ref || item.id || ''),
+      name: String(item.name || item.ref || ''),
+      status: String(item.status || 'UNKNOWN'),
+      region: String(item.region || ''),
+      organizationId: String(item.organization_id || ''),
+    }))
+    .filter(item => /^[a-z0-9]{20}$/.test(item.ref) && item.name);
+}
+
 function projectInput(input) {
   const name = String(input?.name || '').trim(), organizationSlug = String(input?.organizationSlug || '').trim(), region = String(input?.region || '').trim(), dbPassword = String(input?.dbPassword || '');
   if (name.length < 3 || name.length > 80) throw new Error('Project name must be between 3 and 80 characters.');
