@@ -1,8 +1,8 @@
-# PortaBase.dev — 42 documented Supabase nightmare incidents
+# PortaBase.dev — documented Supabase nightmare incidents
 
 Research snapshot: 2026-07-12
 
-This is the publication set used by the PortaBase landing page. It contains exactly 42 real, sourced events: 23 substantive firsthand/public-support cases and 19 official Supabase incidents.
+This is the continuously maintained publication set used by the PortaBase landing page. It contains real, sourced firsthand/public-support cases and official Supabase incidents. The homepage intentionally publishes a curated selection rather than advertising a fixed total.
 
 ## Admission standard
 
@@ -14,7 +14,7 @@ An item counts only when it has all of the following:
 - enough source content to distinguish it from a joke, meme, hypothetical, or unsupported one-line claim; and
 - a visible qualification when the cause is disputed, corrected, customer-caused, or unresolved.
 
-The following do **not** count toward 42: policy pages, documentation gaps by themselves, feature requests, product evaluations, generic backup questions, market-demand posts, jokes, memes, or hypothetical warnings.
+The following are **not admitted as incidents**: policy pages, documentation gaps by themselves, feature requests, product evaluations, generic backup questions, market-demand posts, jokes, memes, or hypothetical warnings.
 
 ## Curated incident index
 

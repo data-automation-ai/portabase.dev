@@ -30,18 +30,9 @@ netlify deploy --prod --dir dist
 
 Always confirm that `netlify status` reports `https://portabase.dev` before deploying. The explicit `netlify.toml` build/publish contract prevents the parent workspace's unrelated Netlify binding from determining this project's output.
 
-## Square checkout
+## Square Checkout
 
-PortaBase uses a Square-hosted Payment Link for a one-time purchase. Card data never touches this application.
-
-```powershell
-$env:SQUARE_ACCESS_TOKEN = 'your-production-token'
-$env:SQUARE_LOCATION_ID = 'your-location-id'
-$env:SQUARE_ENV = 'production'
-npm run square:create-link
-```
-
-Copy the returned `square.link` URL into the Cloudflare Pages build variable `VITE_SQUARE_CHECKOUT_URL`, then rebuild/deploy. Do not prefix the access token with `VITE_`; Vite variables are public.
+PortaBase uses Square-hosted Checkout for the one-time $147 purchase. Payment links are created server-side, `/thanks` verifies the completed order directly with Square, and the signed webhook confirms payment events. Card data and Square private keys never enter the Vite browser bundle. See [the Square setup runbook](docs/SQUARE_SETUP.md).
 
 ## Privacy model
 
@@ -59,6 +50,7 @@ npm run portabase -- init
 npm run portabase -- doctor
 npm run portabase -- plan
 npm run portabase -- backup
+npm run trial
 npm run portabase -- verify --capsule .\portabase-capsules\CAPSULE_NAME
 npm run portabase -- status
 npm run portabase -- restore --capsule .\portabase-capsules\CAPSULE_NAME
@@ -66,9 +58,11 @@ npm run portabase -- restore --capsule .\portabase-capsules\CAPSULE_NAME
 
 Essentials supports Google Drive, Dropbox, any compatible `rclone` remote, and local/NAS destinations. Capsules are encrypted locally with AES-256-GCM, copied under timestamped immutable names, verified after transfer, and retained with a guarded dry-run-first prune command. AWS S3, Object Lock, Fargate scheduling, CloudWatch, and infrastructure as code belong to the separate AWS Recovery package.
 
+The trial runs the real encryption, transfer, verification, and restore-plan path but intentionally captures database structure without rows, at most five Storage objects, and at most two Edge Functions. Every trial capsule includes a local HTML report with a button to open Square Checkout. It is explicitly not a complete recovery backup.
+
 The restore command is a plan by default. Execution refuses the source project, requires a different target URL/ref, and requires `--execute --confirm-target <NEW_REF>`. Auth provider settings, API keys, external secrets, custom domains, and DNS still require explicit customer reconfiguration and verification.
 
-See [the Essentials runbook](docs/ESSENTIALS_RUNBOOK.md), [the AWS Recovery runbook](aws/README.md), and [the package architecture](docs/PACKAGE_ARCHITECTURE.md).
+See [the Essentials runbook](docs/ESSENTIALS_RUNBOOK.md), [hosting and scheduling guide](docs/HOSTING_AND_SCHEDULING.md), [the AWS Recovery runbook](aws/README.md), and [the package architecture](docs/PACKAGE_ARCHITECTURE.md).
 
 The isolated Supabase scale-test dataset and its verified backup measurements are documented in [the mock warehouse report](docs/MOCK_WAREHOUSE.md).
 

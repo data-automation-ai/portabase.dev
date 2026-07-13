@@ -6,6 +6,21 @@
   NODE_VERSION = "24"
 
 [[redirects]]
+  from = "/api/square/checkout"
+  to = "/.netlify/functions/create-square-checkout"
+  status = 200
+
+[[redirects]]
+  from = "/api/square/order"
+  to = "/.netlify/functions/square-order"
+  status = 200
+
+[[redirects]]
+  from = "/api/square/webhook"
+  to = "/.netlify/functions/square-webhook"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

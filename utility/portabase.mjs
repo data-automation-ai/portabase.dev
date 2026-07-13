@@ -14,6 +14,7 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { Readable } from 'node:stream';
@@ -31,6 +32,9 @@ import {
   providerVerifyCommand,
   safeObjectPath,
   supabaseHeaders,
+  TRIAL_LIMITS,
+  validateBlankRestoreInventory,
+  validateDrillCapsule,
   validateRestoreTarget,
   verifyChecksumFile,
 } from './portabase-core.mjs';
@@ -69,6 +73,13 @@ async function loadConfig(path = flag('config', CONFIG_NAME)) {
 }
 
 function resolveTool(name) {
+  const toolsDir = process.env.PORTABASE_TOOLS_DIR;
+  if (toolsDir) {
+    const executable = process.platform === 'win32' ? `${name}.exe` : name;
+    for (const candidate of [join(toolsDir, executable), join(toolsDir, 'postgres', 'bin', executable)]) {
+      if (existsSync(candidate)) return candidate;
+    }
+  }
   if (name === 'supabase') {
     const packaged = resolve(
       'node_modules',
@@ -183,21 +194,22 @@ async function doctor() {
   if (checks.filter(([name]) => !optional.has(name)).some(([, ok]) => !ok)) process.exitCode = 2;
 }
 
-async function captureDatabase(rawDir) {
+async function captureDatabase(rawDir, limits = null) {
   const dbUrl = process.env.SUPABASE_DB_URL;
   if (!dbUrl) throw new Error('SUPABASE_DB_URL is missing.');
   const dbDir = join(rawDir, 'database');
   await mkdir(dbDir, { recursive: true });
   if (resolveTool('pg_dump') && resolveTool('pg_dumpall')) {
-    return captureDatabaseNative(dbUrl, dbDir);
+    return captureDatabaseNative(dbUrl, dbDir, limits);
   }
   const supabase = resolveTool('supabase');
   if (!supabase) throw new Error('Install PostgreSQL client tools or the Supabase CLI for database capture.');
   const common = ['db', 'dump', '--db-url', dbUrl];
   await run(supabase, [...common, '--file', join(dbDir, 'roles.sql'), '--role-only']);
   await run(supabase, [...common, '--file', join(dbDir, 'schema.sql')]);
-  await run(supabase, [...common, '--file', join(dbDir, 'data.sql'), '--use-copy', '--data-only']);
-  return { complete: true, files: ['roles.sql', 'schema.sql', 'data.sql'] };
+  if (!limits?.databaseSchemaOnly) await run(supabase, [...common, '--file', join(dbDir, 'data.sql'), '--use-copy', '--data-only']);
+  const files = limits?.databaseSchemaOnly ? ['roles.sql', 'schema.sql'] : ['roles.sql', 'schema.sql', 'data.sql'];
+  return { complete: true, limited: Boolean(limits), limitation: limits ? 'schema only; table rows are not included' : null, files };
 }
 
 function postgresEnvironment(dbUrl) {
@@ -287,7 +299,7 @@ function cleanRoleLine(line) {
   return line.startsWith('-- ') ? null : line;
 }
 
-async function captureDatabaseNative(dbUrl, dbDir) {
+async function captureDatabaseNative(dbUrl, dbDir, limits = null) {
   const env = postgresEnvironment(dbUrl);
   const pgDump = resolveTool('pg_dump');
   const pgDumpAll = resolveTool('pg_dumpall');
@@ -299,14 +311,17 @@ async function captureDatabaseNative(dbUrl, dbDir) {
     await transformSql(rawRoles, join(dbDir, 'roles.sql'), cleanRoleLine, '', 'RESET ALL;\n');
     await runToFile(pgDump, ['--schema-only', '--quote-all-identifiers', '--role', 'postgres', '--exclude-schema', SCHEMA_EXCLUDES], rawSchema, { env });
     await transformSql(rawSchema, join(dbDir, 'schema.sql'), cleanSchemaLine);
-    await runToFile(pgDump, ['--data-only', '--quote-all-identifiers', '--role', 'postgres', '--exclude-schema', DATA_EXCLUDES, '--exclude-table', 'auth.schema_migrations', '--exclude-table', 'storage.migrations', '--exclude-table', 'supabase_functions.migrations', '--schema', '*'], rawData, { env });
-    await transformSql(rawData, join(dbDir, 'data.sql'), line => /^\\(un)?restrict /.test(line) ? `-- ${line}` : line, 'SET session_replication_role = replica;\n', 'RESET ALL;\n');
+    if (!limits?.databaseSchemaOnly) {
+      await runToFile(pgDump, ['--data-only', '--quote-all-identifiers', '--role', 'postgres', '--exclude-schema', DATA_EXCLUDES, '--exclude-table', 'auth.schema_migrations', '--exclude-table', 'storage.migrations', '--exclude-table', 'supabase_functions.migrations', '--schema', '*'], rawData, { env });
+      await transformSql(rawData, join(dbDir, 'data.sql'), line => /^\\(un)?restrict /.test(line) ? `-- ${line}` : line, 'SET session_replication_role = replica;\n', 'RESET ALL;\n');
+    }
   } finally {
     await rm(rawRoles, { force: true });
     await rm(rawSchema, { force: true });
     await rm(rawData, { force: true });
   }
-  return { complete: true, engine: 'native-postgresql-client', files: ['roles.sql', 'schema.sql', 'data.sql'] };
+  const files = limits?.databaseSchemaOnly ? ['roles.sql', 'schema.sql'] : ['roles.sql', 'schema.sql', 'data.sql'];
+  return { complete: true, limited: Boolean(limits), limitation: limits ? 'schema only; table rows are not included' : null, engine: 'native-postgresql-client', files };
 }
 
 async function listBucketObjects(bucketId, prefix = '') {
@@ -329,12 +344,13 @@ async function listBucketObjects(bucketId, prefix = '') {
   return objects;
 }
 
-async function captureStorage(rawDir) {
+async function captureStorage(rawDir, limits = null) {
   const storageDir = join(rawDir, 'storage');
   await mkdir(storageDir, { recursive: true });
   const buckets = await (await checkedSourceFetch('/storage/v1/bucket')).json();
   const manifest = { capturedAt: new Date().toISOString(), buckets: [], objectCount: 0, totalBytes: 0 };
-  for (const bucket of buckets) {
+  const selectedBuckets = limits ? buckets.slice(0, limits.maxStorageBuckets) : buckets;
+  for (const bucket of selectedBuckets) {
     const record = {
       id: bucket.id,
       name: bucket.name,
@@ -344,6 +360,7 @@ async function captureStorage(rawDir) {
       objects: [],
     };
     for (const object of await listBucketObjects(bucket.id)) {
+      if (limits && manifest.objectCount >= limits.maxStorageObjects) break;
       const target = join(storageDir, safeObjectPath(bucket.id), safeObjectPath(object.fullName));
       await mkdir(dirname(target), { recursive: true });
       const objectPath = object.fullName.split('/').map(encodeURIComponent).join('/');
@@ -357,10 +374,10 @@ async function captureStorage(rawDir) {
     manifest.buckets.push(record);
   }
   await writeFile(join(storageDir, 'storage-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-  return { complete: true, bucketCount: manifest.buckets.length, objectCount: manifest.objectCount, totalBytes: manifest.totalBytes };
+  return { complete: true, limited: Boolean(limits), limitation: limits ? `first ${limits.maxStorageObjects} objects across ${limits.maxStorageBuckets} buckets` : null, bucketCount: manifest.buckets.length, objectCount: manifest.objectCount, totalBytes: manifest.totalBytes };
 }
 
-async function captureFunctions(config, rawDir) {
+async function captureFunctions(config, rawDir, limits = null) {
   if (!process.env.SUPABASE_ACCESS_TOKEN) return { complete: false, skipped: true, reason: 'SUPABASE_ACCESS_TOKEN not provided' };
   const supabase = resolveTool('supabase');
   if (!supabase) throw new Error('Supabase CLI is required for Edge Function capture.');
@@ -370,11 +387,12 @@ async function captureFunctions(config, rawDir) {
     encoding: 'utf8', env: process.env, windowsHide: true, cwd: functionsDir,
   });
   if (result.status !== 0) throw new Error(result.stderr || 'Unable to list Edge Functions.');
-  const functions = JSON.parse(result.stdout || '[]');
+  const availableFunctions = JSON.parse(result.stdout || '[]');
+  const functions = limits ? availableFunctions.slice(0, limits.maxFunctions) : availableFunctions;
   for (const fn of functions) {
     await run(supabase, ['functions', 'download', fn.name, '--project-ref', config.projectRef, '--workdir', functionsDir], { cwd: functionsDir, env: process.env });
   }
-  return { complete: true, count: functions.length, names: functions.map(fn => fn.name) };
+  return { complete: true, limited: Boolean(limits), limitation: limits ? `first ${limits.maxFunctions} Functions` : null, count: functions.length, names: functions.map(fn => fn.name) };
 }
 
 async function listFiles(root) {
@@ -385,6 +403,16 @@ async function listFiles(root) {
     else found.push(path);
   }
   return found;
+}
+
+async function writeTrialReport(capsuleDir, metadata) {
+  const purchaseUrl = process.env.PORTABASE_PURCHASE_URL || 'https://portabase.dev/buy';
+  const contents = metadata.contents || {};
+  const html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PortaBase trial result</title><style>body{margin:0;background:#090a0c;color:#fff;font-family:Segoe UI,sans-serif}.card{width:min(720px,calc(100% - 32px));margin:8vh auto;background:#141519;border:1px solid #303136;padding:40px;box-sizing:border-box}small{font:11px Consolas,monospace;color:#ff4b3e;letter-spacing:.12em}h1{font-size:48px;line-height:1;margin:18px 0}p{color:#aaa;line-height:1.65}.limits{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#34353a;margin:30px 0}.limits div{background:#1a1b1f;padding:20px}.limits b,.limits span{display:block}.limits span{font-size:12px;color:#888;margin-top:8px}.warning{border-left:3px solid #ff4b3e;padding:15px 20px;background:#1b1515}.buy{display:inline-block;background:#c9ff4a;color:#111;text-decoration:none;padding:16px 22px;font-weight:800;margin-top:28px;border-radius:4px}@media(max-width:600px){.card{padding:25px}.limits{grid-template-columns:1fr}h1{font-size:38px}}</style></head>
+<body><main class="card"><small>PORTABASE LIMITED TRIAL</small><h1>The real workflow ran.</h1><p>Your sample capsule was encrypted, copied to your destination, and verified. PortaBase never received your credentials, passphrase, provider tokens, or capsule contents.</p><div class="limits"><div><b>Database</b><span>Structure only; no table rows</span></div><div><b>Storage</b><span>${contents.storage?.objectCount ?? 0} of up to ${TRIAL_LIMITS.maxStorageObjects} objects</span></div><div><b>Functions</b><span>${contents.functions?.count ?? 0} of up to ${TRIAL_LIMITS.maxFunctions}</span></div></div><p class="warning"><b>This is not a complete recovery backup.</b><br>The trial deliberately omits database rows and most files. Buy Essentials before depending on PortaBase for business recovery.</p><a class="buy" href="${purchaseUrl}">Buy the full backup &amp; recovery software — $147 →</a></main></body></html>`;
+  await writeFile(join(capsuleDir, 'TRIAL-REPORT.html'), html);
 }
 
 async function writeChecksums(capsuleDir) {
@@ -447,6 +475,8 @@ async function transferCapsule(config, capsuleDir) {
 
 async function backup() {
   const { config } = await loadConfig();
+  const trial = hasFlag('trial') || process.env.PORTABASE_EDITION === 'trial';
+  const limits = trial ? TRIAL_LIMITS : null;
   const passphraseEnv = config.encryption?.passphraseEnv || 'PORTABASE_ENCRYPTION_PASSPHRASE';
   const passphrase = process.env[passphraseEnv];
   if (!passphrase || passphrase.length < 16) throw new Error(`${passphraseEnv} must contain at least 16 characters.`);
@@ -462,6 +492,7 @@ async function backup() {
   const manifest = {
     formatVersion: 1,
     portabaseVersion: VERSION,
+    edition: trial ? 'trial' : 'essentials',
     projectRef: config.projectRef,
     createdAt: new Date().toISOString(),
     status: 'RUNNING',
@@ -470,9 +501,9 @@ async function backup() {
   };
   try {
     for (const [name, enabled, capture] of [
-      ['database', config.capture?.database !== false, () => captureDatabase(rawDir)],
-      ['storage', config.capture?.storage !== false, () => captureStorage(rawDir)],
-      ['functions', config.capture?.functions !== false, () => captureFunctions(config, rawDir)],
+      ['database', config.capture?.database !== false, () => captureDatabase(rawDir, limits)],
+      ['storage', config.capture?.storage !== false, () => captureStorage(rawDir, limits)],
+      ['functions', config.capture?.functions !== false, () => captureFunctions(config, rawDir, limits)],
     ]) {
       if (!enabled) {
         manifest.contents[name] = { complete: false, skipped: true, reason: 'disabled in config' };
@@ -487,7 +518,7 @@ async function backup() {
         console.error(`PARTIAL ${name}: ${error.message}`);
       }
     }
-    manifest.status = manifest.errors.length || Object.values(manifest.contents).some(item => !item.complete) ? 'PARTIAL' : 'COMPLETE';
+    manifest.status = manifest.errors.length || Object.values(manifest.contents).some(item => !item.complete) ? 'PARTIAL' : trial ? 'TRIAL' : 'COMPLETE';
     await writeFile(join(rawDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
     await writeFile(join(rawDir, 'RECOVER.md'), '# PortaBase recovery capsule\n\nRestore only into a fresh, explicitly confirmed Supabase target. Run `portabase restore --capsule <directory>` for a dry-run recovery plan.\n');
     const tar = resolveTool('tar');
@@ -498,6 +529,7 @@ async function backup() {
     const capsuleMetadata = {
       formatVersion: 1,
       id,
+      edition: manifest.edition,
       projectRef: config.projectRef,
       createdAt: manifest.createdAt,
       status: manifest.status,
@@ -507,6 +539,7 @@ async function backup() {
     };
     await writeFile(join(capsuleDir, 'capsule.json'), `${JSON.stringify(capsuleMetadata, null, 2)}\n`);
     await writeFile(join(capsuleDir, 'RECOVER.txt'), 'This capsule is encrypted. Keep PORTABASE_ENCRYPTION_PASSPHRASE outside the backup destination. Use PortaBase restore without --execute to inspect the recovery plan.\n');
+    if (trial) await writeTrialReport(capsuleDir, capsuleMetadata);
     await writeChecksums(capsuleDir);
     const transfer = await transferCapsule(config, capsuleDir);
     const state = { state: manifest.status, capsule: id, completedAt: new Date().toISOString(), destination: transfer.destination, verified: transfer.verified, errors: manifest.errors };
@@ -514,7 +547,7 @@ async function backup() {
     await sendAlert(config, state);
     console.log(`\n${manifest.status}: ${capsuleDir}`);
     console.log(`VERIFIED DESTINATION: ${transfer.destination}`);
-    if (manifest.status !== 'COMPLETE') process.exitCode = 3;
+    if (!['COMPLETE', 'TRIAL'].includes(manifest.status)) process.exitCode = 3;
   } catch (error) {
     const state = { state: 'FAILED', capsule: id, failedAt: new Date().toISOString(), error: error.message };
     await writeStatus(config, state);
@@ -589,7 +622,7 @@ async function restoreDatabase(extracted) {
   }
 }
 
-async function restoreStorage(extracted) {
+async function restoreStorage(extracted, verifyReadback = false) {
   const manifestPath = join(extracted, 'storage', 'storage-manifest.json');
   if (!existsSync(manifestPath)) return;
   const storage = JSON.parse(await readFile(manifestPath, 'utf8'));
@@ -610,6 +643,12 @@ async function restoreStorage(extracted) {
         duplex: 'half',
       });
       if (!response.ok && response.status !== 409) throw new Error(`Unable to restore ${bucket.id}/${object.name}: HTTP ${response.status}`);
+      if (verifyReadback) {
+        const readback = await targetFetch(`/storage/v1/object/authenticated/${encodeURIComponent(bucket.id)}/${objectPath}`);
+        if (!readback.ok) throw new Error(`Unable to read back ${bucket.id}/${object.name}: HTTP ${readback.status}`);
+        const remoteHash = createHash('sha256').update(Buffer.from(await readback.arrayBuffer())).digest('hex');
+        if (remoteHash !== await hashFile(source)) throw new Error(`Read-back hash mismatch for ${bucket.id}/${object.name}.`);
+      }
     }
   }
 }
@@ -625,6 +664,47 @@ async function restoreFunctions(extracted, manifest, targetRef) {
   }
 }
 
+async function readTargetInventory(targetRef) {
+  const psql = resolveTool('psql');
+  const supabase = resolveTool('supabase');
+  const targetDb = process.env.PORTABASE_TARGET_DB_URL;
+  if (!psql || !targetDb) throw new Error('Target preflight requires psql and PORTABASE_TARGET_DB_URL.');
+  if (!supabase || !process.env.SUPABASE_ACCESS_TOKEN) throw new Error('Target preflight requires the Supabase CLI and SUPABASE_ACCESS_TOKEN.');
+  const tableQuery = "select count(*) from pg_catalog.pg_tables where schemaname !~ '^(pg_.*|information_schema|_analytics|_realtime|_supavisor|auth|cron|dbdev|extensions|graphql|graphql_public|net|pgbouncer|pgmq|pgsodium|pgsodium_masks|pgtle|realtime|repack|storage|supabase_functions|supabase_migrations|tiger|tiger_data|timescaledb_.*|_timescaledb_.*|topology|vault)$';";
+  const tableResult = spawnSync(psql, ['--tuples-only', '--no-align', '--set', 'ON_ERROR_STOP=1', '--command', tableQuery], {
+    encoding: 'utf8', windowsHide: true, env: postgresEnvironment(targetDb),
+  });
+  if (tableResult.status !== 0) throw new Error(`Unable to inspect target tables: ${(tableResult.stderr || '').trim().slice(0, 240)}`);
+  const tableCount = Number(tableResult.stdout.trim());
+  if (!Number.isInteger(tableCount)) throw new Error('Target table inspection returned an invalid count.');
+
+  const [bucketsResponse, usersResponse] = await Promise.all([
+    targetFetch('/storage/v1/bucket', { signal: AbortSignal.timeout(10000) }),
+    targetFetch('/auth/v1/admin/users?page=1&per_page=1', { signal: AbortSignal.timeout(10000) }),
+  ]);
+  if (!bucketsResponse.ok) throw new Error(`Target Storage inspection failed: HTTP ${bucketsResponse.status}`);
+  if (!usersResponse.ok) throw new Error(`Target Auth inspection failed: HTTP ${usersResponse.status}`);
+  const buckets = await bucketsResponse.json();
+  const users = await usersResponse.json();
+  const functionsResult = spawnSync(supabase, ['functions', 'list', '--project-ref', targetRef, '--output', 'json'], {
+    encoding: 'utf8', windowsHide: true, env: process.env,
+  });
+  if (functionsResult.status !== 0) throw new Error(`Target Function inspection failed: ${(functionsResult.stderr || '').trim().slice(0, 240)}`);
+  let functions;
+  try { functions = JSON.parse(functionsResult.stdout || '[]'); } catch { throw new Error('Target Function inspection returned invalid JSON.'); }
+  const inventory = {
+    applicationTables: tableCount,
+    authUsers: Array.isArray(users?.users) ? users.users.length : 0,
+    storageBuckets: Array.isArray(buckets) ? buckets.length : 0,
+    edgeFunctions: Array.isArray(functions) ? functions.length : 0,
+  };
+  return inventory;
+}
+
+async function inspectRestoreTarget(targetRef) {
+  return validateBlankRestoreInventory(await readTargetInventory(targetRef));
+}
+
 async function restore() {
   const materialized = await materializeCapsule(flag('capsule', argv[1] || '.'));
   let opened;
@@ -632,24 +712,43 @@ async function restore() {
     opened = await openCapsule(materialized.capsuleDir, process.env.PORTABASE_ENCRYPTION_PASSPHRASE);
     const { manifest, metadata, extracted } = opened;
     console.log(`PortaBase guarded recovery plan\n\nSource: ${manifest.projectRef}\nCapsule: ${metadata.id}\nCapture status: ${manifest.status}\n`);
+    if (manifest.edition === 'trial') console.log('TRIAL SAMPLE: database rows and most Storage objects/Functions are intentionally absent. This is not a complete recovery backup.\n');
     for (const name of ['database', 'storage', 'functions']) {
       const item = manifest.contents[name];
       console.log(`${item?.complete ? 'READY' : 'GAP  '}  ${name}${item?.reason ? ` — ${item.reason}` : ''}${item?.error ? ` — ${item.error}` : ''}`);
     }
     console.log('\nManual reconfiguration remains: Auth providers/templates, project API keys, Realtime settings, external secrets, custom domains, and DNS cutover.');
-    if (!hasFlag('execute')) {
+    const drill = hasFlag('drill');
+    const writesTarget = hasFlag('execute') || drill;
+    if (drill) validateDrillCapsule(manifest.edition);
+    if (!writesTarget && !hasFlag('preflight')) {
       console.log('\nDRY RUN ONLY. No target was changed. Add --execute --confirm-target <NEW_REF> after reviewing this plan.');
       return;
     }
     const targetRef = process.env.PORTABASE_TARGET_PROJECT_REF;
-    validateRestoreTarget(manifest.projectRef, targetRef, flag('confirm-target'), process.env.PORTABASE_TARGET_SUPABASE_URL);
+    validateRestoreTarget(manifest.projectRef, targetRef, writesTarget ? flag('confirm-target') : targetRef, process.env.PORTABASE_TARGET_SUPABASE_URL);
     const health = await targetFetch('/storage/v1/bucket', { signal: AbortSignal.timeout(10000) });
     if (!health.ok) throw new Error(`Target credential check failed: HTTP ${health.status}`);
-    console.log(`\nTARGET CONFIRMED: ${targetRef}`);
+    const inventory = await inspectRestoreTarget(targetRef);
+    console.log(`\nTARGET PREFLIGHT PASSED: ${targetRef}`);
+    console.log(`Blank inventory: ${Object.entries(inventory).map(([name, count]) => `${name}=${count}`).join(', ')}`);
+    if (!writesTarget) {
+      console.log('\nNO-WRITE PREFLIGHT COMPLETE. The target was not changed. Type the exact target ref and execute only after reviewing this plan.');
+      return;
+    }
+    console.log(`${drill ? 'LIMITED DRILL' : 'TARGET WRITE'} CONFIRMED: ${targetRef}`);
     await restoreDatabase(extracted);
-    await restoreStorage(extracted);
+    await restoreStorage(extracted, drill);
     await restoreFunctions(extracted, manifest, targetRef);
-    console.log('\nRESTORE DATA PATH COMPLETE. Finish and verify the listed manual configuration before cutover.');
+    if (drill) {
+      const api = await targetFetch('/rest/v1/', { headers: { Accept: 'application/openapi+json' }, signal: AbortSignal.timeout(10000) });
+      if (!api.ok) throw new Error(`Restored API surface verification failed: HTTP ${api.status}`);
+      const proof = await readTargetInventory(targetRef);
+      console.log(`\nREAD-BACK PROOF: ${Object.entries(proof).map(([name, count]) => `${name}=${count}`).join(', ')}`);
+      console.log('LIMITED RESTORE DRILL COMPLETE. Database structure/API surface, hash-verified sample Storage objects, and sample Functions were written from the trial capsule. This validates the path; it is not a complete recovery.');
+    } else {
+      console.log('\nRESTORE DATA PATH COMPLETE. Finish and verify the listed manual configuration before cutover.');
+    }
   } finally {
     if (opened) await rm(opened.temp, { recursive: true, force: true });
     if (materialized.cleanup) await rm(materialized.cleanup, { recursive: true, force: true });
@@ -723,7 +822,7 @@ async function plan() {
 }
 
 function help() {
-  console.log(`PortaBase ${VERSION}\n\nEncrypted, customer-owned Supabase recovery capsules. No telemetry. No credential custody.\n\nCommands:\n  init                Create a non-secret Essentials configuration\n  doctor              Test tools, credentials, destination, and live authorization\n  plan                Show the capture and destination plan\n  backup              Capture, encrypt, transfer, and verify a capsule\n  verify              Verify checksums; add --decrypt for authenticated decryption\n  status              Show the last durable backup result\n  prune               Preview retention; add --execute to delete recognized capsules\n  install-schedule    Preview a scheduled backup; add --execute to install\n  remove-schedule     Preview task removal; add --execute to remove\n  restore             Decrypt and plan restore; execution requires two target guards\n\nRequired secrets stay in environment variables and are never written into a capsule.\n`);
+  console.log(`PortaBase ${VERSION}\n\nEncrypted, customer-owned Supabase recovery capsules. No telemetry. No credential custody.\n\nCommands:\n  init                Create a non-secret Essentials configuration\n  doctor              Test tools, credentials, destination, and live authorization\n  plan                Show the capture and destination plan\n  backup              Capture, encrypt, transfer, and verify a capsule\n                      Add --trial for schema + up to 5 objects + 2 Functions\n  verify              Verify checksums; add --decrypt for authenticated decryption\n  status              Show the last durable backup result\n  prune               Preview retention; add --execute to delete recognized capsules\n  install-schedule    Preview a scheduled backup; add --execute to install\n  remove-schedule     Preview task removal; add --execute to remove\n  restore             Decrypt and plan restore; execution requires two target guards\n\nRequired secrets stay in environment variables and are never written into a capsule.\n`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

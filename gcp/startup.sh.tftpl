@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y --no-install-recommends ca-certificates curl google-cloud-cli jq nodejs npm postgresql-client rclone tar
+id portabase >/dev/null 2>&1 || useradd --system --home /opt/portabase --shell /usr/sbin/nologin portabase
+install -d -o portabase -g portabase /opt/portabase /opt/portabase/portabase-capsules /opt/portabase/portabase-status
+install -d -m 700 /etc/portabase
+install -d -m 700 -o portabase -g portabase /run/portabase
+
+curl --fail --location --proto '=https' --tlsv1.2 '${package_url}' -o /tmp/portabase.tar.gz
+echo '${package_sha256}  /tmp/portabase.tar.gz' | sha256sum --check --strict
+tar -xzf /tmp/portabase.tar.gz -C /opt/portabase --strip-components=1
+cd /opt/portabase
+npm ci --omit=dev
+
+cat > /opt/portabase/portabase.config.json <<'JSON'
+{
+  "version": 2,
+  "projectRef": "${project_ref}",
+  "backupDirectory": "/opt/portabase/portabase-capsules",
+  "statusDirectory": "/opt/portabase/portabase-status",
+  "provider": { "type": "rclone", "remote": "${rclone_remote}", "path": "${destination_path}" },
+  "capture": { "database": true, "storage": true, "functions": true },
+  "encryption": { "passphraseEnv": "PORTABASE_ENCRYPTION_PASSPHRASE" },
+  "retention": { "keepLast": 30, "pruneAfterBackup": false },
+  "schedule": { "everyHours": ${schedule_hours} }
+}
+JSON
+chown -R portabase:portabase /opt/portabase
+
+cat > /usr/local/sbin/portabase-run <<'SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+gcloud secrets versions access latest --project '${project_id}' --secret '${secret_id}' |
+  jq -r 'to_entries[] | select(.key | test("^[A-Z][A-Z0-9_]+$")) | "\(.key)=\(.value|tostring|@sh)"' > /run/portabase/portabase.env
+set -a
+# shellcheck disable=SC1091
+source /run/portabase/portabase.env
+set +a
+rm -f /run/portabase/portabase.env
+exec /usr/bin/node /opt/portabase/utility/portabase.mjs backup
+SCRIPT
+chmod 755 /usr/local/sbin/portabase-run
+
+cat > /etc/systemd/system/portabase-backup.service <<'SERVICE'
+[Unit]
+Description=PortaBase encrypted customer-owned recovery capture
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=portabase
+Group=portabase
+WorkingDirectory=/opt/portabase
+ExecStart=/usr/local/sbin/portabase-run
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/portabase/portabase-capsules /opt/portabase/portabase-status /run/portabase
+SERVICE
+
+cat > /etc/systemd/system/portabase-backup.timer <<'TIMER'
+[Unit]
+Description=Run PortaBase on schedule
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=${schedule_hours}h
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target
+TIMER
+
+systemctl daemon-reload
+systemctl enable portabase-backup.timer
+rm -f /tmp/portabase.tar.gz
+echo 'PortaBase installed. Run one manual service execution and a restore drill before relying on the schedule.'

@@ -13,6 +13,17 @@ import { promisify } from 'node:util';
 
 const scrypt = promisify(scryptCallback);
 
+export const TRIAL_LIMITS = Object.freeze({
+  databaseSchemaOnly: true,
+  maxStorageBuckets: 2,
+  maxStorageObjects: 5,
+  maxFunctions: 2,
+});
+
+export function editionFor({ trialFlag = false, environment = process.env.PORTABASE_EDITION } = {}) {
+  return trialFlag || environment === 'trial' ? 'trial' : 'essentials';
+}
+
 export function safeObjectPath(value) {
   const cleaned = normalize(String(value).replaceAll('\\', '/')).replace(/^([/\\])+/, '');
   if (!cleaned || cleaned === '.' || cleaned.split(/[\\/]/).includes('..')) {
@@ -96,6 +107,19 @@ export function validateRestoreTarget(sourceRef, targetRef, confirmation, target
       throw new Error('Restore refused: target URL does not match PORTABASE_TARGET_PROJECT_REF.');
     }
   }
+  return true;
+}
+
+export function validateBlankRestoreInventory(inventory) {
+  const occupied = Object.entries(inventory || {}).filter(([, count]) => Number(count) > 0);
+  if (occupied.length) {
+    throw new Error(`Restore refused: target is not blank (${occupied.map(([name, count]) => `${name}=${count}`).join(', ')}). Create a fresh project or explicitly clear the disposable target outside PortaBase.`);
+  }
+  return inventory;
+}
+
+export function validateDrillCapsule(edition) {
+  if (edition !== 'trial') throw new Error('Limited restore drill requires a current trial capsule.');
   return true;
 }
 

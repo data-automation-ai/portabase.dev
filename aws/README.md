@@ -120,7 +120,7 @@ Choose a capsule URI and update the target secret for a disposable fresh Supabas
 }
 ```
 
-Only after reviewing the plan, repeat with `"--execute", "--confirm-target", "NEW_TARGET_REF"`. PortaBase refuses a target equal to the source, refuses a target URL that does not contain the target ref, and refuses a confirmation mismatch.
+Next run the same restore command with `"--preflight"` and the target secret injected. PortaBase requires zero application tables, zero Auth users, zero Storage buckets, and zero Edge Functions. Only after that passes, repeat with `"--execute", "--confirm-target", "NEW_TARGET_REF"`. PortaBase repeats the blank-target check immediately before writing, refuses a target equal to the source, refuses a target URL that does not contain the target ref, and refuses a confirmation mismatch.
 
 The restore task rebuilds database roles/schema/data, Storage buckets/objects, and captured Functions. The operator must still reconfigure and verify Auth providers/templates, new API keys, Realtime settings, external secrets, custom domains, DNS, and application behavior before cutover.
 

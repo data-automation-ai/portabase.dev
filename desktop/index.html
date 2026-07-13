@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PortaBase</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header><div class="brand"><b>PORTA</b>BASE <span>DESKTOP</span></div><div id="security">Checking protected storage…</div></header>
+  <main>
+    <aside>
+      <button class="nav active" data-page="protect">1. Protect this project</button>
+      <button class="nav" data-page="recover">2. Recover somewhere new</button>
+      <button class="nav" data-page="results">Activity and proof</button>
+      <div class="ownership"><b>Your machine. Your keys.</b><p>PortaBase has no account, credential vault, or route into your backups.</p></div>
+      <button id="buy" class="buy">Buy PortaBase for this platform · $147</button>
+    </aside>
+    <section id="protect" class="page active">
+      <p class="eyebrow">PROTECT THIS PROJECT</p><h1>Make the independent copy before access disappears.</h1>
+      <p class="lead">The trial runs the real workflow indefinitely, but saves only structure, five Storage objects, and two Functions.</p>
+      <div class="grid">
+        <label>Project reference<input id="projectRef" placeholder="abcdefghijklmnopqrst" maxlength="20"></label>
+        <label>Project URL<input id="sourceUrl" placeholder="https://PROJECT.supabase.co"></label>
+        <label class="wide">Database connection<input id="sourceDb" type="password" placeholder="postgresql://..."></label>
+        <label>Service-role / secret key<input id="sourceService" type="password"></label>
+        <label>Personal access token<input id="sourceAccess" type="password"></label>
+        <label class="wide">Encryption passphrase<input id="passphrase" type="password" placeholder="At least 16 characters; keep a separate copy"></label>
+        <label class="wide">Independent destination<div class="picker"><input id="destination" readonly><button data-pick="destination">Choose…</button></div></label>
+      </div>
+      <div class="actions"><button id="saveSource" class="secondary">Save securely</button><button id="doctor" class="secondary">Check readiness</button><button id="trial" class="primary">Run limited trial backup</button></div>
+    </section>
+    <section id="recover" class="page">
+      <p class="eyebrow">RECOVER INTO A NEW PROJECT</p><h1>A backup matters only if it opens somewhere else.</h1>
+      <p class="lead">We guide and automate as much as Supabase permits. A few identity, billing, and third-party security steps must remain manual under Supabase’s rules.</p>
+      <div class="step"><b>Step 1 · You establish the account</b><p>Supabase must handle signup or login, email or identity checks, CAPTCHA, organization ownership, and billing approval. PortaBase stays with you through those steps but cannot impersonate you.</p><div class="stepActions"><button id="newAccount" class="secondary">Create or sign in to Supabase</button><button id="newToken" class="secondary">Create a Personal Access Token</button></div></div>
+      <div class="step automated"><b>Step 2 · PortaBase provisions the blank project</b><p>Your token goes directly from this computer to Supabase’s Management API. PortaBase can list your organizations, create the new project, retrieve its identifiers and administrator key, and prepare the restore fields below. Nothing is sent to PortaBase.</p>
+        <div class="grid compact">
+          <label class="wide">Personal Access Token<input id="targetAccess" type="password" placeholder="Used locally; never sent to PortaBase"></label>
+          <label>Organization<select id="targetOrg"><option value="">Load your organizations first</option></select></label>
+          <label>Project name<input id="targetName" value="PortaBase Recovery"></label>
+          <label>Region<select id="targetRegion"><option value="us-east-1">US East (N. Virginia)</option><option value="us-east-2">US East (Ohio)</option><option value="us-west-1">US West (N. California)</option><option value="us-west-2">US West (Oregon)</option><option value="ca-central-1">Canada Central</option><option value="eu-west-1">Europe (Ireland)</option><option value="eu-central-1">Europe (Frankfurt)</option><option value="ap-southeast-1">Asia Pacific (Singapore)</option><option value="ap-southeast-2">Asia Pacific (Sydney)</option><option value="ap-northeast-1">Asia Pacific (Tokyo)</option></select></label>
+          <label>New database password<input id="targetDbPassword" type="password" placeholder="12+ characters; keep a separate copy"></label>
+        </div>
+        <div class="stepActions"><button id="loadOrgs" class="secondary">1. Load organizations</button><button id="createProject" class="primary">2. Create blank project</button><button id="refreshProject" class="secondary">3. Prepare credentials</button></div>
+        <p id="provisionStatus" class="statusline">Nothing has been created yet. PortaBase will never delete a project from this screen.</p>
+      </div>
+      <div class="step"><b>Step 3 · Prove recovery or restore everything</b><p>Use a current limited-trial capsule for a safe validation drill on a disposable free project: PortaBase restores database structure and its API surface, up to five Storage objects, and up to two Edge Functions, then verifies the target. A full capsule remains available for a complete emergency restore.</p></div>
+      <div class="grid">
+        <label class="wide">Recovery capsule<div class="picker"><input id="capsule" readonly><button data-pick="capsule">Choose…</button></div></label>
+        <label>New project reference<input id="targetRef" placeholder="abcdefghijklmnopqrst" maxlength="20"></label>
+        <label>New project URL<input id="targetUrl" placeholder="https://NEW_PROJECT.supabase.co"></label>
+        <label class="wide">New database connection<input id="targetDb" type="password" placeholder="postgresql://..."></label>
+        <label>New service-role / secret key<input id="targetService" type="password"></label>
+      </div>
+      <div class="danger"><b>Write guard</b><p>First create a dry-run plan. To execute, type the exact new project reference below. PortaBase refuses the original source project.</p><input id="typedRef" placeholder="Type the NEW project reference"></div>
+      <div class="actions"><button id="dryRun" class="secondary">Build no-write restore plan</button><button id="drillRestore" class="secondary">Run limited restore drill</button><button id="executeRestore" class="dangerButton">Restore complete capsule</button></div>
+    </section>
+    <section id="results" class="page"><p class="eyebrow">ACTIVITY AND PROOF</p><h1>Evidence, not a green checkmark.</h1><pre id="output">No task has run in this session.</pre></section>
+  </main>
+  <script src="renderer.js"></script>
+</body>
+</html>

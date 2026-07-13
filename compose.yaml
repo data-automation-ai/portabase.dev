@@ -1,0 +1,14 @@
+services:
+  portabase:
+    build:
+      context: .
+      dockerfile: aws/Dockerfile
+    env_file:
+      - path: .env.portabase.local
+        required: false
+    volumes:
+      - ./portabase.config.json:/opt/portabase/portabase.config.json:ro
+      - ./portabase-capsules:/work/capsules
+      - ./portabase-status:/work/status
+    command: ["backup"]
+    restart: "no"

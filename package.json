@@ -2,7 +2,10 @@
   "name": "portabase-dev",
   "private": true,
   "version": "0.2.0",
+  "description": "Customer-owned, encrypted Supabase backup and guarded recovery software.",
+  "author": "PortaBase",
   "type": "module",
+  "main": "desktop/main.cjs",
   "bin": {
     "portabase": "utility/portabase.mjs"
   },
@@ -11,17 +14,74 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "npm run build",
-    "square:create-link": "node scripts/create-square-payment-link.mjs",
     "portabase": "node utility/portabase.mjs",
-    "test": "node --test utility/*.test.mjs"
+    "trial": "node utility/portabase.mjs backup --trial",
+    "test": "node --test utility/*.test.mjs tests/*.test.mjs tests/*.test.cjs",
+    "desktop": "electron .",
+    "desktop:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stage-desktop-tools.ps1 && electron-builder --win nsis",
+    "desktop:linux": "bash scripts/stage-desktop-tools.sh && electron-builder --linux AppImage deb",
+    "desktop:mac": "bash scripts/stage-desktop-tools.sh && electron-builder --mac dmg zip"
   },
   "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.1085.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
+    "square": "^44.2.0",
     "supabase": "2.109.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "6.0.3",
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
     "vite": "8.1.4"
+  },
+  "build": {
+    "appId": "dev.portabase.desktop",
+    "productName": "PortaBase",
+    "asar": true,
+    "asarUnpack": [
+      "utility/**",
+      "node_modules/@supabase/**"
+    ],
+    "files": [
+      "desktop/**",
+      "utility/**",
+      "package.json",
+      "!node_modules/**",
+      "node_modules/@supabase/**"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "extraResources": [
+      {
+        "from": "desktop/vendor",
+        "to": "tools"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.utilities",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "title": "PortaBase ${version}"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Utility"
+    },
+    "deb": {
+      "depends": ["libsecret-1-0", "postgresql-client", "tar"]
+    }
   }
 }

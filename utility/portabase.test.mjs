@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import {
   capsuleName,
   decryptFile,
+  editionFor,
   encryptFile,
   isCapsuleName,
   providerCommand,
@@ -14,8 +15,16 @@ import {
   projectBaseUrl,
   safeObjectPath,
   supabaseHeaders,
+  validateBlankRestoreInventory,
+  validateDrillCapsule,
   validateRestoreTarget,
 } from './portabase-core.mjs';
+
+test('trial edition cannot be accidentally promoted by a missing flag', () => {
+  assert.equal(editionFor({ trialFlag: true, environment: '' }), 'trial');
+  assert.equal(editionFor({ trialFlag: false, environment: 'trial' }), 'trial');
+  assert.equal(editionFor({ trialFlag: false, environment: 'essentials' }), 'essentials');
+});
 
 test('safeObjectPath accepts nested object names', () => {
   assert.match(safeObjectPath('avatars/user/photo.jpg'), /avatars.+user.+photo\.jpg/);
@@ -62,6 +71,16 @@ test('restore target guards refuse source and mismatched confirmation', () => {
   assert.throws(() => validateRestoreTarget('source', 'target', 'wrong'), /exactly match/);
   assert.throws(() => validateRestoreTarget('source', 'target', 'target', 'https://other.supabase.co'), /does not match/);
   assert.equal(validateRestoreTarget('source', 'target', 'target', 'https://target.supabase.co'), true);
+});
+
+test('restore refuses any occupied destination inventory', () => {
+  assert.deepEqual(validateBlankRestoreInventory({ applicationTables: 0, authUsers: 0, storageBuckets: 0, edgeFunctions: 0 }), { applicationTables: 0, authUsers: 0, storageBuckets: 0, edgeFunctions: 0 });
+  assert.throws(() => validateBlankRestoreInventory({ applicationTables: 0, authUsers: 1, storageBuckets: 0, edgeFunctions: 0 }), /target is not blank.*authUsers=1/);
+});
+
+test('limited restore drill accepts only a deliberately limited trial capsule', () => {
+  assert.equal(validateDrillCapsule('trial'), true);
+  assert.throws(() => validateDrillCapsule('essentials'), /requires a current trial capsule/);
 });
 
 test('capsule names are recognized only for the configured project', () => {
