@@ -49,11 +49,11 @@ Parameters:
     Description: Optional customer email for alarm subscription confirmation.
   TaskCpu:
     Type: String
-    Default: '1024'
+    Default: '512'
     AllowedValues: ['512', '1024', '2048', '4096']
   TaskMemory:
     Type: String
-    Default: '4096'
+    Default: '1024'
     AllowedValues: ['1024', '2048', '3072', '4096', '5120', '8192', '16384']
 
 Conditions:
@@ -243,7 +243,6 @@ Resources:
       RequiresCompatibilities: [FARGATE]
       ExecutionRoleArn: !GetAtt ExecutionRole.Arn
       TaskRoleArn: !GetAtt TaskRole.Arn
-      EphemeralStorage: { SizeInGiB: 50 }
       RuntimePlatform:
         CpuArchitecture: X86_64
         OperatingSystemFamily: LINUX
@@ -267,6 +266,8 @@ Resources:
               ValueFrom: !Sub '${SourceSecretArn}:SUPABASE_ACCESS_TOKEN::'
             - Name: PORTABASE_ENCRYPTION_PASSPHRASE
               ValueFrom: !Sub '${SourceSecretArn}:PORTABASE_ENCRYPTION_PASSPHRASE::'
+            - Name: PORTABASE_LICENSE_ENVELOPE_BASE64
+              ValueFrom: !Sub '${SourceSecretArn}:PORTABASE_LICENSE_ENVELOPE_BASE64::'
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -284,7 +285,6 @@ Resources:
       RequiresCompatibilities: [FARGATE]
       ExecutionRoleArn: !GetAtt ExecutionRole.Arn
       TaskRoleArn: !GetAtt TaskRole.Arn
-      EphemeralStorage: { SizeInGiB: 100 }
       RuntimePlatform:
         CpuArchitecture: X86_64
         OperatingSystemFamily: LINUX

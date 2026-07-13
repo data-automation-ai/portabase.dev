@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   capsuleName,
+  compareDatabaseInventories,
   decryptFile,
   editionFor,
   encryptFile,
@@ -13,6 +14,7 @@ import {
   providerRemote,
   providerVerifyCommand,
   projectBaseUrl,
+  recoveryEvidenceStatus,
   safeObjectPath,
   supabaseHeaders,
   validateBlankRestoreInventory,
@@ -81,6 +83,24 @@ test('restore refuses any occupied destination inventory', () => {
 test('limited restore drill accepts only a deliberately limited trial capsule', () => {
   assert.equal(validateDrillCapsule('trial'), true);
   assert.throws(() => validateDrillCapsule('essentials'), /requires a current trial capsule/);
+});
+
+test('database recovery evidence detects row and structural drift', () => {
+  const expected = { tables: [{ schema: 'public', name: 'orders', rows: 4 }], authUsers: 1, policies: 2, databaseFunctions: 1, triggers: 1 };
+  assert.equal(compareDatabaseInventories(expected, structuredClone(expected)).verified, true);
+  const drifted = structuredClone(expected);
+  drifted.tables[0].rows = 3;
+  const comparison = compareDatabaseInventories(expected, drifted);
+  assert.equal(comparison.verified, false);
+  assert.deepEqual(comparison.rowMismatches, [{ table: 'public.orders', expected: 4, actual: 3 }]);
+});
+
+test('recovery evidence never calls a partial or unverified restore successful', () => {
+  const verified = { verified: true };
+  assert.equal(recoveryEvidenceStatus({ mode: 'execute', captureStatus: 'COMPLETE', database: verified, storage: verified, functions: verified }), 'RECOVERY_DATA_PATH_VERIFIED');
+  assert.equal(recoveryEvidenceStatus({ mode: 'execute', captureStatus: 'PARTIAL', database: verified, storage: verified, functions: verified }), 'FAILED');
+  assert.equal(recoveryEvidenceStatus({ mode: 'execute', captureStatus: 'COMPLETE', database: { verified: false }, storage: verified, functions: verified }), 'FAILED');
+  assert.equal(recoveryEvidenceStatus({ mode: 'limited-drill', captureStatus: 'TRIAL', database: verified, storage: verified, functions: verified }), 'LIMITED_DRILL_PASSED');
 });
 
 test('capsule names are recognized only for the configured project', () => {

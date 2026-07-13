@@ -123,6 +123,47 @@ export function validateDrillCapsule(edition) {
   return true;
 }
 
+function tableKey(table) {
+  return `${table.schema}.${table.name}`;
+}
+
+export function compareDatabaseInventories(expected = {}, actual = {}) {
+  const expectedTables = new Map((expected.tables || []).map(table => [tableKey(table), Number(table.rows)]));
+  const actualTables = new Map((actual.tables || []).map(table => [tableKey(table), Number(table.rows)]));
+  const missingTables = [...expectedTables.keys()].filter(key => !actualTables.has(key));
+  const unexpectedTables = [...actualTables.keys()].filter(key => !expectedTables.has(key));
+  const rowMismatches = [...expectedTables.entries()]
+    .filter(([key, rows]) => actualTables.has(key) && actualTables.get(key) !== rows)
+    .map(([table, expectedRows]) => ({ table, expected: expectedRows, actual: actualTables.get(table) }));
+  const metrics = ['authUsers', 'policies', 'databaseFunctions', 'triggers'].map(name => ({
+    name,
+    expected: Number(expected[name] || 0),
+    actual: Number(actual[name] || 0),
+  }));
+  const metricMismatches = metrics.filter(metric => metric.expected !== metric.actual);
+  return {
+    verified: missingTables.length === 0 && unexpectedTables.length === 0 && rowMismatches.length === 0 && metricMismatches.length === 0,
+    expectedTableCount: expectedTables.size,
+    actualTableCount: actualTables.size,
+    expectedRows: [...expectedTables.values()].reduce((total, rows) => total + rows, 0),
+    actualRows: [...actualTables.values()].reduce((total, rows) => total + rows, 0),
+    missingTables,
+    unexpectedTables,
+    rowMismatches,
+    metricMismatches,
+  };
+}
+
+export function recoveryEvidenceStatus({ mode, captureStatus, database, storage, functions, error } = {}) {
+  if (error) return 'FAILED';
+  if (mode === 'plan') return 'PLAN_ONLY';
+  if (mode === 'preflight') return 'PREFLIGHT_PASSED';
+  const verified = Boolean(database?.verified) && Boolean(storage?.verified) && Boolean(functions?.verified);
+  if (!verified) return 'FAILED';
+  if (mode === 'limited-drill') return 'LIMITED_DRILL_PASSED';
+  return captureStatus === 'COMPLETE' ? 'RECOVERY_DATA_PATH_VERIFIED' : 'FAILED';
+}
+
 export function capsuleName(projectRef, date = new Date()) {
   const stamp = date.toISOString().replaceAll(':', '-').replace('.000Z', 'Z');
   return `${projectRef}-${stamp}`;

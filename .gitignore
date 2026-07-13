@@ -2,6 +2,7 @@ node_modules/
 dist/
 release/
 desktop/vendor/
+private/
 .env
 .env.local
 .env.*.local

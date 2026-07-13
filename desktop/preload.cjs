@@ -10,5 +10,8 @@ contextBridge.exposeInMainWorld('portabase', Object.freeze({
   projectCredentials: request => ipcRenderer.invoke('portabase:project-credentials', request),
   chooseDirectory: () => ipcRenderer.invoke('portabase:choose-directory'),
   chooseCapsule: () => ipcRenderer.invoke('portabase:choose-capsule'),
+  importLicense: () => ipcRenderer.invoke('portabase:import-license'),
+  installSchedule: everyHours => ipcRenderer.invoke('portabase:install-schedule', everyHours),
+  removeSchedule: () => ipcRenderer.invoke('portabase:remove-schedule'),
   open: url => ipcRenderer.invoke('portabase:open', url),
 }));

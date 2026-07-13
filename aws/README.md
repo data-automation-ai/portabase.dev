@@ -23,16 +23,16 @@ Use a dedicated recovery account when practical. Enable root MFA, retain custome
 
 ## Build and publish the runner
 
-Create a customer ECR repository, authenticate Docker, build, scan, and push a versioned image. Prefer passing a digest URI to CloudFormation so a later tag change cannot silently alter the recovery runner.
+Create a customer ECR repository, authenticate Docker, build, scan, and push a versioned image. Prefer passing a digest URI to CloudFormation so a later tag change cannot silently alter the recovery runner. The stack defaults to 0.5 vCPU and 1 GB RAM with Fargate's default ephemeral disk: the smallest practical starting point for a modest PortaBase workload. Measure dump size, peak memory, transfer time, and temporary disk on the first run, then increase `TaskCpu` or `TaskMemory` only when evidence requires it.
 
 ```powershell
 aws ecr create-repository --repository-name portabase-recovery --image-scanning-configuration scanOnPush=true --image-tag-mutability IMMUTABLE
 $account = aws sts get-caller-identity --query Account --output text
 $region = aws configure get region
 aws ecr get-login-password --region $region | docker login --username AWS --password-stdin "$account.dkr.ecr.$region.amazonaws.com"
-docker build -f aws/Dockerfile -t portabase-recovery:0.2.0 .
-docker tag portabase-recovery:0.2.0 "$account.dkr.ecr.$region.amazonaws.com/portabase-recovery:0.2.0"
-docker push "$account.dkr.ecr.$region.amazonaws.com/portabase-recovery:0.2.0"
+docker build -f aws/Dockerfile -t portabase-recovery:0.3.0 .
+docker tag portabase-recovery:0.3.0 "$account.dkr.ecr.$region.amazonaws.com/portabase-recovery:0.3.0"
+docker push "$account.dkr.ecr.$region.amazonaws.com/portabase-recovery:0.3.0"
 ```
 
 The repository does not create or push an image automatically because those are customer-account changes.
@@ -47,7 +47,8 @@ Create the source secret as a JSON object with exactly these keys:
   "SUPABASE_URL": "source project URL",
   "SUPABASE_SERVICE_ROLE_KEY": "source service-role or secret key",
   "SUPABASE_ACCESS_TOKEN": "customer Supabase personal access token",
-  "PORTABASE_ENCRYPTION_PASSPHRASE": "customer-owned passphrase of at least 16 characters"
+  "PORTABASE_ENCRYPTION_PASSPHRASE": "customer-owned passphrase of at least 16 characters",
+  "PORTABASE_LICENSE_ENVELOPE_BASE64": "base64 encoding of the purchased Linux license JSON"
 }
 ```
 

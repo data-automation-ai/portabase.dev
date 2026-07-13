@@ -4,6 +4,7 @@ import { createHmac } from 'node:crypto';
 import { WebhooksHelper } from 'square';
 import { buildSquarePaymentLinkRequest } from '../netlify/functions/create-square-checkout.mjs';
 import { isPaidEssentialsOrder } from '../netlify/functions/square-order.mjs';
+import { buildLicensePayload } from '../netlify/functions/issue-license.mjs';
 
 test('Square payment link is exactly one non-recurring $147 USD license', () => {
   const request = buildSquarePaymentLinkRequest({ locationId: 'LOCATION', attempt: 'ATTEMPT', siteUrl: 'https://portabase.dev' });
@@ -19,6 +20,14 @@ test('payment verification rejects incomplete or price-altered orders', () => {
   assert.equal(isPaidEssentialsOrder(valid), true);
   assert.equal(isPaidEssentialsOrder({ ...valid, state: 'OPEN' }), false);
   assert.equal(isPaidEssentialsOrder({ ...valid, total_money: { amount: 100, currency: 'USD' } }), false);
+});
+
+test('license fulfillment binds a paid order to one platform and lifetime updates', () => {
+  const license = buildLicensePayload({ orderId: 'ORDER_12345678', platform: 'linux', issuedAt: '2026-07-13T00:00:00.000Z', licenseId: 'LICENSE_1' });
+  assert.equal(license.platform, 'linux');
+  assert.equal(license.projectAllowance, 1);
+  assert.equal(license.updates, 'lifetime');
+  assert.equal(license.orderId, 'ORDER_12345678');
 });
 
 test('Square webhook verification binds the raw body to the exact notification URL', async () => {

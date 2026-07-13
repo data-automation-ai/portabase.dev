@@ -20,6 +20,7 @@
     <section id="protect" class="page active">
       <p class="eyebrow">PROTECT THIS PROJECT</p><h1>Make the independent copy before access disappears.</h1>
       <p class="lead">The trial runs the real workflow indefinitely, but saves only structure, five Storage objects, and two Functions.</p>
+      <div class="step automated"><b id="licenseStatus">Trial edition · limited payload</b><p>A paid PortaBase license is a small signed file. It verifies entirely on this computer and never expires.</p><div class="stepActions"><button id="importLicense" class="secondary">Import purchased license</button></div></div>
       <div class="grid">
         <label>Project reference<input id="projectRef" placeholder="abcdefghijklmnopqrst" maxlength="20"></label>
         <label>Project URL<input id="sourceUrl" placeholder="https://PROJECT.supabase.co"></label>
@@ -29,7 +30,8 @@
         <label class="wide">Encryption passphrase<input id="passphrase" type="password" placeholder="At least 16 characters; keep a separate copy"></label>
         <label class="wide">Independent destination<div class="picker"><input id="destination" readonly><button data-pick="destination">Choose…</button></div></label>
       </div>
-      <div class="actions"><button id="saveSource" class="secondary">Save securely</button><button id="doctor" class="secondary">Check readiness</button><button id="trial" class="primary">Run limited trial backup</button></div>
+      <div class="actions"><button id="saveSource" class="secondary">Save securely</button><button id="doctor" class="secondary">Check readiness</button><button id="trial" class="secondary">Run limited trial backup</button><button id="fullBackup" class="primary">Run complete licensed backup</button></div>
+      <div class="step"><b>Automatic protection</b><p>The installed PortaBase application can run headlessly every six hours. The OS schedule contains no passwords or tokens; PortaBase reads them from your protected credential store at run time.</p><div class="stepActions"><button id="installSchedule" class="primary">Install 6-hour schedule</button><button id="removeSchedule" class="secondary">Remove schedule</button></div></div>
     </section>
     <section id="recover" class="page">
       <p class="eyebrow">RECOVER INTO A NEW PROJECT</p><h1>A backup matters only if it opens somewhere else.</h1>

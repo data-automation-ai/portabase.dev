@@ -4,7 +4,7 @@
 
 Install dependencies on the build machine, ensure PostgreSQL client tools are on `PATH`, then run `npm run desktop:win`. The staging script embeds the current platform's pinned Supabase CLI and PostgreSQL tools. Public distribution requires an Authenticode code-signing certificate. Verify the final installer with `Get-AuthenticodeSignature` and publish its SHA-256 hash.
 
-The July 13, 2026 engineering build produced and smoke-launched `release/PortaBase-Setup-0.2.0-unsigned.exe`. It is intentionally named `unsigned` and is not a public release.
+The July 13, 2026 engineering build produced and smoke-launched an unsigned Windows installer. Engineering artifacts are intentionally named `unsigned` and are not public releases.
 
 ## macOS
 

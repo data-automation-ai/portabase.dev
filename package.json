@@ -1,7 +1,7 @@
 {
   "name": "portabase-dev",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Customer-owned, encrypted Supabase backup and guarded recovery software.",
   "author": "PortaBase",
   "type": "module",
@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.1085.0",
+    "@netlify/blobs": "^10.7.9",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "square": "^44.2.0",
@@ -60,7 +61,8 @@
       }
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "artifactName": "PortaBase-Setup-${version}-unsigned.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -68,7 +70,10 @@
       "createDesktopShortcut": true
     },
     "mac": {
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "category": "public.app-category.utilities",
       "hardenedRuntime": true,
       "gatekeeperAssess": false
@@ -77,11 +82,18 @@
       "title": "PortaBase ${version}"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Utility"
     },
     "deb": {
-      "depends": ["libsecret-1-0", "postgresql-client", "tar"]
+      "depends": [
+        "libsecret-1-0",
+        "postgresql-client",
+        "tar"
+      ]
     }
   }
 }

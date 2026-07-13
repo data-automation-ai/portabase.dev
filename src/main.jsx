@@ -408,14 +408,33 @@ function Pricing() {
 
 function ThankYou() {
   const [paid, setPaid] = useState(null);
+  const [licenseState, setLicenseState] = useState({ status: 'idle', message: '' });
   useEffect(() => {
     const orderId = sessionStorage.getItem('portabase_square_order_id');
     if (!orderId) { setPaid(false); return; }
     fetch(`/api/square/order?order_id=${encodeURIComponent(orderId)}`).then(response => response.json()).then(result => setPaid(Boolean(result.paid))).catch(() => setPaid(false));
   }, []);
+  const claimLicense = async platform => {
+    const orderId = sessionStorage.getItem('portabase_square_order_id');
+    setLicenseState({ status: 'loading', message: 'Creating your signed lifetime license…' });
+    try {
+      const response = await fetch('/api/license/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId, platform }) });
+      if (!response.ok) {
+        const problem = await response.json().catch(() => ({}));
+        throw new Error(problem.error || 'License fulfillment could not complete.');
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get('Content-Disposition') || '';
+      const filename = disposition.match(/filename="([^"]+)"/)?.[1] || `PortaBase-${platform}.license.json`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url; link.download = filename; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+      setLicenseState({ status: 'complete', message: 'License downloaded. Import this file in PortaBase Desktop to enable complete backups.' });
+    } catch (error) { setLicenseState({ status: 'error', message: error.message }); }
+  };
   if (paid === null) return <div className="thanks"><div className="thanks-card"><Logo /><h1>Confirming your payment…</h1><p>Square is securely confirming the completed order.</p></div></div>;
   if (!paid) return <div className="thanks"><div className="thanks-card"><Logo /><h1>We could not confirm this payment.</h1><p>No purchase is being claimed from the page URL alone. Contact us and we will verify it with Square.</p><a className="button button-primary" href="mailto:escape@portabase.dev?subject=PortaBase checkout verification">Get checkout help <Arrow /></a></div></div>;
-  return <div className="thanks"><div className="thanks-card"><Logo /><div className="thanks-check">✓</div><div className="section-kicker green">ONE-TIME PAYMENT COMPLETE</div><h1>Your escape plan starts now.</h1><p>Square confirmed your one-time PortaBase payment. There is no monthly renewal. Check the email used at checkout for delivery and setup instructions.</p><a className="button button-primary" href="mailto:escape@portabase.dev?subject=PortaBase purchase help">I need purchase help <Arrow /></a><small>PortaBase never asks you to email Supabase or cloud credentials.</small></div></div>;
+  return <div className="thanks"><div className="thanks-card"><Logo /><div className="thanks-check">✓</div><div className="section-kicker green">ONE-TIME PAYMENT COMPLETE</div><h1>Choose your platform.</h1><p>Square confirmed your one-time PortaBase payment. Select one edition below. Your signed license works offline, never expires, and includes future updates.</p><div className="fulfillment-platforms"><button onClick={() => claimLicense('win32')} disabled={licenseState.status === 'loading'}>Windows</button><button onClick={() => claimLicense('darwin')} disabled={licenseState.status === 'loading'}>macOS <small>Apple</small></button><button onClick={() => claimLicense('linux')} disabled={licenseState.status === 'loading'}>Linux</button></div>{licenseState.message && <p className={`license-message ${licenseState.status}`}>{licenseState.message}</p>}<a className="button button-ghost" href="mailto:escape@portabase.dev?subject=PortaBase purchase help">I need purchase help <Arrow /></a><small>Your first selection permanently assigns this order to that platform. PortaBase never asks you to email Supabase or cloud credentials.</small></div></div>;
 }
 
 function CheckoutRedirect() {

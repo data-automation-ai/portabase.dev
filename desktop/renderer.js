@@ -72,6 +72,26 @@ $('trial').addEventListener('click', async () => {
   try { await window.portabase.saveConfig({ projectRef: $('projectRef').value, destination: $('destination').value }); await run('backup', ['--trial'], secretValues()); }
   catch (error) { result(error.message, true); }
 });
+$('fullBackup').addEventListener('click', async () => {
+  try { await window.portabase.saveConfig({ projectRef: $('projectRef').value, destination: $('destination').value }); await run('backup', [], secretValues()); }
+  catch (error) { result(error.message, true); }
+});
+$('importLicense').addEventListener('click', async () => {
+  try {
+    const license = await window.portabase.importLicense();
+    if (!license) return;
+    $('licenseStatus').textContent = `Essentials licensed · ${license.payload.platform} · lifetime updates`;
+    result('Paid license verified and stored locally. Complete backups are now enabled on this platform.');
+  } catch (error) { result(error.message, true); }
+});
+$('installSchedule').addEventListener('click', async () => {
+  try { const schedule = await window.portabase.installSchedule(6); result(`Automatic backup installed for this ${schedule.platform} computer. PortaBase will run every ${schedule.everyHours} hours using protected local credentials.`); }
+  catch (error) { result(error.message, true); }
+});
+$('removeSchedule').addEventListener('click', async () => {
+  try { await window.portabase.removeSchedule(); result('The automatic PortaBase schedule was removed. Existing recovery capsules were not deleted.'); }
+  catch (error) { result(error.message, true); }
+});
 $('dryRun').addEventListener('click', () => run('restore', ['--capsule', $('capsule').value, '--preflight'], targetValues()));
 $('drillRestore').addEventListener('click', async () => {
   const target = $('targetRef').value.trim();
@@ -88,5 +108,6 @@ $('executeRestore').addEventListener('click', async () => {
 window.portabase.state().then(state => {
   $('security').textContent = state.secureStorage ? '● OS-protected secret storage available' : '● Secure secret storage unavailable; values will not be persisted';
   $('security').classList.toggle('warn', !state.secureStorage);
+  $('licenseStatus').textContent = state.license?.valid ? `Essentials licensed · ${state.license.payload.platform} · lifetime updates` : `Trial edition · ${state.license?.reason || 'license missing'}`;
   if (state.config) { $('projectRef').value = state.config.projectRef || ''; $('destination').value = state.config.provider?.path || ''; }
 }).catch(error => result(error.message, true));

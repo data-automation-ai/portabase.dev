@@ -1,10 +1,11 @@
 const { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const { existsSync } = require('node:fs');
-const { mkdir, readFile, writeFile } = require('node:fs/promises');
+const { appendFile, copyFile, mkdir, readFile, rm, writeFile } = require('node:fs/promises');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { listOrganizations, createProject, projectCredentials } = require('./provisioning.cjs');
+const { definitions: scheduleDefinitions } = require('./scheduler.cjs');
 
 app.enableSandbox();
 
@@ -72,6 +73,16 @@ function cliScript() {
   return path.join(appRoot(), 'utility', 'portabase.mjs');
 }
 
+function licenseFile() {
+  return userFile('portabase.license.json');
+}
+
+async function inspectInstalledLicense(path = licenseFile()) {
+  const modulePath = pathToFileURL(path.join(appRoot(), 'utility', 'license.mjs')).href;
+  const { inspectLicense } = await import(modulePath);
+  return inspectLicense(path, process.platform);
+}
+
 async function runCli(command, args, runtimeSecrets = {}) {
   if (!COMMANDS.has(command)) throw new Error('Unsupported command.');
   if (!Array.isArray(args) || args.some(value => typeof value !== 'string' || value.length > 2048)) throw new Error('Invalid arguments.');
@@ -88,6 +99,7 @@ async function runCli(command, args, runtimeSecrets = {}) {
       cwd: appRoot(),
       env: {
         ...process.env, ...envSecrets, ELECTRON_RUN_AS_NODE: '1', PORTABASE_TOOLS_DIR: toolsDir, PATH: toolPath,
+        PORTABASE_LICENSE_FILE: licenseFile(), PORTABASE_EVIDENCE_DIRECTORY: userFile('recovery-evidence'),
         ...(process.platform === 'linux' && libraryPath ? { LD_LIBRARY_PATH: [libraryPath, process.env.LD_LIBRARY_PATH || ''].filter(Boolean).join(':') } : {}),
         ...(process.platform === 'darwin' && libraryPath ? { DYLD_LIBRARY_PATH: [libraryPath, process.env.DYLD_LIBRARY_PATH || ''].filter(Boolean).join(':') } : {}),
       },
@@ -102,10 +114,68 @@ async function runCli(command, args, runtimeSecrets = {}) {
   });
 }
 
+function runProcess(command, args) {
+  return new Promise((resolveRun, reject) => {
+    const child = spawn(command, args, { shell: false, windowsHide: true });
+    let output = '';
+    child.stdout?.on('data', chunk => { output += chunk; });
+    child.stderr?.on('data', chunk => { output += chunk; });
+    child.once('error', reject);
+    child.once('close', code => code === 0 ? resolveRun(output) : reject(new Error(output.trim() || `${path.basename(command)} exited with code ${code}`)));
+  });
+}
+
+async function installDesktopSchedule(everyHours) {
+  if (!app.isPackaged) throw new Error('Build and install PortaBase before installing its automatic schedule.');
+  if (!existsSync(userFile('portabase.config.json'))) throw new Error('Save a project configuration before installing the schedule.');
+  const secrets = await loadSecrets();
+  if (!secrets.secure || !secrets.values.SUPABASE_DB_URL || !secrets.values.PORTABASE_ENCRYPTION_PASSPHRASE) throw new Error('Save the required credentials in protected operating-system storage before scheduling.');
+  const definition = scheduleDefinitions({ platform: process.platform, executable: process.execPath, everyHours, home: app.getPath('home'), userData: app.getPath('userData') });
+  if (process.platform === 'win32') {
+    await runProcess('schtasks.exe', ['/Create', '/TN', definition.taskName, '/SC', 'HOURLY', '/MO', String(definition.hours), '/TR', definition.command, '/F']);
+  } else if (process.platform === 'darwin') {
+    await mkdir(path.dirname(definition.file), { recursive: true });
+    await writeFile(definition.file, definition.content, { mode: 0o600 });
+    const domain = `gui/${process.getuid()}`;
+    await runProcess('launchctl', ['bootout', domain, definition.file]).catch(() => {});
+    await runProcess('launchctl', ['bootstrap', domain, definition.file]);
+  } else if (process.platform === 'linux') {
+    await mkdir(definition.directory, { recursive: true });
+    await writeFile(path.join(definition.directory, 'portabase-backup.service'), definition.service, { mode: 0o600 });
+    await writeFile(path.join(definition.directory, 'portabase-backup.timer'), definition.timer, { mode: 0o600 });
+    await runProcess('systemctl', ['--user', 'daemon-reload']);
+    await runProcess('systemctl', ['--user', 'enable', '--now', 'portabase-backup.timer']);
+  }
+  return { installed: true, everyHours: definition.hours, platform: process.platform };
+}
+
+async function removeDesktopSchedule() {
+  const definition = scheduleDefinitions({ platform: process.platform, executable: process.execPath, everyHours: 6, home: app.getPath('home'), userData: app.getPath('userData') });
+  if (process.platform === 'win32') await runProcess('schtasks.exe', ['/Delete', '/TN', definition.taskName, '/F']).catch(() => {});
+  else if (process.platform === 'darwin') {
+    await runProcess('launchctl', ['bootout', `gui/${process.getuid()}`, definition.file]).catch(() => {});
+    await rm(definition.file, { force: true });
+  } else if (process.platform === 'linux') {
+    await runProcess('systemctl', ['--user', 'disable', '--now', 'portabase-backup.timer']).catch(() => {});
+    await rm(path.join(definition.directory, 'portabase-backup.service'), { force: true });
+    await rm(path.join(definition.directory, 'portabase-backup.timer'), { force: true });
+    await runProcess('systemctl', ['--user', 'daemon-reload']).catch(() => {});
+  }
+  return { removed: true };
+}
+
+async function runScheduledBackup() {
+  const startedAt = new Date().toISOString();
+  const result = await runCli('backup', []);
+  await mkdir(app.getPath('userData'), { recursive: true });
+  await appendFile(userFile('scheduled-backup.log'), `[${startedAt}] exit=${result.code}\n${result.output}\n`, { mode: 0o600 });
+  return result.code;
+}
+
 function registerIpc() {
   ipcMain.handle('portabase:state', async event => {
     if (!validateSender(event)) throw new Error('Untrusted renderer.');
-    return { secureStorage: Boolean(secureBackend()), config: await readJson(userFile('portabase.config.json'), null) };
+    return { secureStorage: Boolean(secureBackend()), config: await readJson(userFile('portabase.config.json'), null), license: await inspectInstalledLicense() };
   });
   ipcMain.handle('portabase:save-config', async (event, config) => {
     if (!validateSender(event)) throw new Error('Untrusted renderer.');
@@ -154,6 +224,25 @@ function registerIpc() {
     const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
     return result.canceled ? null : result.filePaths[0];
   });
+  ipcMain.handle('portabase:import-license', async event => {
+    if (!validateSender(event)) throw new Error('Untrusted renderer.');
+    const result = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'PortaBase license', extensions: ['json'] }] });
+    if (result.canceled) return null;
+    const selected = result.filePaths[0];
+    const license = await inspectInstalledLicense(selected);
+    if (!license.valid) throw new Error(`License rejected: ${license.reason}.`);
+    await mkdir(app.getPath('userData'), { recursive: true });
+    await copyFile(selected, licenseFile());
+    return license;
+  });
+  ipcMain.handle('portabase:install-schedule', async (event, everyHours) => {
+    if (!validateSender(event)) throw new Error('Untrusted renderer.');
+    return installDesktopSchedule(everyHours);
+  });
+  ipcMain.handle('portabase:remove-schedule', async event => {
+    if (!validateSender(event)) throw new Error('Untrusted renderer.');
+    return removeDesktopSchedule();
+  });
   ipcMain.handle('portabase:open', async (event, url) => {
     if (!validateSender(event) || !ALLOWED_EXTERNAL.has(url)) throw new Error('External link is not allowed.');
     await shell.openExternal(url);
@@ -179,7 +268,15 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'index.html'));
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  if (process.argv.includes('--scheduled-backup')) {
+    const code = await runScheduledBackup().catch(async error => {
+      await appendFile(userFile('scheduled-backup.log'), `[${new Date().toISOString()}] FAILED ${error.message}\n`, { mode: 0o600 }).catch(() => {});
+      return 1;
+    });
+    app.exit(code);
+    return;
+  }
   registerIpc();
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
