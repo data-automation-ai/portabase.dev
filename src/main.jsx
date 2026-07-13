@@ -1,11 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
+import { nightmares as stories } from './data/nightmares.js';
+import { diagrams } from './data/diagrams.js';
 
 const Arrow = () => <span aria-hidden="true">↗</span>;
 const checkoutUrl = import.meta.env.VITE_SQUARE_CHECKOUT_URL || 'mailto:escape@portabase.dev?subject=Purchase PortaBase Essentials';
 
-const stories = [
+const retiredStories = [
   {
     tag: 'ACCOUNT TAKEOVER',
     title: 'Six months of work. Gone after a cofounder was hacked.',
@@ -142,9 +144,9 @@ function Header() {
       <Logo />
       <button className="menu" onClick={() => setOpen(!open)} aria-label="Toggle navigation">{open ? 'Close' : 'Menu'}</button>
       <nav className={open ? 'nav open' : 'nav'}>
-        <a href="#why-now">Why now</a><a href="#reality">The reality</a><a href="#stories">Real incidents</a><a href="#escape">The escape plan</a><a href="#pricing">$47 one time</a>
+        <a href="#what-is-this">What is this?</a><a href="#why-now">Why now</a><a href="#stories">42 real incidents</a><a href="#escape">The escape plan</a><a href="#pricing">$47 one time</a>
       </nav>
-      <a className="button button-small desktop-cta" href="#audit">Check your exposure <Arrow /></a>
+      <a className="button button-small desktop-cta" href="#what-is-this">See how it works <Arrow /></a>
     </div>
   </header>;
 }
@@ -156,10 +158,10 @@ function Hero() {
       <div className="hero-copy">
         <div className="eyebrow"><span className="pulse" /> Supabase is great. A single point of failure isn’t.</div>
         <h1>Your recovery plan<br />cannot be <em>“pray.”</em></h1>
-        <p className="hero-lead">When production is down and the dashboard won’t open, your database, users and files are behind the same locked door. The published Pro support path is email. Your customers will not wait 24–48 hours.</p>
+        <p className="hero-lead"><strong>PortaBase is a customer-run Supabase backup and recovery utility.</strong> It continuously copies your database, Auth records, Storage files and Functions into encrypted storage you control—before the dashboard becomes unavailable.</p>
         <div className="hero-actions">
-          <a className="button button-primary" href="#audit">Find out if “pray” is your plan <Arrow /></a>
-          <a className="text-link" href="#stories">Read the real incidents <span>↓</span></a>
+          <a className="button button-primary" href="#what-is-this">See exactly what PortaBase does <Arrow /></a>
+          <a className="text-link" href="#stories">Read 42 documented incidents <span>↓</span></a>
         </div>
         <div className="hero-proof"><span>Zero credential custody</span><span>Customer-owned cloud</span><span>$47 once · $0 monthly</span></div>
       </div>
@@ -177,6 +179,36 @@ function Hero() {
       </div>
     </div>
     <div className="reality-ticker"><div><span>PROJECT DELETED</span><span>OWNER LOCKED OUT</span><span>PAYMENT FAILED</span><span>STORAGE NOT IN BACKUP</span><span>API KEYS REVOKED</span><span>SUPPORT TICKET OPEN</span><span>PROJECT DELETED</span><span>OWNER LOCKED OUT</span></div></div>
+  </section>;
+}
+
+function WhatIsThis() {
+  return <section className="section what-is-this" id="what-is-this">
+    <div className="shell">
+      <div className="section-kicker green">WHAT IS PORTABASE?</div>
+      <div className="what-heading">
+        <h2>Your customer-run<br />Supabase recovery utility.</h2>
+        <div><p>Install PortaBase on a computer, server, NAS, or customer AWS account. It captures the parts of your application needed for recovery, encrypts them locally, and sends the capsule directly to storage you own.</p><p><strong>No PortaBase cloud account. No credential relay. No access to your backup contents.</strong></p></div>
+      </div>
+      <div className="definition-strip">
+        <div><small>IT CAPTURES</small><b>Database + Auth<br />Storage objects<br />Edge Functions</b></div>
+        <div><small>IT STORES IN</small><b>Google Drive<br />Dropbox / NAS<br />Customer AWS S3</b></div>
+        <div><small>IT PROVES</small><b>Checksums<br />Authenticated decryption<br />Guarded restore plan</b></div>
+        <div><small>IT NEVER GETS</small><b>Your credentials<br />Your encryption key<br />Your data</b></div>
+      </div>
+      <figure className="diagram-hero">
+        <img src={diagrams[0].src} alt={diagrams[0].title} />
+        <figcaption><b>{diagrams[0].title}</b><span>{diagrams[0].body}</span></figcaption>
+      </figure>
+      <div className="diagram-intro"><div><span>10 TECHNICAL DIAGRAMS</span><h3>See the system before you trust it.</h3></div><p>Every major data path, trust boundary, package, capsule, and restore step is shown below. These are the diagrams that were previously sitting unused in the repository.</p></div>
+      <div className="diagram-grid">
+        {diagrams.slice(1).map(diagram => <figure className="diagram-card" key={diagram.src}>
+          <img loading="lazy" src={diagram.src} alt={diagram.title} />
+          <figcaption><b>{diagram.title}</b><span>{diagram.body}</span></figcaption>
+        </figure>)}
+      </div>
+      <div className="what-actions"><a className="button button-primary" href="#pricing">Get PortaBase Essentials — $47 <Arrow /></a><a className="button button-ghost" href="#stories">Review the 42 incidents <Arrow /></a></div>
+    </div>
   </section>;
 }
 
@@ -238,17 +270,17 @@ function Stories() {
   const [shown, setShown] = useState(6);
   return <section className="section stories" id="stories">
     <div className="shell">
-      <div className="section-kicker red">THIS HAS ALREADY HAPPENED</div>
-      <div className="split-heading"><h2>We are not<br />making this up.</h2><p>These are firsthand posts, confirmed outages and public support threads from Supabase users. Every case links to its source. Every correction and dispute stays attached.</p></div>
+      <div className="section-kicker red">42 DOCUMENTED INCIDENTS · ZERO JOKES</div>
+      <div className="split-heading"><h2>These actually<br />happened.</h2><p>Twenty-three substantive firsthand or public-support cases. Nineteen official Supabase incidents. Every case links to its source; corrections and disputes stay attached.</p></div>
       <div className="story-grid">
-        {stories.slice(0, shown).map((story, index) => <a className="story-card" href={story.href} target="_blank" rel="noreferrer" key={story.title}>
+        {stories.slice(0, shown).map((story, index) => <a className="story-card" href={story.href} target="_blank" rel="noreferrer" key={story.id}>
           <div className="story-meta"><span>{story.tag}</span><b>{String(index + 1).padStart(2, '0')}</b></div>
           <h3>{story.title}</h3><p>{story.body}</p>
           <div className="story-source"><span>{story.source}<small>{story.verified}</small></span><Arrow /></div>
         </a>)}
       </div>
       {shown < stories.length && <button className="button button-ghost load-more" onClick={() => setShown(stories.length)}>Show all {stories.length} reports <span>↓</span></button>}
-      <p className="source-note">Community reports are not independent findings of fault. They are included because each illustrates a real continuity failure mode—provider-caused, customer-caused or still disputed.</p>
+      <p className="source-note">No policies, feature requests, hypotheticals or backup-market discussions are counted. Community reports document what the poster reported; official incidents document what Supabase confirmed. A report is not presented as independent proof of cause.</p>
     </div>
   </section>;
 }
@@ -327,7 +359,7 @@ function Footer() {
 
 function App() {
   if (window.location.pathname === '/thanks') return <ThankYou />;
-  return <><Header /><main><Hero /><WhyNow /><Reality /><Stories /><Escape /><Audit /><Cutover /><Pricing /></main><Footer /></>;
+  return <><Header /><main><Hero /><WhatIsThis /><WhyNow /><Reality /><Stories /><Escape /><Audit /><Cutover /><Pricing /></main><Footer /></>;
 }
 
 createRoot(document.getElementById('root')).render(<React.StrictMode><App /></React.StrictMode>);

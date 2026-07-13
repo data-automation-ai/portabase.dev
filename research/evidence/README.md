@@ -1,70 +1,76 @@
-# PortaBase.dev Supabase continuity evidence archive
+# PortaBase.dev — 42 documented Supabase nightmare incidents
 
 Research snapshot: 2026-07-12
 
-This archive collects public reports illustrating why a business should maintain a recovery copy outside its Supabase account. It is an evidence library, not a claim that every report proves fault by Supabase.
+This is the publication set used by the PortaBase landing page. It contains exactly 42 real, sourced events: 23 substantive firsthand/public-support cases and 19 official Supabase incidents.
 
-## Publication rules
+## Admission standard
 
-- Preserve the original URL, date, resolution, correction, and any Supabase response.
-- Describe community posts as reports or firsthand accounts, not independently proven facts.
-- Keep account bans, billing restrictions, project failures, outages, and backup limitations in separate categories.
-- Do not use a temporary-email/AUP violation as the lead example; it is real but readily distinguishable from a compliant paid business.
-- Redact email addresses, project references, ticket numbers, and unrelated browser content before publishing screenshots.
-- Do not crop away a resolution, correction, or official dispute that materially changes the meaning.
-- Obtain permission before publishing the owner-supplied `banned.png` as a personal case study.
+An item counts only when it has all of the following:
 
-## Evidence index
+- a publicly reachable source;
+- a concrete event that actually occurred;
+- a specific operational consequence such as account loss, database unavailability, failed restore, project lockout, data loss, or a confirmed service incident;
+- enough source content to distinguish it from a joke, meme, hypothetical, or unsupported one-line claim; and
+- a visible qualification when the cause is disputed, corrected, customer-caused, or unresolved.
 
-| ID | Category | Public report | Source | Assessment | Screenshot |
-|---:|---|---|---|---|---|
-| 01 | Account ban | Pro customer reported `User is banned`, database/API unavailable, successful company-card payments, no warning, and no response after 48 hours | [AnswerOverflow 1431525602867023992](https://www.answeroverflow.com/m/1431525602867023992) | Strong lead; firsthand paid-user report; thread later identifies billing queue, final resolution not visible | Original attachment archived; redact email before use |
-| 02 | Account ban | GitHub-login user reported `User is banned` and could not reach support through the same sign-in flow | [AnswerOverflow 1438177383642566719](https://www.answeroverflow.com/m/1438177383642566719) | Strong visual; final resolution not visible | Original attachment archived |
-| 03 | Account ban | Company-email user reported an unexpected ban and no stated malicious content | [AnswerOverflow 1503591699413340340](https://www.answeroverflow.com/m/1503591699413340340) | Useful but unresolved; community guidance, not official adjudication | Page capture pending |
-| 04 | Account ban | User reported a banned dashboard account and asked whether a data dump could still be obtained | [AnswerOverflow 1502287051758764263](https://www.answeroverflow.com/m/1502287051758764263) | Real but involved a disposable email contrary to AUP; supporting example only | Original attachment archived; contains email |
-| 05 | Account ban | User reported dashboard ban, missing database access, and uncertainty whether the project was suspended, deleted, or blocked | [AnswerOverflow 1502389003402346517](https://www.answeroverflow.com/m/1502389003402346517) | Strong recovery-dependency example; temporary-email context weakens marketing use | Page capture pending |
-| 06 | Account ban | User with important data requested access long enough to migrate; Supabase restored access for 24 hours | [AnswerOverflow 1499698255401975828](https://www.answeroverflow.com/m/1499698255401975828) | Excellent illustration of post-ban extraction being discretionary; AUP violation must remain visible | Original attachment archived; contains email |
-| 07 | Account ban | User asked why the account was banned and how to recover the database | [AnswerOverflow 1487677548560388188](https://www.answeroverflow.com/m/1487677548560388188) | Thin context; corroborating only | Page capture pending |
-| 08 | Account ban | Owner-supplied Supabase sign-in screen displays `Error: User is banned` | `banned.png` in repository root | Visually strong; origin/date and permission must be documented before publication | Local original available |
-| 09 | Billing restriction | Pro-plan dispute led to payment-method removal, downgrade, and paused projects; Supabase described pausing as standard chargeback procedure and unblocked the customer | [Reddit 1kbj0sh](https://www.reddit.com/r/Supabase/comments/1kbj0sh/) | Strongest billing case because the Supabase response and resolution are preserved | Original support-email attachment archived; shows 24–48 hour Pro response target |
-| 10 | Billing restriction | User remained restricted after clearing Storage usage and passing into a new billing cycle | [GitHub Discussion 38200](https://github.com/orgs/supabase/discussions/38200) | Firsthand restriction report; community troubleshooting, unresolved in visible thread | Page capture pending |
-| 11 | Billing/support | Customer reported a deleted branch continued generating charges and support acknowledged a stuck resource | [Reddit 1qgyx97](https://www.reddit.com/r/Supabase/comments/1qgyx97/) | Useful billing-system incident; preserve refund/acknowledgment context | Page capture pending |
-| 12 | Billing policy | Supabase documents overdue invoices as grounds for pausing projects and downgrading an organization to Free | [Supabase Billing FAQ](https://supabase.com/docs/guides/platform/billing-faq) | Primary-source policy evidence; not a customer incident | Page capture pending |
-| 13 | Production outage | Pro customer reported random full-system outages for more than two days and no support response | [Reddit 1msrwza](https://www.reddit.com/r/Supabase/comments/1msrwza/) | Strong firsthand production-impact report | Page capture pending |
-| 14 | Production outage | Customer reported roughly ten days of database-related downtime and migration to self-controlled servers | [Reddit 1o6aayg](https://www.reddit.com/r/Supabase/comments/1o6aayg/) | Strong firsthand report; capture any Supabase response | Page capture pending |
-| 15 | Management outage | Users across countries reported dashboard/login failure; Supabase linked a resolved incident | [Reddit 1rkhvt6](https://www.reddit.com/r/Supabase/comments/1rkhvt6/) | Confirmed incident with multiple reports and resolution | Page capture pending |
-| 16 | Dashboard outage | Users reported login failure from multiple browsers/countries; Supabase acknowledged the incident | [Reddit 1tjlhdb](https://www.reddit.com/r/Supabase/comments/1tjlhdb/) | Confirmed incident | Page capture pending |
-| 17 | Identity failure | Changed GitHub identity/email made projects appear unavailable until the login method was corrected | [Reddit 1i6jzuj](https://www.reddit.com/r/Supabase/comments/1i6jzuj/) | Resolved user/identity issue; useful because provider fault is not required for lockout risk | Page capture pending |
-| 18 | Platform outage | Auth, Storage, Realtime, and Management API failed together; Supabase leadership confirmed and explained rollback | [Reddit 1p5cs5w](https://www.reddit.com/r/Supabase/comments/1p5cs5w/) | Strong confirmed multi-service incident | Page capture pending |
-| 19 | Database outage | Production database reportedly remained in recovery mode for 24 hours without support response | [AnswerOverflow 1414123910621958174](https://www.answeroverflow.com/m/1414123910621958174) | Firsthand report; resolution not visible | Page capture pending |
-| 20 | Project stuck | Project entered an indefinite `Pausing` state; dashboard and database controls became unavailable | [AnswerOverflow 1489915521368326164](https://www.answeroverflow.com/m/1489915521368326164) | Strong visual; user initiated pause while troubleshooting | Original attachment archived |
-| 21 | Project stuck | Automatically paused project remained stuck for days with no access to database, tables, API, or services | [AnswerOverflow 1447893001798946866](https://www.answeroverflow.com/m/1447893001798946866) | Strong operational dependency example | Page capture pending |
-| 22 | Project stuck | 25-day-old project incorrectly reported as paused for 90+ days; six production apps depended on it | [AnswerOverflow 1486996511219777628](https://www.answeroverflow.com/m/1486996511219777628) | Strong visual and impact statement; resolution not visible | Original attachment archived |
-| 23 | Project stuck | Multiple users reported projects stuck while pausing and needing Supabase intervention | [Reddit 1smif95](https://www.reddit.com/r/Supabase/comments/1smif95/) | Useful repeated-failure thread; initial case resolved overnight | Page capture pending |
-| 24 | Self-lockout | Developer set the Postgres connection limit to zero and lost both application and dashboard database access | [Reddit 1rn42ys](https://www.reddit.com/r/Supabase/comments/1rn42ys/) | Strong example that continuity matters even when the customer causes the incident | Page capture pending |
-| 25 | Service restriction | User reported egress restrictions made the app unavailable and blocked an attempted emergency `pg_dump` | [Reddit 1rle3pn](https://www.reddit.com/r/Supabase/comments/1rle3pn/) | Directly supports “backup before restriction”; verify resolution before publication | Page capture pending |
-| 26 | Project deletion | Founder initially alleged unexplained deletion; later attributed it to a compromised cofounder account | [Reddit 1jt9kix](https://www.reddit.com/r/Supabase/comments/1jt9kix/) | Use only with correction prominent; shows account takeover risk, not Supabase deletion | Page capture pending |
-| 27 | Project deletion | Developer deleted a project and discovered associated application access and backups were gone | [GitHub Discussion 33919](https://github.com/orgs/supabase/discussions/33919) | Strong accidental-deletion/recovery-boundary case | Page capture pending |
-| 28 | Restore failure | User restored paused projects and found only default tables; later commenters reported similar empty restores, with some resolved by support | [Reddit zwx378](https://www.reddit.com/r/Supabase/comments/zwx378/) | Strong but mixed outcomes; preserve Supabase offers to help and later resolutions | Page capture pending |
-| 29 | Restore failure | Pro user reported a restore returning the project to an eight-month-old state | [Reddit 1n901ue](https://www.reddit.com/r/Supabase/comments/1n901ue/) | Firsthand report; visible thread lacks resolution | Original Supabase restore-failure attachment archived |
-| 30 | Accidental deletion | Free-tier user deleted a table without an external backup; Supabase restored it as a one-time exception | [Reddit 1d7qyyz](https://www.reddit.com/r/Supabase/comments/1d7qyyz/) | Excellent “support exception is not a plan” example; resolution must remain visible | Page capture pending |
-| 31 | Expired restore | User struggled to restore a project after the 90-day window and had to manually recover from a backup file | [Reddit 1g2y2k4](https://www.reddit.com/r/Supabase/comments/1g2y2k4/) | Strong portability/usability example, not an account ban | Page capture pending |
-| 32 | Unexplained data loss | User reported intact schemas with every row missing; Supabase community collaborator disputed platform deletion and directed them to audit logs/support | [GitHub Discussion 34773](https://github.com/orgs/supabase/discussions/34773) | Disputed; never present as confirmed Supabase-caused loss | Page capture pending |
-| 33 | Expired restore | Old paused backup required manual recovery and encountered Postgres-version/role incompatibilities | [GitHub Discussion 41710](https://github.com/orgs/supabase/discussions/41710) | Strong evidence that artifact possession alone is not proven recovery | Page capture pending |
-| 34 | Restore error | Backup restore failed until replication subscriptions/slots were removed | [GitHub Discussion 21830](https://github.com/orgs/supabase/discussions/21830) | Technical restore hazard; not account loss | Page capture pending |
-| 35 | Storage gap | Supabase confirmed Storage objects are not part of daily database backups and deleted objects are not restored | [GitHub Discussion 6755](https://github.com/orgs/supabase/discussions/6755) | Primary product-gap evidence with official answer | Page capture pending |
-| 36 | Storage gap | Feature request explains database/Storage point-in-time mismatch and resulting broken references | [GitHub Discussion 39948](https://github.com/orgs/supabase/discussions/39948) | Strong technical explanation; feature request, not incident | Page capture pending |
-| 37 | Production readiness | Evaluator documented concerns around missing Storage backups and restore inconsistency | [GitHub Discussion 28377](https://github.com/orgs/supabase/discussions/28377) | Supporting expert concern, not a loss incident | Page capture pending |
-| 38 | Backup complexity | Users documented difficulties producing and restoring a complete hosted/self-hosted backup, especially Storage | [GitHub Discussion 22200](https://github.com/orgs/supabase/discussions/22200) | Supports usability gap and PortaBase automation | Page capture pending |
-| 39 | Off-site backup need | Production user recognized Pro snapshots remain on Supabase infrastructure and asked how others create external copies | [Reddit 1spkuqg](https://www.reddit.com/r/Supabase/comments/1spkuqg/) | Market-demand evidence, not an incident | Page capture pending |
-| 40 | Off-site backup need | Users discussed independent S3/R2/B2 backups and noted Pro physical backups may not be directly downloadable | [Reddit 1tizdtb](https://www.reddit.com/r/Supabase/comments/1tizdtb/) | Market-demand evidence; verify current backup behavior against docs | Page capture pending |
+The following do **not** count toward 42: policy pages, documentation gaps by themselves, feature requests, product evaluations, generic backup questions, market-demand posts, jokes, memes, or hypothetical warnings.
 
-## Current original attachments
+## Curated incident index
 
-The `original-attachments/` directory contains exact files linked from the public AnswerOverflow pages. These are research originals, not publication-ready assets. Several expose email addresses or unrelated browser content and must be redacted before use.
+| ID | Evidence | Actual incident | Source |
+| --- | --- | --- | --- |
+| N01 | Firsthand support thread | Paid Pro account banned; database/API unavailable; no response after 48 hours | [AnswerOverflow, Oct 25 2025](https://www.answeroverflow.com/m/1431525602867023992) |
+| N02 | Firsthand support thread | GitHub login returned `User is banned`, including on the support path | [AnswerOverflow, Nov 12 2025](https://www.answeroverflow.com/m/1438177383642566719) |
+| N03 | Firsthand support thread | Company-email account unexpectedly banned; no public resolution | [AnswerOverflow, May 12 2026](https://www.answeroverflow.com/m/1503591699413340340) |
+| N04 | Firsthand support thread | Production database unreachable in recovery mode for 24 hours | [AnswerOverflow, Sep 7 2025](https://www.answeroverflow.com/m/1414123910621958174) |
+| N05 | Firsthand support thread | Restart/transfer/pause sequence left project dashboard and tables inaccessible | [AnswerOverflow, Apr 4 2026](https://www.answeroverflow.com/m/1489915521368326164) |
+| N06 | Firsthand + response | Billing dispute froze projects; Supabase described chargeback pause and later unblocked account | [Reddit, Apr 30 2025](https://www.reddit.com/r/Supabase/comments/1kbj0sh/) |
+| N07 | Firsthand + quoted support | Deleted branch remained billable after a stuck `GOING_DOWN` resource | [Reddit, Jan 19 2026](https://www.reddit.com/r/Supabase/comments/1qgyx97/) |
+| N08 | Firsthand | Pro production project repeatedly offline for more than two days after upgrade | [Reddit, Aug 17 2025](https://www.reddit.com/r/Supabase/comments/1msrwza/) |
+| N09 | Firsthand | Branching/upgrade problems reportedly stalled work for roughly ten days | [Reddit, Oct 14 2025](https://www.reddit.com/r/Supabase/comments/1o6aayg/) |
+| N10 | Firsthand, resolved | Changed GitHub identity made all projects appear unavailable | [Reddit, Jan 21 2025](https://www.reddit.com/r/Supabase/comments/1i6jzuj/) |
+| N11 | Firsthand + official incident | Auth and data access failed across customer projects | [Reddit, Nov 24 2025](https://www.reddit.com/r/Supabase/comments/1p5cs5w/) |
+| N12 | Firsthand | Pausing during an I/O problem left project stuck and inaccessible | [Reddit, Apr 15 2026](https://www.reddit.com/r/Supabase/comments/1smif95/) |
+| N13 | Firsthand, reproducible | Connection limit set to zero locked out API, dashboard, and repair path | [Reddit, Mar 7 2026](https://www.reddit.com/r/Supabase/comments/1rn42ys/) |
+| N14 | Firsthand | Egress restriction arrived before user could obtain emergency backup | [Reddit, Mar 5 2026](https://www.reddit.com/r/Supabase/comments/1rle3pn/) |
+| N15 | Firsthand, corrected | Compromised cofounder account deleted six months of project work | [Reddit, Apr 7 2025](https://www.reddit.com/r/Supabase/comments/1jt9kix/) |
+| N16 | Firsthand, mixed outcomes | Resumed paused project reportedly returned without expected data | [Reddit, Dec 28 2022](https://www.reddit.com/r/Supabase/comments/zwx378/) |
+| N17 | Firsthand, support exception | Entire table deleted without customer backup; support restored it once | [Reddit, Jun 4 2024](https://www.reddit.com/r/Supabase/comments/1d7qyyz/) |
+| N18 | Firsthand | Expired project recovery became a confusing manual backup-file migration | [Reddit, Oct 13 2024](https://www.reddit.com/r/Supabase/comments/1g2y2k4/) |
+| N19 | Public support discussion | Service restriction remained after reported overage was cleared | [GitHub #38200, Aug 25 2025](https://github.com/orgs/supabase/discussions/38200) |
+| N20 | Public support discussion | Deleted project had no self-service undo while application remained disconnected | [GitHub #33919, Feb 28 2025](https://github.com/orgs/supabase/discussions/33919) |
+| N21 | Public, explicitly disputed | Schemas remained while every row reportedly disappeared | [GitHub #34773, Apr 6 2025](https://github.com/orgs/supabase/discussions/34773) |
+| N22 | Public restore transcript | Paused-project backup produced role conflicts and extensive import errors | [GitHub #41710, Jan 5 2026](https://github.com/orgs/supabase/discussions/41710) |
+| N23 | Public technical failure | Replication subscriptions/slots blocked backup restoration | [GitHub #21830, Mar 7 2024](https://github.com/orgs/supabase/discussions/21830) |
+| N24 | Official major incident | Americas project endpoints returned HTTP 500 | [Supabase Status, Jul 6 2026](https://status.supabase.com/incidents/mkt5vw3qxh08) |
+| N25 | Official major incident | Functions management API returned 500s for multiple operations | [Supabase Status, Jul 1 2026](https://status.supabase.com/incidents/273vdjyjmz0w) |
+| N26 | Official major incident | Project status changes failed across multiple regions | [Supabase Status, Jun 30 2026](https://status.supabase.com/incidents/3tx3nnmbwyh9) |
+| N27 | Official major incident | DNS failures disrupted project creation, restore, and pause | [Supabase Status, Jun 18 2026](https://status.supabase.com/incidents/72nly8q8062v) |
+| N28 | Official major incident | Management API degradation affected payments and Studio | [Supabase Status, Jun 17 2026](https://status.supabase.com/incidents/qyc28n17gsmr) |
+| N29 | Official critical incident | Pause, restore, and backup operations failed together in Ohio | [Supabase Status, Jun 2 2026](https://status.supabase.com/incidents/2psbh8l0sw0x) |
+| N30 | Official major incident | us-east availability-zone network impact lasted about 28 hours | [Supabase Status, May 8–9 2026](https://status.supabase.com/incidents/x85ytwpgktjh) |
+| N31 | Official major incident | PostgREST requests returned 403 errors | [Supabase Status, Apr 28 2026](https://status.supabase.com/incidents/rzwtq93tzd4f) |
+| N32 | Official major incident | Projects became unreachable following restart | [Supabase Status, Apr 27 2026](https://status.supabase.com/incidents/m9lv5ttn4bny) |
+| N33 | Official major incident | Projects unavailable across multiple regions | [Supabase Status, Apr 27 2026](https://status.supabase.com/incidents/m8fzj42277s1) |
+| N34 | Official major incident | Project creation and configuration changes failed in two regions | [Supabase Status, Apr 25 2026](https://status.supabase.com/incidents/btgcd54tyh7k) |
+| N35 | Official major incident | Newly created projects were unreachable | [Supabase Status, Apr 24 2026](https://status.supabase.com/incidents/1nzvd1b85lzn) |
+| N36 | Official major incident | HTTP endpoint errors continued for roughly thirteen hours | [Supabase Status, Apr 17–18 2026](https://status.supabase.com/incidents/kj2hm399j9cw) |
+| N37 | Official major incident | Project creation failed in multiple APAC regions | [Supabase Status, Apr 12 2026](https://status.supabase.com/incidents/mq5wbksl70j7) |
+| N38 | Official critical incident | Dashboard logs and Log Drains became inaccessible | [Supabase Status, Apr 8 2026](https://status.supabase.com/incidents/xt9yl88y2wkk) |
+| N39 | Official major incident | Plan upgrades returned increased errors | [Supabase Status, Apr 2 2026](https://status.supabase.com/incidents/bcljwj8rwxks) |
+| N40 | Official restore incident | Restore to New Project experienced an outage | [Supabase Status, Jul 1 2026](https://status.supabase.com/incidents/0fmgxxth7wd2) |
+| N41 | Official access incident | SSO and email users could not log into the dashboard | [Supabase Status, May 21 2026](https://status.supabase.com/incidents/vd5bmmcdt5bf) |
+| N42 | Official infrastructure incident | Hardware failure affected the us-east region | [Supabase Status, Jun 17 2026](https://status.supabase.com/incidents/dj3n11rv8q6h) |
 
-## Recommended public shortlist
+## Publication safeguards
 
-Lead with items 01, 09, 13, 14, 18, 25, 27, 28, 30, and 35. Together they show account access, billing restriction, support delay, outage, emergency-export failure, project deletion, restore failure, support exception, and the Storage backup gap without pretending all failures share one cause.
+- Firsthand reports are described as reports, not independent findings of fault.
+- N15 must retain the account-takeover correction.
+- N16 must retain the mixed-outcome context.
+- N21 must remain labeled disputed.
+- Screenshots must show the source identity/date and any material correction or response.
+- Email addresses, project references, ticket numbers, and unrelated browser content must be redacted.
+- Recreated quote cards do not count as source screenshots.
 
-Items 04–07 should remain secondary because temporary-email/AUP context gives visitors an easy reason to dismiss them as inapplicable. Item 26 must always include the poster's correction. Item 32 must always be labeled disputed.
+The canonical landing-page data is in `src/data/nightmares.js`. Automated tests enforce 42 unique IDs/URLs and the 23-firsthand/19-official split.
