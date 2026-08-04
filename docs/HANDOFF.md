@@ -63,7 +63,7 @@ Do **not** thrash C: for multi‑GB Storage capture. Disk is tight; user rejects
 | Gateway | **Square** |
 | Base | **$17/mo** |
 | Included | **1 backup cycle per 24 hours** (workspace) |
-| Extra cycles | **$10/mo each** (each = one more cycle / 24h) |
+| Plans | **$17/mo** · 1 recovery cycle / 24h · or · **$27/mo** · up to 3 / day |
 | Agents | Up to **12** |
 | SMS | Success **and** failure at run time (console: Alerts → SMS texts) |
 | Trial | 7 days, **card required**, auto-convert |

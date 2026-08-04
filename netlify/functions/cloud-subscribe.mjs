@@ -8,7 +8,7 @@ import {
   squareFetch,
   TRIAL_DAYS,
 } from '../shared/square-cloud.mjs';
-import { CLOUD_PAYMENT_GATEWAY, CLOUD_PLAN_ID } from '../shared/product.mjs';
+import { CLOUD_DEFAULT_PLAN_ID, CLOUD_PAYMENT_GATEWAY, CLOUD_PLANS, getCloudPlan } from '../shared/product.mjs';
 import { deriveAccess, getSubscriptionByUserId, saveSubscription } from '../shared/subscription-store.mjs';
 
 export async function handler(event) {
@@ -29,6 +29,14 @@ export async function handler(event) {
   }
 
   const storeKey = `${user.cloudVersion}:${user.id}`;
+  let body = {};
+  try {
+    body = event.body ? JSON.parse(event.body) : {};
+  } catch {
+    body = {};
+  }
+  const planId = CLOUD_PLANS[body.planId] ? body.planId : CLOUD_DEFAULT_PLAN_ID;
+  const plan = getCloudPlan(planId);
 
   try {
     const existing = (await getSubscriptionByUserId(storeKey)) || (await getSubscriptionByUserId(user.id));
@@ -42,7 +50,7 @@ export async function handler(event) {
       });
     }
 
-    const planVariationId = await ensureCloudPlanVariationId();
+    const planVariationId = await ensureCloudPlanVariationId(plan.id);
     const { locationId } = await squareCredentials();
     const siteUrl = (process.env.PORTABASE_SITE_URL || process.env.URL || 'https://portabase.dev').replace(/\/$/, '');
     const attempt = crypto.randomUUID();
@@ -54,9 +62,10 @@ export async function handler(event) {
       siteUrl,
       buyerEmail: user.email,
       cognitoSub: storeKey,
+      planId: plan.id,
     });
-    linkBody.payment_note = `portabase-cloud trial version=${user.cloudVersion} user=${user.id} attempt=${attempt}`;
-    linkBody.checkout_options.redirect_url = `${siteUrl}/app?checkout=complete&version=${user.cloudVersion}&attempt=${encodeURIComponent(attempt)}`;
+    linkBody.payment_note = `portabase-cloud trial plan=${plan.id} version=${user.cloudVersion} user=${user.id} attempt=${attempt}`;
+    linkBody.checkout_options.redirect_url = `${siteUrl}/app?checkout=complete&version=${user.cloudVersion}&plan=${plan.id}&attempt=${encodeURIComponent(attempt)}`;
 
     const result = await squareFetch('/v2/online-checkout/payment-links', {
       method: 'POST',
@@ -77,13 +86,13 @@ export async function handler(event) {
       email: user.email,
       name: user.name || '',
       status: 'checkout_pending',
-      plan: CLOUD_PLAN_ID,
+      plan: plan.id,
+      cyclesPerDay: plan.cyclesPerDay,
       paymentGateway: CLOUD_PAYMENT_GATEWAY,
       trialDays: TRIAL_DAYS,
-      priceMonthlyCents: PRICE_MONTHLY_CENTS,
-      listPriceMonthlyCents: 3400,
+      priceMonthlyCents: plan.priceMonthlyCents,
+      listPriceMonthlyCents: CLOUD_PLANS['cloud-27'].priceMonthlyCents,
       storagePolicy: 'customer_byo',
-      promoUntil: '2026-08-31',
       squarePlanVariationId: planVariationId,
       squareOrderId: orderId || null,
       checkoutAttempt: attempt,
@@ -99,18 +108,21 @@ export async function handler(event) {
       url,
       orderId: orderId || null,
       attempt,
+      planId: plan.id,
+      cyclesPerDay: plan.cyclesPerDay,
       cloudVersion: user.cloudVersion,
       trialDays: TRIAL_DAYS,
-      priceMonthlyCents: PRICE_MONTHLY_CENTS,
+      priceMonthlyCents: plan.priceMonthlyCents,
       paymentGateway: CLOUD_PAYMENT_GATEWAY,
       storage: STORAGE_POLICY,
-      message: 'Square checkout: card required. $17/mo after trial. You provide binary storage — Portabase never hosts capsules.',
+      message: `Square checkout: card required. Then $${plan.priceMonthlyUsd}/mo · ${plan.cadenceLabel}. You provide capsule storage — Portabase never hosts capsules.`,
       subscription: record,
       product: {
         provider: 'dual',
         cloudVersion: user.cloudVersion,
         trialDays: product.trialDays,
-        priceMonthlyCents: product.priceMonthlyCents,
+        priceMonthlyCents: plan.priceMonthlyCents,
+        plans: product.plans || CLOUD_PLANS,
         paymentGateway: CLOUD_PAYMENT_GATEWAY,
         storage: STORAGE_POLICY,
       },

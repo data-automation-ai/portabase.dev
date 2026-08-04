@@ -38,8 +38,8 @@ export function fetchMe(version) {
   return api('/api/cloud/me', { version });
 }
 
-export function startTrialCheckout(version) {
-  return api('/api/cloud/subscribe', { method: 'POST', body: {}, version });
+export function startTrialCheckout(version, planId = 'cloud-17') {
+  return api('/api/cloud/subscribe', { method: 'POST', body: { planId }, version });
 }
 
 export function confirmCheckout({ attempt, version } = {}) {

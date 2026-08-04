@@ -187,7 +187,7 @@ export function LoginPage() {
     <AuthShell
       version={version}
       title={mode === 'signup' ? 'Create your Cloud account' : mode === 'forgot' ? 'Reset password' : 'Sign in to Cloud'}
-      lead="Portabase Cloud launches for Supabase only. Sign in with email or Google, then start a $17/mo ops plan (Square) — you bring capsule storage."
+      lead="Portabase Cloud launches for Supabase only. Sign in with email or Google, then start $17/mo (1 cycle/24h) or $27/mo (up to 3/day) via Square — you bring capsule storage."
     >
       <VersionPicker version={version} onChange={selectVersion} />
 

@@ -18,7 +18,7 @@ import {
 const NAV = [
   { id: 'home', label: 'Home', icon: 'home' },
   { id: 'projects', label: 'Sources', icon: 'folder' },
-  { id: 'backups', label: 'Backups', icon: 'capsule' },
+  { id: 'backups', label: 'Capsules', icon: 'capsule' },
   { id: 'agents', label: 'Agents', icon: 'cpu' },
   { id: 'alerts', label: 'Alerts', icon: 'bell' },
   { id: 'restore', label: 'Replay', icon: 'restore' },
@@ -191,14 +191,14 @@ export function ConsoleApp() {
     return () => { cancelled = true; };
   }, [version]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const startTrial = async () => {
+  const startTrial = async (planId = 'cloud-17') => {
     if (sessionStorage.getItem('portabase.console.demo') === '1') {
       toast('Demo mode — connect auth to run real Square trial checkout', 'ok');
       return;
     }
     setBusy(true);
     try {
-      const result = await startTrialCheckout(version);
+      const result = await startTrialCheckout(version, planId);
       if (result.alreadySubscribed) {
         toast('Already subscribed on this version', 'ok');
         const data = await fetchMe(version);

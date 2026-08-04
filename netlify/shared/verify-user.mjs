@@ -108,15 +108,18 @@ export async function publicAuthConfigBoth() {
     },
     trialDays: 7,
     priceMonthlyCents: 1700,
-    listPriceMonthlyCents: 3400,
+    listPriceMonthlyCents: 2700,
     currency: 'USD',
-    promoUntil: '2026-08-31',
     paymentGateway: 'square',
     maxAgents: 12,
+    plans: {
+      'cloud-17': { id: 'cloud-17', priceMonthlyCents: 1700, cyclesPerDay: 1, title: 'Daily Escape', cadenceLabel: '1 recovery cycle per 24 hours' },
+      'cloud-27': { id: 'cloud-27', priceMonthlyCents: 2700, cyclesPerDay: 3, title: 'Triple Escape', cadenceLabel: 'up to 3 recovery cycles per day' },
+    },
     storage: {
       owner: 'customer',
       includedInCloud: false,
-      summary: 'Customer provides binary/capsule storage. Portabase Cloud never hosts recovery bytes.',
+      summary: 'Customer provides capsule storage. Portabase Cloud never hosts recovery bytes.',
     },
   };
 }

@@ -20,7 +20,7 @@ export function getPublicAuthConfig() {
     hostedUiBase: `https://${domain}.auth.${region}.amazoncognito.com`,
     trialDays: 7,
     priceMonthlyCents: 1700,
-    listPriceMonthlyCents: 3400,
+    listPriceMonthlyCents: 2700,
     currency: 'USD',
     promoUntil: '2026-08-31',
   };

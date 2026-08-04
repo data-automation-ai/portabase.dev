@@ -155,7 +155,7 @@ function Header() {
       <Logo href="/#top" />
       <button className="menu" onClick={() => setOpen(!open)} aria-label="Toggle navigation">{open ? 'Close' : 'Menu'}</button>
       <nav className={open ? 'nav open' : 'nav'}>
-        <a href="/#what-is-this">What is this?</a><a href="/#why-now">Why now</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">The escape plan</a><a href="/security">Security</a><a href="/cloud">Cloud · $17/mo</a><a href="/login">Sign in</a>
+        <a href="/#what-is-this">What is this?</a><a href="/#why-now">Why now</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">The escape plan</a><a href="/security">Security</a><a href="/cloud">Cloud · $17 / $27</a><a href="/login">Sign in</a>
       </nav>
       <a className="button button-small desktop-cta" href="/login?next=/app">Start free trial <Arrow /></a>
     </div>
@@ -273,7 +273,7 @@ function WhatIsThis() {
         </div>
       </div>
       <div className="definition-strip">
-        <div><small>OPEN SOURCE</small><b>Full backup<br />Encrypt &amp; verify<br />Guarded restore</b></div>
+        <div><small>OPEN SOURCE</small><b>Full capture<br />Encrypt &amp; verify<br />Guarded restore</b></div>
         <div><small>SELF-HOST</small><b>Your runner<br />Your schedule<br />Your destinations</b></div>
         <div><small>CLOUD ADDS</small><b>Console ease<br />Telemetry<br />Alert chains</b></div>
         <div><small>NEVER HOSTED</small><b>Passphrase<br />Service keys<br />Capsule contents</b></div>
@@ -566,7 +566,7 @@ function Escape() {
         <div className="arch-node recovery"><small>TARGET</small><b>New Supabase</b><span>New account · New project · Guarded restore</span></div>
       </div>
       <div className="cloud-sideband">
-        <div><small>OPTIONAL CLOUD</small><b>Health events only</b><p>If you opt in, the runner sends status metadata to Portabase Cloud so missed backups, verify failures, and RPO breaches can SMS/email a chain of people. Recovery still works if Cloud is down.</p></div>
+        <div><small>OPTIONAL CLOUD</small><b>Health events only</b><p>If you opt in, the runner sends status metadata to Portabase Cloud so missed cycles, verify failures, and RPO breaches can SMS/email a chain of people. Recovery still works if Cloud is down.</p></div>
         <div className="cloud-sideband-path"><span>runner</span><i>⇢</i><span>telemetry</span><i>⇢</i><span>console · SMS · Slack</span></div>
       </div>
       <div className="steps">
@@ -926,7 +926,7 @@ function CloudTeaser() {
       <div>
         <div className="section-kicker green">USP · ESCAPE OPS</div>
         <h2>Open source is the Escape.<br />Cloud keeps the Escape running.</h2>
-        <p><strong>Supabase only.</strong> GitHub = free Escape engine. <strong>This site</strong> = hosted <strong>GUI</strong>, guided configuration, <strong>telemetry</strong>, SMS on success/failure — so the Escape is not a forgotten cron job. <strong>7-day free trial</strong> then <strong>$17/mo</strong> base · <strong>1 cycle / 24h</strong> · extra cycles <strong>$10/mo</strong> · ≤12 agents. You provide capsule storage.</p>
+        <p><strong>Supabase only.</strong> GitHub = free Escape engine. <strong>This site</strong> = hosted <strong>GUI</strong>, guided configuration, <strong>telemetry</strong>, SMS on success/failure — so the Escape is not a forgotten cron job. <strong>7-day free trial</strong> then <strong>$17/mo</strong> (1 recovery cycle / 24h) or <strong>$27/mo</strong> (up to 3 / day) · ≤12 agents. You provide capsule storage.</p>
         <div className="cloud-teaser-actions">
           <a className="button button-primary" href="/login?mode=signup&next=/app">Start free trial <Arrow /></a>
           <a className="button button-ghost" href="/cloud">Open source vs Cloud <Arrow /></a>
@@ -935,7 +935,7 @@ function CloudTeaser() {
       </div>
       <div className="cloud-teaser-price">
         <span>GUI · CONFIG · TELEMETRY · SMS</span>
-        <b>$17<small>/mo</small></b>
+        <b>$17–27<small>/mo</small></b>
         <em>Card required · auto-converts</em>
         <p>After 7-day free trial</p>
       </div>
@@ -1049,7 +1049,7 @@ function CloudPage() {
                 <tr>
                   <th>Capability</th>
                   <th>GitHub / self-host<br /><span>Apache-2.0 · free</span></th>
-                  <th>Portabase Cloud<br /><span>$17/mo intro · $34 list</span></th>
+                  <th>Portabase Cloud<br /><span>$17 · 1×/24h · or · $27 · 3×/day</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -1069,7 +1069,7 @@ function CloudPage() {
               </tbody>
             </table>
           </div>
-          <p className="compare-footnote">The GitHub edition is not a “lite backup.” It is the full recovery path without the hosted GUI, telemetry product, or advanced reports.</p>
+          <p className="compare-footnote">The GitHub edition is not a lite edition. It is the full recovery path without the hosted GUI, telemetry product, or advanced reports.</p>
         </div>
       </section>
 
@@ -1082,7 +1082,7 @@ function CloudPage() {
             <article>
               <small>ON YOUR RUNNER (ALWAYS)</small>
               <b>Encryption passphrase</b>
-              <p>AES-256-GCM key material for capsules. Set via env / OS secret store on the machine or container that runs backups. <strong>Never uploaded to Portabase Cloud</strong> and never stored in our control-plane database.</p>
+              <p>AES-256-GCM key material for capsules. Set via env / OS secret store on the machine or container that runs recovery cycles. <strong>Never uploaded to Portabase Cloud</strong> and never stored in our control-plane database.</p>
             </article>
             <article>
               <small>ON YOUR RUNNER (ALWAYS)</small>
@@ -1120,7 +1120,7 @@ function CloudPage() {
                 <li>Local AES-256-GCM encryption and checksums</li>
                 <li>Transfer to customer destinations and post-transfer verify</li>
                 <li>Guarded restore into a <em>new</em> project (never silent overwrite of source)</li>
-                <li>CLI: init, doctor, backup, verify, status, restore, schedule helpers</li>
+                <li>CLI: init, doctor, capture (backup command), verify, status, restore, schedule helpers</li>
               </ul>
               <p>What GitHub deliberately does <strong>not</strong> include as a hosted product: the multi-tenant management GUI, Portabase-operated telemetry inbox, multi-person SMS escalation product, and advanced fleet reports. Those are Cloud.</p>
               <a className="button button-ghost" href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">Browse the open-source home <Arrow /></a>
@@ -1137,43 +1137,46 @@ function CloudPage() {
       <section className="section pricing" id="subscribe">
         <div className="shell pricing-grid">
           <div className="price-copy">
-            <div className="section-kicker green">SUPABASE · SQUARE · $17/MO BASE · BYO STORAGE</div>
-            <h2>Seven free days.<br />Then $17/mo base on Square.</h2>
-            <p><strong>Launch: Supabase only.</strong> Protect database, Auth, Storage, and Edge Functions. <strong>Payment: Square</strong> (card on file). Cloud is ops only — <strong>you provide binary storage</strong> for capsules. Portabase never hosts recovery bytes.</p>
+            <div className="section-kicker green">SUPABASE · SQUARE · TWO PLANS · BYO STORAGE</div>
+            <h2>Seven free days.<br />Then $17 or $27/mo.</h2>
+            <p><strong>Launch: Supabase only.</strong> Protect database, Auth, Storage, and Edge Functions. <strong>Payment: Square</strong> (card on file). Cloud is ops only — <strong>you provide capsule storage</strong>. Portabase never hosts recovery bytes.</p>
             <div className="subscribe-case">
               <article><small>01 · SUPABASE FIRST</small><b>Built for Supabase projects.</b><p>Sign in with Supabase Auth (email or Google). Capture DB, Auth inventory, Storage objects, Edge Functions.</p></article>
-              <article><small>02 · SQUARE · $17/MO BASE</small><b>Card required · 7-day trial.</b><p>Then $17/mo base = <strong>1 backup cycle / 24h</strong>. Extra cycles <strong>$10/mo each</strong>. SMS on success and failure. Up to 12 agents.</p></article>
-              <article><small>03 · BYO BINARY STORAGE</small><b>You supply the bucket/drive.</b><p>S3, Dropbox, Google Drive, NAS. Capsules never live on Portabase. Keys stay on your runner.</p></article>
+              <article><small>02 · TWO PLANS</small><b>$17 · 1 cycle / 24h · or · $27 · up to 3 / day.</b><p>Pick how often a recovery cycle may run. SMS on success and failure. Up to 12 agents.</p></article>
+              <article><small>03 · BYO CAPSULE STORAGE</small><b>You supply the vault.</b><p>S3, Dropbox, NAS, or Local Starter (≤100 MB). Capsules never live on Portabase. Keys stay on your runner.</p></article>
             </div>
             <div className="one-time-math">
               <div><small>TRIAL</small><b>$0<span className="per">/7d</span></b></div>
               <span>→</span>
-              <div><small>SQUARE</small><b>$17<span className="per">/mo</span></b></div>
+              <div><small>DAILY</small><b>$17<span className="per">/mo</span></b></div>
+              <span>or</span>
+              <div><small>TRIPLE</small><b>$27<span className="per">/mo</span></b></div>
             </div>
-            <div className="price-note"><span>Binary storage</span><p><strong>Required from you.</strong> Portabase Cloud does not sell or host capsule storage. You pay S3/Drive/Dropbox/NAS yourself.</p></div>
+            <div className="price-note"><span>Capsule storage</span><p><strong>Required from you.</strong> Portabase Cloud does not sell or host capsule storage. You pay S3/Drive/Dropbox/NAS yourself.</p></div>
           </div>
           <div className="price-card">
-            <div className="price-ribbon">SQUARE · $17/MO · YOU PROVIDE STORAGE</div>
+            <div className="price-ribbon">SQUARE · $17 OR $27 · YOU PROVIDE STORAGE</div>
             <div className="price-top">
               <span>PORTABASE CLOUD</span>
               <div className="price-stack">
                 <b>$17<span className="per">/mo</span></b>
-                <small className="list-price">7-day free trial first · card via Square · list <s>$34/mo</s> intro</small>
+                <small className="list-price">1 recovery cycle per 24 hours · or upgrade to $27 for up to 3 / day</small>
               </div>
-              <p>Ops console, telemetry, multi-person alerts. Capsules encrypt on your runner and land in <strong>your</strong> binary storage.</p>
+              <p>Ops console, telemetry, multi-person alerts. Capsules encrypt on your runner and land in <strong>your</strong> storage.</p>
             </div>
-            <div className="promo-chip"><strong>Payment: Square.</strong> Card required. Trial free 7 days → <strong>$17/mo</strong>. Storage is always bring-your-own.</div>
+            <div className="promo-chip"><strong>Payment: Square.</strong> Card required. Trial free 7 days → <strong>$17</strong> (1×/24h) or <strong>$27</strong> (up to 3×/day). Storage is always bring-your-own.</div>
             <div className="purchase-definition">
               <span>WHAT YOU BRING</span>
-              <strong>Binary storage + runner secrets</strong>
+              <strong>Capsule storage + runner secrets</strong>
               <p>Destination for <code>.pbase</code> capsules (S3/Drive/etc.) and passphrase on your machine. Cloud never stores those.</p>
             </div>
             <ul>
               <li><span>✓</span> Supabase projects only (launch)</li>
-              <li><span>✓</span> Square · $17/mo base (1 cycle/day) · +$10/mo per extra cycle</li>
+              <li><span>✓</span> $17 · 1 recovery cycle / 24h</li>
+              <li><span>✓</span> $27 · up to 3 recovery cycles / day</li>
               <li><span>✓</span> SMS on success &amp; failure · up to 12 agents</li>
               <li><span>✓</span> 7-day free trial · card on file</li>
-              <li><span>✓</span> You provide binary storage</li>
+              <li><span>✓</span> You provide capsule storage</li>
               <li><span>✓</span> Console · telemetry · alert chains</li>
               <li><span>✓</span> Keys &amp; capsules stay yours</li>
             </ul>
@@ -1181,7 +1184,7 @@ function CloudPage() {
               {signedIn ? 'Open console · start Square trial' : 'Sign in with Supabase Auth'} <Arrow />
             </a>
             <p className="checkout-hint">Already have an account? <a href="/login">Sign in</a></p>
-            <div className="square-trust"><span><b>Square</b> · $17/mo base</span><span>+$10/mo extra cycles</span><span>SMS · BYO storage</span></div>
+            <div className="square-trust"><span><b>Square</b> · $17 · 1×/24h</span><span>$27 · up to 3×/day</span><span>SMS · BYO storage</span></div>
           </div>
         </div>
       </section>
@@ -1191,11 +1194,11 @@ function CloudPage() {
 }
 
 function LegacyPurchaseNotice() {
-  return <div className="thanks"><div className="thanks-card"><Logo href="/" /><div className="section-kicker green">MODEL UPDATE</div><h1>Portabase is open core + Cloud subscription.</h1><p>There is no $147 software unlock. The recovery engine is free on GitHub. Portabase Cloud is $17/mo intro (normally $34/mo) through August 31, 2026 — console, telemetry, and alert chains.</p><a className="button button-primary" href="/cloud">Open source vs Cloud <Arrow /></a><a className="button button-ghost" href="mailto:escape@portabase.dev?subject=Legacy Portabase purchase">Legacy purchase help <Arrow /></a></div></div>;
+  return <div className="thanks"><div className="thanks-card"><Logo href="/" /><div className="section-kicker green">MODEL UPDATE</div><h1>Portabase is open core + Cloud subscription.</h1><p>There is no $147 software unlock. The recovery engine is free on GitHub. Portabase Cloud is $17/mo (1 recovery cycle per 24h) or $27/mo (up to 3 per day) — console, telemetry, and alert chains.</p><a className="button button-primary" href="/cloud">Open source vs Cloud <Arrow /></a><a className="button button-ghost" href="mailto:escape@portabase.dev?subject=Legacy Portabase purchase">Legacy purchase help <Arrow /></a></div></div>;
 }
 
 function Footer() {
-  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#reality">The reality</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">Escape plan</a><a href="/#audit">Risk check</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · $17/mo intro</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">GitHub · DataAutomation.ai</a><span>Independent product.<br />Not affiliated with Supabase.</span><span>Apache-2.0 open core. Cloud is ops subscription — never custody of keys or capsule contents. Intro $17/mo (half of $34) through Aug 31, 2026.</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your cloud. Your way out.</span></div></footer>;
+  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#reality">The reality</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">Escape plan</a><a href="/#audit">Risk check</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · $17 / $27</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">GitHub · DataAutomation.ai</a><span>Independent product.<br />Not affiliated with Supabase.</span><span>Apache-2.0 open core. Cloud is ops subscription — never custody of keys or capsule contents. $17/mo · 1 cycle/24h · or · $27/mo · up to 3/day.</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your cloud. Your way out.</span></div></footer>;
 }
 
 /**

@@ -1,17 +1,23 @@
 import { resolveServerSecret } from './secrets.mjs';
 import {
+  CLOUD_DEFAULT_PLAN_ID,
+  CLOUD_PLANS,
   CLOUD_PRICE_MONTHLY_CENTS,
   CLOUD_TRIAL_DAYS,
   STORAGE_POLICY,
+  getCloudPlan,
   subscriptionDescription,
 } from './product.mjs';
 
 export const SQUARE_API_VERSION = '2026-05-20';
 export const PLAN_NAME = 'Portabase Cloud';
-export const VARIATION_NAME = 'Portabase Cloud · 7-day trial → $17/mo (BYO storage)';
+/** Default catalog variation = Daily Escape ($17 · 1 cycle / 24h). */
+export const VARIATION_NAME = 'Portabase Cloud · Daily Escape · 7-day trial → $17/mo (1 cycle/24h · BYO storage)';
+export const VARIATION_NAME_TRIPLE = 'Portabase Cloud · Triple Escape · 7-day trial → $27/mo (up to 3 cycles/day · BYO storage)';
 export const TRIAL_DAYS = CLOUD_TRIAL_DAYS;
 export const PRICE_MONTHLY_CENTS = CLOUD_PRICE_MONTHLY_CENTS;
-export { STORAGE_POLICY };
+export const PRICE_TRIPLE_MONTHLY_CENTS = CLOUD_PLANS['cloud-27'].priceMonthlyCents;
+export { STORAGE_POLICY, getCloudPlan, CLOUD_DEFAULT_PLAN_ID };
 
 export async function squareCredentials() {
   const [accessToken, locationId] = await Promise.all([
@@ -45,32 +51,38 @@ export async function squareFetch(path, { method = 'GET', body } = {}) {
   return result;
 }
 
-/** Ensure Catalog plan + variation (free 7-day phase then $17/mo). Returns plan variation id. */
-export async function ensureCloudPlanVariationId() {
-  const configured = process.env.SQUARE_CLOUD_PLAN_VARIATION_ID;
+/**
+ * Ensure Catalog plan + variation for a Cloud plan id.
+ * @param {'cloud-17'|'cloud-27'} [planId]
+ */
+export async function ensureCloudPlanVariationId(planId = CLOUD_DEFAULT_PLAN_ID) {
+  const plan = getCloudPlan(planId);
+  const isTriple = plan.id === 'cloud-27';
+  const envKey = isTriple ? 'SQUARE_CLOUD_PLAN_VARIATION_ID_27' : 'SQUARE_CLOUD_PLAN_VARIATION_ID';
+  const configured = process.env[envKey] || (!isTriple ? process.env.SQUARE_CLOUD_PLAN_VARIATION_ID : null);
   if (configured) return configured;
 
+  const variationName = isTriple ? VARIATION_NAME_TRIPLE : VARIATION_NAME;
   const listed = await squareFetch('/v2/catalog/list?types=SUBSCRIPTION_PLAN_VARIATION');
   const existing = (listed.objects || []).find(obj =>
     obj.type === 'SUBSCRIPTION_PLAN_VARIATION'
-    && obj.subscription_plan_variation_data?.name === VARIATION_NAME
+    && obj.subscription_plan_variation_data?.name === variationName
     && obj.present_at_all_locations !== false,
   );
   if (existing?.id) return existing.id;
 
-  const planId = `#portabase-cloud-plan`;
-  const variationId = `#portabase-cloud-intro-trial`;
+  const catalogPlanId = `#portabase-cloud-plan`;
+  const variationId = isTriple ? `#portabase-cloud-triple-trial` : `#portabase-cloud-daily-trial`;
 
   const batch = await squareFetch('/v2/catalog/batch-upsert', {
     method: 'POST',
     body: {
-      // Bump key when commercial terms change (price, trial, BYO storage note)
-      idempotency_key: `portabase-cloud-plan-v2-${PRICE_MONTHLY_CENTS}-byo-storage`,
+      idempotency_key: `portabase-cloud-${plan.id}-v3-${plan.priceMonthlyCents}-byo-storage`,
       batches: [{
         objects: [
           {
             type: 'SUBSCRIPTION_PLAN',
-            id: planId,
+            id: catalogPlanId,
             present_at_all_locations: true,
             subscription_plan_data: {
               name: PLAN_NAME,
@@ -82,8 +94,8 @@ export async function ensureCloudPlanVariationId() {
             id: variationId,
             present_at_all_locations: true,
             subscription_plan_variation_data: {
-              name: VARIATION_NAME,
-              subscription_plan_id: planId,
+              name: variationName,
+              subscription_plan_id: catalogPlanId,
               phases: [
                 {
                   cadence: 'DAILY',
@@ -99,7 +111,7 @@ export async function ensureCloudPlanVariationId() {
                   ordinal: 1,
                   pricing: {
                     type: 'STATIC',
-                    price: { amount: PRICE_MONTHLY_CENTS, currency: 'USD' },
+                    price: { amount: plan.priceMonthlyCents, currency: 'USD' },
                   },
                 },
               ],
@@ -122,23 +134,24 @@ export function buildSubscriptionPaymentLinkRequest({
   siteUrl,
   buyerEmail,
   cognitoSub,
+  planId = CLOUD_DEFAULT_PLAN_ID,
 }) {
+  const plan = getCloudPlan(planId);
   return {
     idempotency_key: attempt,
-    description: subscriptionDescription(),
-    // Square Checkout = payment gateway for Cloud subscription (card on file)
+    description: subscriptionDescription(plan.id),
     quick_pay: {
-      name: 'Portabase Cloud · $17/mo · up to 12 agents · BYO storage',
+      name: `Portabase Cloud · ${plan.shortLabel} · up to 12 agents · BYO storage`,
       price_money: { amount: 0, currency: 'USD' },
       location_id: locationId,
     },
     checkout_options: {
       subscription_plan_id: planVariationId,
-      redirect_url: `${siteUrl}/app?checkout=complete&attempt=${encodeURIComponent(attempt)}`,
+      redirect_url: `${siteUrl}/app?checkout=complete&attempt=${encodeURIComponent(attempt)}&plan=${plan.id}`,
       ask_for_shipping_address: false,
       allow_tipping: false,
     },
     pre_populated_data: buyerEmail ? { buyer_email: buyerEmail } : undefined,
-    payment_note: `portabase-cloud $17/mo gateway=square byo_storage=true user=${cognitoSub} attempt=${attempt}`,
+    payment_note: `portabase-cloud plan=${plan.id} $${plan.priceMonthlyUsd}/mo gateway=square byo_storage=true user=${cognitoSub} attempt=${attempt}`,
   };
 }

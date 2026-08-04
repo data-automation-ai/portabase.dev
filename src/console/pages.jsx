@@ -6,11 +6,10 @@ import {
 } from './data/store.js';
 import {
   CLOUD_MAX_AGENTS,
-  CLOUD_MAX_EXTRA_CYCLES,
-  CLOUD_EXTRA_CYCLE_MONTHLY_USD,
+  CLOUD_PLANS,
+  CLOUD_DEFAULT_PLAN_ID,
   agentSlotsUsed,
-  cyclesPerDay,
-  monthlyTotalCents,
+  getCloudPlan,
 } from '../lib/product.js';
 
 function Badge({ tone, children }) {
@@ -121,7 +120,7 @@ export function OverviewPage({ state, navigate, toast }) {
           <div className="pb-kpi-meta">{state.agents.length}/{CLOUD_MAX_AGENTS} plan slots · {relativeTime(state.agents[0]?.lastSeenAt)}</div>
         </div>
         <div className="pb-card">
-          <div className="pb-kpi-label">Verified backups</div>
+          <div className="pb-kpi-label">Verified capsules</div>
           <div className="pb-kpi-value">{state.capsules.filter(c => c.verified).length}</div>
           <div className="pb-kpi-meta">{success} ok · {failed} failed</div>
           <div className="pb-spark" aria-hidden="true">{spark.map((s, i) => <i key={i} className={s.fail ? 'fail' : ''} style={{ height: `${s.h * 100}%` }} />)}</div>
@@ -492,7 +491,7 @@ export function AgentsPage({ state, toast, setState, embedded }) {
 
   const createAgent = () => {
     if (agentSlotsUsed(state.agents.length).atLimit) {
-      toast(`Plan limit: ${CLOUD_MAX_AGENTS} agents on $17/mo Cloud`, 'danger');
+      toast(`Plan limit: ${CLOUD_MAX_AGENTS} agents on Cloud`, 'danger');
       return;
     }
     const token = `pb_live_${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
@@ -524,7 +523,7 @@ export function AgentsPage({ state, toast, setState, embedded }) {
     <>
       <div className="pb-inline" style={{ marginBottom: 12 }}>
         <Badge tone={slots.atLimit ? 'warn' : 'acid'}>{slots.used} / {slots.max} agents</Badge>
-        <span className="pb-muted" style={{ fontSize: 12.5 }}>$17/mo plan · up to {CLOUD_MAX_AGENTS} agents</span>
+        <span className="pb-muted" style={{ fontSize: 12.5 }}>Cloud · up to {CLOUD_MAX_AGENTS} agents · $17 or $27/mo</span>
         <button
           type="button"
           className="pb-btn pb-btn-primary pb-right"
@@ -583,7 +582,7 @@ export function AgentsPage({ state, toast, setState, embedded }) {
         >
           {!createdToken ? (
             <>
-              <div className="pb-field"><label>Agent name</label><input value={name} onChange={e => setName(e.target.value)} placeholder="backup-box-2" /></div>
+              <div className="pb-field"><label>Agent name</label><input value={name} onChange={e => setName(e.target.value)} placeholder="escape-runner-2" /></div>
               <p className="pb-field-hint">Install on the runner with PORTABASE_CLOUD_TOKEN. Telemetry stays opt-in and allowlisted.</p>
             </>
           ) : (
@@ -678,7 +677,7 @@ export function SchedulesPage({ state, setState, toast, embedded }) {
   if (embedded) return table;
   return (
     <>
-      <PageHead title="Schedule" subtitle="Expected backup cadence. Misses fire alert chains." />
+      <PageHead title="Schedule" subtitle="Expected recovery-cycle cadence. Misses fire alert chains." />
       {table}
     </>
   );
@@ -752,7 +751,7 @@ export function DestinationsPage({ state, setState, toast, embedded }) {
   if (embedded) return body;
   return (
     <>
-      <PageHead title="Binary storage (yours)" subtitle="Required. $17 Cloud does not include object storage — you bring the bucket or drive." />
+      <PageHead title="Capsule storage (yours)" subtitle="Required. Cloud does not include object storage — you bring the bucket, drive, or Local Starter folder." />
       {body}
     </>
   );
@@ -919,7 +918,7 @@ export function RestoresPage({ state, setState, toast }) {
           <strong>What Replay proves</strong>
           <p>
             Decrypt + integrity of the capsule, then a full write into a <em>blank</em> target ref that is not the source.
-            That is the only honest “this backup works” test. Cloud tracks the run; the agent/CLI holds target credentials.
+            That is the only honest “this capsule restores” test. Cloud tracks the run; the agent/CLI holds target credentials.
           </p>
         </div>
       </div>
@@ -1144,7 +1143,7 @@ export function AlertsPage({ state, setState, toast, forcedTab, embedded }) {
             <div>
               <strong>Automatic SMS at run time</strong>
               <p>
-                When a managed backup finishes, enabled numbers get a short text for <strong>success</strong> and/or <strong>failure</strong>.
+                When a managed recovery cycle finishes, enabled numbers get a short text for <strong>success</strong> and/or <strong>failure</strong>.
                 Also useful: quiet hours (success only), verified numbers only, and delivery history.
               </p>
             </div>
@@ -1436,21 +1435,19 @@ export function TeamPage({ state, setState, toast, embedded }) {
 
 export function BillingPage({ state, me, startTrial, busy, setState, toast, embedded }) {
   const b = { ...state.billing, ...(me?.subscription || {}) };
-  const extra = Math.max(0, Number(b.extraCycles ?? state.billing.extraCycles) || 0);
-  const cycles = cyclesPerDay(extra);
-  const totalCents = monthlyTotalCents(extra);
+  const planId = b.plan && CLOUD_PLANS[b.plan] ? b.plan : (state.billing.planId || CLOUD_DEFAULT_PLAN_ID);
+  const plan = getCloudPlan(planId);
   const trialDays = b.trialEndsAt ? Math.max(0, Math.ceil((new Date(b.trialEndsAt) - Date.now()) / 86400e3)) : null;
   const used24 = Number(b.cyclesUsedLast24h ?? state.billing.cyclesUsedLast24h) || 0;
 
-  const setExtra = (n) => {
-    const next = Math.max(0, Math.min(CLOUD_MAX_EXTRA_CYCLES, Number(n) || 0));
+  const selectPlan = (id) => {
     if (setState) {
       setState(s => {
-        s.billing = { ...s.billing, extraCycles: next };
+        s.billing = { ...s.billing, planId: id, plan: id };
         return s;
       });
     }
-    toast?.(`Extra cycles set to ${next} (+$${next * 10}/mo)`, 'ok');
+    toast?.(getCloudPlan(id).shortLabel, 'ok');
   };
 
   const body = (
@@ -1458,52 +1455,68 @@ export function BillingPage({ state, me, startTrial, busy, setState, toast, embe
       <div className="pb-callout warn" style={{ marginBottom: 14 }}>
         <Icon name="cloud" size={16} />
         <div>
-          <strong>You provide binary storage</strong>
+          <strong>You provide capsule storage</strong>
           <p>
-            Base <strong>$17/mo</strong> (Square) includes <strong>1 backup cycle per 24 hours</strong>.
-            Additional cycles are <strong>$10/mo each</strong>. Capsule binaries go to <em>your</em> S3, Drive, Dropbox, or NAS.
+            Two plans via Square: <strong>$17/mo</strong> = 1 recovery cycle per 24 hours;
+            {' '}<strong>$27/mo</strong> = up to 3 recovery cycles per day.
+            Capsules land in <em>your</em> S3, Dropbox, NAS, or Local Starter folder.
           </p>
         </div>
       </div>
+      <div className="pb-grid pb-grid-2" style={{ marginBottom: 14 }}>
+        {Object.values(CLOUD_PLANS).map(p => (
+          <button
+            type="button"
+            key={p.id}
+            className="pb-card"
+            style={{
+              textAlign: 'left',
+              cursor: 'pointer',
+              borderColor: plan.id === p.id ? 'var(--acid, #c9ff4a)' : undefined,
+              boxShadow: plan.id === p.id ? '0 0 0 1px rgba(201,255,74,.45)' : undefined,
+            }}
+            onClick={() => selectPlan(p.id)}
+          >
+            <div className="pb-kpi-label">{p.title}</div>
+            <div className="pb-kpi-value" style={{ fontSize: 28 }}>${p.priceMonthlyUsd}<span style={{ fontSize: 14 }}>/mo</span></div>
+            <div className="pb-kpi-meta">{p.cadenceLabel}</div>
+            {plan.id === p.id && <Badge tone="acid">Selected</Badge>}
+          </button>
+        ))}
+      </div>
       <div className="pb-grid pb-grid-2">
         <div className="pb-card">
-          <div className="pb-kpi-label">Plan · payment gateway</div>
-          <div className="pb-kpi-value" style={{ fontSize: 22 }}>${(totalCents / 100).toFixed(0)}/mo</div>
-          <div className="pb-kpi-meta">
-            $17 base + ${extra * 10} extra cycles · Square · cloud-17
-          </div>
+          <div className="pb-kpi-label">Plan · Square</div>
+          <div className="pb-kpi-value" style={{ fontSize: 22 }}>${plan.priceMonthlyUsd}/mo</div>
+          <div className="pb-kpi-meta">{plan.shortLabel}</div>
           <div style={{ marginTop: 14 }} className="pb-inline">
             <Badge tone={b.status || state.billing.status}>{b.status || state.billing.status}</Badge>
             <Badge tone="acid">Square</Badge>
-            <Badge tone="info">{cycles.total}× / 24h</Badge>
+            <Badge tone="info">{plan.cyclesPerDay}× / day max</Badge>
           </div>
           {(b.status || state.billing.status) === 'trialing' && trialDays != null && (
             <p className="pb-muted" style={{ marginTop: 12 }}>Trial ends in {trialDays} day(s) · then billed on the card on file</p>
           )}
           {!(me?.access?.hasAccess) && (
-            <button type="button" className="pb-btn pb-btn-primary" style={{ marginTop: 16 }} disabled={busy} onClick={startTrial}>
-              {busy ? 'Opening Square…' : 'Pay with Square · 7-day trial then $17/mo base'}
+            <button
+              type="button"
+              className="pb-btn pb-btn-primary"
+              style={{ marginTop: 16 }}
+              disabled={busy}
+              onClick={() => startTrial?.(plan.id)}
+            >
+              {busy ? 'Opening Square…' : `Pay with Square · 7-day trial then $${plan.priceMonthlyUsd}/mo`}
             </button>
           )}
         </div>
         <div className="pb-card">
-          <div className="pb-kpi-label">Backup cycles (per 24 hours)</div>
+          <div className="pb-kpi-label">Recovery cycles (per day)</div>
           <p className="pb-muted" style={{ margin: '8px 0 12px', fontSize: 13, lineHeight: 1.5 }}>
-            Included: <strong>1</strong>. Used last 24h: <strong>{used24}</strong> / {cycles.total}.
-            Extra cycles: <strong>${CLOUD_EXTRA_CYCLE_MONTHLY_USD}/mo</strong> each.
+            Plan allowance: <strong>{plan.cyclesPerDay}</strong>. Used last 24h: <strong>{used24}</strong> / {plan.cyclesPerDay}.
           </p>
-          <div className="pb-field">
-            <label>Extra daily cycles (add-on)</label>
-            <div className="pb-inline" style={{ gap: 8 }}>
-              <button type="button" className="pb-btn pb-btn-sm" disabled={extra <= 0} onClick={() => setExtra(extra - 1)}>−</button>
-              <strong className="pb-mono" style={{ minWidth: 24, textAlign: 'center' }}>{extra}</strong>
-              <button type="button" className="pb-btn pb-btn-sm" disabled={extra >= CLOUD_MAX_EXTRA_CYCLES} onClick={() => setExtra(extra + 1)}>+</button>
-              <span className="pb-faint">→ {cycles.total} total runs / day</span>
-            </div>
-          </div>
           <ul className="pb-muted" style={{ margin: '14px 0 0', paddingLeft: 18, lineHeight: 1.55, fontSize: 13 }}>
-            <li>$17 base · console · SMS success/failure · ≤{CLOUD_MAX_AGENTS} agents</li>
-            <li>1 included cycle / 24h · extras $10/mo each</li>
+            <li>Console · SMS success/failure · ≤{CLOUD_MAX_AGENTS} agents</li>
+            <li>$17 · 1 cycle / 24h · or · $27 · up to 3 / day</li>
             <li>Not capsule storage (you provide)</li>
             <li>Not encryption keys or Supabase secrets</li>
           </ul>
@@ -1519,7 +1532,7 @@ export function BillingPage({ state, me, startTrial, busy, setState, toast, embe
     </>
   );
   if (embedded) return body;
-  return (<><PageHead title="Plan" subtitle="Square · $17/mo · you provide binary storage." />{body}</>);
+  return (<><PageHead title="Plan" subtitle="Square · $17 (1×/24h) or $27 (up to 3×/day) · you provide capsule storage." />{body}</>);
 }
 
 export function SettingsPage({ state, setState, toast, resetDemo, embedded }) {

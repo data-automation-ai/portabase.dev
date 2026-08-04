@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildSubscriptionPaymentLinkRequest, PRICE_MONTHLY_CENTS, STORAGE_POLICY, TRIAL_DAYS } from '../netlify/shared/square-cloud.mjs';
-import { CLOUD_MAX_AGENTS, CLOUD_PAYMENT_GATEWAY, CLOUD_PRICE_MONTHLY_CENTS } from '../netlify/shared/product.mjs';
+import { CLOUD_MAX_AGENTS, CLOUD_PAYMENT_GATEWAY, CLOUD_PRICE_MONTHLY_CENTS, CLOUD_PLANS, getCloudPlan } from '../netlify/shared/product.mjs';
 import { deriveAccess, trialEndsAtFrom } from '../netlify/shared/subscription-store.mjs';
 
 test('subscription payment link is $0 trial with plan variation id', () => {
@@ -27,6 +27,25 @@ test('subscription payment link is $0 trial with plan variation id', () => {
   assert.equal(STORAGE_POLICY.includedInCloud, false);
   assert.equal(STORAGE_POLICY.owner, 'customer');
   assert.equal(CLOUD_MAX_AGENTS, 12);
+});
+
+test('Triple Escape plan is $27 with up to 3 recovery cycles per day', () => {
+  const plan = getCloudPlan('cloud-27');
+  assert.equal(plan.priceMonthlyCents, 2700);
+  assert.equal(plan.cyclesPerDay, 3);
+  assert.equal(CLOUD_PLANS['cloud-17'].cyclesPerDay, 1);
+  const body = buildSubscriptionPaymentLinkRequest({
+    locationId: 'LOC',
+    planVariationId: 'VAR27',
+    attempt: 'attempt-27',
+    siteUrl: 'https://portabase.dev',
+    buyerEmail: 'ops@example.com',
+    cognitoSub: 'sub-abc',
+    planId: 'cloud-27',
+  });
+  assert.match(body.description, /\$27\/mo|27\/mo/i);
+  assert.match(body.payment_note, /cloud-27|\$27/);
+  assert.doesNotMatch(body.description, /backup/i);
 });
 
 test('trial end is seven days after start', () => {

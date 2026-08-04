@@ -222,12 +222,12 @@ export function seedWorkspace(user = {}) {
       status: 'trialing',
       trialEndsAt: new Date(Date.now() + 5 * 86400e3).toISOString(),
       priceMonthlyCents: 1700,
-      listPriceMonthlyCents: 3400,
-      plan: 'cloud-intro-17',
+      listPriceMonthlyCents: 2700,
+      plan: 'cloud-17',
+      planId: 'cloud-17',
       paymentMethod: 'Visa •••• 4242',
       cloudVersion: user.cloudVersion || 'supabase',
-      /** Base plan = 1 cycle / 24h; each extra daily cycle = $10/mo */
-      extraCycles: 0,
+      /** Daily Escape = 1 cycle / 24h; Triple Escape = up to 3 / day */
       includedCyclesPerDay: 1,
       cyclesUsedLast24h: 1,
     },
