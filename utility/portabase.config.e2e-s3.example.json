@@ -1,0 +1,25 @@
+{
+  "version": 3,
+  "projectRef": "ekklokrukxmqlahtonnc",
+  "backupDirectory": "./portabase-capsules",
+  "statusDirectory": "./portabase-status",
+  "provider": {
+    "type": "aws",
+    "bucket": "dataautomation-ai-backups",
+    "prefix": "portabase/ekklokrukxmqlahtonnc",
+    "sync": true
+  },
+  "capture": {
+    "database": true,
+    "storage": true,
+    "functions": true,
+    "storageConcurrency": 8
+  },
+  "encryption": {
+    "passphraseEnv": "PORTABASE_ENCRYPTION_PASSPHRASE"
+  },
+  "retention": {
+    "keepLast": 5,
+    "pruneAfterBackup": false
+  }
+}
