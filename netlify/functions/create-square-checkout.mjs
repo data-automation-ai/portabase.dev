@@ -16,7 +16,7 @@ export async function handler(event) {
   const body = {
     error: 'legacy_checkout_retired',
     message:
-      'The $147 one-time Essentials license is retired. Recovery engine is free (Apache-2.0 open source). Portabase Cloud is $17/mo (1 recovery cycle / 24h) or $27/mo (up to 3 / day) via Square after a 7-day trial — you bring capsule storage.',
+      'The $147 one-time Essentials license is retired. Recovery engine is free (Apache-2.0 open source). Portabase Cloud is $17/mo (1 escape / 24h) or $27/mo (up to 3 escapes / day) via Square after a 7-day trial — you bring capsule storage.',
     openSource: 'https://github.com/DataAutomation-ai',
     cloud: `${siteUrl}/cloud`,
     subscribe: `${siteUrl}/login?mode=signup&next=/app/account?tab=billing`,

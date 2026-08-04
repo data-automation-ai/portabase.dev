@@ -3,12 +3,13 @@
  *
  * Launch target: Supabase projects only (DB, Auth, Storage, Edge Functions).
  * Payment: Square · two plans:
- *   $17/mo — 1 recovery cycle per 24 hours
- *   $27/mo — up to 3 recovery cycles per day
+ *   $17/mo — 1 escape per 24 hours
+ *   $27/mo — up to 3 escapes per day
  * SMS: success + failure texts at run time (manage numbers in console).
  * Binary/capsule storage: ALWAYS customer-provided — never hosted by Portabase Cloud.
  *
- * Avoid the word "backup" in customer-facing copy — use cycle / capsule / Escape / capture.
+ * Unit of work = an "escape" (capture → encrypt capsule → verify destination).
+ * Avoid "backup" in customer-facing copy.
  */
 
 export const LAUNCH_PLATFORM = 'supabase';
@@ -26,19 +27,21 @@ export const CLOUD_PLANS = Object.freeze({
     id: 'cloud-17',
     priceMonthlyUsd: 17,
     priceMonthlyCents: 1700,
-    cyclesPerDay: 1,
+    escapesPerDay: 1,
+    cyclesPerDay: 1, // alias — prefer escapesPerDay in product copy
     title: 'Daily Escape',
-    cadenceLabel: '1 recovery cycle per 24 hours',
-    shortLabel: '$17/mo · 1× / 24h',
+    cadenceLabel: '1 escape per 24 hours',
+    shortLabel: '$17/mo · 1 escape / 24h',
   }),
   'cloud-27': Object.freeze({
     id: 'cloud-27',
     priceMonthlyUsd: 27,
     priceMonthlyCents: 2700,
+    escapesPerDay: 3,
     cyclesPerDay: 3,
     title: 'Triple Escape',
-    cadenceLabel: 'up to 3 recovery cycles per day',
-    shortLabel: '$27/mo · up to 3× / day',
+    cadenceLabel: 'up to 3 escapes per day',
+    shortLabel: '$27/mo · up to 3 escapes / day',
   }),
 });
 
@@ -161,7 +164,7 @@ export function whatCloudDoesNotInclude() {
     'Encryption passphrases or Supabase service keys',
     'Capsule ciphertext (never lands in Portabase Cloud)',
     'Managed object store billed by Portabase',
-    'Unlimited recovery frequency (choose $17 · 1×/24h or $27 · up to 3×/day)',
+    'Unlimited escapes (choose $17 · 1 escape/24h or $27 · up to 3 escapes/day)',
   ];
 }
 

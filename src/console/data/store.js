@@ -227,7 +227,7 @@ export function seedWorkspace(user = {}) {
       planId: 'cloud-17',
       paymentMethod: 'Visa •••• 4242',
       cloudVersion: user.cloudVersion || 'supabase',
-      /** Daily Escape = 1 cycle / 24h; Triple Escape = up to 3 / day */
+      /** Daily Escape = 1 escape / 24h; Triple Escape = up to 3 escapes / day */
       includedCyclesPerDay: 1,
       cyclesUsedLast24h: 1,
     },

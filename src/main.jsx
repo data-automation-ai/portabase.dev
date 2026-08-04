@@ -926,7 +926,7 @@ function CloudTeaser() {
       <div>
         <div className="section-kicker green">USP · ESCAPE OPS</div>
         <h2>Open source is the Escape.<br />Cloud keeps the Escape running.</h2>
-        <p><strong>Supabase only.</strong> GitHub = free Escape engine. <strong>This site</strong> = hosted <strong>GUI</strong>, guided configuration, <strong>telemetry</strong>, SMS on success/failure — so the Escape is not a forgotten cron job. <strong>7-day free trial</strong> then <strong>$17/mo</strong> (1 recovery cycle / 24h) or <strong>$27/mo</strong> (up to 3 / day) · ≤12 agents. You provide capsule storage.</p>
+        <p><strong>Supabase only.</strong> GitHub = free Escape engine. <strong>This site</strong> = hosted <strong>GUI</strong>, guided configuration, <strong>telemetry</strong>, SMS on success/failure — so the Escape is not a forgotten cron job. <strong>7-day free trial</strong> then <strong>$17/mo</strong> (1 escape / 24h) or <strong>$27/mo</strong> (up to 3 escapes / day) · ≤12 agents. You provide capsule storage.</p>
         <div className="cloud-teaser-actions">
           <a className="button button-primary" href="/login?mode=signup&next=/app">Start free trial <Arrow /></a>
           <a className="button button-ghost" href="/cloud">Open source vs Cloud <Arrow /></a>
@@ -1049,7 +1049,7 @@ function CloudPage() {
                 <tr>
                   <th>Capability</th>
                   <th>GitHub / self-host<br /><span>Apache-2.0 · free</span></th>
-                  <th>Portabase Cloud<br /><span>$17 · 1×/24h · or · $27 · 3×/day</span></th>
+                  <th>Portabase Cloud<br /><span>$17 · 1 escape/24h · or · $27 · 3 escapes/day</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -1082,7 +1082,7 @@ function CloudPage() {
             <article>
               <small>ON YOUR RUNNER (ALWAYS)</small>
               <b>Encryption passphrase</b>
-              <p>AES-256-GCM key material for capsules. Set via env / OS secret store on the machine or container that runs recovery cycles. <strong>Never uploaded to Portabase Cloud</strong> and never stored in our control-plane database.</p>
+              <p>AES-256-GCM key material for capsules. Set via env / OS secret store on the machine or container that runs escapes. <strong>Never uploaded to Portabase Cloud</strong> and never stored in our control-plane database.</p>
             </article>
             <article>
               <small>ON YOUR RUNNER (ALWAYS)</small>
@@ -1142,7 +1142,7 @@ function CloudPage() {
             <p><strong>Launch: Supabase only.</strong> Protect database, Auth, Storage, and Edge Functions. <strong>Payment: Square</strong> (card on file). Cloud is ops only — <strong>you provide capsule storage</strong>. Portabase never hosts recovery bytes.</p>
             <div className="subscribe-case">
               <article><small>01 · SUPABASE FIRST</small><b>Built for Supabase projects.</b><p>Sign in with Supabase Auth (email or Google). Capture DB, Auth inventory, Storage objects, Edge Functions.</p></article>
-              <article><small>02 · TWO PLANS</small><b>$17 · 1 cycle / 24h · or · $27 · up to 3 / day.</b><p>Pick how often a recovery cycle may run. SMS on success and failure. Up to 12 agents.</p></article>
+              <article><small>02 · TWO PLANS</small><b>$17 · 1 escape / 24h · or · $27 · up to 3 escapes / day.</b><p>Pick how often an escape may run. SMS on success and failure. Up to 12 agents.</p></article>
               <article><small>03 · BYO CAPSULE STORAGE</small><b>You supply the vault.</b><p>S3, Dropbox, NAS, or Local Starter (≤100 MB). Capsules never live on Portabase. Keys stay on your runner.</p></article>
             </div>
             <div className="one-time-math">
@@ -1160,11 +1160,11 @@ function CloudPage() {
               <span>PORTABASE CLOUD</span>
               <div className="price-stack">
                 <b>$17<span className="per">/mo</span></b>
-                <small className="list-price">1 recovery cycle per 24 hours · or upgrade to $27 for up to 3 / day</small>
+                <small className="list-price">1 escape per 24 hours · or upgrade to $27 for up to 3 escapes / day</small>
               </div>
               <p>Ops console, telemetry, multi-person alerts. Capsules encrypt on your runner and land in <strong>your</strong> storage.</p>
             </div>
-            <div className="promo-chip"><strong>Payment: Square.</strong> Card required. Trial free 7 days → <strong>$17</strong> (1×/24h) or <strong>$27</strong> (up to 3×/day). Storage is always bring-your-own.</div>
+            <div className="promo-chip"><strong>Payment: Square.</strong> Card required. Trial free 7 days → <strong>$17</strong> (1 escape/24h) or <strong>$27</strong> (up to 3 escapes/day). Storage is always bring-your-own.</div>
             <div className="purchase-definition">
               <span>WHAT YOU BRING</span>
               <strong>Capsule storage + runner secrets</strong>
@@ -1172,8 +1172,8 @@ function CloudPage() {
             </div>
             <ul>
               <li><span>✓</span> Supabase projects only (launch)</li>
-              <li><span>✓</span> $17 · 1 recovery cycle / 24h</li>
-              <li><span>✓</span> $27 · up to 3 recovery cycles / day</li>
+              <li><span>✓</span> $17 · 1 escape / 24h</li>
+              <li><span>✓</span> $27 · up to 3 escapes / day</li>
               <li><span>✓</span> SMS on success &amp; failure · up to 12 agents</li>
               <li><span>✓</span> 7-day free trial · card on file</li>
               <li><span>✓</span> You provide capsule storage</li>
@@ -1184,7 +1184,7 @@ function CloudPage() {
               {signedIn ? 'Open console · start Square trial' : 'Sign in with Supabase Auth'} <Arrow />
             </a>
             <p className="checkout-hint">Already have an account? <a href="/login">Sign in</a></p>
-            <div className="square-trust"><span><b>Square</b> · $17 · 1×/24h</span><span>$27 · up to 3×/day</span><span>SMS · BYO storage</span></div>
+            <div className="square-trust"><span><b>Square</b> · $17 · 1 escape/24h</span><span>$27 · up to 3 escapes/day</span><span>SMS · BYO storage</span></div>
           </div>
         </div>
       </section>
@@ -1194,11 +1194,11 @@ function CloudPage() {
 }
 
 function LegacyPurchaseNotice() {
-  return <div className="thanks"><div className="thanks-card"><Logo href="/" /><div className="section-kicker green">MODEL UPDATE</div><h1>Portabase is open core + Cloud subscription.</h1><p>There is no $147 software unlock. The recovery engine is free on GitHub. Portabase Cloud is $17/mo (1 recovery cycle per 24h) or $27/mo (up to 3 per day) — console, telemetry, and alert chains.</p><a className="button button-primary" href="/cloud">Open source vs Cloud <Arrow /></a><a className="button button-ghost" href="mailto:escape@portabase.dev?subject=Legacy Portabase purchase">Legacy purchase help <Arrow /></a></div></div>;
+  return <div className="thanks"><div className="thanks-card"><Logo href="/" /><div className="section-kicker green">MODEL UPDATE</div><h1>Portabase is open core + Cloud subscription.</h1><p>There is no $147 software unlock. The recovery engine is free on GitHub. Portabase Cloud is $17/mo (1 escape per 24h) or $27/mo (up to 3 escapes per day) — console, telemetry, and alert chains.</p><a className="button button-primary" href="/cloud">Open source vs Cloud <Arrow /></a><a className="button button-ghost" href="mailto:escape@portabase.dev?subject=Legacy Portabase purchase">Legacy purchase help <Arrow /></a></div></div>;
 }
 
 function Footer() {
-  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#reality">The reality</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">Escape plan</a><a href="/#audit">Risk check</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · $17 / $27</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">GitHub · DataAutomation.ai</a><span>Independent product.<br />Not affiliated with Supabase.</span><span>Apache-2.0 open core. Cloud is ops subscription — never custody of keys or capsule contents. $17/mo · 1 cycle/24h · or · $27/mo · up to 3/day.</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your cloud. Your way out.</span></div></footer>;
+  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#reality">The reality</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">Escape plan</a><a href="/#audit">Risk check</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · $17 / $27</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">GitHub · DataAutomation.ai</a><span>Independent product.<br />Not affiliated with Supabase.</span><span>Apache-2.0 open core. Cloud is ops subscription — never custody of keys or capsule contents. $17/mo · 1 escape/24h · or · $27/mo · up to 3 escapes/day.</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your cloud. Your way out.</span></div></footer>;
 }
 
 /**

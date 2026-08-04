@@ -677,7 +677,7 @@ export function SchedulesPage({ state, setState, toast, embedded }) {
   if (embedded) return table;
   return (
     <>
-      <PageHead title="Schedule" subtitle="Expected recovery-cycle cadence. Misses fire alert chains." />
+      <PageHead title="Schedule" subtitle="Expected escape cadence. Misses fire alert chains." />
       {table}
     </>
   );
@@ -1143,7 +1143,7 @@ export function AlertsPage({ state, setState, toast, forcedTab, embedded }) {
             <div>
               <strong>Automatic SMS at run time</strong>
               <p>
-                When a managed recovery cycle finishes, enabled numbers get a short text for <strong>success</strong> and/or <strong>failure</strong>.
+                When a managed escape finishes, enabled numbers get a short text for <strong>success</strong> and/or <strong>failure</strong>.
                 Also useful: quiet hours (success only), verified numbers only, and delivery history.
               </p>
             </div>
@@ -1457,8 +1457,8 @@ export function BillingPage({ state, me, startTrial, busy, setState, toast, embe
         <div>
           <strong>You provide capsule storage</strong>
           <p>
-            Two plans via Square: <strong>$17/mo</strong> = 1 recovery cycle per 24 hours;
-            {' '}<strong>$27/mo</strong> = up to 3 recovery cycles per day.
+            Two plans via Square: <strong>$17/mo</strong> = 1 escape per 24 hours;
+            {' '}<strong>$27/mo</strong> = up to 3 escapes per day.
             Capsules land in <em>your</em> S3, Dropbox, NAS, or Local Starter folder.
           </p>
         </div>
@@ -1492,7 +1492,7 @@ export function BillingPage({ state, me, startTrial, busy, setState, toast, embe
           <div style={{ marginTop: 14 }} className="pb-inline">
             <Badge tone={b.status || state.billing.status}>{b.status || state.billing.status}</Badge>
             <Badge tone="acid">Square</Badge>
-            <Badge tone="info">{plan.cyclesPerDay}× / day max</Badge>
+            <Badge tone="info">{plan.escapesPerDay || plan.cyclesPerDay} escapes / day max</Badge>
           </div>
           {(b.status || state.billing.status) === 'trialing' && trialDays != null && (
             <p className="pb-muted" style={{ marginTop: 12 }}>Trial ends in {trialDays} day(s) · then billed on the card on file</p>
@@ -1510,13 +1510,13 @@ export function BillingPage({ state, me, startTrial, busy, setState, toast, embe
           )}
         </div>
         <div className="pb-card">
-          <div className="pb-kpi-label">Recovery cycles (per day)</div>
+          <div className="pb-kpi-label">Escapes (per day)</div>
           <p className="pb-muted" style={{ margin: '8px 0 12px', fontSize: 13, lineHeight: 1.5 }}>
-            Plan allowance: <strong>{plan.cyclesPerDay}</strong>. Used last 24h: <strong>{used24}</strong> / {plan.cyclesPerDay}.
+            Plan allowance: <strong>{plan.escapesPerDay || plan.cyclesPerDay}</strong>. Used last 24h: <strong>{used24}</strong> / {plan.escapesPerDay || plan.cyclesPerDay}.
           </p>
           <ul className="pb-muted" style={{ margin: '14px 0 0', paddingLeft: 18, lineHeight: 1.55, fontSize: 13 }}>
             <li>Console · SMS success/failure · ≤{CLOUD_MAX_AGENTS} agents</li>
-            <li>$17 · 1 cycle / 24h · or · $27 · up to 3 / day</li>
+            <li>$17 · 1 escape / 24h · or · $27 · up to 3 escapes / day</li>
             <li>Not capsule storage (you provide)</li>
             <li>Not encryption keys or Supabase secrets</li>
           </ul>
@@ -1532,7 +1532,7 @@ export function BillingPage({ state, me, startTrial, busy, setState, toast, embe
     </>
   );
   if (embedded) return body;
-  return (<><PageHead title="Plan" subtitle="Square · $17 (1×/24h) or $27 (up to 3×/day) · you provide capsule storage." />{body}</>);
+  return (<><PageHead title="Plan" subtitle="Square · $17 (1 escape/24h) or $27 (up to 3 escapes/day) · you provide capsule storage." />{body}</>);
 }
 
 export function SettingsPage({ state, setState, toast, resetDemo, embedded }) {

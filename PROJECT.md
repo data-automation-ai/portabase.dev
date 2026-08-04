@@ -78,8 +78,8 @@ Live: **https://portabase.dev**
 | Rule | Value |
 | --- | --- |
 | Payment | Square |
-| Daily Escape | **$17/mo** · 1 recovery cycle / 24h |
-| Triple Escape | **$27/mo** · up to 3 recovery cycles / day |
+| Daily Escape | **$17/mo** · 1 escape / 24h |
+| Triple Escape | **$27/mo** · up to 3 escapes / day |
 | Included | **1 backup cycle per 24 hours** |
 | (no à-la-carte extras) | Choose $17 or $27 plan only |
 | Agents | Up to **12** |

@@ -11,9 +11,9 @@ import {
 
 export const SQUARE_API_VERSION = '2026-05-20';
 export const PLAN_NAME = 'Portabase Cloud';
-/** Default catalog variation = Daily Escape ($17 · 1 cycle / 24h). */
-export const VARIATION_NAME = 'Portabase Cloud · Daily Escape · 7-day trial → $17/mo (1 cycle/24h · BYO storage)';
-export const VARIATION_NAME_TRIPLE = 'Portabase Cloud · Triple Escape · 7-day trial → $27/mo (up to 3 cycles/day · BYO storage)';
+/** Default catalog variation = Daily Escape ($17 · 1 escape / 24h). */
+export const VARIATION_NAME = 'Portabase Cloud · Daily Escape · 7-day trial → $17/mo (1 escape/24h · BYO storage)';
+export const VARIATION_NAME_TRIPLE = 'Portabase Cloud · Triple Escape · 7-day trial → $27/mo (up to 3 escapes/day · BYO storage)';
 export const TRIAL_DAYS = CLOUD_TRIAL_DAYS;
 export const PRICE_MONTHLY_CENTS = CLOUD_PRICE_MONTHLY_CENTS;
 export const PRICE_TRIPLE_MONTHLY_CENTS = CLOUD_PLANS['cloud-27'].priceMonthlyCents;

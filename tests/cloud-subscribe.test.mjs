@@ -29,11 +29,14 @@ test('subscription payment link is $0 trial with plan variation id', () => {
   assert.equal(CLOUD_MAX_AGENTS, 12);
 });
 
-test('Triple Escape plan is $27 with up to 3 recovery cycles per day', () => {
+test('Triple Escape plan is $27 with up to 3 escapes per day', () => {
   const plan = getCloudPlan('cloud-27');
   assert.equal(plan.priceMonthlyCents, 2700);
+  assert.equal(plan.escapesPerDay, 3);
   assert.equal(plan.cyclesPerDay, 3);
-  assert.equal(CLOUD_PLANS['cloud-17'].cyclesPerDay, 1);
+  assert.equal(CLOUD_PLANS['cloud-17'].escapesPerDay, 1);
+  assert.match(plan.cadenceLabel, /escape/i);
+  assert.doesNotMatch(plan.cadenceLabel, /backup/i);
   const body = buildSubscriptionPaymentLinkRequest({
     locationId: 'LOC',
     planVariationId: 'VAR27',
