@@ -1,14 +1,14 @@
 {
   "name": "portabase",
   "private": true,
-  "version": "0.3.1",
-  "description": "Customer-owned, encrypted Supabase backup and guarded recovery software.",
+  "version": "0.4.0",
+  "description": "Open-source, customer-owned encrypted Supabase backup and recovery. Optional Portabase Cloud for monitoring and alert chains.",
   "homepage": "https://portabase.dev",
   "author": {
-    "name": "PortaBase",
+    "name": "Portabase",
     "email": "support@portabase.dev"
   },
-  "desktopName": "PortaBase",
+  "desktopName": "Portabase",
   "type": "module",
   "main": "desktop/main.cjs",
   "bin": {
@@ -28,8 +28,13 @@
     "desktop:mac": "bash scripts/stage-desktop-tools.sh && electron-builder --mac dmg zip"
   },
   "dependencies": {
+    "@aws-sdk/client-cloudtrail": "^3.1102.0",
+    "@aws-sdk/client-cloudwatch-logs": "^3.1102.0",
     "@aws-sdk/client-secrets-manager": "^3.1085.0",
+    "@aws-sdk/client-sts": "^3.1102.0",
     "@netlify/blobs": "^10.7.9",
+    "@supabase/supabase-js": "^2.112.0",
+    "aws-jwt-verify": "^5.2.1",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "square": "^44.2.0",
@@ -39,11 +44,11 @@
     "@vitejs/plugin-react": "6.0.3",
     "electron": "^43.1.0",
     "electron-builder": "^26.15.3",
-    "vite": "8.1.4"
+    "vite": "^8.1.4"
   },
   "build": {
     "appId": "dev.portabase.desktop",
-    "productName": "PortaBase",
+    "productName": "Portabase",
     "asar": true,
     "asarUnpack": [
       "utility/**",
@@ -67,7 +72,7 @@
     ],
     "win": {
       "target": "nsis",
-      "artifactName": "PortaBase-Setup-${version}-unsigned.${ext}"
+      "artifactName": "Portabase-Setup-${version}-unsigned.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -84,7 +89,7 @@
       "gatekeeperAssess": false
     },
     "dmg": {
-      "title": "PortaBase ${version}"
+      "title": "Portabase ${version}"
     },
     "linux": {
       "target": [
@@ -92,10 +97,10 @@
         "deb"
       ],
       "category": "Utility",
-      "maintainer": "PortaBase <support@portabase.dev>",
+      "maintainer": "Portabase <support@portabase.dev>",
       "syncDesktopName": true,
       "executableName": "portabase",
-      "artifactName": "PortaBase-${version}-${arch}.${ext}"
+      "artifactName": "Portabase-${version}-${arch}.${ext}"
     },
     "deb": {
       "depends": [
@@ -104,5 +109,9 @@
         "tar"
       ]
     }
+  },
+  "license": "Apache-2.0",
+  "optionalDependencies": {
+    "@rolldown/binding-win32-x64-msvc": "^1.2.2"
   }
 }

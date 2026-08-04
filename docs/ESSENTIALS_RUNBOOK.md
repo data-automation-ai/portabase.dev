@@ -1,10 +1,10 @@
-# PortaBase Essentials runbook
+# Portabase Essentials runbook
 
 ## What the package does
 
-PortaBase Essentials runs entirely on a customer-controlled Windows, macOS, or Linux machine. It captures the hosted Postgres database (including Auth and Storage metadata), Storage object bytes, and downloadable Edge Function source. It packages those materials into a timestamped archive, encrypts the archive locally with AES-256-GCM, transfers it to the customer's destination, and verifies the destination copy.
+Portabase Essentials runs entirely on a customer-controlled Windows, macOS, or Linux machine. It captures the hosted Postgres database (including Auth and Storage metadata), Storage object bytes, and downloadable Edge Function source. It packages those materials into a timestamped archive, encrypts the archive locally with AES-256-GCM, transfers it to the customer's destination, and verifies the destination copy.
 
-PortaBase never receives the Supabase credentials, destination credentials, encryption passphrase, or capsule contents.
+Portabase never receives the Supabase credentials, destination credentials, encryption passphrase, or capsule contents.
 
 ## Prerequisites
 
@@ -16,21 +16,42 @@ PortaBase never receives the Supabase credentials, destination credentials, encr
 
 The included Supabase CLI is pinned by `package-lock.json`. It is used for Edge Functions and can fall back for database dumping where its Docker dependency is available.
 
+## Local Starter (no S3 / Dropbox yet)
+
+If you have **no third-party storage**, keep encrypted capsules on a folder you control (this PC, USB drive, or NAS path):
+
+```json
+"provider": {
+  "type": "local",
+  "mode": "local-starter",
+  "path": "./portabase-capsules/vault",
+  "maxBytes": 104857600,
+  "allowLargeLocal": false
+}
+```
+
+- Default size gate: **100 MB** per encrypted capsule folder.
+- Larger only with `allowLargeLocal: true` or `backup --allow-large-local` (you accept same-disk risk).
+- Passphrase still never goes to Portabase. Capsules are still encrypted at rest on disk.
+- When you can, switch to Dropbox or S3 — Escape from Supabase is not Escape from laptop loss.
+
+See also `utility/portabase.config.local-starter.example.json`.
+
 ## Configure Drive or Dropbox
 
-Authorize the customer's provider directly with `rclone config`. PortaBase stores only the non-secret remote name and destination path:
+Authorize the customer's provider directly with `rclone config`. Portabase stores only the non-secret remote name and destination path:
 
 ```json
 {
   "provider": {
     "type": "google-drive",
     "remote": "gdrive",
-    "path": "/PortaBase"
+    "path": "/Portabase"
   }
 }
 ```
 
-Use `"type": "dropbox"` and the customer's Dropbox remote name for Dropbox. PortaBase uses `rclone copy --immutable --checksum`, never mirror/delete sync semantics, and follows the upload with `rclone check`.
+Use `"type": "dropbox"` and the customer's Dropbox remote name for Dropbox. Portabase uses `rclone copy --immutable --checksum`, never mirror/delete sync semantics, and follows the upload with `rclone check`.
 
 ## Set credentials without writing them into the config
 
@@ -42,7 +63,7 @@ $env:SUPABASE_ACCESS_TOKEN = '...'
 $env:PORTABASE_ENCRYPTION_PASSPHRASE = 'use-a-long-customer-owned-passphrase'
 ```
 
-`SUPABASE_URL` may also be copied as a `/rest/v1` or `/storage/v1` endpoint; PortaBase normalizes it to the project base URL. New `sb_secret_` keys are sent only as the `apikey` header, while legacy JWT service-role keys also receive the required Bearer header.
+`SUPABASE_URL` may also be copied as a `/rest/v1` or `/storage/v1` endpoint; Portabase normalizes it to the project base URL. New `sb_secret_` keys are sent only as the `apikey` header, while legacy JWT service-role keys also receive the required Bearer header.
 
 If a direct database hostname exposes only IPv6 and the runner has no IPv6 route, use the project's IPv4-compatible Supabase session-pooler connection string from the Connect panel. Transaction-pooler URLs are not appropriate for every dump/restore operation.
 
@@ -68,7 +89,7 @@ npm run portabase -- install-schedule --every-hours 6
 npm run portabase -- install-schedule --every-hours 6 --execute
 ```
 
-The generated wrapper contains paths only, never credentials. A direct customer-owned webhook can be configured with `alerts.webhookEnv`; PortaBase posts status directly to that URL without an intermediary service.
+The generated wrapper contains paths only, never credentials. A direct customer-owned webhook can be configured with `alerts.webhookEnv`; Portabase posts status directly to that URL without an intermediary service.
 
 ## Retention
 
@@ -91,7 +112,7 @@ Recovery execution requires all of the following:
 4. `--execute` is supplied.
 5. `--confirm-target` exactly equals the target ref.
 
-PortaBase then restores roles/schema/data, recreates Storage buckets and objects, and deploys captured Functions. It does not claim to export provider secrets, Auth provider settings/templates, new project API keys, custom domains, DNS, or every platform setting. Those items remain on the explicit post-restore checklist.
+Portabase then restores roles/schema/data, recreates Storage buckets and objects, and deploys captured Functions. It does not claim to export provider secrets, Auth provider settings/templates, new project API keys, custom domains, DNS, or every platform setting. Those items remain on the explicit post-restore checklist.
 
 ## Proof completed in this repository
 

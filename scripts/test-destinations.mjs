@@ -4,7 +4,7 @@
 //
 //   node scripts/test-destinations.mjs --local "D:\\somewhere or \\\\NAS\\share"
 //   node scripts/test-destinations.mjs --s3 my-bucket/optional/prefix
-//   node scripts/test-destinations.mjs --rclone remotename:PortaBase-test
+//   node scripts/test-destinations.mjs --rclone remotename:Portabase-test
 //
 // Multiple flags run multiple destinations. No Supabase credentials are needed;
 // the capsule is synthetic but structurally identical to a real one.
@@ -36,7 +36,7 @@ if (flag('s3')) {
 }
 if (flag('rclone')) {
   const [remote, ...path] = flag('rclone').split(':');
-  destinations.push({ label: `rclone → ${flag('rclone')}`, provider: { type: 'rclone', remote, path: path.join(':') || '/PortaBase-test' } });
+  destinations.push({ label: `rclone → ${flag('rclone')}`, provider: { type: 'rclone', remote, path: path.join(':') || '/Portabase-test' } });
 }
 if (!destinations.length) {
   console.log('Usage: node scripts/test-destinations.mjs [--local DIR] [--s3 BUCKET[/PREFIX]] [--rclone REMOTE:PATH]');

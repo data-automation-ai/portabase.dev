@@ -47,7 +47,7 @@ chmod 755 /usr/local/sbin/portabase-run
 
 cat > /etc/systemd/system/portabase-backup.service <<'SERVICE'
 [Unit]
-Description=PortaBase encrypted customer-owned recovery capture
+Description=Portabase encrypted customer-owned recovery capture
 After=network-online.target
 Wants=network-online.target
 
@@ -66,7 +66,7 @@ SERVICE
 
 cat > /etc/systemd/system/portabase-backup.timer <<'TIMER'
 [Unit]
-Description=Run PortaBase on schedule
+Description=Run Portabase on schedule
 
 [Timer]
 OnBootSec=15min
@@ -81,4 +81,4 @@ TIMER
 systemctl daemon-reload
 systemctl enable portabase-backup.timer
 rm -f /tmp/portabase.tar.gz
-echo 'PortaBase installed. Run one manual service execution and a restore drill before relying on the schedule.'
+echo 'Portabase installed. Run one manual service execution and a restore drill before relying on the schedule.'

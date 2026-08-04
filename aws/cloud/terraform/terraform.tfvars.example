@@ -1,0 +1,15 @@
+project_name         = "portabase-cloud"
+aws_region           = "us-east-1"
+environment          = "prod"
+cognito_domain_prefix = "portabase-cloud-YOURUNIQUE"
+supabase_url         = "https://YOUR_PROJECT.supabase.co"
+# supabase_service_role_secret_arn = "arn:aws:secretsmanager:..."
+runner_image         = "ACCOUNT.dkr.ecr.us-east-1.amazonaws.com/portabase-runner:0.4.0"
+enable_nat_gateway   = true
+alarm_email          = "ops@example.com"
+console_callback_urls = [
+  "https://cloud.portabase.dev/auth/callback",
+  "http://localhost:5173/auth/callback"
+]
+enable_example_tenant_runner = false
+example_enable_tailscale     = false

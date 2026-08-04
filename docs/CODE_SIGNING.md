@@ -1,4 +1,4 @@
-# PortaBase code-signing and notarization runbook
+# Portabase code-signing and notarization runbook
 
 The engineering artifacts are intentionally unsigned. Never rename an unsigned build to hide that fact. A public release must be rebuilt on the target operating system with protected signing credentials, must fail when signing is unavailable, and must publish a SHA-256 checksum beside the download.
 
@@ -14,11 +14,11 @@ For the release build, set electron-builder `forceCodeSigning: true`; without th
 Verify on a clean Windows VM:
 
 ```powershell
-Get-AuthenticodeSignature .\PortaBase-Setup-0.3.1.exe | Format-List Status,StatusMessage,SignerCertificate,TimeStamperCertificate
-signtool verify /pa /v .\PortaBase-Setup-0.3.1.exe
+Get-AuthenticodeSignature .\Portabase-Setup-0.3.1.exe | Format-List Status,StatusMessage,SignerCertificate,TimeStamperCertificate
+signtool verify /pa /v .\Portabase-Setup-0.3.1.exe
 ```
 
-The required outcome is `Valid`/exit code zero, the expected PortaBase publisher identity, a valid timestamp, and a successful install/uninstall. See [Microsoft SignTool](https://learn.microsoft.com/windows/win32/seccrypto/signtool), [Microsoft signature verification](https://learn.microsoft.com/windows/win32/seccrypto/using-signtool-to-verify-a-file-signature), and [electron-builder Windows signing](https://www.electron.build/docs/features/code-signing/code-signing-win/).
+The required outcome is `Valid`/exit code zero, the expected Portabase publisher identity, a valid timestamp, and a successful install/uninstall. See [Microsoft SignTool](https://learn.microsoft.com/windows/win32/seccrypto/signtool), [Microsoft signature verification](https://learn.microsoft.com/windows/win32/seccrypto/using-signtool-to-verify-a-file-signature), and [electron-builder Windows signing](https://www.electron.build/docs/features/code-signing/code-signing-win/).
 
 ## macOS DMG and ZIP
 
@@ -31,16 +31,16 @@ The required outcome is `Valid`/exit code zero, the expected PortaBase publisher
 Verify on a clean current macOS machine:
 
 ```bash
-codesign --verify --deep --strict --verbose=2 "PortaBase.app"
-spctl --assess --type execute --verbose=4 "PortaBase.app"
-xcrun stapler validate "PortaBase-0.3.1.dmg"
+codesign --verify --deep --strict --verbose=2 "Portabase.app"
+spctl --assess --type execute --verbose=4 "Portabase.app"
+xcrun stapler validate "Portabase-0.3.1.dmg"
 ```
 
 Apple requires Developer ID signing and notarization for modern direct distribution; `notarytool` and `stapler` are the supported command-line tools. See [Apple Developer ID](https://developer.apple.com/support/developer-id/), [Apple notarization](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution), and [electron-builder macOS signing](https://www.electron.build/docs/features/code-signing/code-signing-mac/).
 
 ## Linux
 
-AppImage does not have a Windows/macOS-style platform trust prompt. Publish its SHA-256 checksum over HTTPS and optionally publish a detached GPG signature from a protected release key. If PortaBase later operates an APT repository, sign repository metadata and packages as part of that repository workflow. Do not call a checksum a code signature.
+AppImage does not have a Windows/macOS-style platform trust prompt. Publish its SHA-256 checksum over HTTPS and optionally publish a detached GPG signature from a protected release key. If Portabase later operates an APT repository, sign repository metadata and packages as part of that repository workflow. Do not call a checksum a code signature.
 
 ## Secret handling
 
@@ -52,4 +52,4 @@ AppImage does not have a Windows/macOS-style platform trust prompt. Publish its 
 
 ## Current blocker
 
-No PortaBase publisher certificate, Azure Trusted Signing profile, Apple Developer ID identity, or Apple notarization credential has been supplied to this workspace. The current Windows artifact is therefore correctly labeled `unsigned`; the Linux artifacts have verified hashes but no GPG signature; a public macOS DMG cannot be produced from Windows or Linux.
+No Portabase publisher certificate, Azure Trusted Signing profile, Apple Developer ID identity, or Apple notarization credential has been supplied to this workspace. The current Windows artifact is therefore correctly labeled `unsigned`; the Linux artifacts have verified hashes but no GPG signature; a public macOS DMG cannot be produced from Windows or Linux.

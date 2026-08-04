@@ -1,6 +1,6 @@
-# PortaBase AWS Recovery
+# Portabase AWS Recovery
 
-This package provisions a recovery vault and restore workspace inside an AWS account owned by the customer. PortaBase does not operate an AWS account, hosted control plane, credential relay, or telemetry service.
+This package provisions a recovery vault and restore workspace inside an AWS account owned by the customer. Portabase does not operate an AWS account, hosted control plane, credential relay, or telemetry service.
 
 ## The honest recovery claim
 
@@ -13,17 +13,17 @@ The stack makes the recovery mechanics ready before an incident:
 - source and target secret injection from the customer's Secrets Manager;
 - CloudWatch logs and failure/partial-capture alarms;
 - direct SNS notification to the customer; and
-- an image containing PortaBase, PostgreSQL clients, the pinned Supabase CLI, and AWS CLI v2.
+- an image containing Portabase, PostgreSQL clients, the pinned Supabase CLI, and AWS CLI v2.
 
 It is a recovery point and restore workspace, not a live replacement Supabase project. A fresh authorized target and explicit cutover are still required.
 
 ## Recommended AWS boundary
 
-Use a dedicated recovery account when practical. Enable root MFA, retain customer-controlled break-glass access, and do not share its administrator credentials with PortaBase. The stack roles can access only the named source/target secrets, the generated recovery bucket/prefix, the generated KMS key, ECR image pulls, and logs required by the tasks.
+Use a dedicated recovery account when practical. Enable root MFA, retain customer-controlled break-glass access, and do not share its administrator credentials with Portabase. The stack roles can access only the named source/target secrets, the generated recovery bucket/prefix, the generated KMS key, ECR image pulls, and logs required by the tasks.
 
 ## Build and publish the runner
 
-Create a customer ECR repository, authenticate Docker, build, scan, and push a versioned image. Prefer passing a digest URI to CloudFormation so a later tag change cannot silently alter the recovery runner. The stack defaults to 0.5 vCPU and 1 GB RAM with Fargate's default ephemeral disk: the smallest practical starting point for a modest PortaBase workload. Measure dump size, peak memory, transfer time, and temporary disk on the first run, then increase `TaskCpu` or `TaskMemory` only when evidence requires it.
+Create a customer ECR repository, authenticate Docker, build, scan, and push a versioned image. Prefer passing a digest URI to CloudFormation so a later tag change cannot silently alter the recovery runner. The stack defaults to 0.5 vCPU and 1 GB RAM with Fargate's default ephemeral disk: the smallest practical starting point for a modest Portabase workload. Measure dump size, peak memory, transfer time, and temporary disk on the first run, then increase `TaskCpu` or `TaskMemory` only when evidence requires it.
 
 ```powershell
 aws ecr create-repository --repository-name portabase-recovery --image-scanning-configuration scanOnPush=true --image-tag-mutability IMMUTABLE
@@ -121,7 +121,7 @@ Choose a capsule URI and update the target secret for a disposable fresh Supabas
 }
 ```
 
-Next run the same restore command with `"--preflight"` and the target secret injected. PortaBase requires zero application tables, zero Auth users, zero Storage buckets, and zero Edge Functions. Only after that passes, repeat with `"--execute", "--confirm-target", "NEW_TARGET_REF"`. PortaBase repeats the blank-target check immediately before writing, refuses a target equal to the source, refuses a target URL that does not contain the target ref, and refuses a confirmation mismatch.
+Next run the same restore command with `"--preflight"` and the target secret injected. Portabase requires zero application tables, zero Auth users, zero Storage buckets, and zero Edge Functions. Only after that passes, repeat with `"--execute", "--confirm-target", "NEW_TARGET_REF"`. Portabase repeats the blank-target check immediately before writing, refuses a target equal to the source, refuses a target URL that does not contain the target ref, and refuses a confirmation mismatch.
 
 The restore task rebuilds database roles/schema/data, Storage buckets/objects, and captured Functions. The operator must still reconfigure and verify Auth providers/templates, new API keys, Realtime settings, external secrets, custom domains, DNS, and application behavior before cutover.
 

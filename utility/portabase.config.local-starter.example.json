@@ -1,0 +1,38 @@
+{
+  "version": 3,
+  "projectRef": "your-supabase-project-ref",
+  "backupDirectory": "./portabase-capsules",
+  "statusDirectory": "./portabase-status",
+  "provider": {
+    "type": "local",
+    "mode": "local-starter",
+    "path": "./portabase-capsules/vault",
+    "maxBytes": 104857600,
+    "allowLargeLocal": false
+  },
+  "capture": {
+    "database": true,
+    "storage": true,
+    "functions": true
+  },
+  "encryption": {
+    "passphraseEnv": "PORTABASE_ENCRYPTION_PASSPHRASE"
+  },
+  "retention": {
+    "keepLast": 14,
+    "pruneAfterBackup": true
+  },
+  "schedule": {
+    "everyHours": 6
+  },
+  "cloud": {
+    "enabled": false,
+    "endpointEnv": "PORTABASE_CLOUD_URL",
+    "tokenEnv": "PORTABASE_CLOUD_TOKEN",
+    "agentId": null
+  },
+  "alerts": {
+    "webhookEnv": "PORTABASE_ALERT_WEBHOOK_URL"
+  },
+  "_comment": "Local Starter: no S3/Dropbox required. Encrypted capsules ≤ 100 MB land on a folder you own (PC, USB, or NAS path). Prefer Dropbox/S3 when you can — same-disk is not full Escape. Override with allowLargeLocal or --allow-large-local only if you accept that risk."
+}

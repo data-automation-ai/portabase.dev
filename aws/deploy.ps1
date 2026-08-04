@@ -29,7 +29,7 @@ $parameters = @(
 )
 if ($AlertEmail) { $parameters += "AlertEmail=$AlertEmail" }
 
-Write-Host "Validated PortaBase recovery stack: $StackName"
+Write-Host "Validated Portabase recovery stack: $StackName"
 Write-Host "Project ref: $ProjectRef"
 Write-Host "Object Lock: $ObjectLockMode"
 Write-Host "Schedule: $ScheduleExpression"

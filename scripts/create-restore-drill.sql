@@ -11,7 +11,7 @@ end $$;
 
 create schema portabase_drill;
 comment on schema portabase_drill is
-  'Deterministic synthetic fixture for PortaBase fresh-project restore acceptance.';
+  'Deterministic synthetic fixture for Portabase fresh-project restore acceptance.';
 
 create table portabase_drill.customers (
   id uuid primary key,

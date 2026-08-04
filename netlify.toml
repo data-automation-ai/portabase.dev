@@ -26,6 +26,51 @@
   status = 200
 
 [[redirects]]
+  from = "/api/cloud/telemetry"
+  to = "/.netlify/functions/cloud-telemetry"
+  status = 200
+
+[[redirects]]
+  from = "/api/cloud/interest"
+  to = "/.netlify/functions/cloud-interest"
+  status = 200
+
+[[redirects]]
+  from = "/api/auth/config"
+  to = "/.netlify/functions/auth-config"
+  status = 200
+
+[[redirects]]
+  from = "/api/cloud/me"
+  to = "/.netlify/functions/cloud-me"
+  status = 200
+
+[[redirects]]
+  from = "/api/cloud/subscribe"
+  to = "/.netlify/functions/cloud-subscribe"
+  status = 200
+
+[[redirects]]
+  from = "/api/cloud/confirm-checkout"
+  to = "/.netlify/functions/cloud-confirm-checkout"
+  status = 200
+
+[[redirects]]
+  from = "/api/cloud/jobs"
+  to = "/.netlify/functions/cloud-jobs"
+  status = 200
+
+[[redirects]]
+  from = "/api/cloud/audit-trail"
+  to = "/.netlify/functions/cloud-audit-trail"
+  status = 200
+
+[[redirects]]
+  from = "/api/cloud/cloudwatch-live"
+  to = "/.netlify/functions/cloud-cloudwatch-live"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

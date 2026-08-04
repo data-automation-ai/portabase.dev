@@ -148,7 +148,7 @@ async function connectCloud(provider) {
 }
 
 async function installDesktopSchedule(everyHours) {
-  if (!app.isPackaged) throw new Error('Build and install PortaBase before installing its automatic schedule.');
+  if (!app.isPackaged) throw new Error('Build and install Portabase before installing its automatic schedule.');
   if (!existsSync(userFile('portabase.config.json'))) throw new Error('Save a project configuration before installing the schedule.');
   const secrets = await loadSecrets();
   if (!secrets.secure || !secrets.values.SUPABASE_DB_URL || !secrets.values.PORTABASE_ENCRYPTION_PASSPHRASE) throw new Error('Save the required credentials in protected operating-system storage before scheduling.');
@@ -227,11 +227,11 @@ function registerIpc() {
     const clean = {
       version: 2,
       projectRef: String(config?.projectRef || '').trim(),
-      backupDirectory: String(config?.backupDirectory || path.join(app.getPath('documents'), 'PortaBase Capsules')),
+      backupDirectory: String(config?.backupDirectory || path.join(app.getPath('documents'), 'Portabase Capsules')),
       statusDirectory: String(config?.statusDirectory || path.join(app.getPath('userData'), 'status')),
       provider: cloud
-        ? { type: cloud, remote: CLOUD_REMOTES[cloud][0], path: '/PortaBase' }
-        : { type: 'local', path: String(config?.destination || path.join(app.getPath('documents'), 'PortaBase Independent Copy')) },
+        ? { type: cloud, remote: CLOUD_REMOTES[cloud][0], path: '/Portabase' }
+        : { type: 'local', path: String(config?.destination || path.join(app.getPath('documents'), 'Portabase Independent Copy')) },
       capture: { database: true, storage: true, functions: true },
       encryption: { passphraseEnv: 'PORTABASE_ENCRYPTION_PASSPHRASE' },
       retention: { keepLast: 30, pruneAfterBackup: false },
@@ -276,7 +276,7 @@ function registerIpc() {
   });
   ipcMain.handle('portabase:import-license', async event => {
     if (!validateSender(event)) throw new Error('Untrusted renderer.');
-    const result = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'PortaBase license', extensions: ['json'] }] });
+    const result = await dialog.showOpenDialog({ properties: ['openFile'], filters: [{ name: 'Portabase license', extensions: ['json'] }] });
     if (result.canceled) return null;
     const selected = result.filePaths[0];
     const license = await inspectInstalledLicense(selected);
@@ -305,7 +305,7 @@ function registerIpc() {
     const resolved = path.resolve(reportPath.trim());
     const isTrialReport = path.basename(resolved) === 'TRIAL-REPORT.html';
     const isEvidence = resolved.startsWith(userFile('recovery-evidence') + path.sep) && resolved.endsWith('.html');
-    if ((!isTrialReport && !isEvidence) || !existsSync(resolved)) throw new Error('Only PortaBase-generated reports can be opened.');
+    if ((!isTrialReport && !isEvidence) || !existsSync(resolved)) throw new Error('Only Portabase-generated reports can be opened.');
     const problem = await shell.openPath(resolved);
     if (problem) throw new Error(problem);
     return true;

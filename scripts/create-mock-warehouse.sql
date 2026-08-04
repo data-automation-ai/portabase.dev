@@ -17,7 +17,7 @@ BEGIN;
 
 CREATE SCHEMA mock_warehouse;
 COMMENT ON SCHEMA mock_warehouse IS
-  'Entirely synthetic analytics warehouse created for PortaBase backup and recovery testing.';
+  'Entirely synthetic analytics warehouse created for Portabase backup and recovery testing.';
 
 SET search_path = mock_warehouse, public;
 

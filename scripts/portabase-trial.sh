@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# PortaBase limited trial — Linux/macOS one-command runner.
+# Portabase limited trial — Linux/macOS one-command runner.
 # Runs the real backup workflow with trial limits, then opens the protection ledger.
-# Nothing is transmitted to PortaBase: credentials come from your environment,
+# Nothing is transmitted to Portabase: credentials come from your environment,
 # the capsule is encrypted locally, and the report is written to local disk.
 set -euo pipefail
 
@@ -13,7 +13,7 @@ fail() { printf 'portabase-trial: %s\n' "$1" >&2; exit 1; }
 command -v node >/dev/null 2>&1 || fail 'Node.js 20+ is required (https://nodejs.org).'
 node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 20 ? 0 : 1)' \
   || fail "Node.js 20+ is required; found $(node --version)."
-[ -f "$cli" ] || fail "PortaBase CLI not found at $cli"
+[ -f "$cli" ] || fail "Portabase CLI not found at $cli"
 
 # Optional tools: report presence, do not block (the CLI degrades gracefully).
 for tool in pg_dump psql tar; do

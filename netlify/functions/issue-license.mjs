@@ -64,7 +64,7 @@ export async function handler(event) {
       statusCode: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Content-Disposition': `attachment; filename="PortaBase-${platform}-${fingerprint}.license.json"`,
+        'Content-Disposition': `attachment; filename="Portabase-${platform}-${fingerprint}.license.json"`,
         'Cache-Control': 'no-store',
       },
       body: `${JSON.stringify(license, null, 2)}\n`,

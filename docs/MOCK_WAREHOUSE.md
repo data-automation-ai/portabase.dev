@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The `mock_warehouse` schema is a deterministic, entirely synthetic analytics workload created in the isolated Redshift White Papers Supabase project. It exists to exercise PortaBase capture, encryption, transfer, verification, and future restore drills at a meaningful database size without touching existing application schemas.
+The `mock_warehouse` schema is a deterministic, entirely synthetic analytics workload created in the isolated Redshift White Papers Supabase project. It exists to exercise Portabase capture, encryption, transfer, verification, and future restore drills at a meaningful database size without touching existing application schemas.
 
 No names, email addresses, tracking codes, or business records in this schema represent real people or transactions. Synthetic email addresses use the reserved `.invalid` domain.
 
@@ -29,7 +29,7 @@ On July 12, 2026:
 - The complete database grew from 11 MB to 360 MB.
 - The tested sales relationships contained zero orphan customer, product, or date references.
 - The largest relation was `fact_sales` at 223 MB including indexes.
-- A full PortaBase capture completed for database, Storage, and two Edge Functions.
+- A full Portabase capture completed for database, Storage, and two Edge Functions.
 - The independently copied encrypted capsule was 58.3 MB.
 - Outer checksums, AES-GCM authentication, ciphertext hash, and decrypted payload hash all verified.
 

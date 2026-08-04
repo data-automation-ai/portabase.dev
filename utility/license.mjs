@@ -31,10 +31,27 @@ export async function inspectEncodedLicense(encoded, platform = process.platform
   }
 }
 
+/**
+ * Open-core: full capture is free by default.
+ * Explicit --trial / PORTABASE_EDITION=trial enables limited demo mode only.
+ * Legacy signed licenses are inspected for metadata but never gate features.
+ */
 export async function resolveEdition({ forceTrial = false, licensePath, platform = process.platform } = {}) {
-  if (forceTrial || process.env.PORTABASE_EDITION === 'trial') return { edition: 'trial', license: { valid: false, reason: 'trial_requested' } };
+  if (forceTrial || process.env.PORTABASE_EDITION === 'trial') {
+    return {
+      edition: 'trial',
+      license: { valid: false, reason: 'demo_mode_requested' },
+    };
+  }
+
   const license = process.env.PORTABASE_LICENSE_ENVELOPE_BASE64
     ? await inspectEncodedLicense(process.env.PORTABASE_LICENSE_ENVELOPE_BASE64, platform)
     : await inspectLicense(licensePath || process.env.PORTABASE_LICENSE_FILE || './portabase.license.json', platform);
-  return { edition: license.valid ? 'essentials' : 'trial', license };
+
+  return {
+    edition: 'community',
+    license: license.valid
+      ? license
+      : { valid: false, reason: 'open_core_no_license_required' },
+  };
 }

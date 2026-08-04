@@ -236,7 +236,7 @@ guided.cloud = null;
 async function chooseGuidedCloud(provider, button) {
   try {
     if (provider) {
-      guidedStatus('gDestStatus', 'Your browser is opening — sign in and approve access. PortaBase never sees that password.');
+      guidedStatus('gDestStatus', 'Your browser is opening — sign in and approve access. Portabase never sees that password.');
       await window.portabase.connectCloud(provider);
     }
     guided.cloud = provider;
@@ -258,11 +258,11 @@ async function guidedSaveAll() {
 }
 $('gProtect').addEventListener('click', async () => {
   try {
-    if (!guided.credentials) return guidedStatus('gStep4Status', 'Finish step 2 first — PortaBase needs a verified connection.');
+    if (!guided.credentials) return guidedStatus('gStep4Status', 'Finish step 2 first — Portabase needs a verified connection.');
     guidedStatus('gStep4Status', 'Saving everything into protected local storage…');
     await guidedSaveAll();
     const state = await window.portabase.state();
-    await run('backup', state.license?.valid ? [] : ['--trial'], {
+    await run('backup', [], {
       SUPABASE_DB_URL: guided.credentials.dbUrl, SUPABASE_URL: guided.credentials.url,
       SUPABASE_SERVICE_ROLE_KEY: guided.credentials.adminKey, SUPABASE_ACCESS_TOKEN: guided.token,
       PORTABASE_ENCRYPTION_PASSPHRASE: $('gPassphrase').value,
@@ -295,7 +295,7 @@ document.querySelector('[data-pick="destination"]').addEventListener('click', as
   if (picked) { $('destination').value = picked; standardCloud = null; $('cloudStatus').textContent = ''; }
 });
 document.querySelector('[data-pick="capsule"]').addEventListener('click', async () => { $('capsule').value = await window.portabase.chooseCapsule() || $('capsule').value; });
-$('buy').addEventListener('click', () => window.portabase.open('https://portabase.dev/buy'));
+$('buy').addEventListener('click', () => window.portabase.open('https://portabase.dev/#cloud'));
 $('newAccount').addEventListener('click', () => window.portabase.open('https://supabase.com/dashboard/sign-up'));
 $('newToken').addEventListener('click', () => window.portabase.open('https://supabase.com/dashboard/account/tokens'));
 $('loadOrgs').addEventListener('click', async () => {
@@ -327,7 +327,7 @@ $('saveSource').addEventListener('click', async () => {
   try {
     await window.portabase.saveConfig({ projectRef: $('projectRef').value, destination: $('destination').value, cloud: standardCloud });
     await window.portabase.saveSecrets(secretValues());
-    result('Saved locally using protected operating-system storage. PortaBase did not transmit these values.');
+    result('Saved locally using protected operating-system storage. Portabase did not transmit these values.');
   } catch (error) { result(error.message, true); }
 });
 $('doctor').addEventListener('click', async () => {
@@ -346,16 +346,16 @@ $('importLicense').addEventListener('click', async () => {
   try {
     const license = await window.portabase.importLicense();
     if (!license) return;
-    $('licenseStatus').textContent = `Essentials licensed · ${license.payload.platform} · lifetime updates`;
-    result('Paid license verified and stored locally. Complete backups are now enabled on this platform.');
+    $('licenseStatus').textContent = `Legacy license file stored · ${license.payload.platform} (not required for full capture)`;
+    result('Legacy license file verified and stored. Open-core Portabase does not require a license for full backups.');
   } catch (error) { result(error.message, true); }
 });
 $('installSchedule').addEventListener('click', async () => {
-  try { const schedule = await window.portabase.installSchedule(6); result(`Automatic backup installed for this ${schedule.platform} computer. PortaBase will run every ${schedule.everyHours} hours using protected local credentials.`); }
+  try { const schedule = await window.portabase.installSchedule(6); result(`Automatic backup installed for this ${schedule.platform} computer. Portabase will run every ${schedule.everyHours} hours using protected local credentials.`); }
   catch (error) { result(error.message, true); }
 });
 $('removeSchedule').addEventListener('click', async () => {
-  try { await window.portabase.removeSchedule(); result('The automatic PortaBase schedule was removed. Existing recovery capsules were not deleted.'); }
+  try { await window.portabase.removeSchedule(); result('The automatic Portabase schedule was removed. Existing recovery capsules were not deleted.'); }
   catch (error) { result(error.message, true); }
 });
 $('dryRun').addEventListener('click', () => run('restore', ['--capsule', $('capsule').value, '--preflight'], targetValues()));
@@ -375,7 +375,7 @@ $('executeRestore').addEventListener('click', async () => {
 window.portabase.state().then(state => {
   $('security').textContent = state.secureStorage ? '● OS-protected secret storage available' : '● Secure secret storage unavailable; values will not be persisted';
   $('security').classList.toggle('warn', !state.secureStorage);
-  $('licenseStatus').textContent = state.license?.valid ? `Essentials licensed · ${state.license.payload.platform} · lifetime updates` : `Trial edition · ${state.license?.reason || 'license missing'}`;
+  $('licenseStatus').textContent = 'Community edition · full open-source capture · no license required';
   if (state.config) { $('projectRef').value = state.config.projectRef || ''; $('destination').value = state.config.provider?.path || ''; }
   show(state.comfortLevel ? HOME_PAGE[state.comfortLevel] : 'comfort');
 }).catch(error => result(error.message, true));

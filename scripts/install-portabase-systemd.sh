@@ -35,7 +35,7 @@ fi
 
 cat > /etc/systemd/system/portabase-backup.service <<'SERVICE'
 [Unit]
-Description=PortaBase encrypted Supabase recovery capture
+Description=Portabase encrypted Supabase recovery capture
 After=network-online.target
 Wants=network-online.target
 
@@ -55,7 +55,7 @@ SERVICE
 
 cat > /etc/systemd/system/portabase-backup.timer <<'TIMER'
 [Unit]
-Description=Run PortaBase every six hours
+Description=Run Portabase every six hours
 
 [Timer]
 OnBootSec=15min

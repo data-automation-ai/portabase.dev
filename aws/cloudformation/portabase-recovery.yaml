@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Customer-owned PortaBase AWS Recovery vault, scheduled backup runner, and guarded restore workspace.
+Description: Customer-owned Portabase AWS Recovery vault, scheduled backup runner, and guarded restore workspace.
 
 Parameters:
   ProjectRef:
@@ -8,7 +8,7 @@ Parameters:
     Description: Source Supabase project reference.
   ContainerImage:
     Type: String
-    Description: Immutable PortaBase runner image URI, preferably pinned by digest.
+    Description: Immutable Portabase runner image URI, preferably pinned by digest.
   SourceSecretArn:
     Type: String
     Description: Secrets Manager JSON secret containing the required source and encryption fields.
@@ -66,7 +66,7 @@ Resources:
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
-      Description: !Sub PortaBase recovery vault key for ${ProjectRef}
+      Description: !Sub Portabase recovery vault key for ${ProjectRef}
       EnableKeyRotation: true
       PendingWindowInDays: 30
       KeyPolicy:
@@ -155,7 +155,7 @@ Resources:
   TaskSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Egress-only PortaBase recovery runner
+      GroupDescription: Egress-only Portabase recovery runner
       VpcId: !Ref VpcId
       SecurityGroupEgress:
         - IpProtocol: '-1'
@@ -172,7 +172,7 @@ Resources:
   AlertTopic:
     Type: AWS::SNS::Topic
     Properties:
-      DisplayName: !Sub PortaBase ${ProjectRef}
+      DisplayName: !Sub Portabase ${ProjectRef}
       KmsMasterKeyId: alias/aws/sns
 
   AlertSubscription:
@@ -361,9 +361,9 @@ Resources:
     Type: AWS::Logs::MetricFilter
     Properties:
       LogGroupName: !Ref LogGroup
-      FilterPattern: '?"PortaBase failed" ?"PARTIAL:" ?"FAILED:"'
+      FilterPattern: '?"Portabase failed" ?"PARTIAL:" ?"FAILED:"'
       MetricTransformations:
-        - MetricNamespace: PortaBase
+        - MetricNamespace: Portabase
           MetricName: !Sub BackupFailures-${ProjectRef}
           MetricValue: '1'
           DefaultValue: 0
@@ -371,8 +371,8 @@ Resources:
   FailureAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmDescription: !Sub PortaBase backup failure for ${ProjectRef}
-      Namespace: PortaBase
+      AlarmDescription: !Sub Portabase backup failure for ${ProjectRef}
+      Namespace: Portabase
       MetricName: !Sub BackupFailures-${ProjectRef}
       Statistic: Sum
       Period: 300

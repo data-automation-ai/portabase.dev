@@ -23,11 +23,11 @@ variable "disk_size_gb" {
 }
 variable "secret_id" {
   type        = string
-  description = "Existing Secret Manager secret ID containing the PortaBase environment JSON. Secret values never enter Terraform."
+  description = "Existing Secret Manager secret ID containing the Portabase environment JSON. Secret values never enter Terraform."
 }
 variable "package_url" {
   type        = string
-  description = "HTTPS URL for the licensed PortaBase Linux package archive."
+  description = "HTTPS URL for the licensed Portabase Linux package archive."
   validation {
     condition     = startswith(var.package_url, "https://")
     error_message = "package_url must use HTTPS."
@@ -54,7 +54,7 @@ variable "rclone_remote" {
 }
 variable "destination_path" {
   type    = string
-  default = "/PortaBase"
+  default = "/Portabase"
 }
 variable "schedule_hours" {
   type    = number

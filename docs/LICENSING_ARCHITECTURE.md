@@ -1,30 +1,40 @@
-# Offline license and copy-deterrence architecture
+# Licensing and open-core commercial model
 
-Electron is the interface, not the protection boundary. ASAR files can be unpacked and JavaScript obfuscation is not meaningful license enforcement.
+**Supersedes** the closed $147 lifetime software-unlock model.
 
-## Implemented paid-license design
+## Current model
 
-1. PortaBase has an Ed25519 signing key pair. The private key is held in the PortaBase AWS `secrets-bundle`, with an encrypted Netlify function environment fallback; only the public key ships with the application.
-2. After Square confirms a completed $147 Essentials order, `/api/license/claim` atomically binds the order to the customer's selected platform and mints a lifetime signed license with free future updates.
-3. The desktop app imports the small license file and verifies it entirely offline. No Supabase key, cloud credential, passphrase, capsule, machine inventory, or backup metadata is sent to PortaBase.
-4. Missing, malformed, altered, or wrong-platform licenses fail closed to the indefinite trial limits. Emergency restore is never disabled by a commercial-license check.
-5. A customer can retain and reuse the same license file on customer-owned machines for its selected platform; the purchase is not coupled to a PortaBase login service.
+Portabase is **Apache-2.0 open source**. Full backup and restore require no commercial license.
 
-## Hardening still required
+| Product | Access | Monetization |
+| --- | --- | --- |
+| Recovery engine, CLI, basic GUI, capsule format | Open source | Free |
+| Portabase Cloud console niceties, telemetry, multi-person alert chains | Hosted SaaS | Paid subscription (in development) |
 
-1. Move trial-limit enforcement, capsule capture, and restore execution into a compiled Rust core shared by Windows, macOS, and Linux. The current JavaScript/ASAR implementation deters casual copying but can be patched by a determined attacker.
-2. Code-sign every platform binary and publish hashes. macOS additionally requires Developer ID signing, notarization, and ticket stapling.
-3. Complete controlled Square sandbox and live-purchase/refund acceptance tests before enabling public checkout.
+See [OPEN_CORE.md](./OPEN_CORE.md).
 
-## Customer-fair policy
+## Legacy offline license files
 
-- The purchased software keeps working offline even if PortaBase disappears.
-- Every future PortaBase software update is included at no additional charge.
-- License verification must never be on the backup critical path through a PortaBase server.
-- Allow at least two customer-owned machines and a documented offline recovery process.
-- A hardware change must not make an existing recovery capsule unreadable.
-- The encryption passphrase and capsule format are independent of the commercial license.
+The Ed25519 license verifier remains for:
 
-## Public-release blocker
+- Historical Square orders that already issued platform-bound license files
+- Regression tests of the signature format
+- Optional legacy import in desktop (no feature unlock)
 
-Signed offline fulfillment is implemented, but the installers remain unsigned and the recovery acceptance suite has not yet completed a live write-and-verify restore into a new disposable Supabase account. Do not claim a signed production release or proven one-click disaster recovery until those gates pass. Do not describe the JavaScript implementation as unbreakable copy protection.
+`resolveEdition()` always returns `community` unless the operator explicitly requests demo mode (`--trial` / `PORTABASE_EDITION=trial`).
+
+## What we never do
+
+- Gate encryption, full capture, or restore behind a paywall
+- Put license checks on the backup critical path through a Portabase server
+- Claim JavaScript packaging is strong copy protection
+
+## Cloud entitlements (future)
+
+Cloud subscriptions will authorize:
+
+- Agent tokens for telemetry ingest
+- Console workspace seats
+- SMS / escalation routing capacity
+
+They will **not** authorize the right to run the recovery engine offline.

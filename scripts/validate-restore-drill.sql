@@ -1,4 +1,4 @@
--- Read-only acceptance queries for the disposable PortaBase restore target.
+-- Read-only acceptance queries for the disposable Portabase restore target.
 -- Run only after confirming this is the new destination project.
 
 select 'customers' as fixture, count(*)::bigint as actual_rows from portabase_drill.customers

@@ -30,7 +30,7 @@ const buckets = [
 for (const bucket of buckets) await request('/storage/v1/bucket', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bucket) });
 
 const objects = [
-  ['portabase-drill-private', 'notes/readme.txt', 'PortaBase restore drill\n', 'text/plain'],
+  ['portabase-drill-private', 'notes/readme.txt', 'Portabase restore drill\n', 'text/plain'],
   ['portabase-drill-private', 'orders/sample.json', '{"order":"20000000-0000-4000-8000-000000000001","status":"paid"}\n', 'application/json'],
   ['portabase-drill-private', 'nested/deep/check.txt', 'nested-object-ok\n', 'text/plain'],
   ['portabase-drill-media', 'status.json', '{"fixture":"portabase_restore_drill","ok":true}\n', 'application/json'],

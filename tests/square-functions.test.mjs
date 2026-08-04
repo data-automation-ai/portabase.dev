@@ -2,27 +2,36 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { WebhooksHelper } from 'square';
-import { buildSquarePaymentLinkRequest } from '../netlify/functions/create-square-checkout.mjs';
+import { buildSquarePaymentLinkRequest, handler as checkoutHandler } from '../netlify/functions/create-square-checkout.mjs';
 import { isPaidEssentialsOrder } from '../netlify/functions/square-order.mjs';
 import { buildLicensePayload } from '../netlify/functions/issue-license.mjs';
 
-test('Square payment link is exactly one non-recurring $147 USD license', () => {
-  const request = buildSquarePaymentLinkRequest({ locationId: 'LOCATION', attempt: 'ATTEMPT', siteUrl: 'https://portabase.dev' });
-  assert.equal(request.order.line_items.length, 1);
-  assert.deepEqual(request.order.line_items[0], { name: 'PortaBase Essentials — One-Platform Software License', quantity: '1', base_price_money: { amount: 14700, currency: 'USD' } });
-  assert.match(request.description, /Windows, macOS, or Linux/);
-  assert.equal(request.checkout_options.redirect_url, 'https://portabase.dev/thanks');
-  assert.equal(request.checkout_options.allow_tipping, false);
+test('legacy $147 checkout endpoint is retired (410)', async () => {
+  assert.throws(() => buildSquarePaymentLinkRequest({}), /legacy_147_checkout_retired/);
+  const res = await checkoutHandler({ httpMethod: 'POST', headers: {} });
+  assert.equal(res.statusCode, 410);
+  const body = JSON.parse(res.body);
+  assert.equal(body.error, 'legacy_checkout_retired');
+  assert.equal(body.priceMonthlyUsd, 17);
+  assert.match(body.message, /open source/i);
 });
 
-test('payment verification rejects incomplete or price-altered orders', () => {
-  const valid = { state: 'COMPLETED', line_items: [{ name: 'PortaBase Essentials — One-Platform Software License', quantity: '1', base_price_money: { amount: 14700, currency: 'USD' } }], total_money: { amount: 14700, currency: 'USD' } };
+test('legacy payment verification still recognizes historical $147 Essentials orders only', () => {
+  const valid = {
+    state: 'COMPLETED',
+    line_items: [{
+      name: 'Portabase Essentials — One-Platform Software License',
+      quantity: '1',
+      base_price_money: { amount: 14700, currency: 'USD' },
+    }],
+    total_money: { amount: 14700, currency: 'USD' },
+  };
   assert.equal(isPaidEssentialsOrder(valid), true);
   assert.equal(isPaidEssentialsOrder({ ...valid, state: 'OPEN' }), false);
   assert.equal(isPaidEssentialsOrder({ ...valid, total_money: { amount: 100, currency: 'USD' } }), false);
 });
 
-test('license fulfillment binds a paid order to one platform and lifetime updates', () => {
+test('legacy license fulfillment binds a paid order to one platform and lifetime updates', () => {
   const license = buildLicensePayload({ orderId: 'ORDER_12345678', platform: 'linux', issuedAt: '2026-07-13T00:00:00.000Z', licenseId: 'LICENSE_1' });
   assert.equal(license.platform, 'linux');
   assert.equal(license.projectAllowance, 1);

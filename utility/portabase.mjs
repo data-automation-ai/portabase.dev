@@ -34,19 +34,43 @@ import {
   formatBytes,
   recoveryEvidenceStatus,
   safeObjectPath,
+  DATA_SCHEMA_EXCLUDES,
+  generateFunctionRedeployScripts,
+  PINNED_SUPABASE_CLI,
+  schemaExcludePattern,
+  shouldSkipStorageDownload,
+  storageCacheKey,
+  storageObjectIdentity,
   supabaseHeaders,
+  mapPool,
+  resolveStorageConcurrency,
   TRIAL_LIMITS,
   trialProtectionLedger,
   validateBlankRestoreInventory,
   validateDrillCapsule,
   validateRestoreTarget,
   verifyChecksumFile,
+  packDirectoryTarGz,
+  LOCAL_STARTER_MAX_BYTES,
+  LOCAL_STARTER_MAX_LABEL,
+  isLocalProvider,
+  directoryByteSize,
+  assertLocalStarterSize,
+  localStarterPolicyNote,
 } from './portabase-core.mjs';
 import { resolveEdition } from './license.mjs';
+import { emitTelemetry } from './telemetry.mjs';
 
-export { providerCommand, safeObjectPath, validateRestoreTarget } from './portabase-core.mjs';
+export {
+  providerCommand,
+  safeObjectPath,
+  validateRestoreTarget,
+  generateFunctionRedeployScripts,
+  shouldSkipStorageDownload,
+  storageObjectIdentity,
+} from './portabase-core.mjs';
 
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 const CONFIG_NAME = 'portabase.config.json';
 const argv = process.argv.slice(2);
 const command = argv[0] || 'help';
@@ -121,25 +145,47 @@ function run(name, commandArgs, options = {}) {
 
 async function init() {
   const projectRef = flag('project-ref') || await ask('Supabase project ref');
-  const providerType = flag('provider') || await ask('Destination (google-drive, dropbox, local)', 'google-drive');
+  const providerType = flag('provider') || await ask('Destination (google-drive, dropbox, local, aws)', 'local');
   const config = {
-    version: 2,
+    version: 3,
     projectRef,
     backupDirectory: flag('directory', './portabase-capsules'),
     statusDirectory: './portabase-status',
     provider: { type: providerType },
     capture: { database: true, storage: true, functions: true },
     encryption: { passphraseEnv: 'PORTABASE_ENCRYPTION_PASSPHRASE' },
-    retention: { keepLast: 30, pruneAfterBackup: false },
+    retention: { keepLast: 14, pruneAfterBackup: true },
     schedule: { everyHours: 6 },
+    cloud: {
+      enabled: false,
+      endpointEnv: 'PORTABASE_CLOUD_URL',
+      tokenEnv: 'PORTABASE_CLOUD_TOKEN',
+      agentId: null,
+    },
+    alerts: {
+      webhookEnv: 'PORTABASE_ALERT_WEBHOOK_URL',
+    },
   };
   if (['google-drive', 'dropbox', 'rclone'].includes(providerType)) {
     config.provider.remote = flag('remote') || await ask('rclone remote name', providerType === 'google-drive' ? 'gdrive' : 'dropbox');
-    config.provider.path = flag('path', '/PortaBase');
+    config.provider.path = flag('path', '/Portabase');
   } else if (providerType === 'local') {
-    config.provider.path = flag('path') || await ask('Independent local/NAS destination (blank keeps capsule directory)', '');
+    // Local Starter: no third-party vault required — folder on this PC / USB / NAS.
+    const defaultPath = resolve('./portabase-capsules/vault');
+    config.provider.path = flag('path') || await ask(
+      `Local Starter vault folder (≤ ${LOCAL_STARTER_MAX_LABEL} per capsule; blank = ${defaultPath})`,
+      defaultPath,
+    ) || defaultPath;
+    config.provider.mode = 'local-starter';
+    config.provider.maxBytes = LOCAL_STARTER_MAX_BYTES;
+    config.provider.allowLargeLocal = hasFlag('allow-large-local');
+    console.log(`\n${localStarterPolicyNote()}`);
+    console.log('Prefer Dropbox or S3 when you can — Escape fails if this disk dies with the laptop.');
+  } else if (providerType === 'aws') {
+    config.provider.bucket = flag('bucket') || await ask('S3 bucket name');
+    config.provider.prefix = flag('prefix', 'portabase');
   } else {
-    throw new Error('Essentials supports google-drive, dropbox, rclone, or local. AWS is configured by the AWS Recovery package.');
+    throw new Error('Supported destinations: local (starter), google-drive, dropbox, rclone, aws.');
   }
   if (!projectRef) throw new Error('Project ref is required.');
   await writeFile(resolve(CONFIG_NAME), `${JSON.stringify(config, null, 2)}\n`, { flag: 'wx' });
@@ -179,28 +225,101 @@ async function authenticatedHealth() {
 async function doctor() {
   const { config } = await loadConfig();
   const rcloneNeeded = ['google-drive', 'dropbox', 'rclone'].includes(config.provider.type);
+  const awsNeeded = config.provider.type === 'aws';
   const nativePostgres = Boolean(resolveTool('pg_dump') && resolveTool('pg_dumpall'));
+  const installHints = [];
+  if (!nativePostgres && !resolveTool('supabase')) {
+    installHints.push('Install PostgreSQL client tools (pg_dump) OR Supabase CLI: https://supabase.com/docs/guides/cli');
+  }
+  if (!resolveTool('tar')) installHints.push('Install tar (Windows: Git for Windows or bsdtar).');
+  if (rcloneNeeded && !resolveTool('rclone')) installHints.push('Install rclone: https://rclone.org/install/');
+  if (awsNeeded && !resolveTool('aws')) installHints.push('Install AWS CLI v2: https://docs.aws.amazon.com/cli/');
+  if (!process.env.SUPABASE_ACCESS_TOKEN) {
+    installHints.push('Optional: set SUPABASE_ACCESS_TOKEN for Edge Functions (CLI or Management API fallback).');
+  }
+  if (isLocalProvider(config)) {
+    installHints.push(localStarterPolicyNote());
+    installHints.push('Local Starter is for no S3/Dropbox yet. Prefer off-machine storage for real Escape.');
+  } else {
+    installHints.push('You provide binary storage (S3/Drive/Dropbox/NAS). Portabase Cloud never hosts capsules.');
+  }
+  installHints.push('After first complete backup, run: portabase replay --confirm-target <NEW_REF> (prove restore works).');
+
   const checks = [
     ['Postgres dump tools', nativePostgres || Boolean(resolveTool('supabase')), nativePostgres ? 'native; Docker not required' : 'Supabase CLI fallback'],
-    ['Supabase CLI', Boolean(resolveTool('supabase')), 'Edge Function capture'],
+    ['Supabase CLI', Boolean(resolveTool('supabase')), `Edge Functions (pin ${PINNED_SUPABASE_CLI}; Management API fallback if missing)`],
     ['tar', Boolean(resolveTool('tar')), 'encrypted capsule packaging'],
     ['SUPABASE_DB_URL', Boolean(process.env.SUPABASE_DB_URL), 'database capture'],
     ['SUPABASE_URL', Boolean(process.env.SUPABASE_URL), 'Storage capture'],
-    ['SUPABASE_SERVICE_ROLE_KEY', Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY), 'Storage capture'],
-    ['SUPABASE_ACCESS_TOKEN', Boolean(process.env.SUPABASE_ACCESS_TOKEN), 'optional; Edge Function capture'],
-    ['Encryption passphrase', Boolean(process.env[config.encryption?.passphraseEnv || 'PORTABASE_ENCRYPTION_PASSPHRASE']?.length >= 16), 'minimum 16 characters'],
-    [rcloneNeeded ? 'rclone CLI' : 'Local destination', rcloneNeeded ? Boolean(resolveTool('rclone')) : true, 'destination transfer'],
+    ['SUPABASE_SERVICE_ROLE_KEY', Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY), 'Storage + Auth inventory'],
+    ['SUPABASE_ACCESS_TOKEN', Boolean(process.env.SUPABASE_ACCESS_TOKEN), 'Edge Functions (recommended)'],
+    ['Encryption passphrase', Boolean(process.env[config.encryption?.passphraseEnv || 'PORTABASE_ENCRYPTION_PASSPHRASE']?.length >= 16), 'minimum 16 characters · never sent to Cloud'],
+    [rcloneNeeded ? 'rclone CLI' : awsNeeded ? 'AWS CLI' : 'Local Starter vault',
+      rcloneNeeded ? Boolean(resolveTool('rclone')) : awsNeeded ? Boolean(resolveTool('aws')) : true,
+      isLocalProvider(config)
+        ? `folder on this PC/USB/NAS · max ${LOCAL_STARTER_MAX_LABEL}/capsule`
+        : 'destination transfer (BYO storage)'],
   ];
   if (rcloneNeeded && resolveTool('rclone')) {
     const remotes = spawnSync(resolveTool('rclone'), ['listremotes'], { encoding: 'utf8', windowsHide: true });
     checks.push(['rclone remote', remotes.status === 0 && remotes.stdout.split(/\r?\n/).includes(`${config.provider.remote}:`), 'configured customer account']);
   }
+  if (awsNeeded && config.provider.bucket) {
+    checks.push(['AWS bucket configured', Boolean(config.provider.bucket), config.provider.bucket]);
+  }
+  if (isLocalProvider(config)) {
+    const vaultPath = config.provider.path
+      ? resolve(config.provider.path)
+      : resolve(config.backupDirectory || './portabase-capsules');
+    let vaultOk = true;
+    try {
+      await mkdir(vaultPath, { recursive: true });
+    } catch {
+      vaultOk = false;
+    }
+    checks.push(['Local vault path writable', vaultOk, vaultPath]);
+    checks.push([
+      'Local size policy',
+      true,
+      `refuse > ${formatBytes(config.provider.maxBytes || LOCAL_STARTER_MAX_BYTES)} unless allowLargeLocal`,
+    ]);
+  }
   const health = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY ? await authenticatedHealth() : { ok: false };
   checks.push(['Authenticated Storage read', health.ok, health.ok ? `HTTP ${health.status}` : `credential check failed${health.status ? ` (HTTP ${health.status})` : ''}`]);
-  console.log(`PortaBase ${VERSION} · ${config.provider.type} destination\n`);
+  console.log(`Portabase ${VERSION} · ${config.provider.type} destination · max agents (Cloud plan): 12\n`);
   for (const [name, ok, note] of checks) console.log(`${ok ? 'PASS' : 'MISS'}  ${name.padEnd(28)} ${note}`);
+  if (installHints.length) {
+    console.log('\nNext steps / install hints:');
+    for (const hint of installHints) console.log(`  • ${hint}`);
+  }
   const optional = new Set(['SUPABASE_ACCESS_TOKEN']);
   if (checks.filter(([name]) => !optional.has(name)).some(([, ok]) => !ok)) process.exitCode = 2;
+}
+
+/** W4: simple agent registry on the runner (status directory) */
+async function touchAgentRegistry(config, event = {}) {
+  try {
+    const dir = resolve(config.statusDirectory || './portabase-status');
+    await mkdir(dir, { recursive: true });
+    const path = join(dir, 'agent-registry.json');
+    let registry = { formatVersion: 1, agents: [] };
+    if (existsSync(path)) {
+      try { registry = JSON.parse(await readFile(path, 'utf8')); } catch { /* reset */ }
+    }
+    const agentId = process.env.PORTABASE_AGENT_ID || config.agentId || 'local-runner';
+    const entry = {
+      id: agentId,
+      hostname: process.env.COMPUTERNAME || process.env.HOSTNAME || 'unknown',
+      projectRef: config.projectRef,
+      lastEvent: event.type || 'heartbeat',
+      lastCapsule: event.capsule || null,
+      lastSeenAt: new Date().toISOString(),
+      version: VERSION,
+    };
+    registry.agents = [entry, ...(registry.agents || []).filter(a => a.id !== agentId)].slice(0, 12);
+    registry.updatedAt = entry.lastSeenAt;
+    await writeFile(path, `${JSON.stringify(registry, null, 2)}\n`);
+  } catch { /* non-fatal */ }
 }
 
 async function captureDatabase(rawDir, limits = null) {
@@ -383,21 +502,33 @@ async function runDumpToFile(name, commandArgs, outputPath, options = {}) {
 
 async function transformSql(source, target, transform, prefix = '', suffix = '') {
   const writer = createWriteStream(target, { flags: 'wx' });
-  if (prefix) writer.write(prefix);
-  const lines = createInterface({ input: createReadStream(source), crlfDelay: Infinity });
-  for await (const line of lines) {
-    const changed = transform(line);
-    if (changed !== null) writer.write(`${changed}\n`);
+  try {
+    if (prefix) writer.write(prefix);
+    const input = createReadStream(source);
+    const lines = createInterface({ input, crlfDelay: Infinity });
+    for await (const line of lines) {
+      const changed = transform(line);
+      if (changed !== null) {
+        if (!writer.write(`${changed}\n`)) {
+          await new Promise(resolveDrain => writer.once('drain', resolveDrain));
+        }
+      }
+    }
+    if (suffix) writer.write(suffix);
+    await new Promise((resolveWrite, reject) => {
+      writer.once('error', reject);
+      writer.end(resolveWrite);
+    });
+  } catch (error) {
+    writer.destroy();
+    await rm(target, { force: true }).catch(() => {});
+    throw new Error(`SQL transform failed for ${basename(source)}: ${error.message}`);
   }
-  if (suffix) writer.write(suffix);
-  await new Promise((resolveWrite, reject) => {
-    writer.once('error', reject);
-    writer.end(resolveWrite);
-  });
 }
 
-const SCHEMA_EXCLUDES = 'information_schema|pg_*|_analytics|_realtime|_supavisor|auth|etl|extensions|pgbouncer|realtime|storage|supabase_functions|supabase_migrations|cron|dbdev|graphql|graphql_public|net|pgmq|pgsodium|pgsodium_masks|pgtle|repack|tiger|tiger_data|timescaledb_*|_timescaledb_*|topology|vault';
-const DATA_EXCLUDES = 'information_schema|pg_*|graphql|graphql_public|pgsodium|pgsodium_masks|pgtle|repack|tiger|tiger_data|timescaledb_*|_timescaledb_*|topology|vault|etl|extensions|pgbouncer|realtime|storage|supabase_functions|supabase_migrations|_analytics|_realtime|_supavisor';
+// W10: single source of truth lives in portabase-core PLATFORM_SCHEMA_EXCLUDES
+const SCHEMA_EXCLUDES = schemaExcludePattern();
+const DATA_EXCLUDES = schemaExcludePattern(DATA_SCHEMA_EXCLUDES);
 const RESERVED_ROLES = '(anon|authenticated|authenticator|cli_login_.*|dashboard_user|pgbouncer|postgres|service_role|supabase_.*|pgsodium_keyholder|pgsodium_keyiduser|pgsodium_keymaker|pgtle_admin)';
 const EXACT_EXCLUDED_SCHEMAS = new Set(SCHEMA_EXCLUDES.split('|').filter(name => !name.includes('*')));
 
@@ -505,77 +636,431 @@ async function listBucketObjects(bucketId, prefix = '') {
   return objects;
 }
 
-async function captureStorage(rawDir, limits = null) {
+function lastStorageManifestPath(config) {
+  return join(resolve(config.statusDirectory || './portabase-status'), 'last-storage-manifest.json');
+}
+
+async function loadPriorStorageIndex(config) {
+  // Optional resume index from previous successful capture (object identity only — not capsule bytes)
+  try {
+    const priorPath = lastStorageManifestPath(config);
+    if (!existsSync(priorPath)) return new Map();
+    const prior = JSON.parse(await readFile(priorPath, 'utf8'));
+    const map = new Map();
+    for (const bucket of prior.buckets || []) {
+      for (const object of bucket.objects || []) {
+        map.set(`${bucket.id}/${object.name}`, object);
+      }
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+async function captureStorage(rawDir, limits = null, config = {}) {
   const storageDir = join(rawDir, 'storage');
+  const cacheRoot = resolve(config.backupDirectory || './portabase-capsules', '.storage-object-cache');
   await mkdir(storageDir, { recursive: true });
+  await mkdir(cacheRoot, { recursive: true });
   const buckets = await (await checkedSourceFetch('/storage/v1/bucket')).json();
-  const manifest = { capturedAt: new Date().toISOString(), buckets: [], objectCount: 0, totalBytes: 0 };
+  const concurrency = resolveStorageConcurrency(config);
+  const manifest = {
+    capturedAt: new Date().toISOString(),
+    formatVersion: 3,
+    buckets: [],
+    objectCount: 0,
+    totalBytes: 0,
+    skippedUnchanged: 0,
+    cacheHits: 0,
+    downloaded: 0,
+    concurrency,
+  };
   const inventory = { bucketCount: buckets.length, objectCount: 0, totalBytes: 0, buckets: [] };
   const listedObjects = new Map();
-  for (const bucket of buckets) {
+  const priorIndex = await loadPriorStorageIndex(config);
+  const seenKeys = new Set();
+
+  // List buckets in parallel (metadata only; nested prefix walks still sequential per bucket).
+  const listResults = await mapPool(buckets, Math.min(8, concurrency), async (bucket) => {
     progress({ phase: 'scan', item: bucket.id });
     const objects = await listBucketObjects(bucket.id);
     const bytes = objects.reduce((total, object) => total + (Number(object.metadata?.size) || 0), 0);
-    listedObjects.set(bucket.id, objects);
-    inventory.buckets.push({ id: bucket.id, objectCount: objects.length, totalBytes: bytes });
-    inventory.objectCount += objects.length;
-    inventory.totalBytes += bytes;
+    return { bucketId: bucket.id, objects, bytes };
+  });
+  for (const row of listResults) {
+    listedObjects.set(row.bucketId, row.objects);
+    inventory.buckets.push({ id: row.bucketId, objectCount: row.objects.length, totalBytes: row.bytes });
+    inventory.objectCount += row.objects.length;
+    inventory.totalBytes += row.bytes;
   }
+  console.log(`Storage inventory: ${inventory.bucketCount} buckets · ${inventory.objectCount} objects · ${formatBytes(inventory.totalBytes)} · concurrency=${concurrency}`);
+
   const selectedBuckets = limits ? buckets.slice(0, limits.maxStorageBuckets) : buckets;
+  // Flatten work queue so concurrency is global (not stuck on one huge bucket).
+  const jobs = [];
   for (const bucket of selectedBuckets) {
-    const record = {
+    for (const object of listedObjects.get(bucket.id) || []) {
+      if (limits && jobs.length >= limits.maxStorageObjects) break;
+      jobs.push({ bucket, object });
+    }
+    if (limits && jobs.length >= limits.maxStorageObjects) break;
+  }
+
+  let completed = 0;
+  const startedAt = Date.now();
+  async function copyBestEffort(src, dest, { retries = 4 } = {}) {
+    let lastErr;
+    for (let attempt = 1; attempt <= retries; attempt += 1) {
+      try {
+        await mkdir(dirname(dest), { recursive: true });
+        await cp(src, dest, { force: true });
+        return true;
+      } catch (err) {
+        lastErr = err;
+        if (attempt < retries) await new Promise(r => setTimeout(r, 25 * attempt));
+      }
+    }
+    throw lastErr;
+  }
+
+  const objectResults = await mapPool(jobs, concurrency, async ({ bucket, object }) => {
+    const identity = storageObjectIdentity(object);
+    const key = `${bucket.id}/${object.fullName}`;
+    seenKeys.add(key);
+    const target = join(storageDir, safeObjectPath(bucket.id), safeObjectPath(object.fullName));
+    await mkdir(dirname(target), { recursive: true });
+    const prior = priorIndex.get(key) || null;
+    let skipped = false;
+    let fromCache = false;
+    const tentativeCache = storageCacheKey(identity, prior?.sha256 || '');
+    const identityOnlyKey = storageCacheKey(identity, '');
+
+    // Cache is best-effort: never fail the backup because of cache I/O races on Windows.
+    try {
+      const lookupKeys = [prior?.sha256, tentativeCache, identityOnlyKey].filter(Boolean);
+      for (const keyHash of lookupKeys) {
+        if (fromCache) break;
+        const candidate = join(cacheRoot, String(keyHash).slice(0, 2), String(keyHash));
+        if (!existsSync(candidate)) continue;
+        const cached = await stat(candidate);
+        if (Number(identity.size) > 0 && Number(cached.size) !== Number(identity.size)) continue;
+        await copyBestEffort(candidate, target);
+        fromCache = true;
+        skipped = true;
+      }
+    } catch {
+      fromCache = false;
+      skipped = false;
+    }
+
+    if (!fromCache && existsSync(target)) {
+      try {
+        const local = await stat(target);
+        if (shouldSkipStorageDownload(local, identity, prior)) {
+          skipped = true;
+        }
+      } catch { /* re-download */ }
+    }
+    if (!skipped && !fromCache) {
+      const objectPath = object.fullName.split('/').map(encodeURIComponent).join('/');
+      let response = await sourceFetch(`/storage/v1/object/authenticated/${encodeURIComponent(bucket.id)}/${objectPath}`);
+      if (!response.ok) {
+        response = await sourceFetch(`/storage/v1/object/${encodeURIComponent(bucket.id)}/${objectPath}`);
+      }
+      if (!response.ok) {
+        throw new Error(`Unable to download storage object ${bucket.id}/${object.fullName}: HTTP ${response.status}`);
+      }
+      await pipeline(Readable.fromWeb(response.body), createWriteStream(target, { flags: 'w' }));
+    }
+    const info = await stat(target);
+    const sha256 = await hashFile(target);
+    // Dual-key cache promote — best-effort only
+    try {
+      const cacheKeys = new Set([storageCacheKey(identity, sha256), identityOnlyKey].filter(Boolean));
+      for (const keyHash of cacheKeys) {
+        const destCache = join(cacheRoot, keyHash.slice(0, 2), keyHash);
+        if (existsSync(destCache)) continue;
+        const tmp = `${destCache}.${process.pid}.${Math.random().toString(16).slice(2)}.tmp`;
+        try {
+          await mkdir(dirname(destCache), { recursive: true });
+          await cp(target, tmp, { force: true });
+          await rename(tmp, destCache);
+        } catch {
+          await rm(tmp, { force: true }).catch(() => {});
+        }
+      }
+    } catch { /* cache is optional */ }
+
+    completed += 1;
+    if (completed % 50 === 0 || completed === jobs.length) {
+      const elapsedSec = Math.max(1, (Date.now() - startedAt) / 1000);
+      const rate = (completed / elapsedSec).toFixed(1);
+      console.log(`Storage progress: ${completed}/${jobs.length} objects (${rate}/s) · concurrency=${concurrency}`);
+    }
+    progress({
+      phase: 'storage',
+      item: `${bucket.id}/${object.fullName}${fromCache ? ' (cache)' : skipped ? ' (resume)' : ''}`,
+      bytes: info.size,
+      completed,
+      total: jobs.length,
+    });
+    return {
+      bucketId: bucket.id,
+      entry: {
+        name: object.fullName,
+        size: info.size,
+        sha256,
+        updatedAt: identity.updatedAt,
+        etag: identity.etag,
+        contentType: identity.contentType || null,
+        resumed: skipped || fromCache,
+        cacheHit: fromCache,
+        downloaded: !skipped && !fromCache,
+      },
+    };
+  });
+
+  const byBucket = new Map();
+  for (const bucket of selectedBuckets) {
+    byBucket.set(bucket.id, {
       id: bucket.id,
       name: bucket.name,
       public: bucket.public,
       fileSizeLimit: bucket.file_size_limit ?? null,
       allowedMimeTypes: bucket.allowed_mime_types ?? null,
       objects: [],
-    };
-    for (const object of listedObjects.get(bucket.id)) {
-      if (limits && manifest.objectCount >= limits.maxStorageObjects) break;
-      const target = join(storageDir, safeObjectPath(bucket.id), safeObjectPath(object.fullName));
-      await mkdir(dirname(target), { recursive: true });
-      const objectPath = object.fullName.split('/').map(encodeURIComponent).join('/');
-      const response = await checkedSourceFetch(`/storage/v1/object/authenticated/${encodeURIComponent(bucket.id)}/${objectPath}`);
-      await pipeline(Readable.fromWeb(response.body), createWriteStream(target, { flags: 'wx' }));
-      const info = await stat(target);
-      record.objects.push({ name: object.fullName, size: info.size, sha256: await hashFile(target), updatedAt: object.updated_at || null, contentType: object.metadata?.mimetype || null });
-      manifest.objectCount += 1;
-      manifest.totalBytes += info.size;
-      progress({ phase: 'storage', item: `${bucket.id}/${object.fullName}`, bytes: info.size });
-    }
-    manifest.buckets.push(record);
+    });
   }
+  for (const result of objectResults) {
+    if (!result) continue;
+    const record = byBucket.get(result.bucketId);
+    if (!record) continue;
+    record.objects.push(result.entry);
+    if (result.entry.cacheHit) manifest.cacheHits += 1;
+    else if (result.entry.resumed) manifest.skippedUnchanged += 1;
+    else if (result.entry.downloaded) manifest.downloaded += 1;
+    manifest.objectCount += 1;
+    manifest.totalBytes += result.entry.size;
+  }
+  for (const bucket of selectedBuckets) {
+    const record = byBucket.get(bucket.id);
+    if (record) manifest.buckets.push(record);
+  }
+
+  // W8: reconcile — drop prior keys no longer present (stale index entries)
+  manifest.reconciledDropped = [...priorIndex.keys()].filter(k => !seenKeys.has(k)).length;
   manifest.sourceInventory = inventory;
-  await writeFile(join(storageDir, 'storage-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-  return { complete: true, limited: Boolean(limits), limitation: limits ? `first ${limits.maxStorageObjects} objects across ${limits.maxStorageBuckets} buckets` : null, bucketCount: manifest.buckets.length, objectCount: manifest.objectCount, totalBytes: manifest.totalBytes, inventory };
+  const manifestPath = join(storageDir, 'storage-manifest.json');
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  return {
+    complete: true,
+    limited: Boolean(limits),
+    limitation: limits ? `first ${limits.maxStorageObjects} objects across ${limits.maxStorageBuckets} buckets` : null,
+    bucketCount: manifest.buckets.length,
+    objectCount: manifest.objectCount,
+    totalBytes: manifest.totalBytes,
+    skippedUnchanged: manifest.skippedUnchanged,
+    cacheHits: manifest.cacheHits,
+    downloaded: manifest.downloaded,
+    concurrency,
+    inventory,
+    manifestPath,
+  };
+}
+
+async function managementApiJson(path, { method = 'GET', body } = {}) {
+  const token = process.env.SUPABASE_ACCESS_TOKEN;
+  if (!token) throw new Error('SUPABASE_ACCESS_TOKEN required for Management API');
+  const response = await fetch(`https://api.supabase.com${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await response.text();
+  let data;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  if (!response.ok) throw new Error(`Management API ${response.status}: ${String(text).slice(0, 240)}`);
+  return data;
+}
+
+/** W2: Management API fallback when Supabase CLI download fails */
+async function captureFunctionViaManagementApi(projectRef, name, fnRoot) {
+  await mkdir(fnRoot, { recursive: true });
+  const details = await managementApiJson(`/v1/projects/${projectRef}/functions/${encodeURIComponent(name)}`);
+  const body = await managementApiJson(`/v1/projects/${projectRef}/functions/${encodeURIComponent(name)}/body`);
+  const entry = typeof body === 'string' ? body
+    : body?.body || body?.source || body?.entrypoint_path
+      ? (typeof body.body === 'string' ? body.body : JSON.stringify(body, null, 2))
+      : JSON.stringify(body, null, 2);
+  // Prefer index.ts layout CLI expects
+  const mainFile = join(fnRoot, 'index.ts');
+  await writeFile(mainFile, entry);
+  await writeFile(join(fnRoot, 'metadata.json'), `${JSON.stringify({
+    name,
+    verify_jwt: details?.verify_jwt !== false,
+    import_map: details?.import_map || null,
+    source: 'management-api',
+  }, null, 2)}\n`);
+  return { verifyJwt: details?.verify_jwt !== false, via: 'management-api' };
 }
 
 async function captureFunctions(config, rawDir, limits = null) {
   if (!process.env.SUPABASE_ACCESS_TOKEN) return { complete: false, skipped: true, reason: 'SUPABASE_ACCESS_TOKEN not provided' };
   const supabase = resolveTool('supabase');
-  if (!supabase) throw new Error('Supabase CLI is required for Edge Function capture.');
   const functionsDir = join(rawDir, 'functions');
   await mkdir(functionsDir, { recursive: true });
-  const result = spawnSync(supabase, ['functions', 'list', '--project-ref', config.projectRef, '--output', 'json', '--workdir', functionsDir], {
-    encoding: 'utf8', env: process.env, windowsHide: true, cwd: functionsDir,
-  });
-  if (result.status !== 0) throw new Error(result.stderr || 'Unable to list Edge Functions.');
-  const availableFunctions = JSON.parse(result.stdout || '[]');
-  const functions = limits ? availableFunctions.slice(0, limits.maxFunctions) : availableFunctions;
-  for (const fn of functions) {
-    progress({ phase: 'functions', item: fn.name });
-    await run(supabase, ['functions', 'download', fn.name, '--project-ref', config.projectRef, '--workdir', functionsDir], { cwd: functionsDir, env: process.env });
+
+  let availableFunctions = [];
+  let listVia = 'cli';
+  if (supabase) {
+    const result = spawnSync(supabase, ['functions', 'list', '--project-ref', config.projectRef, '--output', 'json', '--workdir', functionsDir], {
+      encoding: 'utf8', env: process.env, windowsHide: true, cwd: functionsDir,
+    });
+    if (result.status === 0) {
+      availableFunctions = JSON.parse(result.stdout || '[]');
+    } else {
+      listVia = 'management-api';
+      availableFunctions = await managementApiJson(`/v1/projects/${config.projectRef}/functions`);
+      if (!Array.isArray(availableFunctions)) availableFunctions = availableFunctions?.functions || [];
+    }
+  } else {
+    listVia = 'management-api';
+    availableFunctions = await managementApiJson(`/v1/projects/${config.projectRef}/functions`);
+    if (!Array.isArray(availableFunctions)) availableFunctions = availableFunctions?.functions || [];
   }
+
+  const functions = limits ? availableFunctions.slice(0, limits.maxFunctions) : availableFunctions;
+  const functionMeta = [];
+  for (const fn of functions) {
+    const name = fn.name || fn.slug;
+    progress({ phase: 'functions', item: name });
+    const fnRoot = join(functionsDir, name);
+    let via = 'cli';
+    let verifyJwt = fn.verify_jwt !== false && fn.verifyJwt !== false;
+    try {
+      if (!supabase) throw new Error('no_cli');
+      await run(supabase, ['functions', 'download', name, '--project-ref', config.projectRef, '--workdir', functionsDir], { cwd: functionsDir, env: process.env });
+    } catch (error) {
+      // W2 fallback — skip missing/ghost functions instead of failing the whole layer
+      try {
+        const fallback = await captureFunctionViaManagementApi(config.projectRef, name, fnRoot);
+        via = fallback.via;
+        verifyJwt = fallback.verifyJwt;
+      } catch (fallbackError) {
+        const msg = fallbackError.message || String(fallbackError);
+        if (/404|not found/i.test(msg)) {
+          console.warn(`Skipping function ${name}: not found (stale list entry).`);
+          functionMeta.push({ name, verifyJwt, files: [], captureVia: 'skipped-missing', error: msg });
+          continue;
+        }
+        throw fallbackError;
+      }
+    }
+    const files = [];
+    if (existsSync(fnRoot)) {
+      for (const filePath of await listFiles(fnRoot)) {
+        files.push({
+          path: relative(fnRoot, filePath).split(sep).join('/'),
+          bytes: (await stat(filePath)).size,
+          sha256: await hashFile(filePath),
+        });
+      }
+    }
+    functionMeta.push({ name, verifyJwt, files, captureVia: via });
+  }
+
+  const redeploy = generateFunctionRedeployScripts(
+    functionMeta.map(fn => ({ name: fn.name, verifyJwt: fn.verifyJwt })),
+    { projectRef: config.projectRef, supabaseCliVersion: PINNED_SUPABASE_CLI },
+  );
+  const functionsManifest = {
+    ...redeploy.manifest,
+    functions: functionMeta,
+    secretNames: listSecretNames(supabase, config.projectRef),
+  };
+  await writeFile(join(functionsDir, 'functions-manifest.json'), `${JSON.stringify(functionsManifest, null, 2)}\n`);
+  await writeFile(join(functionsDir, 'REDEPLOY-ALL.ps1'), redeploy.ps1);
+  await writeFile(join(functionsDir, 'redeploy-all.sh'), redeploy.bash);
+
   return {
     complete: true,
     limited: Boolean(limits),
     limitation: limits ? `first ${limits.maxFunctions} Functions` : null,
     count: functions.length,
-    names: functions.map(fn => fn.name),
+    names: functionMeta.map(fn => fn.name),
+    verifyJwt: Object.fromEntries(functionMeta.map(fn => [fn.name, fn.verifyJwt])),
     availableCount: availableFunctions.length,
-    available: availableFunctions.map(fn => fn.name),
-    secretNames: listSecretNames(supabase, config.projectRef),
+    available: availableFunctions.map(fn => fn.name || fn.slug),
+    secretNames: functionsManifest.secretNames,
+    redeployScripts: ['REDEPLOY-ALL.ps1', 'redeploy-all.sh'],
+    manifestFile: 'functions-manifest.json',
+    listVia,
+    supabaseCliVersion: PINNED_SUPABASE_CLI,
+  };
+}
+
+/** W3: Auth inventory (no passwords) — recovery checklist layer */
+async function captureAuth(config, rawDir) {
+  const authDir = join(rawDir, 'auth');
+  await mkdir(authDir, { recursive: true });
+  const inventory = { capturedAt: new Date().toISOString(), users: [], count: 0, note: 'Passwords and provider secrets are never exported.' };
+  try {
+    // Prefer Auth Admin API via service role
+    const response = await sourceFetch('/auth/v1/admin/users?page=1&per_page=200');
+    if (response.ok) {
+      const data = await response.json();
+      const users = data.users || data || [];
+      if (Array.isArray(users)) {
+        inventory.users = users.slice(0, 500).map(u => ({
+          id: u.id,
+          email: u.email || null,
+          phone: u.phone || null,
+          role: u.role || null,
+          created_at: u.created_at || null,
+          last_sign_in_at: u.last_sign_in_at || null,
+          providers: (u.app_metadata?.providers || u.identities?.map(i => i.provider) || []).filter(Boolean),
+        }));
+        inventory.count = inventory.users.length;
+        inventory.truncated = true;
+      }
+    } else {
+      inventory.truncated = false;
+      inventory.reason = `Auth admin list HTTP ${response.status}`;
+    }
+  } catch (error) {
+    inventory.truncated = false;
+    inventory.reason = error.message;
+  }
+  // Always write cutover checklist (threats: false confidence mitigation)
+  const checklist = [
+    '# Auth cutover checklist (manual — by design)',
+    '',
+    `- Project: ${config.projectRef}`,
+    `- Users inventoried: ${inventory.count} (ids/emails only; no password hashes exported)`,
+    '',
+    '## Must reconfigure on the NEW project before cutover',
+    '- [ ] Auth providers (Google, GitHub, Apple, etc.) client IDs/secrets',
+    '- [ ] Site URL + redirect URLs',
+    '- [ ] SMTP / email templates',
+    '- [ ] MFA policies',
+    '- [ ] Hook / SMS provider secrets',
+    '',
+    'Portabase restores application data and Storage/Functions; Auth *configuration* stays with you.',
+    '',
+  ].join('\n');
+  await writeFile(join(authDir, 'auth-inventory.json'), `${JSON.stringify(inventory, null, 2)}\n`);
+  await writeFile(join(authDir, 'AUTH-CUTOVER.md'), checklist);
+  return {
+    complete: inventory.truncated !== false,
+    partial: !inventory.truncated,
+    count: inventory.count,
+    checklist: 'AUTH-CUTOVER.md',
+    inventoryFile: 'auth-inventory.json',
+    reason: inventory.reason || null,
   };
 }
 
@@ -612,7 +1097,7 @@ async function listFiles(root) {
 }
 
 export async function writeTrialReport(capsuleDir, metadata) {
-  const purchaseUrl = process.env.PORTABASE_PURCHASE_URL || 'https://portabase.dev/buy';
+  const purchaseUrl = process.env.PORTABASE_PURCHASE_URL || 'https://portabase.dev/cloud';
   const escape = value => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
   const number = value => Number(value ?? 0).toLocaleString('en-US');
   const contents = metadata.contents || {};
@@ -631,13 +1116,13 @@ export async function writeTrialReport(capsuleDir, metadata) {
   const secretNames = contents.functions?.secretNames;
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PortaBase trial result</title><style>body{margin:0;background:#090a0c;color:#fff;font-family:Segoe UI,sans-serif}.card{width:min(860px,calc(100% - 32px));margin:6vh auto;background:#141519;border:1px solid #303136;padding:40px;box-sizing:border-box}small{font:11px Consolas,monospace;color:#ff4b3e;letter-spacing:.12em}h1{font-size:44px;line-height:1;margin:18px 0}p{color:#aaa;line-height:1.65}table{width:100%;border-collapse:collapse;margin:30px 0;background:#101115}td,th{border:1px solid #303136;padding:14px 16px;text-align:left;vertical-align:top}th{font:11px Consolas,monospace;letter-spacing:.1em;color:#888}td b{display:block;font-size:15px}td span{display:block;font-size:11px;color:#82837e;margin-top:6px;max-width:340px}td i{font-style:normal;font-size:10px;color:#6d6e72;text-transform:uppercase}tr.exposed td:nth-child(2){color:#ff7066;font-weight:700}tr.exposed td:nth-child(3){color:#ff4b3e;font-weight:700}tr.saved td:nth-child(3){color:#c9ff4a;font-weight:700}tr.design td{color:#9a9b96}.recover{border-left:3px solid #ff4b3e;padding:15px 20px;background:#1b1515;font-size:15px;line-height:1.6}.privacy{border:1px solid #2c3f1d;background:#131a0d;padding:13px 18px;margin-top:22px;color:#a8c47e;font-size:12px;line-height:1.6}.secrets{margin-top:22px;padding:18px;border:1px solid #303136;background:#101115}.secrets b{font-size:13px}.secrets code{display:block;margin-top:10px;color:#8fb0c9;font-size:12px;line-height:1.8;word-break:break-all}.buy{display:inline-block;background:#c9ff4a;color:#111;text-decoration:none;padding:16px 22px;font-weight:800;margin-top:28px;border-radius:4px}@media(max-width:600px){.card{padding:22px}h1{font-size:34px}td,th{padding:10px}}</style></head>
-<body><main class="card"><small>PORTABASE LIMITED TRIAL · PROTECTION LEDGER</small><h1>The real workflow ran.<br>Here is everything it found.</h1><p>Your sample capsule was captured, encrypted, transferred to your destination, and verified — the exact workflow a complete backup uses. The inventory below is everything PortaBase found in project <b>${escape(metadata.projectRef)}</b>.</p>
+<title>Portabase trial result</title><style>body{margin:0;background:#090a0c;color:#fff;font-family:Segoe UI,sans-serif}.card{width:min(860px,calc(100% - 32px));margin:6vh auto;background:#141519;border:1px solid #303136;padding:40px;box-sizing:border-box}small{font:11px Consolas,monospace;color:#ff4b3e;letter-spacing:.12em}h1{font-size:44px;line-height:1;margin:18px 0}p{color:#aaa;line-height:1.65}table{width:100%;border-collapse:collapse;margin:30px 0;background:#101115}td,th{border:1px solid #303136;padding:14px 16px;text-align:left;vertical-align:top}th{font:11px Consolas,monospace;letter-spacing:.1em;color:#888}td b{display:block;font-size:15px}td span{display:block;font-size:11px;color:#82837e;margin-top:6px;max-width:340px}td i{font-style:normal;font-size:10px;color:#6d6e72;text-transform:uppercase}tr.exposed td:nth-child(2){color:#ff7066;font-weight:700}tr.exposed td:nth-child(3){color:#ff4b3e;font-weight:700}tr.saved td:nth-child(3){color:#c9ff4a;font-weight:700}tr.design td{color:#9a9b96}.recover{border-left:3px solid #ff4b3e;padding:15px 20px;background:#1b1515;font-size:15px;line-height:1.6}.privacy{border:1px solid #2c3f1d;background:#131a0d;padding:13px 18px;margin-top:22px;color:#a8c47e;font-size:12px;line-height:1.6}.secrets{margin-top:22px;padding:18px;border:1px solid #303136;background:#101115}.secrets b{font-size:13px}.secrets code{display:block;margin-top:10px;color:#8fb0c9;font-size:12px;line-height:1.8;word-break:break-all}.buy{display:inline-block;background:#c9ff4a;color:#111;text-decoration:none;padding:16px 22px;font-weight:800;margin-top:28px;border-radius:4px}@media(max-width:600px){.card{padding:22px}h1{font-size:34px}td,th{padding:10px}}</style></head>
+<body><main class="card"><small>PORTABASE LIMITED TRIAL · PROTECTION LEDGER</small><h1>The real workflow ran.<br>Here is everything it found.</h1><p>Your sample capsule was captured, encrypted, transferred to your destination, and verified — the exact workflow a complete backup uses. The inventory below is everything Portabase found in project <b>${escape(metadata.projectRef)}</b>.</p>
 <table><tr><th>LAYER</th><th>IN YOUR PROJECT</th><th>IN THIS TRIAL CAPSULE</th></tr>${ledgerRows}</table>
 <p class="recover"><b>${escape(recoverLine)}</b><br>Everything in red is currently unprotected against an account lockout, deletion, or billing freeze.</p>
 ${secretNames?.length ? `<div class="secrets"><b>Recovery checklist: ${number(secretNames.length)} secret name${secretNames.length === 1 ? '' : 's'} inventoried (values are never exported)</b><code>${secretNames.map(escape).join(' · ')}</code></div>` : ''}
-<p class="privacy"><b>Computed locally. Transmitted nowhere.</b> This report, the inventory behind it, and your credentials never left this computer. PortaBase has no server that could receive them.</p>
-<a class="buy" href="${escape(purchaseUrl)}">Protect all of it — Essentials, $147 once →</a></main></body></html>`;
+<p class="privacy"><b>Computed locally. Transmitted nowhere.</b> This report, the inventory behind it, and your credentials never left this computer. Portabase has no server that could receive them.</p>
+<a class="buy" href="${escape(purchaseUrl)}">Full capture is free open source · Cloud $17/mo optional →</a></main></body></html>`;
   await writeFile(join(capsuleDir, 'TRIAL-REPORT.html'), html);
 }
 
@@ -659,16 +1144,28 @@ async function writeStatus(config, state) {
 }
 
 async function sendAlert(config, state) {
-  const envName = config.alerts?.webhookEnv;
-  const url = envName ? process.env[envName] : null;
-  if (!url) return;
+  const eventType = state.state === 'FAILED' || state.state === 'PARTIAL'
+    ? 'backup.failed'
+    : ['COMPLETE', 'TRIAL'].includes(state.state)
+      ? 'backup.completed'
+      : null;
+  if (!eventType) return;
   try {
-    await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product: 'PortaBase', projectRef: config.projectRef, ...state }),
-      signal: AbortSignal.timeout(10000),
+    const result = await emitTelemetry(config, {
+      eventType,
+      portabaseVersion: VERSION,
+      payload: {
+        capsuleId: state.capsule || null,
+        status: state.state,
+        destinationKind: config.provider?.type || null,
+        verified: Boolean(state.verified),
+        errorCount: Array.isArray(state.errors) ? state.errors.length : (state.error ? 1 : 0),
+        errorClass: state.error ? 'backup_error' : null,
+      },
     });
+    if (result.sent === false && result.reason !== 'telemetry_disabled') {
+      console.error('Telemetry delivery incomplete.');
+    }
   } catch (error) {
     console.error(`Alert delivery failed: ${error.message}`);
   }
@@ -676,14 +1173,44 @@ async function sendAlert(config, state) {
 
 export async function transferCapsule(config, capsuleDir) {
   if (config.provider.type === 'local') {
-    if (!config.provider.path) return { destination: capsuleDir, verified: true };
+    const bytes = await directoryByteSize(capsuleDir);
+    const allowLargeLocal = Boolean(config.provider.allowLargeLocal) || hasFlag('allow-large-local');
+    const sizeGate = assertLocalStarterSize(bytes, {
+      allowLargeLocal,
+      maxBytes: config.provider.maxBytes || LOCAL_STARTER_MAX_BYTES,
+    });
+    if (sizeGate.allowedByOverride) {
+      console.warn(
+        `WARNING: Local Starter override — capsule is ${formatBytes(bytes)} (limit ${formatBytes(sizeGate.maxBytes)}). `
+        + 'Same-disk Escape risk accepted via allowLargeLocal.',
+      );
+    } else {
+      console.log(`Local Starter vault: capsule ${formatBytes(bytes)} ≤ ${formatBytes(sizeGate.maxBytes)}`);
+    }
+
+    // No separate path: encrypted capsule directory is the vault (still size-gated).
+    if (!config.provider.path) {
+      return {
+        destination: capsuleDir,
+        verified: true,
+        mode: 'local-starter',
+        bytes,
+        maxBytes: sizeGate.maxBytes,
+      };
+    }
     const target = join(resolve(config.provider.path), basename(capsuleDir));
     if (existsSync(target)) throw new Error(`Immutable destination already exists: ${target}`);
     await mkdir(dirname(target), { recursive: true });
     await cp(capsuleDir, target, { recursive: true, errorOnExist: true, force: false });
     const results = await verifyChecksumFile(target, join(target, 'checksums.sha256'));
     if (results.some(item => !item.ok)) throw new Error('Local destination verification failed.');
-    return { destination: target, verified: true };
+    return {
+      destination: target,
+      verified: true,
+      mode: 'local-starter',
+      bytes,
+      maxBytes: sizeGate.maxBytes,
+    };
   }
   const upload = providerCommand(config, capsuleDir);
   if (!resolveTool(upload[0])) throw new Error(`${upload[0]} CLI is not installed.`);
@@ -704,8 +1231,8 @@ async function backup() {
   const entitlement = await resolveEdition({ forceTrial: hasFlag('trial'), licensePath: flag('license') });
   const trial = entitlement.edition === 'trial';
   console.log(trial
-    ? `PortaBase trial limits active (${entitlement.license.reason}). A valid signed license enables complete capture.`
-    : `PortaBase Essentials license verified offline (${entitlement.license.payload.licenseId}).`);
+    ? 'Portabase demo mode (--trial): limited sample capture for safe drills. Full open-source capture is the default without this flag.'
+    : 'Portabase community edition: full open-source capture. No license required.');
   const limits = trial ? TRIAL_LIMITS : null;
   const passphraseEnv = config.encryption?.passphraseEnv || 'PORTABASE_ENCRYPTION_PASSPHRASE';
   const passphrase = process.env[passphraseEnv];
@@ -718,7 +1245,15 @@ async function backup() {
   const archive = join(workDir, 'capsule.tar.gz');
   if (existsSync(capsuleDir) || existsSync(workDir)) throw new Error(`Capsule already exists: ${id}`);
   await mkdir(rawDir, { recursive: true });
+  const startedAt = Date.now();
   await writeStatus(config, { state: 'RUNNING', capsule: id, startedAt: new Date().toISOString() });
+  try {
+    await emitTelemetry(config, {
+      eventType: 'backup.started',
+      portabaseVersion: VERSION,
+      payload: { capsuleId: id, edition: entitlement.edition },
+    });
+  } catch { /* non-fatal */ }
   const manifest = {
     formatVersion: 1,
     portabaseVersion: VERSION,
@@ -732,8 +1267,9 @@ async function backup() {
   try {
     for (const [name, enabled, capture] of [
       ['database', config.capture?.database !== false, () => captureDatabase(rawDir, limits)],
-      ['storage', config.capture?.storage !== false, () => captureStorage(rawDir, limits)],
+      ['storage', config.capture?.storage !== false, () => captureStorage(rawDir, limits, config)],
       ['functions', config.capture?.functions !== false, () => captureFunctions(config, rawDir, limits)],
+      ['auth', config.capture?.auth !== false, () => captureAuth(config, rawDir)],
     ]) {
       if (!enabled) {
         manifest.contents[name] = { complete: false, skipped: true, reason: 'disabled in config' };
@@ -751,11 +1287,51 @@ async function backup() {
     }
     manifest.status = manifest.errors.length || Object.values(manifest.contents).some(item => !item.complete) ? 'PARTIAL' : trial ? 'TRIAL' : 'COMPLETE';
     await writeFile(join(rawDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-    await writeFile(join(rawDir, 'RECOVER.md'), '# PortaBase recovery capsule\n\nRestore only into a fresh, explicitly confirmed Supabase target. Run `portabase restore --capsule <directory>` for a dry-run recovery plan.\n');
-    const tar = resolveTool('tar');
-    if (!tar) throw new Error('tar is required to create the encrypted capsule.');
+    // Persist storage object identity for next-run resume (metadata only; lives outside capsule)
+    try {
+      const sm = manifest.contents.storage?.manifestPath;
+      if (sm && existsSync(sm)) {
+        await mkdir(resolve(config.statusDirectory || './portabase-status'), { recursive: true });
+        await writeFile(lastStorageManifestPath(config), await readFile(sm, 'utf8'));
+      }
+    } catch { /* non-fatal */ }
+    const recoverMd = [
+      '# Portabase recovery capsule',
+      '',
+      'Restore only into a fresh, explicitly confirmed Supabase target.',
+      '',
+      '## Replay (validate on a new account)',
+      '',
+      '```bash',
+      'portabase replay --capsule <this-directory> --confirm-target <NEW_PROJECT_REF>',
+      '```',
+      '',
+      '## Edge Functions manual redeploy',
+      '',
+      'After decrypting the capsule, see `functions/REDEPLOY-ALL.ps1` and `functions/redeploy-all.sh`.',
+      'Secret values are never exported — recreate them on the target before cutover.',
+      '',
+      '```bash',
+      'portabase restore --capsule <directory>           # dry-run plan',
+      'portabase restore --capsule <directory> --preflight',
+      'portabase restore --capsule <directory> --execute --confirm-target <NEW_REF>',
+      '```',
+      '',
+    ].join('\n');
+    await writeFile(join(rawDir, 'RECOVER.md'), recoverMd);
+    progress({ phase: 'package' });
+    console.log('Packaging capsule archive...');
+    // Prefer pure-Node tar.gz on Windows (system tar often fails on large trees / missing drives).
+    try {
+      await packDirectoryTarGz(rawDir, archive);
+    } catch (packError) {
+      const tar = resolveTool('tar');
+      if (!tar) throw new Error(`Archive pack failed: ${packError.message}`);
+      console.warn(`Node pack failed (${packError.message}); falling back to system tar...`);
+      await run(tar, ['-czf', archive, '-C', rawDir, '.']);
+    }
     progress({ phase: 'encrypt' });
-    await run(tar, ['-czf', archive, '-C', rawDir, '.']);
+    console.log('Encrypting capsule...');
     await mkdir(capsuleDir, { recursive: false });
     const encryption = await encryptFile(archive, join(capsuleDir, 'capsule.pbase'), passphrase, id);
     const capsuleMetadata = {
@@ -769,25 +1345,43 @@ async function backup() {
       contents: manifest.contents,
       errors: manifest.errors,
       encryption,
+      durationMs: Date.now() - startedAt,
     };
     await writeFile(join(capsuleDir, 'capsule.json'), `${JSON.stringify(capsuleMetadata, null, 2)}\n`);
-    await writeFile(join(capsuleDir, 'RECOVER.txt'), 'This capsule is encrypted. Keep PORTABASE_ENCRYPTION_PASSPHRASE outside the backup destination. Use PortaBase restore without --execute to inspect the recovery plan.\n');
+    await writeFile(join(capsuleDir, 'RECOVER.txt'), 'This capsule is encrypted. Keep PORTABASE_ENCRYPTION_PASSPHRASE outside the backup destination. Use Portabase restore without --execute to inspect the recovery plan.\n');
     if (trial) await writeTrialReport(capsuleDir, capsuleMetadata);
     await writeChecksums(capsuleDir);
     progress({ phase: 'transfer', item: config.provider.type });
     const transfer = await transferCapsule(config, capsuleDir);
-    const state = { state: manifest.status, capsule: id, completedAt: new Date().toISOString(), destination: transfer.destination, verified: transfer.verified, errors: manifest.errors };
+    const state = {
+      state: manifest.status,
+      capsule: id,
+      completedAt: new Date().toISOString(),
+      destination: transfer.destination,
+      verified: transfer.verified,
+      errors: manifest.errors,
+      durationMs: Date.now() - startedAt,
+    };
     await writeStatus(config, state);
+    await touchAgentRegistry(config, { type: 'backup.completed', capsule: id });
     await sendAlert(config, state);
     console.log(`\n${manifest.status}: ${capsuleDir}`);
     console.log(`VERIFIED DESTINATION: ${transfer.destination}`);
+    if (manifest.contents.storage?.cacheHits != null) {
+      console.log(`STORAGE: downloaded=${manifest.contents.storage.downloaded || 0} cache_hits=${manifest.contents.storage.cacheHits || 0} resumed=${manifest.contents.storage.skippedUnchanged || 0}`);
+    }
+    if (manifest.contents.functions?.redeployScripts) {
+      console.log(`FUNCTIONS REDEPLOY: functions/REDEPLOY-ALL.ps1 · functions/redeploy-all.sh (CLI pin ${PINNED_SUPABASE_CLI})`);
+    }
     if (trial) console.log(`TRIAL REPORT: ${join(capsuleDir, 'TRIAL-REPORT.html')}`);
+    console.log('NEXT: prove recovery with  portabase replay --capsule <dir> --confirm-target <NEW_REF>');
     progress({ phase: 'done', status: manifest.status });
     if (hasFlag('json')) console.log(JSON.stringify({ ...state, contents: manifest.contents }));
     if (!['COMPLETE', 'TRIAL'].includes(manifest.status)) process.exitCode = 3;
   } catch (error) {
     const state = { state: 'FAILED', capsule: id, failedAt: new Date().toISOString(), error: error.message };
     await writeStatus(config, state);
+    await touchAgentRegistry(config, { type: 'backup.failed', capsule: id });
     await sendAlert(config, state);
     progress({ phase: 'failed', item: error.message });
     if (hasFlag('json')) console.log(JSON.stringify(state));
@@ -905,17 +1499,20 @@ async function restoreFunctions(extracted, manifest, targetRef) {
   if (!functions.names?.length) return { verified: true, expected: [], active: [] };
   const supabase = resolveTool('supabase');
   if (!supabase || !process.env.SUPABASE_ACCESS_TOKEN) throw new Error('Supabase CLI and SUPABASE_ACCESS_TOKEN are required to restore Edge Functions.');
+  const workdir = join(extracted, 'functions');
+  const verifyMap = functions.verifyJwt || {};
   for (const name of functions.names) {
-    const workdir = join(extracted, 'functions');
-    await run(supabase, ['functions', 'deploy', name, '--project-ref', targetRef, '--workdir', workdir], { cwd: workdir, env: process.env });
+    const args = ['functions', 'deploy', name, '--project-ref', targetRef, '--workdir', workdir];
+    if (verifyMap[name] === false) args.push('--no-verify-jwt');
+    await run(supabase, args, { cwd: workdir, env: process.env });
   }
   const result = spawnSync(supabase, ['functions', 'list', '--project-ref', targetRef, '--output', 'json'], {
     encoding: 'utf8', env: process.env, windowsHide: true,
   });
   if (result.status !== 0) throw new Error(`Unable to verify restored Edge Functions: ${(result.stderr || '').trim().slice(0, 300)}`);
-  const active = JSON.parse(result.stdout || '[]').map(fn => fn.name);
+  const active = JSON.parse(result.stdout || '[]').map(fn => fn.name || fn.slug);
   const missing = functions.names.filter(name => !active.includes(name));
-  return { verified: missing.length === 0, expected: functions.names, active, missing };
+  return { verified: missing.length === 0, expected: functions.names, active, missing, redeployScripts: functions.redeployScripts || null };
 }
 
 async function verifyRestoredDatabase(extracted, limited = false) {
@@ -947,7 +1544,7 @@ function evidenceHtml(report) {
     ['Storage', report.storage?.verified, report.storage?.verified ? `${report.storage.hashesVerified} object hashes matched` : report.storage?.reason || 'Not verified'],
     ['Edge Functions', report.functions?.verified, report.functions?.verified ? `${report.functions.active?.length || 0} Functions verified` : report.functions?.reason || 'Not verified'],
   ];
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PortaBase recovery evidence</title><style>body{margin:0;background:#0d0e11;color:#f7f6f1;font-family:Segoe UI,sans-serif}.wrap{width:min(900px,calc(100% - 32px));margin:48px auto}.status{padding:24px;border:1px solid #34353a;background:#17181c}small{font:11px Consolas,monospace;color:#c9ff4a;letter-spacing:.1em}h1{font-size:42px;margin:12px 0}.meta{color:#92938f;line-height:1.7}.checks{display:grid;gap:1px;background:#34353a;margin:28px 0}.check{background:#17181c;padding:20px}.check b{display:block;font-size:18px}.pass{color:#c9ff4a}.fail{color:#ff4b3e}.manual{padding:24px;background:#f2f0e8;color:#17181c}.manual li{margin:10px 0;line-height:1.5}code{word-break:break-all}</style></head><body><main class="wrap"><section class="status"><small>PORTABASE RECOVERY EVIDENCE</small><h1 class="${report.status.includes('VERIFIED') || report.status.includes('PASSED') ? 'pass' : 'fail'}">${escape(report.status)}</h1><div class="meta">Capsule: <code>${escape(report.capsuleId)}</code><br>Source: ${escape(report.sourceProjectRef)}<br>Target: ${escape(report.targetProjectRef || 'Not selected')}<br>Started: ${escape(report.startedAt)}<br>Completed: ${escape(report.completedAt)}</div></section><section class="checks">${checks.map(([name, ok, note]) => `<div class="check"><b class="${ok ? 'pass' : 'fail'}">${ok ? 'PASS' : 'NOT VERIFIED'} · ${escape(name)}</b><span>${escape(note)}</span></div>`).join('')}</section><section class="manual"><h2>Manual work still required</h2><ol>${MANUAL_RECOVERY_ACTIONS.map(item => `<li>${escape(item)}</li>`).join('')}</ol></section></main></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Portabase recovery evidence</title><style>body{margin:0;background:#0d0e11;color:#f7f6f1;font-family:Segoe UI,sans-serif}.wrap{width:min(900px,calc(100% - 32px));margin:48px auto}.status{padding:24px;border:1px solid #34353a;background:#17181c}small{font:11px Consolas,monospace;color:#c9ff4a;letter-spacing:.1em}h1{font-size:42px;margin:12px 0}.meta{color:#92938f;line-height:1.7}.checks{display:grid;gap:1px;background:#34353a;margin:28px 0}.check{background:#17181c;padding:20px}.check b{display:block;font-size:18px}.pass{color:#c9ff4a}.fail{color:#ff4b3e}.manual{padding:24px;background:#f2f0e8;color:#17181c}.manual li{margin:10px 0;line-height:1.5}code{word-break:break-all}</style></head><body><main class="wrap"><section class="status"><small>PORTABASE RECOVERY EVIDENCE</small><h1 class="${report.status.includes('VERIFIED') || report.status.includes('PASSED') ? 'pass' : 'fail'}">${escape(report.status)}</h1><div class="meta">Capsule: <code>${escape(report.capsuleId)}</code><br>Source: ${escape(report.sourceProjectRef)}<br>Target: ${escape(report.targetProjectRef || 'Not selected')}<br>Started: ${escape(report.startedAt)}<br>Completed: ${escape(report.completedAt)}</div></section><section class="checks">${checks.map(([name, ok, note]) => `<div class="check"><b class="${ok ? 'pass' : 'fail'}">${ok ? 'PASS' : 'NOT VERIFIED'} · ${escape(name)}</b><span>${escape(note)}</span></div>`).join('')}</section><section class="manual"><h2>Manual work still required</h2><ol>${MANUAL_RECOVERY_ACTIONS.map(item => `<li>${escape(item)}</li>`).join('')}</ol></section></main></body></html>`;
 }
 
 async function writeRecoveryEvidence(report) {
@@ -1027,7 +1624,7 @@ async function restore() {
       captureContents: manifest.contents,
       captureErrors: manifest.errors,
     };
-    console.log(`PortaBase guarded recovery plan\n\nSource: ${manifest.projectRef}\nCapsule: ${metadata.id}\nCapture status: ${manifest.status}\n`);
+    console.log(`Portabase guarded recovery plan\n\nSource: ${manifest.projectRef}\nCapsule: ${metadata.id}\nCapture status: ${manifest.status}\n`);
     if (manifest.edition === 'trial') console.log('TRIAL SAMPLE: database rows and most Storage objects/Functions are intentionally absent. This is not a complete recovery backup.\n');
     for (const name of ['database', 'storage', 'functions']) {
       const item = manifest.contents[name];
@@ -1130,7 +1727,7 @@ async function installSchedule() {
   }
   const scheduleDir = resolve('.portabase');
   const wrapper = join(scheduleDir, `backup-${config.projectRef}.cmd`);
-  const taskName = `PortaBase Backup ${config.projectRef}`;
+  const taskName = `Portabase Backup ${config.projectRef}`;
   console.log(`Task: ${taskName}\nEvery: ${hours} hour(s)\nWrapper: ${wrapper}`);
   if (!hasFlag('execute')) return console.log('\nDRY RUN ONLY. Add --execute to create the task. Secrets must be available as Windows user environment variables.');
   await mkdir(scheduleDir, { recursive: true });
@@ -1142,7 +1739,7 @@ async function installSchedule() {
 
 async function removeSchedule() {
   const { config } = await loadConfig();
-  const taskName = `PortaBase Backup ${config.projectRef}`;
+  const taskName = `Portabase Backup ${config.projectRef}`;
   if (!hasFlag('execute')) return console.log(`DRY RUN: would remove task "${taskName}". Add --execute to continue.`);
   const schtasks = resolveTool('schtasks');
   await run(schtasks, ['/Delete', '/TN', taskName, '/F']);
@@ -1150,10 +1747,10 @@ async function removeSchedule() {
 
 async function plan() {
   const { config } = await loadConfig();
-  console.log(`PortaBase Essentials recovery plan\n\nProject: ${config.projectRef}\nDestination: ${config.provider.type}\nEncrypted staging: ${resolve(config.backupDirectory)}\n`);
+  console.log(`Portabase recovery plan (open core)\n\nProject: ${config.projectRef}\nDestination: ${config.provider.type}\nEncrypted staging: ${resolve(config.backupDirectory)}\n`);
   for (const name of ['database', 'storage', 'functions']) console.log(`${config.capture?.[name] === false ? 'SKIP' : 'KEEP'}  ${name}`);
   console.log(`\nRetention: keep ${config.retention?.keepLast ?? 30}; pruning is guarded and dry-run by default.`);
-  console.log('Credentials and encryption keys remain local. No PortaBase API or telemetry endpoint is contacted.');
+  console.log('Credentials and encryption keys remain local. No Portabase API or telemetry endpoint is contacted.');
 }
 
 async function probeToken() {
@@ -1217,7 +1814,86 @@ async function probe() {
 }
 
 function help() {
-  console.log(`PortaBase ${VERSION}\n\nEncrypted, customer-owned Supabase recovery capsules. No telemetry. No credential custody.\n\nCommands:\n  init                Create a non-secret Essentials configuration\n  doctor              Test tools, credentials, destination, and live authorization\n  plan                Show the capture and destination plan\n  backup              Capture, encrypt, transfer, and verify a capsule\n                      Missing/invalid license fails closed to trial limits\n                      Add --license <file> for an offline signed paid license\n  verify              Verify checksums; add --decrypt for authenticated decryption\n  status              Show the last durable backup result\n  prune               Preview retention; add --execute to delete recognized capsules\n  install-schedule    Preview a scheduled backup; add --execute to install\n  remove-schedule     Preview task removal; add --execute to remove\n  restore             Decrypt and plan restore; execution requires two target guards\n\nRequired secrets stay in environment variables and are never written into a capsule.\n`);
+  console.log(`Portabase ${VERSION} (Apache-2.0 open core)
+
+Encrypted, customer-owned Supabase recovery capsules.
+Full capture is free. Credentials and encryption keys never leave your runner.
+Cloud telemetry is opt-in only (see docs/TELEMETRY_SCHEMA.md).
+
+Destinations:
+  local               Local Starter vault — folder on this PC / USB / NAS
+                      Capsules ≤ ${LOCAL_STARTER_MAX_LABEL} (override: --allow-large-local)
+                      For operators with no S3/Dropbox yet. Not off-machine Escape.
+  dropbox | google-drive | aws | rclone
+                      Recommended when you can — recovery bytes leave this machine.
+
+Commands:
+  init                Create a non-secret configuration
+  doctor              Test tools, credentials, destination, and live authorization
+  plan                Show the capture and destination plan
+  backup              Capture, encrypt, transfer, and verify a capsule
+                      Default: full community capture (no license)
+                      Add --trial for a deliberately limited demo sample
+                      Local Starter: add --allow-large-local to bypass ${LOCAL_STARTER_MAX_LABEL} cap
+  verify              Verify checksums; add --decrypt for authenticated decryption
+  status              Show the last durable backup result
+  prune               Preview retention; add --execute to delete recognized capsules
+  install-schedule    Preview a scheduled backup; add --execute to install
+  remove-schedule     Preview task removal; add --execute to remove
+  restore             Decrypt and plan restore; execution requires two target guards
+  replay              Validate a capsule by restoring into a NEW Supabase project
+                      (never the source). Requires target env vars + --confirm-target.
+                      Same guards as restore --execute; clearer validation report.
+
+Optional Cloud:
+  Set cloud.enabled=true and PORTABASE_CLOUD_URL / PORTABASE_CLOUD_TOKEN
+  for health events only. Never required for backup or restore.
+
+Required secrets stay in environment variables and are never written into a capsule.
+`);
+}
+
+/**
+ * Replay = prove the bundle works by writing into a blank, new Supabase project.
+ * Refuses source == target. Never required to use Portabase Cloud.
+ */
+async function replay() {
+  console.log([
+    'Portabase REPLAY',
+    'Validate a recovery capsule by moving it into a NEW Supabase project/account.',
+    'Source project is never written. Target must be blank and explicitly confirmed.',
+    '',
+  ].join('\n'));
+
+  if (!flag('confirm-target') && !flag('confirm-target', argv[2])) {
+    // allow: portabase replay <capsuleDir> --confirm-target ref
+  }
+  const confirm = flag('confirm-target');
+  if (!confirm) {
+    throw new Error('replay requires --confirm-target <NEW_PROJECT_REF> (exact new project ref, never the source).');
+  }
+  if (!process.env.PORTABASE_TARGET_PROJECT_REF) {
+    throw new Error('Set PORTABASE_TARGET_PROJECT_REF to the new project ref (must match --confirm-target).');
+  }
+  if (process.env.PORTABASE_TARGET_PROJECT_REF !== confirm) {
+    throw new Error('PORTABASE_TARGET_PROJECT_REF must exactly match --confirm-target.');
+  }
+  if (!process.env.PORTABASE_TARGET_SUPABASE_URL || !(process.env.PORTABASE_TARGET_SERVICE_ROLE_KEY || process.env.PORTABASE_TARGET_SECRET_KEY) || !process.env.PORTABASE_TARGET_DB_URL) {
+    throw new Error('Set PORTABASE_TARGET_SUPABASE_URL, PORTABASE_TARGET_SERVICE_ROLE_KEY (or SECRET_KEY), and PORTABASE_TARGET_DB_URL for the new project only.');
+  }
+
+  // Force write path used by restore() (unless user asked preflight-only)
+  if (!hasFlag('preflight') && !hasFlag('execute') && !hasFlag('drill')) {
+    process.argv.push('--execute');
+  }
+
+  console.log('REPLAY STEPS: open capsule → decrypt/verify → refuse source target → blank preflight → restore layers → read-back evidence\n');
+  await restore();
+  if (hasFlag('preflight') && !hasFlag('execute') && !hasFlag('drill')) {
+    console.log('\nREPLAY PREFLIGHT ONLY — target not modified. Re-run without --preflight (defaults to --execute) to complete validation.');
+  } else {
+    console.log('\nREPLAY VALIDATION FINISHED. If evidence status is green, this capsule is proven restorable into a new account. Keep production DNS pointed at source until you deliberately cut over.');
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
@@ -1232,10 +1908,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     else if (command === 'install-schedule') await installSchedule();
     else if (command === 'remove-schedule') await removeSchedule();
     else if (command === 'restore') await restore();
+    else if (command === 'replay') await replay();
     else if (command === 'probe') await probe();
     else help();
   } catch (error) {
-    console.error(`\nPortaBase failed: ${error.message}`);
+    console.error(`\nPortabase failed: ${error.message}`);
     process.exitCode = 1;
   }
 }

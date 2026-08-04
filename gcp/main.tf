@@ -24,7 +24,7 @@ resource "google_project_service" "required" {
 
 resource "google_service_account" "portabase" {
   account_id   = "portabase-runner"
-  display_name = "PortaBase customer-owned backup runner"
+  display_name = "Portabase customer-owned backup runner"
   depends_on   = [google_project_service.required]
 }
 

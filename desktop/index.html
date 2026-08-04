@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>PortaBase</title>
+  <title>Portabase</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -17,13 +17,13 @@
       <button class="nav" data-page="cli">Command line</button>
       <button class="nav" data-page="results">Activity and proof</button>
       <button class="nav subtle" data-page="comfort">Change experience level</button>
-      <div class="ownership"><b>Your machine. Your keys.</b><p>PortaBase has no account, credential vault, or route into your backups.</p></div>
-      <button id="buy" class="buy">Buy PortaBase for this platform · $147</button>
+      <div class="ownership"><b>Your machine. Your keys.</b><p>Open-source recovery engine. Optional Cloud adds monitoring and alert chains — never your keys.</p></div>
+      <button id="buy" class="buy">Portabase Cloud · monitoring & alerts</button>
     </aside>
 
     <section id="comfort" class="page">
       <p class="eyebrow">WELCOME</p><h1>You built something worth protecting.<br>How do you like to work?</h1>
-      <p class="lead">Every path uses the same engine, the same encryption, and the same safety guards. This only changes how much PortaBase explains and how much it handles for you. You can switch anytime.</p>
+      <p class="lead">Every path uses the same engine, the same encryption, and the same safety guards. This only changes how much Portabase explains and how much it handles for you. You can switch anytime.</p>
       <div class="comfortCards">
         <button class="comfortCard" data-level="guided"><b>I just built an app</b><p>You made something real — we’ll handle the database plumbing. One token, a few guided steps, and your app is protected.</p><span>GUIDED · RECOMMENDED FOR BUILDERS</span></button>
         <button class="comfortCard" data-level="standard"><b>I know my way around</b><p>You know what a token is and can find your connection string. One screen with every field, validated as you go.</p><span>STANDARD</span></button>
@@ -33,8 +33,8 @@
 
     <section id="guided" class="page">
       <p class="eyebrow">GUIDED PROTECTION</p><h1>Let’s protect your app.<br>Four steps, all on this computer.</h1>
-      <p class="lead">Nothing you paste here is sent to PortaBase — there is nowhere to send it. Your token talks directly to Supabase; everything else stays on this machine.</p>
-      <div class="step automated" id="gStep1"><b>Step 1 · Connect with one token</b><p>A Personal Access Token lets PortaBase find your apps by name so you never have to hunt for technical details. Create one, then paste it below.</p>
+      <p class="lead">Nothing you paste here is sent to Portabase — there is nowhere to send it. Your token talks directly to Supabase; everything else stays on this machine.</p>
+      <div class="step automated" id="gStep1"><b>Step 1 · Connect with one token</b><p>A Personal Access Token lets Portabase find your apps by name so you never have to hunt for technical details. Create one, then paste it below.</p>
         <div class="stepActions"><button id="gOpenTokens" class="secondary">Open the Supabase token page</button></div>
         <div class="grid compact"><label class="wide">Personal Access Token<input id="gToken" type="password" placeholder="Paste your token — it stays on this computer"></label></div>
         <div class="stepActions"><button id="gConnect" class="primary">Connect</button></div>
@@ -52,7 +52,7 @@
         <label class="confirm"><input type="checkbox" id="gSaved"> I saved this passphrase somewhere safe that is not this computer.</label>
         <p id="gStep3Status" class="statusline">Generate and save your passphrase to continue.</p>
       </div>
-      <div class="step locked" id="gStep4"><b>Step 4 · Where should your safety copy live?</b><p>Anywhere Supabase isn’t. Your Google Drive or Dropbox works beautifully — you sign in with your own browser, and PortaBase verifies every backup actually arrived there.</p>
+      <div class="step locked" id="gStep4"><b>Step 4 · Where should your safety copy live?</b><p>Anywhere Supabase isn’t. Your Google Drive or Dropbox works beautifully — you sign in with your own browser, and Portabase verifies every backup actually arrived there.</p>
         <div class="stepActions destChoice"><button id="gDestLocal" class="secondary selected">This computer</button><button id="gDestDrive" class="secondary">My Google Drive</button><button id="gDestDropbox" class="secondary">My Dropbox</button></div>
         <p id="gDestStatus" class="statusline">Backups will be kept in your Documents folder.</p>
         <div class="stepActions"><button id="gProtect" class="primary">Protect my app now</button><button id="gSchedule" class="secondary">Also protect it automatically every 6 hours</button></div>
@@ -62,8 +62,8 @@
 
     <section id="protect" class="page">
       <p class="eyebrow">PROTECT THIS PROJECT</p><h1>Make the independent copy before access disappears.</h1>
-      <p class="lead">The trial runs the real workflow indefinitely, but saves only structure, five Storage objects, and two Functions.</p>
-      <div class="step automated"><b id="licenseStatus">Trial edition · limited payload</b><p>A paid PortaBase license is a small signed file. It verifies entirely on this computer and never expires.</p><div class="stepActions"><button id="importLicense" class="secondary">Import purchased license</button></div></div>
+      <p class="lead">Full encrypted capture is free under Apache-2.0. Optional demo mode (--trial) limits the payload for safe drills only.</p>
+      <div class="step automated"><b id="licenseStatus">Community edition · full open-source capture</b><p>No purchase is required for complete backups. Portabase Cloud (optional) adds fleet monitoring and multi-person SMS/email alert chains.</p><div class="stepActions"><button id="importLicense" class="secondary">Import legacy license file</button></div></div>
       <div class="grid">
         <label>Project reference<input id="projectRef" placeholder="abcdefghijklmnopqrst" maxlength="20"></label>
         <label>Project URL<input id="sourceUrl" placeholder="https://PROJECT.supabase.co"></label>
@@ -74,26 +74,26 @@
         <label class="wide">Independent destination<div class="picker"><input id="destination" readonly><button data-pick="destination">Choose…</button></div></label>
         <div class="wide stepActions destChoice"><button id="connectDrive" class="secondary">Connect Google Drive</button><button id="connectDropbox" class="secondary">Connect Dropbox</button><span id="cloudStatus" class="cloudStatus"></span></div>
       </div>
-      <div class="actions"><button id="saveSource" class="secondary">Save securely</button><button id="doctor" class="secondary">Check readiness</button><button id="trial" class="secondary">Run limited trial backup</button><button id="fullBackup" class="primary">Run complete licensed backup</button></div>
-      <div class="step"><b>Automatic protection</b><p>The installed PortaBase application can run headlessly every six hours. The OS schedule contains no passwords or tokens; PortaBase reads them from your protected credential store at run time.</p><div class="stepActions"><button id="installSchedule" class="primary">Install 6-hour schedule</button><button id="removeSchedule" class="secondary">Remove schedule</button></div></div>
+      <div class="actions"><button id="saveSource" class="secondary">Save securely</button><button id="doctor" class="secondary">Check readiness</button><button id="trial" class="secondary">Run limited demo backup</button><button id="fullBackup" class="primary">Run complete backup</button></div>
+      <div class="step"><b>Automatic protection</b><p>The installed Portabase application can run headlessly every six hours. The OS schedule contains no passwords or tokens; Portabase reads them from your protected credential store at run time.</p><div class="stepActions"><button id="installSchedule" class="primary">Install 6-hour schedule</button><button id="removeSchedule" class="secondary">Remove schedule</button></div></div>
     </section>
 
     <section id="recover" class="page">
       <p class="eyebrow">RECOVER INTO A NEW PROJECT</p><h1>A backup matters only if it opens somewhere else.</h1>
       <p class="lead">We guide and automate as much as Supabase permits. A few identity, billing, and third-party security steps must remain manual under Supabase’s rules.</p>
-      <div class="step"><b>Step 1 · You establish the account</b><p>Supabase must handle signup or login, email or identity checks, CAPTCHA, organization ownership, and billing approval. PortaBase stays with you through those steps but cannot impersonate you.</p><div class="stepActions"><button id="newAccount" class="secondary">Create or sign in to Supabase</button><button id="newToken" class="secondary">Create a Personal Access Token</button></div></div>
-      <div class="step automated"><b>Step 2 · PortaBase provisions the blank project</b><p>Your token goes directly from this computer to Supabase’s Management API. PortaBase can list your organizations, create the new project, retrieve its identifiers and administrator key, and prepare the restore fields below. Nothing is sent to PortaBase.</p>
+      <div class="step"><b>Step 1 · You establish the account</b><p>Supabase must handle signup or login, email or identity checks, CAPTCHA, organization ownership, and billing approval. Portabase stays with you through those steps but cannot impersonate you.</p><div class="stepActions"><button id="newAccount" class="secondary">Create or sign in to Supabase</button><button id="newToken" class="secondary">Create a Personal Access Token</button></div></div>
+      <div class="step automated"><b>Step 2 · Portabase provisions the blank project</b><p>Your token goes directly from this computer to Supabase’s Management API. Portabase can list your organizations, create the new project, retrieve its identifiers and administrator key, and prepare the restore fields below. Nothing is sent to Portabase.</p>
         <div class="grid compact">
-          <label class="wide">Personal Access Token<input id="targetAccess" type="password" placeholder="Used locally; never sent to PortaBase"></label>
+          <label class="wide">Personal Access Token<input id="targetAccess" type="password" placeholder="Used locally; never sent to Portabase"></label>
           <label>Organization<select id="targetOrg"><option value="">Load your organizations first</option></select></label>
-          <label>Project name<input id="targetName" value="PortaBase Recovery"></label>
+          <label>Project name<input id="targetName" value="Portabase Recovery"></label>
           <label>Region<select id="targetRegion"><option value="us-east-1">US East (N. Virginia)</option><option value="us-east-2">US East (Ohio)</option><option value="us-west-1">US West (N. California)</option><option value="us-west-2">US West (Oregon)</option><option value="ca-central-1">Canada Central</option><option value="eu-west-1">Europe (Ireland)</option><option value="eu-central-1">Europe (Frankfurt)</option><option value="ap-southeast-1">Asia Pacific (Singapore)</option><option value="ap-southeast-2">Asia Pacific (Sydney)</option><option value="ap-northeast-1">Asia Pacific (Tokyo)</option></select></label>
           <label>New database password<input id="targetDbPassword" type="password" placeholder="12+ characters; keep a separate copy"></label>
         </div>
         <div class="stepActions"><button id="loadOrgs" class="secondary">1. Load organizations</button><button id="createProject" class="primary">2. Create blank project</button><button id="refreshProject" class="secondary">3. Prepare credentials</button></div>
-        <p id="provisionStatus" class="statusline">Nothing has been created yet. PortaBase will never delete a project from this screen.</p>
+        <p id="provisionStatus" class="statusline">Nothing has been created yet. Portabase will never delete a project from this screen.</p>
       </div>
-      <div class="step"><b>Step 3 · Prove recovery or restore everything</b><p>Use a current limited-trial capsule for a safe validation drill on a disposable free project: PortaBase restores database structure and its API surface, up to five Storage objects, and up to two Edge Functions, then verifies the target. A full capsule remains available for a complete emergency restore.</p></div>
+      <div class="step"><b>Step 3 · Prove recovery or restore everything</b><p>Use a current limited-trial capsule for a safe validation drill on a disposable free project: Portabase restores database structure and its API surface, up to five Storage objects, and up to two Edge Functions, then verifies the target. A full capsule remains available for a complete emergency restore.</p></div>
       <div class="grid">
         <label class="wide">Recovery capsule<div class="picker"><input id="capsule" readonly><button data-pick="capsule">Choose…</button></div></label>
         <label>New project reference<input id="targetRef" placeholder="abcdefghijklmnopqrst" maxlength="20"></label>
@@ -101,7 +101,7 @@
         <label class="wide">New database connection<input id="targetDb" type="password" placeholder="postgresql://..."></label>
         <label>New service-role / secret key<input id="targetService" type="password"></label>
       </div>
-      <div class="danger"><b>Write guard</b><p>First create a dry-run plan. To execute, type the exact new project reference below. PortaBase refuses the original source project.</p><input id="typedRef" placeholder="Type the NEW project reference"></div>
+      <div class="danger"><b>Write guard</b><p>First create a dry-run plan. To execute, type the exact new project reference below. Portabase refuses the original source project.</p><input id="typedRef" placeholder="Type the NEW project reference"></div>
       <div class="actions"><button id="dryRun" class="secondary">Build no-write restore plan</button><button id="drillRestore" class="secondary">Run limited restore drill</button><button id="executeRestore" class="dangerButton">Restore complete capsule</button></div>
     </section>
 

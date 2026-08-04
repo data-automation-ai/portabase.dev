@@ -14,7 +14,7 @@ function definitions({ platform, executable, everyHours, home, userData }) {
   const hours = validateHours(everyHours);
   if (!path.isAbsolute(executable)) throw new Error('Scheduled executable must be an absolute path.');
   if (platform === 'win32') {
-    return { taskName: 'PortaBase Automatic Backup', command: `"${executable}" --scheduled-backup`, hours };
+    return { taskName: 'Portabase Automatic Backup', command: `"${executable}" --scheduled-backup`, hours };
   }
   if (platform === 'darwin') {
     const file = path.join(home, 'Library', 'LaunchAgents', 'dev.portabase.backup.plist');
@@ -24,8 +24,8 @@ function definitions({ platform, executable, everyHours, home, userData }) {
   }
   if (platform === 'linux') {
     const directory = path.join(home, '.config', 'systemd', 'user');
-    const service = `[Unit]\nDescription=PortaBase automatic encrypted backup\nAfter=network-online.target\n\n[Service]\nType=oneshot\nExecStart="${executable.replaceAll('"', '\\"')}" --scheduled-backup\nNoNewPrivileges=true\nPrivateTmp=true\n`;
-    const timer = `[Unit]\nDescription=Run PortaBase automatically\n\n[Timer]\nOnBootSec=15min\nOnUnitActiveSec=${hours}h\nPersistent=true\nRandomizedDelaySec=5min\n\n[Install]\nWantedBy=timers.target\n`;
+    const service = `[Unit]\nDescription=Portabase automatic encrypted backup\nAfter=network-online.target\n\n[Service]\nType=oneshot\nExecStart="${executable.replaceAll('"', '\\"')}" --scheduled-backup\nNoNewPrivileges=true\nPrivateTmp=true\n`;
+    const timer = `[Unit]\nDescription=Run Portabase automatically\n\n[Timer]\nOnBootSec=15min\nOnUnitActiveSec=${hours}h\nPersistent=true\nRandomizedDelaySec=5min\n\n[Install]\nWantedBy=timers.target\n`;
     return { directory, service, timer, hours };
   }
   throw new Error(`Unsupported scheduling platform: ${platform}`);

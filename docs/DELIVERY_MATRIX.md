@@ -1,4 +1,4 @@
-# PortaBase delivery matrix
+# Portabase delivery matrix
 
 The same recovery-capsule format and guarded restore rules apply to every edition. The interface and scheduler change; the customer always owns the credentials, runner, destination, passphrase, and capsules.
 
@@ -15,7 +15,7 @@ The same recovery-capsule format and guarded restore rules apply to every editio
 
 ## Desktop security boundary
 
-The Electron renderer loads only packaged local files. It has no Node integration, uses process sandboxing and context isolation, blocks navigation and new windows, and receives only narrow IPC methods. The main process validates the renderer for every privileged call. Static external links are allowlisted. Secrets are encrypted with operating-system protected storage and are never included in the capsule or sent to PortaBase.
+The Electron renderer loads only packaged local files. It has no Node integration, uses process sandboxing and context isolation, blocks navigation and new windows, and receives only narrow IPC methods. The main process validates the renderer for every privileged call. Static external links are allowlisted. Secrets are encrypted with operating-system protected storage and are never included in the capsule or sent to Portabase.
 
 ## Release gates
 
@@ -28,8 +28,8 @@ Do not publish a desktop artifact merely because it compiled. Each platform rele
 5. No-write preflight against a new blank target.
 6. Guarded restore and post-restore acceptance suite.
 7. OS code-signature verification; macOS additionally requires notarization and Gatekeeper verification.
-8. Secret-at-rest inspection and an outbound-network audit proving no PortaBase credential/data relay.
+8. Secret-at-rest inspection and an outbound-network audit proving no Portabase credential/data relay.
 
 ## Trial and paid distribution
 
-The indefinite trial runs the complete workflow but enforces schema-only database capture, five Storage objects across two buckets, and two Functions. The paid package removes those payload limits after importing an offline Ed25519-signed lifetime license. The current JavaScript verifier fails closed and deters casual copying, but Electron ASAR packaging is not a strong protection boundary. A compiled native recovery core remains the hardening path for meaningful resistance to patching or redistribution.
+The optional `--trial` sample runs the complete workflow but enforces schema-only database capture, five Storage objects across two buckets, and two Functions. **Full capture is free open core** (no license). Portabase Cloud is a separate $17/mo ops subscription. Legacy offline Ed25519 licenses may still verify for historical orders but do not unlock software.

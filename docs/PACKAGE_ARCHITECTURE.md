@@ -1,4 +1,4 @@
-# PortaBase package architecture
+# Portabase package architecture
 
 ## The shared premise
 
@@ -6,7 +6,7 @@ Both packages solve the same dependency problem: recovery material must already 
 
 Both packages use the same recovery-capsule format and the same local capture, encryption, integrity, retention, and guarded-restore engine. The package changes where execution runs, where capsules live, and how much of the recovery workspace is pre-provisioned.
 
-## PortaBase Essentials: independent recovery copy
+## Portabase Essentials: independent recovery copy
 
 ### Best fit
 
@@ -17,17 +17,17 @@ Both packages use the same recovery-capsule format and the same local capture, e
 
 ### Topology
 
-1. PortaBase runs on a customer computer, NAS, or always-on server.
+1. Portabase runs on a customer computer, NAS, or always-on server.
 2. A local scheduler launches the capture at the chosen interval.
-3. PortaBase captures database/Auth material, actual Storage objects, Edge Function source, and configuration inventory.
+3. Portabase captures database/Auth material, actual Storage objects, Edge Function source, and configuration inventory.
 4. The capsule is hashed and encrypted locally.
 5. The encrypted capsule is copied through the customer's existing `rclone` authorization to Google Drive or Dropbox.
-6. PortaBase verifies the remote copy and applies local and remote retention without using destructive sync semantics.
+6. Portabase verifies the remote copy and applies local and remote retention without using destructive sync semantics.
 
 ### What it promises
 
 - A complete, independently controlled recovery artifact
-- No PortaBase account, hosted service, credential relay, or telemetry
+- No Portabase account, hosted service, credential relay, or telemetry
 - Guided recovery into a fresh authorized Supabase project
 - Configurable recovery-point objective based on the schedule
 
@@ -44,7 +44,7 @@ Both packages use the same recovery-capsule format and the same local capture, e
 - Prefer a scope limited to files created by the customer's rclone remote where the provider supports it.
 - Split very large capsule payloads into deterministic chunks and record every chunk hash in the manifest.
 - Verify the destination using remote listings and hashes where supported; label a destination partial when provider hash semantics are insufficient.
-- Treat Google Drive or Dropbox trash/version history as convenience, not the retention authority. PortaBase retention remains explicit and independently reported.
+- Treat Google Drive or Dropbox trash/version history as convenience, not the retention authority. Portabase retention remains explicit and independently reported.
 - Report realistic restore readiness: `CAPSULE VERIFIED` is not `APPLICATION RECOVERY PROVEN`.
 
 ### Expected recovery profile
@@ -53,7 +53,7 @@ Both packages use the same recovery-capsule format and the same local capture, e
 - RTO: typically hours and dependent on capsule size, download speed, target creation, and Supabase import time
 - Operating cost: the customer's existing Drive/Dropbox storage plan and local execution resources
 
-## PortaBase AWS Recovery: immutable vault and restore workspace
+## Portabase AWS Recovery: immutable vault and restore workspace
 
 ### Best fit
 
@@ -64,7 +64,7 @@ Both packages use the same recovery-capsule format and the same local capture, e
 
 ### Recommended account boundary
 
-Use a dedicated customer-owned AWS account for recovery, separate from the application account when practical. Protect its root user with MFA, retain break-glass access, and restrict the PortaBase runner to a purpose-built least-privilege role.
+Use a dedicated customer-owned AWS account for recovery, separate from the application account when practical. Protect its root user with MFA, retain break-glass access, and restrict the Portabase runner to a purpose-built least-privilege role.
 
 ### Topology
 
@@ -119,4 +119,4 @@ At recovery time the customer still:
 | Restore workspace | Customer machine | Predefined Fargate restore task |
 | Best description | Independent recovery copy | Recovery vault and restore workspace |
 
-Neither package should be called a hot standby. The higher-value promise is customer-owned, verified recoverability without PortaBase ever receiving the credentials or the data.
+Neither package should be called a hot standby. The higher-value promise is customer-owned, verified recoverability without Portabase ever receiving the credentials or the data.

@@ -1,12 +1,12 @@
 {
-  "version": 2,
+  "version": 3,
   "projectRef": "abcdefghijklmnopqrst",
   "backupDirectory": "./portabase-capsules",
   "statusDirectory": "./portabase-status",
   "provider": {
     "type": "google-drive",
     "remote": "gdrive",
-    "path": "/PortaBase"
+    "path": "/Portabase"
   },
   "capture": {
     "database": true,
@@ -22,6 +22,12 @@
   },
   "schedule": {
     "everyHours": 6
+  },
+  "cloud": {
+    "enabled": false,
+    "endpointEnv": "PORTABASE_CLOUD_URL",
+    "tokenEnv": "PORTABASE_CLOUD_TOKEN",
+    "agentId": null
   },
   "alerts": {
     "webhookEnv": "PORTABASE_ALERT_WEBHOOK_URL"

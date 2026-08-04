@@ -1,16 +1,23 @@
-# PortaBase.dev product specification
+# Portabase.dev product specification
 
-Status: working v1 definition
+Status: open-core v0.4 working definition
 
 ## Product promise
 
-PortaBase is a one-time-purchase, customer-run continuity utility for Supabase. It continuously creates recovery capsules outside the customer's Supabase account so recovery does not depend on access to the original organization, dashboard, or managed backups.
+Portabase creates encrypted recovery capsules for Supabase **outside** the customer's Supabase account so recovery does not depend on the original organization, dashboard, or managed backups.
 
-PortaBase has no hosted control plane, customer account, credential vault, telemetry pipeline, backup relay, or access to customer data. Payment fulfillment data held by Square is outside this infrastructure zero-knowledge claim.
+Two ways to run it:
+
+| Path | Who stages the job | Final capsule vault |
+| --- | --- | --- |
+| **Portabase Cloud (sold)** | **Portabase managed runners** — customer does not use a laptop disk | **Customer BYO destination** (S3, etc.) |
+| **Standalone open-source engine** | Customer — **local disk or their cloud** working store (script is flexible) | Customer-chosen destination |
+
+The recovery engine is **Apache-2.0 open source**. Cloud sells managed staging + console + alerts. Neither path makes Portabase the long-term landlord of recovery bytes.
 
 ## Shared recovery capsule
 
-Both packages capture and verify:
+Open-source capture and verify include:
 
 - PostgreSQL roles, schema, data, policies, triggers, functions, extensions inventory, cron inventory, and queues inventory
 - Supabase Auth schema records required for an authorized migration
@@ -18,68 +25,76 @@ Both packages capture and verify:
 - Edge Function source from the customer's local project and authorized remote inventory
 - Auth, Realtime, Storage, API, domain, webhook, SMTP, redirect, and extension configuration inventory
 - Encrypted manifest, per-file hashes, timestamps, source project reference, tool versions, and capture status
-- A truthful `COMPLETE`, `PARTIAL`, or `FAILED` result; a missing subsystem can never produce a successful capsule
-- Retention, verification, restore rehearsal, logs, and failure notification
+- A truthful `COMPLETE`, `PARTIAL`, `TRIAL` (demo), or `FAILED` result
 
 Credentials are read only from the customer's local environment or provider CLI. Encryption keys remain customer-held.
 
-## Package 1: PortaBase Essentials
+## Open-source Community (standalone script)
 
-Audience: small businesses, agencies, and independent developers who want a low-friction external recovery copy.
+Audience: teams that want independent recovery without buying Cloud.
 
-Destinations:
+Includes:
 
-- Dropbox through a customer-authenticated `rclone` remote
-- Google Drive through a customer-authenticated `rclone` remote
-- Local folder or NAS as an optional additional destination
+- CLI and self-hosted runner
+- **Flexible staging:** local drive **or** another customer-controlled cloud/VM disk (script may be extended either way)
+- Basic management GUI (local / self-hosted)
+- Destinations: Google Drive, Dropbox, rclone remotes, local/NAS, customer AWS path
+- Full capture by default; optional `--trial` limited demo for safe drills
+- Guarded restore into a fresh Supabase project
+- Optional local webhook alerts
 
-Delivery:
+No customer credentials or capsules are required by the public website repo.
 
-- Windows-first interactive installer and PowerShell-friendly CLI
-- Scheduled hourly/daily capture using Windows Task Scheduler
-- Cross-platform cron/systemd instructions where supported
-- Encrypted, dated recovery capsules with configurable retention
-- `init`, `doctor`, `backup`, `verify`, `status`, `prune`, `install-schedule`, `remove-schedule`, `plan-restore`, and guarded `restore` commands
+## Portabase Cloud (paid service)
 
-No Google, Dropbox, Supabase, or database credentials pass through PortaBase infrastructure.
+Audience: teams who expect **Portabase to perform staging** and operate the control plane.
 
-## Package 2: PortaBase AWS Recovery
+**Launch platform: Supabase only** (see [LAUNCH-SCOPE.md](./LAUNCH-SCOPE.md)).
 
-Audience: production businesses requiring stronger immutability, monitoring, and a rehearsable recovery environment.
+Commercial defaults: **$17/mo** (Square), **7-day trial with card**, **up to 12 agents/runners**, **customer-provided capsule destination (BYO storage)**.
 
-Includes everything in Essentials plus:
+Includes:
 
-- Customer-owned Amazon S3 recovery vault
-- S3 versioning and configurable lifecycle retention
-- Optional S3 Object Lock; the installer must explain that Object Lock configuration has long-lived consequences
-- AWS KMS customer-managed encryption key
-- Least-privilege IAM roles and policies
-- EventBridge scheduling and an optional customer-owned backup runner
-- CloudWatch logs/alarms and SNS failure notifications
-- Restore-runner infrastructure and isolated recovery networking where required
-- CloudFormation and Terraform templates for the AWS resources
-- Dry-run and drift reporting before any infrastructure change
+- Hosted management console and setup wizards
+- **Managed staging on Portabase runners** (not the customer’s laptop)
+- Encrypted capsule written to the customer’s BYO destination
+- Job status in console: running / finished / failed (progress % optional)
+- Advanced monitoring (missed backups, RPO age, destination failures)
+- Multi-person alert chains / escalation (SMS, email, Slack, webhooks)
+- Team seats, fleet view, console audit log
 
-CloudFormation provisions AWS resources only. It cannot create or recover a Supabase account.
+Does **not** include: Portabase as permanent recovery vault; requiring local laptop staging for Cloud subscribers.
 
-Terraform may configure resources supported by the current Supabase provider only after the customer has created a fresh, authorized Supabase organization/project and supplied target credentials locally. Unsupported dashboard settings remain a generated, evidence-backed runbook.
+### Trust posture (customer choice)
+
+Cloud subscribers pick how hard the locks are (see [SECURITY-TRUST.md](./SECURITY-TRUST.md) and `/security`):
+
+Honest default: managed Cloud still has a **possibility that Portabase sees or uses key material during a run**. Customer KMS and audits reduce that; they do not claim zero. Standalone OSS if zero vendor key path is required.
+
+| Option | Intent |
+| --- | --- |
+| **Trust Portabase** | We hold job encryption material for unattended simplicity; capsules still go to their BYO vault; **key visibility possible by design** |
+| **Job CloudWatch / console** | **Always recorded** for managed jobs; customer has **retroactive** access in-product within retention — no “request logs” gate |
+| **Customer CloudTrail** | Audit KMS/S3 use in *their* AWS account (always theirs when Trail is on; enable early for history) |
+| **Customer KMS** | Crypto authority in *their* CMK; revocable grant |
+| **Any combination** | Start simple; tighten later |
+| **Standalone OSS** | Zero Portabase compute |
 
 ## Recovery model
 
 1. The customer creates a fresh, authorized Supabase account and empty target project.
-2. PortaBase refuses to restore when the target reference matches the source project.
+2. Portabase refuses to restore when the target reference matches the source project.
 3. The customer must type the exact target reference and approve a generated restore plan.
-4. PortaBase restores database/Auth material, then Storage objects, then Edge Functions and supported configuration.
-5. PortaBase validates row counts, hashes, bucket/object counts, policies, users, Functions, and selected application probes.
-6. PortaBase produces a residual-work report for keys, OAuth providers, SMTP, custom domains, webhooks, DNS, mobile endpoints, and any setting that cannot be safely automated.
+4. Portabase restores database/Auth material, then Storage objects, then Edge Functions and supported configuration.
+5. Portabase validates row counts, hashes, bucket/object counts, policies, users, Functions, and selected application probes.
+6. Portabase produces a residual-work report for keys, OAuth providers, SMTP, custom domains, webhooks, DNS, mobile endpoints, and any setting that cannot be safely automated.
 7. Cutover remains customer-controlled and is never performed silently.
 
 ## Definition of done
 
-- A clean-machine installation succeeds without machine-wide developer tooling beyond documented prerequisites.
-- Repeated scheduled captures produce independently stored, encrypted capsules.
-- Source access is then removed for the recovery drill.
+- A clean-machine or clean-VM installation succeeds with documented prerequisites.
+- Repeated scheduled captures produce independently stored, encrypted capsules without a Portabase account.
+- Source access can be removed for a recovery drill.
 - A new Supabase project is restored using only the capsule and target credentials.
-- Database rows, Auth records, Storage bytes, Functions, hashes, and recovery reports are verified.
-- Both package installers, upgrade/uninstall paths, documentation, and example configurations are tested.
-- Marketing claims match demonstrated behavior and never describe a partial backup as full application recovery.
+- Marketing claims match demonstrated behavior; demo/trial capsules are never described as complete recovery.
+- Cloud marketing never implies Portabase can decrypt customer capsules.

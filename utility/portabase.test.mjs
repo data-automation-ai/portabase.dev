@@ -10,6 +10,14 @@ import {
   editionFor,
   encryptFile,
   formatBytes,
+  generateFunctionRedeployScripts,
+  mapPool,
+  PINNED_SUPABASE_CLI,
+  PLATFORM_SCHEMA_EXCLUDES,
+  resolveStorageConcurrency,
+  SCHEMA_EXCLUDE_VERSION,
+  schemaExcludePattern,
+  storageCacheKey,
   trialProtectionLedger,
   isCapsuleName,
   providerCommand,
@@ -18,17 +26,24 @@ import {
   projectBaseUrl,
   recoveryEvidenceStatus,
   safeObjectPath,
+  shouldSkipStorageDownload,
+  storageObjectIdentity,
   supabaseHeaders,
   validateBlankRestoreInventory,
   validateDrillCapsule,
   validateRestoreTarget,
+  assertLocalStarterSize,
+  LOCAL_STARTER_MAX_BYTES,
+  directoryByteSize,
+  isLocalProvider,
 } from './portabase-core.mjs';
 import { cleanSchemaLine } from './portabase.mjs';
 
-test('trial edition cannot be accidentally promoted by a missing flag', () => {
+test('demo trial is opt-in; default is full community capture', () => {
   assert.equal(editionFor({ trialFlag: true, environment: '' }), 'trial');
   assert.equal(editionFor({ trialFlag: false, environment: 'trial' }), 'trial');
-  assert.equal(editionFor({ trialFlag: false, environment: 'essentials' }), 'essentials');
+  assert.equal(editionFor({ trialFlag: false, environment: 'essentials' }), 'community');
+  assert.equal(editionFor({ trialFlag: false, environment: '' }), 'community');
 });
 
 test('safeObjectPath accepts nested object names', () => {
@@ -37,6 +52,84 @@ test('safeObjectPath accepts nested object names', () => {
 
 test('safeObjectPath blocks traversal', () => {
   assert.throws(() => safeObjectPath('../secret.txt'), /Unsafe object path/);
+});
+
+test('storageObjectIdentity reads size etag and content type', () => {
+  const id = storageObjectIdentity({
+    updated_at: '2026-08-01T00:00:00.000Z',
+    metadata: { size: 42, etag: '"abc"', mimetype: 'image/png' },
+  });
+  assert.equal(id.size, 42);
+  assert.equal(id.etag, '"abc"');
+  assert.equal(id.contentType, 'image/png');
+  assert.equal(id.updatedAt, '2026-08-01T00:00:00.000Z');
+});
+
+test('shouldSkipStorageDownload resumes when size and etag match prior record', () => {
+  const listing = { size: 100, etag: 'e1', updatedAt: 't1' };
+  assert.equal(shouldSkipStorageDownload({ size: 100 }, listing, { size: 100, etag: 'e1', sha256: 'x' }), true);
+  assert.equal(shouldSkipStorageDownload({ size: 99 }, listing, { size: 100, etag: 'e1', sha256: 'x' }), false);
+  assert.equal(shouldSkipStorageDownload({ size: 100 }, listing, null), false);
+});
+
+test('generateFunctionRedeployScripts emits ps1 bash and verify_jwt flags', () => {
+  const out = generateFunctionRedeployScripts(
+    [{ name: 'health', verifyJwt: true }, { name: 'public-hook', verifyJwt: false }],
+    { projectRef: 'abcd' },
+  );
+  assert.match(out.ps1, /functions deploy health/);
+  assert.match(out.ps1, /functions deploy public-hook --project-ref \$ProjectRef --no-verify-jwt/);
+  assert.match(out.bash, /public-hook.*--no-verify-jwt/);
+  assert.match(out.ps1, new RegExp(`supabase@${PINNED_SUPABASE_CLI}`));
+  assert.doesNotMatch(out.ps1, /supabase@latest/);
+  assert.equal(out.manifest.totalFunctions, 2);
+  assert.equal(out.manifest.functions[1].verifyJwt, false);
+});
+
+test('schema exclude list is versioned and non-empty (W10)', () => {
+  assert.ok(SCHEMA_EXCLUDE_VERSION >= 2);
+  assert.ok(PLATFORM_SCHEMA_EXCLUDES.includes('auth'));
+  assert.ok(PLATFORM_SCHEMA_EXCLUDES.includes('storage'));
+  assert.match(schemaExcludePattern(), /supabase_functions/);
+});
+
+test('storageCacheKey prefers sha256 then identity hash (W1)', () => {
+  const sha = 'a'.repeat(64);
+  assert.equal(storageCacheKey({}, sha), sha);
+  const key = storageCacheKey({ size: 10, updatedAt: 't', etag: 'e' });
+  assert.equal(key.length, 64);
+  assert.equal(storageCacheKey({}), null);
+});
+
+test('mapPool runs with concurrency and preserves order', async () => {
+  const started = [];
+  const results = await mapPool([1, 2, 3, 4, 5], 2, async (n) => {
+    started.push(n);
+    await new Promise(r => setTimeout(r, 5));
+    return n * 10;
+  });
+  assert.deepEqual(results, [10, 20, 30, 40, 50]);
+  assert.equal(started.length, 5);
+});
+
+test('resolveStorageConcurrency reads config and env', () => {
+  const prev = process.env.PORTABASE_STORAGE_CONCURRENCY;
+  try {
+    delete process.env.PORTABASE_STORAGE_CONCURRENCY;
+    assert.equal(resolveStorageConcurrency({}), 8);
+    assert.equal(resolveStorageConcurrency({ capture: { storageConcurrency: 12 } }), 12);
+    process.env.PORTABASE_STORAGE_CONCURRENCY = '24';
+    assert.equal(resolveStorageConcurrency({ capture: { storageConcurrency: 8 } }), 24);
+  } finally {
+    if (prev === undefined) delete process.env.PORTABASE_STORAGE_CONCURRENCY;
+    else process.env.PORTABASE_STORAGE_CONCURRENCY = prev;
+  }
+});
+
+test('aws provider prefers s3 sync for destination efficiency (W1)', () => {
+  const cmd = providerCommand({ provider: { type: 'aws', bucket: 'b', prefix: 'p' } }, 'C:/caps/c1');
+  assert.equal(cmd[0], 'aws');
+  assert.equal(cmd[1][1], 'sync');
 });
 
 test('schema cleanup preserves PL/pgSQL function definitions and bodies', () => {
@@ -68,6 +161,24 @@ test('Dropbox upload uses customer rclone remote', () => {
   assert.equal(command, 'rclone');
   assert.ok(args.some(value => String(value).startsWith('mydropbox:')));
   assert.ok(args.includes('--immutable'));
+});
+
+test('Local Starter size gate allows under 100 MB and refuses over without override', async () => {
+  assert.equal(isLocalProvider({ provider: { type: 'local' } }), true);
+  assert.equal(assertLocalStarterSize(50 * 1024 * 1024).ok, true);
+  assert.equal(assertLocalStarterSize(LOCAL_STARTER_MAX_BYTES).ok, true);
+  assert.throws(
+    () => assertLocalStarterSize(LOCAL_STARTER_MAX_BYTES + 1),
+    /Local Starter vault refuses/,
+  );
+  assert.equal(assertLocalStarterSize(LOCAL_STARTER_MAX_BYTES + 1, { allowLargeLocal: true }).allowedByOverride, true);
+  const root = await mkdtemp(join(tmpdir(), 'pb-local-'));
+  try {
+    await writeFile(join(root, 'a.bin'), Buffer.alloc(1024));
+    assert.equal(await directoryByteSize(root), 1024);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('modern Supabase keys are not incorrectly sent as JWT bearer tokens', () => {

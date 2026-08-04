@@ -32,9 +32,9 @@ function parseEnv(text) {
   return values;
 }
 
-function runPortaBase(args, env) {
+function runPortabase(args, env) {
   const result = spawnSync(process.execPath, [cli, ...args], { cwd: resolve('.'), env, stdio: 'inherit', windowsHide: true });
-  if (result.status !== 0) throw new Error(`PortaBase ${args[0]} exited with code ${result.status}.`);
+  if (result.status !== 0) throw new Error(`Portabase ${args[0]} exited with code ${result.status}.`);
 }
 
 function runTool(file, args, env, label) {
@@ -157,11 +157,11 @@ async function main() {
   let succeeded = false;
   try {
     console.log('STEP 1/8  Capture a complete, encrypted source capsule');
-    runPortaBase(['backup'], env);
+    runPortabase(['backup'], env);
     const capsuleNames = (await readdir(destination, { withFileTypes: true })).filter(entry => entry.isDirectory()).map(entry => entry.name).sort();
     if (capsuleNames.length !== 1) throw new Error(`Expected exactly one fresh capsule, found ${capsuleNames.length}.`);
     const capsule = join(destination, capsuleNames[0]);
-    runPortaBase(['verify', '--capsule', capsule, '--decrypt'], env);
+    runPortabase(['verify', '--capsule', capsule, '--decrypt'], env);
 
     console.log('STEP 2/8  Pause only the synthetic source to release one free slot');
     await pauseProject(SOURCE_REF, token);
@@ -188,11 +188,11 @@ async function main() {
     };
 
     console.log('STEP 5/8  Generate the dry-run plan and no-write blank-target preflight');
-    runPortaBase(['restore', '--capsule', capsule], targetEnv);
-    runPortaBase(['restore', '--capsule', capsule, '--preflight'], targetEnv);
+    runPortabase(['restore', '--capsule', capsule], targetEnv);
+    runPortabase(['restore', '--capsule', capsule, '--preflight'], targetEnv);
 
     console.log('STEP 6/8  Execute the guarded restore into the confirmed new ref');
-    runPortaBase(['restore', '--capsule', capsule, '--execute', '--confirm-target', targetRef], targetEnv);
+    runPortabase(['restore', '--capsule', capsule, '--execute', '--confirm-target', targetRef], targetEnv);
 
     console.log('STEP 7/8  Run fixture SQL and live Function acceptance checks');
     const psql = process.platform === 'win32' ? join(toolsDir, 'postgres', 'bin', 'psql.exe') : join(toolsDir, 'postgres', 'bin', 'psql');

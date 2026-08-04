@@ -1,8 +1,8 @@
-# PortaBase.dev — documented Supabase nightmare incidents
+# Portabase.dev — documented Supabase nightmare incidents
 
 Research snapshot: 2026-07-12
 
-This is the continuously maintained publication set used by the PortaBase landing page. It contains real, sourced firsthand/public-support cases and official Supabase incidents. The homepage intentionally publishes a curated selection rather than advertising a fixed total.
+This is the continuously maintained publication set used by the Portabase landing page. It contains real, sourced firsthand/public-support cases and official Supabase incidents. The homepage intentionally publishes a curated selection rather than advertising a fixed total.
 
 ## Admission standard
 

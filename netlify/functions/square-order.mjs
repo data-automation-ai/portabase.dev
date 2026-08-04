@@ -1,7 +1,11 @@
 import { resolveServerSecret } from '../shared/secrets.mjs';
 
+/**
+ * Legacy $147 Essentials order detector — for historical license fulfillment only.
+ * New commercial checkout is Cloud subscription ($17/mo), not this product.
+ */
 export function isPaidEssentialsOrder(order) {
-  const line = order?.line_items?.find(item => item.name === 'PortaBase Essentials — One-Platform Software License');
+  const line = order?.line_items?.find(item => item.name === 'Portabase Essentials — One-Platform Software License');
   return order?.state === 'COMPLETED'
     && line?.quantity === '1'
     && line?.base_price_money?.amount === 14700

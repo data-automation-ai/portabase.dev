@@ -1,6 +1,6 @@
-# PortaBase on customer-owned GCP
+# Portabase on customer-owned GCP
 
-This Terraform module creates a dedicated Debian Compute Engine runner, a least-privilege service account that can read one existing Secret Manager secret, checksum-verified PortaBase package installation, and a systemd backup timer. The only inbound rule permits SSH from Google Identity-Aware Proxy's documented range, and OS Login is enabled. The customer owns the GCP project, VM, secret, destination, logs, and capsules.
+This Terraform module creates a dedicated Debian Compute Engine runner, a least-privilege service account that can read one existing Secret Manager secret, checksum-verified Portabase package installation, and a systemd backup timer. The only inbound rule permits SSH from Google Identity-Aware Proxy's documented range, and OS Login is enabled. The customer owns the GCP project, VM, secret, destination, logs, and capsules.
 
 The existing secret must be a JSON object containing `SUPABASE_DB_URL`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ACCESS_TOKEN`, `PORTABASE_ENCRYPTION_PASSPHRASE`, and any `RCLONE_CONFIG_GCS_*` environment values required for the customer-owned destination. Never put those values in `.tfvars`.
 

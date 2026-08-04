@@ -1,12 +1,12 @@
-# Hosting and scheduling PortaBase
+# Hosting and scheduling Portabase
 
-PortaBase is delivered as customer-run software rather than a hosted backup SaaS. The customer keeps custody of every database credential, API token, encryption passphrase, cloud key, and recovery capsule. PortaBase payment systems never receive those infrastructure secrets.
+Portabase is delivered as customer-run software rather than a hosted backup SaaS. The customer keeps custody of every database credential, API token, encryption passphrase, cloud key, and recovery capsule. Portabase payment systems never receive those infrastructure secrets.
 
 ## Recommended paths
 
 | Customer | Recommended runner | Scheduling |
 | --- | --- | --- |
-| Nontechnical Windows user | An always-on office PC or mini PC | PortaBase `install-schedule` creates Windows Task Scheduler configuration |
+| Nontechnical Windows user | An always-on office PC or mini PC | Portabase `install-schedule` creates Windows Task Scheduler configuration |
 | Nontechnical AWS user | Amazon Lightsail Linux Nano or Micro | `systemd` service and timer installed by `scripts/install-portabase-systemd.sh` |
 | Existing AWS engineering team | Existing EC2, ECS/Fargate, or the included CloudFormation recovery stack | EventBridge Scheduler, systemd, or the existing task scheduler |
 | Existing GCP engineering team | Compute Engine `e2-micro` or an existing VM | `systemd` timer or Cloud Scheduler-triggered job |
@@ -18,7 +18,7 @@ Google publishes an `e2-micro` on-demand rate that is roughly $6.12 for a 730-ho
 
 ## Linux installation
 
-Copy the purchased PortaBase package to the VM, then run:
+Copy the purchased Portabase package to the VM, then run:
 
 ```bash
 sudo bash scripts/install-portabase-systemd.sh
@@ -53,4 +53,4 @@ systemctl list-timers portabase-backup.timer
 7. Configure failure alerts.
 8. Schedule a fresh-project restore drill and record RPO/RTO.
 
-PortaBase support can script and walk the customer through this entire process, but the resulting VM, scheduler, credentials, keys, and data remain in the customer’s account.
+Portabase support can script and walk the customer through this entire process, but the resulting VM, scheduler, credentials, keys, and data remain in the customer’s account.
