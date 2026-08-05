@@ -143,9 +143,9 @@ button { font:inherit; }
   flex:0 0 auto;
   width:clamp(120px,18vw,220px);
   height:auto;
-  margin-left:-18px;
-  margin-right:-8px;
-  transform:rotate(-6deg);
+  margin-left:-8px;
+  margin-right:-18px;
+  transform:rotate(4deg);
   filter:drop-shadow(0 18px 28px rgba(0,0,0,.45));
   pointer-events:none;
   z-index:2;
@@ -153,7 +153,7 @@ button { font:inherit; }
 }
 @media(max-width:900px){
   .lockout-stage{flex-direction:column;align-items:stretch}
-  .lockout-arrow{width:min(160px,42vw);margin:-8px auto 0;transform:rotate(8deg)}
+  .lockout-arrow{width:min(160px,42vw);margin:0 auto -8px;order:-1;transform:rotate(-4deg)}
   .lockout-evidence{transform:none}
 }
 .window-bar { height:43px; padding:0 15px; display:flex; align-items:center; justify-content:space-between; background:#d7d5ce; border-bottom:1px solid #bbb9b2; color:#65645e; font-family:'DM Mono'; font-size:9px; }
