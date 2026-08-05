@@ -181,11 +181,14 @@ function Hero() {
         </div>
         <div className="hero-proof"><span>USP · Escape</span><span>Supabase only</span><span>OSS free · Cloud = GUI &amp; telemetry</span></div>
       </div>
-      <figure className="lockout-evidence">
-        <div className="evidence-label"><span><i /> Actual lockout</span><b>Not a mockup</b></div>
-        <img src="/images/supabase-banned.jpg" alt="Actual Supabase sign-in screen showing the error: User is banned" />
-        <figcaption><span>Account locked. Business frozen. Backups unreachable.</span><small>Actual founder scenario · identifying details redacted</small></figcaption>
-       </figure>
+      <div className="lockout-stage">
+        <figure className="lockout-evidence">
+          <div className="evidence-label"><span><i /> Actual lockout</span><b>Not a mockup</b></div>
+          <img className="lockout-shot" src="/images/supabase-banned.jpg" alt="Actual Supabase sign-in screen showing the error: User is banned" />
+          <figcaption><span>Account locked. Business frozen. Backups unreachable.</span><small>Actual founder scenario · identifying details redacted</small></figcaption>
+        </figure>
+        <img className="lockout-arrow" src="/images/arrow2.png" alt="" width="280" height="280" aria-hidden="true" />
+      </div>
       </div>
     </div>
     <div className="reality-ticker"><div><span>PROJECT DELETED</span><span>OWNER LOCKED OUT</span><span>PAYMENT FAILED</span><span>STORAGE NOT IN BACKUP</span><span>API KEYS REVOKED</span><span>SUPPORT TICKET OPEN</span><span>PROJECT DELETED</span><span>OWNER LOCKED OUT</span></div></div>
