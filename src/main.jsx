@@ -182,7 +182,13 @@ function Hero() {
         <div className="hero-proof"><span>USP · Escape</span><span>Supabase only</span><span>OSS free · Cloud = GUI &amp; telemetry</span></div>
       </div>
       <div className="lockout-stage">
-        <img className="lockout-arrow" src="/images/arrow2.png" alt="" width="280" height="280" aria-hidden="true" />
+        <img
+          className="lockout-arrow"
+          src="/images/arrow2.png"
+          alt="This is the actual login screenshot from the Founder, it's the reason Portabase.dev came to be"
+          width="280"
+          height="140"
+        />
         <figure className="lockout-evidence">
           <div className="evidence-label"><span><i /> Actual lockout</span><b>Not a mockup</b></div>
           <img className="lockout-shot" src="/images/supabase-banned.jpg" alt="Actual Supabase sign-in screen showing the error: User is banned" />
