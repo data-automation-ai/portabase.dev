@@ -289,6 +289,43 @@ function WhatIsThis() {
         <div><small>NEVER HOSTED</small><b>Passphrase<br />Service keys<br />Capsule contents</b></div>
       </div>
       <ModelExplainer />
+      <div className="open-core-story" id="open-core-story">
+        <div className="open-core-story-kicker">
+          <span>THE MODEL YOU ALREADY KNOW</span>
+          <em>Open source first · Cloud on top</em>
+        </div>
+        <h3>Portabase is open source — the same shape as Supabase itself.</h3>
+        <p className="open-core-story-lead">
+          The engine that captures your project, encrypts the capsule, and restores into a new Supabase is
+          {' '}<strong>Apache-2.0 and free</strong>. You can run it on a VM, a NAS, a container, or any box you control.
+          No license unlock. No “pay us or your recovery stops.”
+        </p>
+        <div className="open-core-story-grid">
+          <article>
+            <small>01 · OPEN CORE</small>
+            <b>The real product is readable code.</b>
+            <p>Like Supabase, the serious work lives in the open: capture, encrypt, verify, restore. You can audit the crypto path, pin versions, and keep Escape running even if this website disappeared tomorrow.</p>
+          </article>
+          <article>
+            <small>02 · CLOUD LAYER</small>
+            <b>We make Escape something you live with.</b>
+            <p>On top of that engine we add the boring-but-critical layer: a calm GUI, guided workflows, telemetry that SMS/email the right people, and — most importantly — <strong>hosted runner compute</strong> so you are not babysitting a laptop cron for the rest of your life.</p>
+          </article>
+          <article>
+            <small>03 · WHAT STAYS YOURS</small>
+            <b>Capsules and keys never become our product.</b>
+            <p>Cloud stages the job and watches it. Encrypted recovery bytes land in <em>your</em> S3, Dropbox, or Local Starter vault. Passphrases and service keys stay on the runner path — not as our “backup of record.”</p>
+          </article>
+        </div>
+        <p className="open-core-story-close">
+          <strong>Do not trust another vague “backup” promise.</strong>
+          {' '}Trust an Escape you can run yourself — and a Cloud that only exists to keep that Escape real.
+        </p>
+        <div className="open-core-story-actions">
+          <a className="button button-primary" href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">Browse the open-source engine <Arrow /></a>
+          <a className="button button-ghost" href="/cloud">See open source vs Cloud <Arrow /></a>
+        </div>
+      </div>
       <div className="diagram-intro">
         <div><span>TECHNICAL DETAIL</span><h3>How recovery actually works — still customer-owned.</h3></div>
         <p>These diagrams stay relevant under open core: data path, capsule contents, key custody, and restore guards. Captions now describe Community vs optional Cloud instead of a paid software unlock.</p>
