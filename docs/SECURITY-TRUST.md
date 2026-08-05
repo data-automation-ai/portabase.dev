@@ -1,7 +1,9 @@
 # Portabase security & trust model
 
 Public page: **https://portabase.dev/security** (also `/trust`).  
-Deep customer explainer: **https://portabase.dev/security#keys-protected** · Cloud summary: **https://portabase.dev/cloud#keys**
+Deep customer explainer: **https://portabase.dev/security#keys-protected** · Cloud summary: **https://portabase.dev/cloud#keys**  
+
+**Open-source crypto (source of truth):** [`utility/capsule-crypto.mjs`](../utility/capsule-crypto.mjs) · [KEY-PROTECTION.md](./KEY-PROTECTION.md)
 
 ## Up front (required honesty)
 

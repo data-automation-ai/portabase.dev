@@ -8,6 +8,8 @@ Live site: [https://portabase.dev](https://portabase.dev)
 
 License: **Apache-2.0** — see [LICENSE](./LICENSE) and [docs/OPEN_CORE.md](./docs/OPEN_CORE.md).
 
+**Capsule key protection (open source):** [`utility/capsule-crypto.mjs`](./utility/capsule-crypto.mjs) — scrypt + AES-256-GCM. See [docs/KEY-PROTECTION.md](./docs/KEY-PROTECTION.md).
+
 ## Open core vs Cloud
 
 | | Community (OSS) | Portabase Cloud |

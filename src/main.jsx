@@ -1528,6 +1528,19 @@ function SecurityPage() {
               </ul>
             </div>
 
+            <div className="keys-deep-source">
+              <small>OPEN SOURCE · AUDIT THIS FILE</small>
+              <b>The encrypt / decrypt code is public.</b>
+              <p>
+                Capsule sealing is not a closed Cloud binary. It lives in the Apache-2.0 engine:
+                {' '}<code>utility/capsule-crypto.mjs</code> — scrypt key derivation, AES-256-GCM, SHA-256 integrity, fail-closed wrong-passphrase behavior.
+                Tests reject the wrong passphrase in <code>utility/portabase.test.mjs</code>.
+                Full write-up: <a href="https://github.com/lcapece/portabase.dev/blob/main/docs/KEY-PROTECTION.md" target="_blank" rel="noreferrer">docs/KEY-PROTECTION.md ↗</a>
+                {' · '}
+                <a href="https://github.com/lcapece/portabase.dev/blob/main/utility/capsule-crypto.mjs" target="_blank" rel="noreferrer">Read capsule-crypto.mjs ↗</a>
+              </p>
+            </div>
+
             <div className="key-callout" style={{ marginTop: 28 }}>
               <span>BOTTOM LINE</span>
               <b>Your Escape is sealed ciphertext in storage you own, opened only with a passphrase that does not live in our product vault.</b>

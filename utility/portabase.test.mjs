@@ -314,6 +314,16 @@ test('trial report renders the full inventory ledger and never claims completene
   }
 });
 
+test('open-source capsule-crypto module is the AES-GCM source of truth', async () => {
+  const crypto = await import('./capsule-crypto.mjs');
+  assert.equal(crypto.CAPSULE_CRYPTO_FORMAT, 'portabase-aes256gcm-v1');
+  assert.equal(crypto.CAPSULE_CIPHER, 'aes-256-gcm');
+  assert.equal(crypto.CAPSULE_PASSPHRASE_MIN_LENGTH, 16);
+  assert.match(crypto.capsuleCryptoPublicDescription(), /capsule-crypto\.mjs/);
+  assert.equal(typeof crypto.encryptFile, 'function');
+  assert.equal(typeof crypto.decryptFile, 'function');
+});
+
 test('encrypted capsules authenticate and reject the wrong passphrase', async () => {
   const root = await mkdtemp(join(tmpdir(), 'portabase-test-'));
   try {
