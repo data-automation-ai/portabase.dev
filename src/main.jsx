@@ -322,7 +322,7 @@ function WhatIsThis() {
           {' '}Trust an Escape you can run yourself — and a Cloud that only exists to keep that Escape real.
         </p>
         <div className="open-core-story-actions">
-          <a className="button button-primary" href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">Browse the open-source engine <Arrow /></a>
+          <a className="button button-primary" href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">Browse the open-source engine <Arrow /></a>
           <a className="button button-ghost" href="/cloud">See open source vs Cloud <Arrow /></a>
         </div>
       </div>
@@ -1033,7 +1033,7 @@ function PublicDeal() {
       </div>
       <div className="cloud-teaser-actions" style={{ marginTop: 28 }}>
         <a className="button button-primary" href="/cloud#subscribe">Cloud · GUI &amp; telemetry <Arrow /></a>
-        <a className="button button-ghost" href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">Open-source engine <Arrow /></a>
+        <a className="button button-ghost" href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">Open-source engine <Arrow /></a>
       </div>
     </div>
   </section>;
@@ -1078,7 +1078,7 @@ function CloudPage() {
             <a className="button button-primary" href={signedIn ? '/app' : '/login?mode=signup&next=/app'}>Start 7-day free trial <Arrow /></a>
             <a className="button button-ghost" href="/app?demo=1">Open full console (demo) <Arrow /></a>
             <a className="button button-ghost" href="#subscribe">See trial → subscription <Arrow /></a>
-            <a className="button button-ghost" href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">GitHub · open source <Arrow /></a>
+            <a className="button button-ghost" href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">GitHub · open source <Arrow /></a>
           </div>
         </div>
       </section>
@@ -1184,7 +1184,7 @@ function CloudPage() {
           <h2>Transparent source. Complete recovery path.</h2>
           <div className="github-split">
             <div>
-              <p>The public GitHub edition (under <a href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">DataAutomation.ai</a> / Portabase open core) ships everything required to protect and restore a Supabase project:</p>
+              <p>The public GitHub edition (<a href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">data-automation-ai/portabase.dev</a> · open core) ships everything required to protect and restore a Supabase project:</p>
               <ul className="github-list">
                 <li>Capture database structure and data, Auth material, Storage objects, Edge Functions</li>
                 <li>Local AES-256-GCM encryption and checksums</li>
@@ -1193,7 +1193,7 @@ function CloudPage() {
                 <li>CLI: init, doctor, capture (backup command), verify, status, restore, schedule helpers</li>
               </ul>
               <p>What GitHub deliberately does <strong>not</strong> include as a hosted product: the multi-tenant management GUI, Portabase-operated telemetry inbox, multi-person SMS escalation product, and advanced fleet reports. Those are Cloud.</p>
-              <a className="button button-ghost" href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">Browse the open-source home <Arrow /></a>
+              <a className="button button-ghost" href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">Browse the open-source home <Arrow /></a>
             </div>
             <aside className="github-aside">
               <span>WHY THIS MATTERS</span>
@@ -1268,7 +1268,7 @@ function LegacyPurchaseNotice() {
 }
 
 function Footer() {
-  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#reality">The reality</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">Escape plan</a><a href="/#audit">Risk check</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · $17 / $27</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">GitHub · DataAutomation.ai</a><span>Independent product.<br />Not affiliated with Supabase.</span><span>Apache-2.0 open core. Cloud is ops subscription — never custody of keys or capsule contents. $17/mo · 1 escape/24h · or · $27/mo · up to 3 escapes/day.</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your cloud. Your way out.</span></div></footer>;
+  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#reality">The reality</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">Escape plan</a><a href="/#audit">Risk check</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · $17 / $27</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">GitHub · portabase.dev</a><span>Independent product.<br />Not affiliated with Supabase.</span><span>Apache-2.0 open core. Cloud is ops subscription — never custody of keys or capsule contents. $17/mo · 1 escape/24h · or · $27/mo · up to 3 escapes/day.</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your cloud. Your way out.</span></div></footer>;
 }
 
 /**
@@ -1462,7 +1462,7 @@ function SecurityPage() {
                   That path is the only posture that delivers a true “vendor cannot open the capsule” story,
                   because there is no Portabase runner process in the loop.
                 </p>
-                <a className="button button-ghost" href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">Open-source engine <Arrow /></a>
+                <a className="button button-ghost" href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">Open-source engine <Arrow /></a>
               </article>
             </div>
 
@@ -1535,9 +1535,9 @@ function SecurityPage() {
                 Capsule sealing is not a closed Cloud binary. It lives in the Apache-2.0 engine:
                 {' '}<code>utility/capsule-crypto.mjs</code> — scrypt key derivation, AES-256-GCM, SHA-256 integrity, fail-closed wrong-passphrase behavior.
                 Tests reject the wrong passphrase in <code>utility/portabase.test.mjs</code>.
-                Full write-up: <a href="https://github.com/lcapece/portabase.dev/blob/main/docs/KEY-PROTECTION.md" target="_blank" rel="noreferrer">docs/KEY-PROTECTION.md ↗</a>
+                Full write-up: <a href="https://github.com/data-automation-ai/portabase.dev/blob/main/docs/KEY-PROTECTION.md" target="_blank" rel="noreferrer">docs/KEY-PROTECTION.md ↗</a>
                 {' · '}
-                <a href="https://github.com/lcapece/portabase.dev/blob/main/utility/capsule-crypto.mjs" target="_blank" rel="noreferrer">Read capsule-crypto.mjs ↗</a>
+                <a href="https://github.com/data-automation-ai/portabase.dev/blob/main/utility/capsule-crypto.mjs" target="_blank" rel="noreferrer">Read capsule-crypto.mjs ↗</a>
               </p>
             </div>
 
@@ -1840,7 +1840,7 @@ function SecurityPage() {
               <p>Run the open-source engine yourself. Stage on local disk or your own cloud VM. Same capsule idea — you operate the runner entirely. Cloud is optional ops, not a gate on recovery.</p>
             </div>
             <div className="security-standalone-actions">
-              <a className="button button-primary" href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">GitHub · open source <Arrow /></a>
+              <a className="button button-primary" href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">GitHub · open source <Arrow /></a>
               <a className="button button-ghost" href="/cloud">Cloud vs open source <Arrow /></a>
             </div>
           </div>

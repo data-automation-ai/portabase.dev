@@ -3,7 +3,7 @@
 **Start here for “what is the project + what do I do”:** **[PROJECT.md](../PROJECT.md)** (repo root).  
 **Then this file** for depth. Then `AGENTS.md` (hard rules).
 
-**Owner:** Ryan (operator). **Entity:** DataAutomation.ai, LLC · GitHub org [DataAutomation-ai](https://github.com/DataAutomation-ai).  
+**Owner:** Ryan (operator). **Entity:** DataAutomation.ai, LLC · GitHub repo [data-automation-ai/portabase.dev](https://github.com/data-automation-ai/portabase.dev).  
 **Live site:** https://portabase.dev  
 **Repo:** `C:\Users\ryanh\git\portabase.dev` (branch `main`, often ahead of origin with local/uncommitted work).
 
