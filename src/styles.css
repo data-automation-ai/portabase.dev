@@ -25,11 +25,20 @@ button { font:inherit; }
 .button-ghost { background:transparent; color:white; border:1px solid var(--line); }
 .button-light { background:white; color:var(--ink); }
 .hero { position:relative; overflow:hidden; min-height:940px; padding:152px 0 112px; background:radial-gradient(circle at 72% 32%,rgba(255,71,62,.17),transparent 33%),radial-gradient(circle at 15% 0,rgba(201,255,74,.05),transparent 30%),#090a0c; }
-/* lockout callout hangs above the ban dialog — do not clip */
-.hero-grid{overflow:visible}
-.hero-grid > .lockout-stage{overflow:visible}
 .hero-noise { position:absolute; inset:0; opacity:.04; background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E"); pointer-events:none; }
-.hero-shell{position:relative}.hero-brandline{display:flex;align-items:center;gap:17px;width:100%;padding:0 0 27px;border-bottom:1px solid #2b2d31;color:#f0eee8;font:600 clamp(16px,1.45vw,22px) 'Cascadia Mono','SFMono-Regular',Consolas,monospace;letter-spacing:.13em;text-transform:uppercase}.hero-brandline .supabase-mark{width:38px;height:40px}.hero-grid { position:relative; display:grid; grid-template-columns:1.12fr .72fr; gap:72px; align-items:center; margin-top:42px; }
+.hero-shell{position:relative;overflow:visible}
+.hero-brandline{display:flex;align-items:center;gap:17px;width:100%;padding:0 0 27px;border-bottom:1px solid #2b2d31;color:#f0eee8;font:600 clamp(16px,1.45vw,22px) 'Cascadia Mono','SFMono-Regular',Consolas,monospace;letter-spacing:.13em;text-transform:uppercase}
+.hero-brandline .supabase-mark{width:38px;height:40px}
+/* Two columns + absolute callout bridging the gap (matches design example) */
+.hero-grid{
+  position:relative;
+  display:grid;
+  grid-template-columns:1.12fr .72fr;
+  gap:72px;
+  align-items:center;
+  margin-top:42px;
+  overflow:visible;
+}
 .eyebrow,.section-kicker { font-family:'Cascadia Mono','SFMono-Regular',Consolas,monospace; font-size:11px; font-weight:500; letter-spacing:.15em; text-transform:uppercase; }
 .eyebrow { display:flex; align-items:center; gap:10px; color:#d4d3cf; }
 .supabase-mark{width:23px;height:24px;flex:0 0 auto;overflow:visible;filter:drop-shadow(0 0 10px rgba(62,207,142,.18))}
@@ -108,8 +117,7 @@ button { font:inherit; }
 .text-link span { margin-left:10px; }
 .hero-proof { display:flex; flex-wrap:wrap; gap:9px 22px; color:#858681; font-family:'DM Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.06em; }
 .hero-proof span:before { content:'✓'; color:var(--acid); margin-right:7px; }
-/* Hero: ban dialog; founder callout floats above at ~45° and overlaps the card a little
-   (transparent PNG/GIF — black should read as clear over the dark hero) */
+/* Ban dialog column */
 .lockout-stage{
   position:relative;
   display:block;
@@ -117,8 +125,8 @@ button { font:inherit; }
   width:100%;
   max-width:440px;
   margin-left:auto;
-  padding-top:48px; /* half hangs above; half overlaps the dialog */
   overflow:visible;
+  z-index:1;
 }
 .lockout-evidence{
   position:relative;
@@ -141,30 +149,49 @@ button { font:inherit; }
 .lockout-evidence figcaption{display:flex;justify-content:space-between;align-items:center;gap:18px;background:var(--red);color:#1c0d0b;padding:13px 16px}
 .lockout-evidence figcaption span{font-size:11px;font-weight:800}
 .lockout-evidence figcaption small{font:7px 'DM Mono';text-align:right;text-transform:uppercase;letter-spacing:.06em}
+/* Founder callout: horizontal in the gutter, tip into the ban dialog (like the yellow example) */
 .lockout-arrow{
   position:absolute;
-  /* sit on the top edge of the dialog so ~30–40% overlaps into the card */
-  top:28px;
-  left:8%;
-  width:clamp(170px,48%,260px);
+  left:48%;
+  top:28%;
+  width:clamp(140px,16vw,220px);
   height:auto;
-  z-index:4;
+  z-index:6;
+  margin:0;
   pointer-events:none;
   user-select:none;
-  mix-blend-mode:screen; /* black matte drops out on dark hero; red/white stay */
-  /* 45° pose; tip into the ban dialog */
-  transform:translate(0, 18%) rotate(45deg);
-  transform-origin:center center;
-  filter:drop-shadow(0 10px 18px rgba(0,0,0,.35));
+  transform:translate(-18%, -10%) rotate(-2deg);
+  transform-origin:center right;
+  mix-blend-mode:screen; /* black matte → clear on dark hero */
+  filter:drop-shadow(0 12px 20px rgba(0,0,0,.4));
+}
+@media(max-width:1100px){
+  .lockout-arrow{left:46%;width:clamp(120px,15vw,180px);top:26%}
 }
 @media(max-width:900px){
-  .lockout-stage{max-width:500px;margin:0 auto;padding-top:44px}
-  .lockout-arrow{width:min(200px,52vw);top:20px;left:6%;transform:translate(0,22%) rotate(45deg)}
+  .hero-grid{gap:40px}
+  .lockout-stage{max-width:500px;margin:0 auto}
   .lockout-evidence{transform:none}
+  /* Stack: arrow between copy and dialog, still pointing at the shot */
+  .lockout-arrow{
+    position:relative;
+    left:auto;
+    top:auto;
+    display:block;
+    width:min(200px,52vw);
+    margin:-8px auto 12px;
+    transform:rotate(0deg);
+    grid-column:1 / -1;
+    justify-self:center;
+    order:0;
+  }
+  .hero-grid{display:flex;flex-direction:column;align-items:stretch}
+  .hero-copy{order:1}
+  .lockout-arrow{order:2}
+  .lockout-stage{order:3}
 }
 @media(max-width:580px){
-  .lockout-stage{padding-top:36px}
-  .lockout-arrow{width:min(160px,58vw);top:12px;opacity:.98}
+  .lockout-arrow{width:min(170px,60vw);margin:4px auto 10px}
 }
 .window-bar { height:43px; padding:0 15px; display:flex; align-items:center; justify-content:space-between; background:#d7d5ce; border-bottom:1px solid #bbb9b2; color:#65645e; font-family:'DM Mono'; font-size:9px; }
 .window-bar div { display:flex; gap:5px; }.window-bar i{width:7px;height:7px;border-radius:50%;background:#aaa;}.window-bar i:first-child{background:var(--red)}
