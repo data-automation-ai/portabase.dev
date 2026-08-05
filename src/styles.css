@@ -108,7 +108,8 @@ button { font:inherit; }
 .text-link span { margin-left:10px; }
 .hero-proof { display:flex; flex-wrap:wrap; gap:9px 22px; color:#858681; font-family:'DM Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.06em; }
 .hero-proof span:before { content:'✓'; color:var(--acid); margin-right:7px; }
-/* Hero: ban dialog full width of column; founder callout floats above at ~45° */
+/* Hero: ban dialog; founder callout floats above at ~45° and overlaps the card a little
+   (transparent PNG/GIF — black should read as clear over the dark hero) */
 .lockout-stage{
   position:relative;
   display:block;
@@ -116,7 +117,7 @@ button { font:inherit; }
   width:100%;
   max-width:440px;
   margin-left:auto;
-  padding-top:72px; /* room for rotated callout above — does not steal hero-copy width */
+  padding-top:48px; /* half hangs above; half overlaps the dialog */
   overflow:visible;
 }
 .lockout-evidence{
@@ -142,26 +143,28 @@ button { font:inherit; }
 .lockout-evidence figcaption small{font:7px 'DM Mono';text-align:right;text-transform:uppercase;letter-spacing:.06em}
 .lockout-arrow{
   position:absolute;
-  top:0;
-  left:50%;
-  width:clamp(160px,42%,240px);
+  /* sit on the top edge of the dialog so ~30–40% overlaps into the card */
+  top:28px;
+  left:8%;
+  width:clamp(170px,48%,260px);
   height:auto;
-  z-index:3;
+  z-index:4;
   pointer-events:none;
   user-select:none;
-  /* 45° pose above the dialog; tip aims down-right into the shot */
-  transform:translate(-58%, -12%) rotate(45deg);
+  mix-blend-mode:screen; /* black matte drops out on dark hero; red/white stay */
+  /* 45° pose; tip into the ban dialog */
+  transform:translate(0, 18%) rotate(45deg);
   transform-origin:center center;
-  filter:drop-shadow(0 14px 22px rgba(0,0,0,.5));
+  filter:drop-shadow(0 10px 18px rgba(0,0,0,.35));
 }
 @media(max-width:900px){
-  .lockout-stage{max-width:500px;margin:0 auto;padding-top:64px}
-  .lockout-arrow{width:min(180px,48vw);left:42%;transform:translate(-50%,-8%) rotate(45deg)}
+  .lockout-stage{max-width:500px;margin:0 auto;padding-top:44px}
+  .lockout-arrow{width:min(200px,52vw);top:20px;left:6%;transform:translate(0,22%) rotate(45deg)}
   .lockout-evidence{transform:none}
 }
 @media(max-width:580px){
-  .lockout-stage{padding-top:56px}
-  .lockout-arrow{width:min(150px,55vw);opacity:.95}
+  .lockout-stage{padding-top:36px}
+  .lockout-arrow{width:min(160px,58vw);top:12px;opacity:.98}
 }
 .window-bar { height:43px; padding:0 15px; display:flex; align-items:center; justify-content:space-between; background:#d7d5ce; border-bottom:1px solid #bbb9b2; color:#65645e; font-family:'DM Mono'; font-size:9px; }
 .window-bar div { display:flex; gap:5px; }.window-bar i{width:7px;height:7px;border-radius:50%;background:#aaa;}.window-bar i:first-child{background:var(--red)}
