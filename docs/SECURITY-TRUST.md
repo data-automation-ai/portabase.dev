@@ -1,6 +1,7 @@
 # Portabase security & trust model
 
-Public page: **https://portabase.dev/security** (also `/trust`).
+Public page: **https://portabase.dev/security** (also `/trust`).  
+Deep customer explainer: **https://portabase.dev/security#keys-protected** · Cloud summary: **https://portabase.dev/cloud#keys**
 
 ## Up front (required honesty)
 

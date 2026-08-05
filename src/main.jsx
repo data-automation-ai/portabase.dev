@@ -1123,34 +1123,57 @@ function CloudPage() {
       <section className="section cloud-keys" id="keys">
         <div className="shell">
           <div className="section-kicker green">KEY STORAGE · HOSTED CLOUD</div>
-          <h2>How keys work if you use our hosted site.</h2>
-          <p className="cloud-section-lead">Using Portabase Cloud does not mean we become your Supabase landlord. Recovery secrets and capsule encryption stay off our product database. Full model: customer KMS, CloudTrail, and job CloudWatch — <a href="/security" style={{ color: 'var(--acid)', fontWeight: 700 }}>Security &amp; trust <span aria-hidden="true">↗</span></a>.</p>
+          <h2>How your keys are protected on Cloud.</h2>
+          <p className="cloud-section-lead">
+            Using Portabase Cloud does not make us your Supabase landlord or the permanent home of your recovery files.
+            Capsules are sealed with <strong>AES-256-GCM</strong> and written to <strong>storage you own</strong>.
+            Full deep-dive (every secret type, standalone vs Cloud, checklists):{' '}
+            <a href="/security#keys-protected" style={{ color: 'var(--acid)', fontWeight: 700 }}>Security · how your keys are protected <span aria-hidden="true">↗</span></a>.
+          </p>
           <div className="key-grid">
             <article>
-              <small>ON YOUR RUNNER (ALWAYS)</small>
+              <small>ON THE RUNNER · CAPSULE CRYPTO</small>
               <b>Encryption passphrase</b>
-              <p>AES-256-GCM key material for capsules. Set via env / OS secret store on the machine or container that runs escapes. <strong>Never uploaded to Portabase Cloud</strong> and never stored in our control-plane database.</p>
+              <p>
+                Derives AES-256-GCM material that seals the Escape capsule. On self-host it lives only in your env / OS secret store.
+                On managed Cloud it is available to the job runner for the run so schedules can complete unattended —
+                that is an <strong>explicit operational trade</strong>, not a hidden one. It is not stored as our “backup of record” in the product vault.
+              </p>
             </article>
             <article>
-              <small>ON YOUR RUNNER (ALWAYS)</small>
+              <small>ON THE RUNNER · SOURCE ACCESS</small>
               <b>Supabase &amp; database credentials</b>
-              <p>Project URL, service role / secret key, DB URL, access token — read only from your environment when capture or restore runs. Cloud does not proxy or vault these for capsule build.</p>
+              <p>
+                Project URL, service-role / secret key, DB URL, access token — used only to capture or restore during a job.
+                They open the live project; they do not open a sealed capsule by themselves. Limit who holds them; rotate on staff change.
+              </p>
             </article>
             <article>
-              <small>ON YOUR DESTINATION</small>
+              <small>ON YOUR DESTINATION · CIPHERTEXT ONLY</small>
               <b>Encrypted capsules</b>
-              <p>`.pbase` files land in Drive, Dropbox, S3, or local/NAS you choose. Portabase Cloud is not the storage of record for recovery bytes.</p>
+              <p>
+                <code>.pbase</code> (and checksums/metadata) land in S3, Dropbox, Drive, NAS, or Local Starter — <strong>your</strong> vault.
+                Portabase Cloud is not the storage of record. Without the passphrase, vault access is not a usable Escape.
+              </p>
             </article>
             <article>
-              <small>ON PORTABASE CLOUD (HOSTED)</small>
-              <b>Account &amp; ops metadata only</b>
-              <p>Login identity (Supabase Auth), workspace membership, agent tokens (hashed), alert routes, and opt-in health events (job status, timing, error class). Enough to run the console and page people — not enough to decrypt a capsule.</p>
+              <small>ON PORTABASE CLOUD · OPS ONLY</small>
+              <b>Account &amp; health metadata</b>
+              <p>
+                Login identity (Supabase Auth), workspace membership, hashed agent tokens, alert routes, opt-in job status/timing/error class.
+                Enough to run the console and wake people — <strong>not</strong> enough to decrypt a capsule.
+                Telemetry rejects secret-shaped fields by design.
+              </p>
             </article>
           </div>
           <div className="key-callout">
             <span>HOSTED TRANSPARENCY</span>
-            <b>If Cloud is down, you still restore from the capsule + passphrase on infrastructure you control.</b>
-            <p>Subscription value is visibility and escalation. The open-source engine on GitHub remains the recovery authority. Agent telemetry is opt-in and schema-documented; it rejects secret-shaped fields.</p>
+            <b>If Cloud is down, you still restore from capsule + passphrase on infrastructure you control.</b>
+            <p>
+              Subscription value is visibility, schedules, hosted runners, and escalation — not custody of your only recovery copy.
+              The open-source engine remains the recovery authority. Want zero Portabase key path? Run the CLI yourself.
+              Want maximum AWS-side control on Cloud? Customer KMS + your CloudTrail — details on the Security page.
+            </p>
           </div>
         </div>
       </section>
@@ -1260,6 +1283,7 @@ function SecurityPage() {
         <div className="shell nav-wrap">
           <Logo href="/" />
           <nav className="nav cloud-page-nav">
+            <a href="#keys-protected">Your keys</a>
             <a href="#choose">Choose trust</a>
             <a href="#options">Controls</a>
             <a href="#retroactive">Past access</a>
@@ -1293,6 +1317,224 @@ function SecurityPage() {
               That means <strong>there is still a possibility that Portabase can see or use a key</strong> during a run —
               especially on the simple “Trust Portabase” path. We reduce that risk with customer KMS, short job windows, and your audit trails.
               We will <strong>not</strong> pretend the risk is zero.
+            </div>
+            <p className="security-lead" style={{ marginTop: 22, marginBottom: 0 }}>
+              Full detail below: <a href="#keys-protected" style={{ color: 'var(--acid)', fontWeight: 700 }}>How your keys are protected →</a>
+            </p>
+          </div>
+        </section>
+
+        <section className="section security-keys-deep" id="keys-protected">
+          <div className="shell">
+            <div className="section-kicker green">KEY PROTECTION · IN DETAIL</div>
+            <h2>How your keys are protected — step by step.</h2>
+            <p className="security-prose">
+              When customers ask “do you have our keys?”, they usually mean three different things mixed together:
+              <strong> Supabase credentials</strong>, the <strong>encryption passphrase</strong> that seals the Escape capsule, and
+              <strong> access to the encrypted files themselves</strong>. Those are protected differently. Here is the full picture in plain language.
+            </p>
+
+            <div className="keys-deep-what">
+              <h3>What we mean by “keys”</h3>
+              <div className="keys-deep-types">
+                <article>
+                  <small>A · SOURCE CREDENTIALS</small>
+                  <b>Supabase project secrets</b>
+                  <p>Project URL, service-role / secret key, database connection string, and (optionally) a Management API access token. These let a runner <em>read</em> your live project during an Escape job.</p>
+                </article>
+                <article>
+                  <small>B · CAPSULE CRYPTO</small>
+                  <b>Encryption passphrase</b>
+                  <p>The secret that derives AES-256-GCM key material for the capsule. Without it, a <code>.pbase</code> file is ciphertext — not a usable database dump sitting in the clear.</p>
+                </article>
+                <article>
+                  <small>C · DESTINATION ACCESS</small>
+                  <b>Vault credentials</b>
+                  <p>Your S3 keys, Dropbox/rclone remote, or Local Starter path. Whoever can write/read that vault can move capsules — they still cannot decrypt them without B.</p>
+                </article>
+              </div>
+            </div>
+
+            <div className="keys-deep-crypto">
+              <h3>How encryption actually works</h3>
+              <ol className="security-steps keys-deep-steps">
+                <li>
+                  <b>Capture happens on a runner you authorize</b>
+                  <p>
+                    The open-source engine (or a Cloud-managed runner running that same engine) connects to Supabase using
+                    <strong> source credentials provided for that job</strong>. It pulls database layers, Auth records, Storage object bytes, and Edge Function source.
+                    Nothing in that path is designed to ship a cleartext dump into Portabase’s multi-tenant product database.
+                  </p>
+                </li>
+                <li>
+                  <b>The capsule is sealed with AES-256-GCM</b>
+                  <p>
+                    Before the artifact is considered ready for long-term storage, it is encrypted with
+                    <strong> AES-256-GCM</strong> (authenticated encryption). Integrity is checked with checksums.
+                    The crypto path is in the public engine — you can read it, not take our word alone.
+                  </p>
+                </li>
+                <li>
+                  <b>Only ciphertext lands in your vault</b>
+                  <p>
+                    The durable recovery object is a sealed capsule (for example <code>.pbase</code> + metadata/checksums) written to
+                    <strong> storage you own</strong>: your S3 bucket, Dropbox, NAS, or Local Starter folder.
+                    Portabase Cloud is <strong>not</strong> the storage of record for recovery bytes. We do not sell “keep your only copy in our object store.”
+                  </p>
+                </li>
+                <li>
+                  <b>Restore needs the passphrase on infrastructure you control</b>
+                  <p>
+                    To open a capsule you need the encryption passphrase (or the key path that produces it) plus the ciphertext.
+                    If Cloud is offline, a correct standalone restore still works from <strong>capsule + passphrase + a blank target project</strong>.
+                    That is the Escape guarantee: recovery must not depend on our website being up.
+                  </p>
+                </li>
+              </ol>
+            </div>
+
+            <div className="keys-deep-table-wrap">
+              <h3>Where each secret lives</h3>
+              <table className="security-table keys-deep-table">
+                <thead>
+                  <tr>
+                    <th>Secret</th>
+                    <th>Standalone (CLI / self-host)</th>
+                    <th>Portabase Cloud</th>
+                    <th>Can it decrypt your capsule alone?</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Encryption passphrase</strong></td>
+                    <td>Env / OS secret store on <em>your</em> runner only</td>
+                    <td>Injected into the job runner for the run; <strong>not</strong> stored as the recovery vault in our product DB. On “Trust Portabase,” we may hold material so unattended schedules work — that is an explicit convenience trade.</td>
+                    <td>With ciphertext: yes. Without the vault object: no useful recovery.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Supabase service / DB credentials</strong></td>
+                    <td>Only on your machine as env vars for the job</td>
+                    <td>Supplied to the managed runner for capture/restore; not used as long-term “we keep a copy of your production keys in the marketing console.”</td>
+                    <td>No — those open the live project, not the sealed capsule.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Capsule files</strong></td>
+                    <td>Your Drive / Dropbox / S3 / local path</td>
+                    <td>Same: <strong>your</strong> destination. Cloud never becomes the only copy.</td>
+                    <td>Only if someone also has the passphrase.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Console login &amp; alert config</strong></td>
+                    <td>N/A (no Cloud account required)</td>
+                    <td>Hosted identity (Supabase Auth), workspace membership, SMS routes, agent tokens (hashed)</td>
+                    <td>No — ops metadata cannot open AES-GCM capsules.</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Telemetry / job status</strong></td>
+                    <td>Local status files if you enable them</td>
+                    <td>Opt-in health: status, timing, error class — schema rejects secret-shaped fields</td>
+                    <td>No.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div className="keys-deep-grid-2">
+              <article className="keys-deep-card keys-deep-never">
+                <small>DESIGN RULES · WHAT WE WILL NOT DO</small>
+                <b>What Portabase does not claim as a product</b>
+                <ul>
+                  <li>We do <strong>not</strong> store capsule ciphertext as the permanent recovery vault in our control-plane database.</li>
+                  <li>We do <strong>not</strong> put your passphrase in marketing analytics, SMS bodies, or “share with support” by default.</li>
+                  <li>We do <strong>not</strong> pretend Cloud is a zero-knowledge black box while also offering unattended managed runners — those two stories conflict, so we stay honest.</li>
+                  <li>We do <strong>not</strong> require you to give us keys to use the open-source Escape engine at all.</li>
+                </ul>
+              </article>
+              <article className="keys-deep-card keys-deep-standalone">
+                <small>MAXIMUM SEPARATION</small>
+                <b>Standalone open source = no Portabase key path</b>
+                <p>
+                  If your hard requirement is <strong>“Portabase must never be able to touch encryption material,”</strong>
+                  run the Apache-2.0 engine yourself. Credentials and passphrase stay on infrastructure only you operate.
+                  Cloud is optional convenience — not a gate on recovery.
+                </p>
+                <p>
+                  That path is the only posture that delivers a true “vendor cannot open the capsule” story,
+                  because there is no Portabase runner process in the loop.
+                </p>
+                <a className="button button-ghost" href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">Open-source engine <Arrow /></a>
+              </article>
+            </div>
+
+            <div className="keys-deep-cloud">
+              <h3>If you use Cloud: what “protected” means in practice</h3>
+              <p className="security-prose">
+                Cloud’s job is to <strong>run Escape without you SSH-ing into a box every night</strong>: hosted GUI, schedules, telemetry, SMS, and managed compute.
+                Protection is a stack — not a single slogan.
+              </p>
+              <div className="keys-deep-stack">
+                <article>
+                  <span>1</span>
+                  <div>
+                    <b>Encryption at rest for recovery files</b>
+                    <p>Capsules are AES-256-GCM sealed before they are treated as durable Escape artifacts. Vault providers may add their own encryption-at-rest; that is additive, not a substitute for the capsule passphrase.</p>
+                  </div>
+                </article>
+                <article>
+                  <span>2</span>
+                  <div>
+                    <b>Separation of duties</b>
+                    <p>Console login ≠ passphrase. Alert SMS ≠ service-role key. Telemetry ≠ ciphertext. Compromising one layer should not automatically hand an attacker a complete recovery kit.</p>
+                  </div>
+                </article>
+                <article>
+                  <span>3</span>
+                  <div>
+                    <b>Short job windows on managed runners</b>
+                    <p>Staging disk is ephemeral for the job. The long-lived copy is the sealed capsule in <em>your</em> vault — not an open dump left on our multi-tenant product database.</p>
+                  </div>
+                </article>
+                <article>
+                  <span>4</span>
+                  <div>
+                    <b>Optional: your KMS, your CloudTrail, your job logs</b>
+                    <p>
+                      Customer KMS puts crypto authority under a CMK you own with a revocable grant.
+                      CloudTrail in <em>your</em> AWS account records API activity against your vault/KMS.
+                      Job CloudWatch / console history shows what ran — without asking us for a special export ticket.
+                      These controls <strong>contain</strong> risk; they do not erase the fact that a granted runner must use crypto during the job.
+                    </p>
+                  </div>
+                </article>
+                <article>
+                  <span>5</span>
+                  <div>
+                    <b>Guarded restore</b>
+                    <p>Restore refuses to overwrite the source project casually. You confirm a <strong>new</strong> target ref. That is operational safety for keys-and-data under pressure — not cryptography, but it protects you from panic mistakes.</p>
+                  </div>
+                </article>
+              </div>
+            </div>
+
+            <div className="keys-deep-checklist">
+              <h3>Checklist: maximize key protection</h3>
+              <ul>
+                <li><strong>Use a long, unique passphrase</strong> (16+ characters minimum in the engine) and store it in a password manager or OS secret store — not in Slack.</li>
+                <li><strong>Point capsules at storage you control</strong> (S3 recommended for production Escape). Prefer off-machine vaults over “only my laptop.”</li>
+                <li><strong>Limit who has source service-role keys</strong>; rotate if staff leave or a leak is suspected.</li>
+                <li><strong>If you need zero Portabase key path:</strong> standalone CLI only — skip managed runners.</li>
+                <li><strong>If you use managed Cloud and want stronger control:</strong> customer KMS + CloudTrail on, read job logs, understand Trust Portabase means operational trust in us for unattended jobs.</li>
+                <li><strong>Prove recovery</strong> with <code>replay</code> into a blank project before you need it in anger.</li>
+              </ul>
+            </div>
+
+            <div className="key-callout" style={{ marginTop: 28 }}>
+              <span>BOTTOM LINE</span>
+              <b>Your Escape is sealed ciphertext in storage you own, opened only with a passphrase that does not live in our product vault.</b>
+              <p>
+                Cloud exists to keep Escape operational — GUI, workflows, telemetry, and hosted runners — with honest trade-offs when we operate those runners.
+                For the strongest separation, keep the open-source engine under your own control. For the full trust dial and optional AWS controls, stay on this page; for Cloud packaging, see <a href="/cloud#keys" style={{ color: 'var(--acid)', fontWeight: 700 }}>Cloud · key storage</a>.
+              </p>
             </div>
           </div>
         </section>
