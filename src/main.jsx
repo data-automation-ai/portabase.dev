@@ -184,7 +184,7 @@ function Hero() {
       {/* Bridge: headline → ban dialog (same placement as design example) */}
       <img
         className="lockout-arrow"
-        src="/images/arrow2.png"
+        src="/images/arrow3.png"
         alt="This is the actual login screenshot from the Founder, it's the reason Portabase.dev came to be"
         width="320"
         height="160"
