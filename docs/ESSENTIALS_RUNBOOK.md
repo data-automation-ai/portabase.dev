@@ -2,7 +2,7 @@
 
 ## What the package does
 
-Portabase Essentials runs entirely on a customer-controlled Windows, macOS, or Linux machine. It captures the hosted Postgres database (including Auth and Storage metadata), Storage object bytes, and downloadable Edge Function source. It packages those materials into a timestamped archive, encrypts the archive locally with AES-256-GCM, transfers it to the customer's destination, and verifies the destination copy.
+Portabase Essentials (self-hosted engine) runs on a customer-controlled machine. **Launch desktop installer: Windows 11 only.** On macOS/Linux, use the open-source CLI. It captures the hosted Postgres database (including Auth and Storage metadata), Storage object bytes, and downloadable Edge Function source. It packages those materials into a timestamped archive, encrypts the archive locally with AES-256-GCM, transfers it to the customer's destination, and verifies the destination copy.
 
 Portabase never receives the Supabase credentials, destination credentials, encryption passphrase, or capsule contents.
 

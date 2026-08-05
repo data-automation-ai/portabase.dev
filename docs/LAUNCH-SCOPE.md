@@ -9,6 +9,7 @@
 | Square $17/mo · ≤12 agents · BYO **capsule destination** | Portabase-hosted long-term object storage (vault) |
 | **Cloud: Portabase stages on managed runners** | Requiring the customer’s laptop disk for Cloud staging |
 | Standalone script: stage on local **or** customer cloud temp | Multi-cloud *product* identity at launch |
+| **Desktop installer: Windows 11 only** | Mac desktop app / DMG (use open-source CLI on macOS) |
 
 ## Commercial split (non-negotiable)
 

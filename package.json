@@ -24,8 +24,8 @@
     "test": "node --test utility/*.test.mjs tests/*.test.mjs tests/*.test.cjs",
     "desktop": "electron .",
     "desktop:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stage-desktop-tools.ps1 && electron-builder --win nsis",
-    "desktop:linux": "bash scripts/stage-desktop-tools.sh && electron-builder --linux AppImage deb",
-    "desktop:mac": "bash scripts/stage-desktop-tools.sh && electron-builder --mac dmg zip"
+    "desktop:linux": "node -e \"console.error('Launch desktop is Windows 11 only. Use the open-source CLI on Linux.'); process.exit(1)\"",
+    "desktop:mac": "node -e \"console.error('Launch desktop is Windows 11 only — do not build for Mac. Use the open-source CLI on macOS if needed.'); process.exit(1)\""
   },
   "dependencies": {
     "@aws-sdk/client-cloudtrail": "^3.1102.0",
@@ -71,43 +71,22 @@
       }
     ],
     "win": {
-      "target": "nsis",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "artifactName": "Portabase-Setup-${version}-unsigned.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true
-    },
-    "mac": {
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "category": "public.app-category.utilities",
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false
-    },
-    "dmg": {
-      "title": "Portabase ${version}"
-    },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "category": "Utility",
-      "maintainer": "Portabase <support@portabase.dev>",
-      "syncDesktopName": true,
-      "executableName": "portabase",
-      "artifactName": "Portabase-${version}-${arch}.${ext}"
-    },
-    "deb": {
-      "depends": [
-        "libsecret-1-0",
-        "postgresql-client",
-        "tar"
-      ]
+      "createDesktopShortcut": true,
+      "shortcutName": "Portabase",
+      "uninstallDisplayName": "Portabase"
     }
   },
   "license": "Apache-2.0",

@@ -4,8 +4,8 @@ The same recovery-capsule format and guarded restore rules apply to every editio
 
 | Customer | Delivery | Scheduling | Secret storage | Current readiness |
 | --- | --- | --- | --- | --- |
-| Windows non-technical | Electron NSIS installer with PostgreSQL and Supabase tools | Guided Windows Task Scheduler setup | Windows DPAPI through Electron `safeStorage` | Installer builds and smoke-runs; signing and end-to-end UI acceptance remain |
-| macOS non-technical | Electron DMG and ZIP with the same guided UI | LaunchAgent | macOS Keychain through Electron `safeStorage` | Build definition exists; must build, sign, notarize, and test on macOS |
+| Windows 11 non-technical (**launch**) | Electron NSIS installer with PostgreSQL and Supabase tools | Guided Windows Task Scheduler setup | Windows DPAPI through Electron `safeStorage` | Installer builds and smoke-runs; signing and end-to-end UI acceptance remain |
+| macOS non-technical | **Out of launch scope** — use open-source CLI | — | — | No Mac desktop package for launch |
 | Linux desktop | Electron AppImage and Debian package | systemd user/system timer | Secret Service keyring; app refuses plaintext persistence | AppImage and Debian package build and tool-smoke-test on Ubuntu; graphical clean-install acceptance remains |
 | Linux server / NAS | CLI package or Docker Compose | systemd timer, cron, or NAS scheduler | root-readable env file or platform secret injection | CLI and systemd installer exist; target host acceptance remains |
 | AWS novice | Small Lightsail/EC2 Linux runner | systemd timer | Customer AWS Secrets Manager or root-readable env file | Installation runbook/script path exists; no customer instance is provisioned automatically |

@@ -331,6 +331,15 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  // Launch desktop is Windows 11 (win32) only — do not ship or run the packaged Mac app.
+  if (app.isPackaged && process.platform !== 'win32') {
+    dialog.showErrorBox(
+      'Windows 11 only',
+      'This Portabase desktop build supports Windows 11 only. On Mac or Linux, use the open-source CLI (utility/portabase.mjs).',
+    );
+    app.exit(1);
+    return;
+  }
   if (process.argv.includes('--scheduled-backup')) {
     const code = await runScheduledBackup().catch(async error => {
       await appendFile(userFile('scheduled-backup.log'), `[${new Date().toISOString()}] FAILED ${error.message}\n`, { mode: 0o600 }).catch(() => {});
@@ -343,4 +352,4 @@ app.whenReady().then(async () => {
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('window-all-closed', () => { app.quit(); });
