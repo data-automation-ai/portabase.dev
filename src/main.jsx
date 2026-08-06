@@ -9,6 +9,21 @@ import { loadSession } from './lib/session.js';
 
 const Arrow = () => <span aria-hidden="true">↗</span>;
 
+/** Skull + crossbones — SVG, not emoji (design rules) */
+const SkullCrossbones = () => (
+  <svg className="skull-xbones" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+    <g fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 46 L32 34 L46 46" />
+      <path d="M18 34 L32 46 L46 34" />
+      <ellipse cx="32" cy="22" rx="14" ry="13" fill="currentColor" stroke="none" opacity="0.95" />
+      <ellipse cx="26" cy="21" rx="3.2" ry="3.8" fill="#0a0b0d" stroke="none" />
+      <ellipse cx="38" cy="21" rx="3.2" ry="3.8" fill="#0a0b0d" stroke="none" />
+      <path d="M29 28.5 L32 31.5 L35 28.5" stroke="#0a0b0d" strokeWidth="1.8" />
+      <path d="M22 14 Q32 8 42 14" stroke="currentColor" strokeWidth="1.6" opacity="0.5" />
+    </g>
+  </svg>
+);
+
 const SupabaseMark = () => <svg className="supabase-mark" viewBox="0 0 109 113" role="img" aria-label="Supabase logo">
   <defs>
     <linearGradient id="supabase-a" x1="53.974" y1="38.974" x2="94.163" y2="55.829" gradientUnits="userSpaceOnUse"><stop stopColor="#249361" /><stop offset="1" stopColor="#3ECF8E" /></linearGradient>
@@ -1073,13 +1088,42 @@ function PublicDeal() {
         <h2>Keep Supabase.<br /><em>Own the Escape.</em></h2>
         <p><strong>USP:</strong> Portabase is your <strong>Supabase Escape</strong> — open source, Supabase-only. Encrypted capsule you control (database, Auth, <strong>Storage objects</strong>, <strong>Edge Functions</strong>) so lockout is not the end. This website is Cloud convenience: <strong>GUI, easier configuration, and telemetry</strong> — so the Escape stays real day to day, not a dusty script.</p>
       </div>
-      <div className="gap-callout" style={{ marginTop: 28, marginBottom: 8, padding: '22px 24px', border: '1px solid rgba(201,255,74,.35)', background: 'rgba(201,255,74,.05)' }}>
+      <aside className="edge-fn-death" aria-label="Warning: Supabase Edge Functions are not in platform backups">
+        <div className="edge-fn-death-mark" aria-hidden="true">
+          <SkullCrossbones />
+        </div>
+        <div className="edge-fn-death-body">
+          <span className="edge-fn-death-kicker">DID YOU KNOW · CRITICAL GAP</span>
+          <h3>Your Supabase Edge Functions are not backed up.</h3>
+          <p className="edge-fn-death-lead">
+            Platform database backups restore <strong>Postgres</strong>. They do <strong>not</strong> restore your
+            Edge Function source, deploy config, or secrets wiring. A clean “restore from backup” can leave your
+            app with a database — and <em>no functions to serve traffic</em>.
+          </p>
+          <p>
+            That is not a corner case. For many products the Edge Function layer <strong>is</strong> the product:
+            auth hooks, webhooks, billing, AI routes, admin APIs. Lose the dashboard or the project and you may
+            still “have a backup” — while the code that made the business run is gone from the recovery path.
+          </p>
+          <p className="edge-fn-death-close">
+            <strong>Portabase treats Function source as a first-class Escape layer</strong> — captured into
+            your sealed capsule with DB, Auth, and Storage object bytes, so restore into a <em>new</em> project
+            can bring the app back, not just the tables.
+          </p>
+          <div className="edge-fn-death-links">
+            <a href="https://supabase.com/docs/guides/platform/backups" target="_blank" rel="noreferrer">Supabase backups docs ↗</a>
+            <a href="#escape">How Escape captures Functions ↗</a>
+          </div>
+        </div>
+      </aside>
+
+      <div className="gap-callout" style={{ marginTop: 18, marginBottom: 8, padding: '22px 24px', border: '1px solid rgba(201,255,74,.35)', background: 'rgba(201,255,74,.05)' }}>
         <div className="section-kicker green" style={{ marginBottom: 10 }}>SUPABASE PLATFORM BACKUPS · THE GAP</div>
-        <h3 style={{ margin: '0 0 12px', fontSize: 22, letterSpacing: '-.03em' }}>Their backup is not a full product escape hatch.</h3>
-        <p style={{ margin: 0, color: '#b4b4ae', fontSize: 15, lineHeight: 1.65, maxWidth: 820 }}>
-          Supabase documents that <strong>database backups do not include objects stored via the Storage API</strong> — the database holds <em>metadata</em> about files, not the file bytes themselves.
+        <h3 style={{ margin: '0 0 12px', fontSize: 22, letterSpacing: '-.03em', color: '#faf8f2' }}>Storage files are missing too — same hole, different layer.</h3>
+        <p style={{ margin: 0, color: '#c4c3bd', fontSize: 15, lineHeight: 1.65, maxWidth: 820 }}>
+          Supabase documents that <strong style={{ color: '#fff' }}>database backups do not include objects stored via the Storage API</strong> — the database holds <em>metadata</em> about files, not the file bytes themselves.
           <a href="https://supabase.com/docs/guides/platform/backups" target="_blank" rel="noreferrer" style={{ color: 'var(--acid)', fontWeight: 700 }}> Official backups docs ↗</a>
-          {' '}Edge Function source is managed outside that Postgres snapshot path — a DB-only restore does not bring back your Storage files or redeploy Functions for you.
+          {' '}Edge Function source sits outside that Postgres snapshot path as well.
           <strong style={{ color: '#f0eee8' }}> Portabase captures Storage object bytes and Function source as first-class layers.</strong>
         </p>
       </div>
