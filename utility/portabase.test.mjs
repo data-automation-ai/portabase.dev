@@ -65,6 +65,14 @@ test('storage name+size fingerprint is order-independent and size-sensitive', ()
   ]);
   assert.deepEqual(keys.sort(), ['images/a.png\t9', 'images/b/c.png\t3'].sort());
 });
+
+test('sample-expected fingerprint differs from full source inventory', () => {
+  const full = fingerprintSortedKeys(['b/a\t1', 'b/z\t2', 'c/x\t3'], 'md5');
+  const sample = fingerprintSortedKeys(['b/a\t1', 'c/x\t3'], 'md5');
+  assert.equal(fingerprintsMatch(full, sample), false);
+  assert.equal(sample.count, 2);
+  assert.equal(full.count, 3);
+});
 import { cleanSchemaLine } from './portabase.mjs';
 
 test('demo trial is opt-in; default is full community capture', () => {

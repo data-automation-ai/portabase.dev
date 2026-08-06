@@ -344,14 +344,23 @@ async function captureDatabase(rawDir, limits = null) {
   if (!limits?.databaseSchemaOnly) await run(supabase, [...common, '--file', join(dbDir, 'data.sql'), '--use-copy', '--data-only']);
   const files = limits?.databaseSchemaOnly ? ['roles.sql', 'schema.sql'] : ['roles.sql', 'schema.sql', 'data.sql'];
   const inventory = resolveTool('psql') ? await captureDatabaseInventory(dbUrl, join(dbDir, 'database-inventory.json'), { estimateRows: Boolean(limits) }) : null;
+  const schemaOnly = Boolean(limits?.databaseSchemaOnly);
+  const summary = inventorySummary(inventory);
+  const inventoryFingerprint = databaseInventoryFingerprint(inventory);
+  if (inventoryFingerprint) {
+    console.log(
+      `Database inventory fingerprint (MD5): ${inventoryFingerprint.fingerprint} · count=${inventoryFingerprint.count}`,
+    );
+  }
   return {
     complete: Boolean(inventory),
     reason: inventory ? null : 'Database dump captured, but psql was unavailable for exact recovery inventory.',
-    limited: Boolean(limits),
-    limitation: limits ? 'schema only; table rows are not included' : null,
+    limited: schemaOnly,
+    limitation: schemaOnly ? 'schema only; table rows are not included' : null,
     files,
     inventory: Boolean(inventory),
-    summary: inventorySummary(inventory),
+    summary,
+    inventoryFingerprintMd5: inventoryFingerprint,
   };
 }
 
@@ -366,6 +375,18 @@ function inventorySummary(inventory) {
     databaseFunctions: Number(inventory.databaseFunctions) || 0,
     triggers: Number(inventory.triggers) || 0,
   };
+}
+
+/** Non-storage fingerprint: schema.table + reported row count (order-independent). */
+function databaseInventoryFingerprint(inventory) {
+  if (!inventory?.tables?.length) return null;
+  const lines = inventory.tables.map((table) => {
+    const schema = table.schema || 'public';
+    const name = table.name || table.table || '';
+    const rows = Number(table.rows) || 0;
+    return `${schema}.${name}\t${rows}`;
+  });
+  return fingerprintSortedKeys(lines, 'md5');
 }
 
 function postgresEnvironment(dbUrl) {
@@ -609,15 +630,24 @@ async function captureDatabaseNative(dbUrl, dbDir, limits = null) {
     ...(!limits?.databaseSchemaOnly ? ['data.sql'] : []),
     ...(inventory ? ['database-inventory.json'] : []),
   ];
+  const schemaOnly = Boolean(limits?.databaseSchemaOnly);
+  const summary = inventorySummary(inventory);
+  const inventoryFingerprint = databaseInventoryFingerprint(inventory);
+  if (inventoryFingerprint) {
+    console.log(
+      `Database inventory fingerprint (MD5): ${inventoryFingerprint.fingerprint} · count=${inventoryFingerprint.count}`,
+    );
+  }
   return {
     complete: Boolean(inventory),
     reason: inventory ? null : 'Database dump captured, but psql was unavailable for exact recovery inventory.',
-    limited: Boolean(limits),
-    limitation: limits ? 'schema only; table rows are not included' : null,
+    limited: schemaOnly,
+    limitation: schemaOnly ? 'schema only; table rows are not included' : null,
     engine: 'native-postgresql-client',
     files,
     inventory: Boolean(inventory),
-    summary: inventorySummary(inventory),
+    summary,
+    inventoryFingerprintMd5: inventoryFingerprint,
   };
 }
 
@@ -743,6 +773,22 @@ async function captureStorage(rawDir, limits = null, config = {}) {
       }
       if (limits?.maxStorageObjects != null && jobs.length >= limits.maxStorageObjects) break;
     }
+  }
+
+  // Scaled sample fingerprint: first object per bucket from the listing (expected capsule set).
+  // Full source fingerprint stays above; these two intentionally differ under first-per-bucket.
+  const sampleExpectedKeys = jobs.map(({ bucket, object }) => {
+    const name = object.fullName || object.name;
+    const size = Number(object.metadata?.size ?? object.metadata?.contentLength ?? object.size ?? 0) || 0;
+    return storageInventoryLine(bucket.id, name, size);
+  });
+  const sampleExpectedFingerprintMd5 = fingerprintSortedKeys(sampleExpectedKeys, 'md5');
+  const sampleExpectedFingerprintSha256 = fingerprintSortedKeys(sampleExpectedKeys, 'sha256');
+  if (limits?.firstObjectPerBucket) {
+    console.log(
+      `Storage sample-expected name+size (MD5): ${sampleExpectedFingerprintMd5.fingerprint} · count=${sampleExpectedFingerprintMd5.count} `
+      + `(full source count=${inventory.namesFingerprintMd5.count} — fingerprints differ by design)`,
+    );
   }
 
   let completed = 0;
@@ -895,6 +941,13 @@ async function captureStorage(rawDir, limits = null, config = {}) {
   // Source-side fingerprint: full listing snapshot from backup start (may be larger when sampling)
   manifest.sourceNamesFingerprintMd5 = inventory.namesFingerprintMd5;
   manifest.sourceNamesFingerprintSha256 = inventory.namesFingerprintSha256;
+  // Scaled expected sample (first-per-bucket plan at list time) — should match capsule when downloads succeed
+  manifest.sampleExpectedNamesFingerprintMd5 = sampleExpectedFingerprintMd5;
+  manifest.sampleExpectedNamesFingerprintSha256 = sampleExpectedFingerprintSha256;
+  manifest.sampleMatchesCapsule = fingerprintsMatch(
+    sampleExpectedFingerprintMd5,
+    manifest.capsuleNamesFingerprintMd5,
+  );
   manifest.sourceInventory = inventory;
   const manifestPath = join(storageDir, 'storage-manifest.json');
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
@@ -906,13 +959,18 @@ async function captureStorage(rawDir, limits = null, config = {}) {
   }
   console.log(
     `Storage capsule name+size (MD5): ${manifest.capsuleNamesFingerprintMd5.fingerprint} · count=${manifest.capsuleNamesFingerprintMd5.count}`
-    + (limits
-      ? ` · source inventory MD5=${manifest.sourceNamesFingerprintMd5.fingerprint} (count=${manifest.sourceNamesFingerprintMd5.count})`
-      : ''),
+    + (limits?.firstObjectPerBucket
+      ? ` · sample-expected MD5=${sampleExpectedFingerprintMd5.fingerprint}`
+        + ` match=${manifest.sampleMatchesCapsule}`
+        + ` · full-source MD5=${manifest.sourceNamesFingerprintMd5.fingerprint}`
+        + ` (count=${manifest.sourceNamesFingerprintMd5.count}, not expected to match sample)`
+      : limits
+        ? ` · source inventory MD5=${manifest.sourceNamesFingerprintMd5.fingerprint} (count=${manifest.sourceNamesFingerprintMd5.count})`
+        : ''),
   );
   return {
     complete: true,
-    limited: Boolean(limits),
+    limited: Boolean(limits?.firstObjectPerBucket || limits?.maxStorageObjects != null),
     limitation,
     bucketCount: manifest.buckets.length,
     objectCount: manifest.objectCount,
@@ -924,6 +982,8 @@ async function captureStorage(rawDir, limits = null, config = {}) {
     inventory,
     namesFingerprintMd5: manifest.capsuleNamesFingerprintMd5,
     sourceNamesFingerprintMd5: manifest.sourceNamesFingerprintMd5,
+    sampleExpectedNamesFingerprintMd5: sampleExpectedFingerprintMd5,
+    sampleMatchesCapsule: manifest.sampleMatchesCapsule,
     manifestPath,
   };
 }
@@ -1048,6 +1108,22 @@ async function captureFunctions(config, rawDir, limits = null) {
   await writeFile(join(functionsDir, 'redeploy-all.sh'), redeploy.bash);
 
   const functionsLimited = limits?.maxFunctions != null;
+  // Non-storage fingerprint: function name + file path + content sha256
+  const functionFpLines = [];
+  for (const fn of functionMeta) {
+    if (!fn.name) continue;
+    if (!fn.files?.length) {
+      functionFpLines.push(`${fn.name}\t0`);
+      continue;
+    }
+    for (const file of fn.files) {
+      functionFpLines.push(`${fn.name}/${file.path}\t${file.sha256 || file.bytes || 0}`);
+    }
+  }
+  const inventoryFingerprintMd5 = fingerprintSortedKeys(functionFpLines, 'md5');
+  console.log(
+    `Functions inventory fingerprint (MD5): ${inventoryFingerprintMd5.fingerprint} · count=${inventoryFingerprintMd5.count}`,
+  );
   return {
     complete: true,
     limited: functionsLimited,
@@ -1062,6 +1138,7 @@ async function captureFunctions(config, rawDir, limits = null) {
     manifestFile: 'functions-manifest.json',
     listVia,
     supabaseCliVersion: PINNED_SUPABASE_CLI,
+    inventoryFingerprintMd5,
   };
 }
 
@@ -1116,6 +1193,12 @@ async function captureAuth(config, rawDir) {
   ].join('\n');
   await writeFile(join(authDir, 'auth-inventory.json'), `${JSON.stringify(inventory, null, 2)}\n`);
   await writeFile(join(authDir, 'AUTH-CUTOVER.md'), checklist);
+  // Non-storage fingerprint: auth user id + email (no secrets)
+  const authFpLines = (inventory.users || []).map((u) => `${u.id || ''}\t${u.email || ''}`);
+  const inventoryFingerprintMd5 = fingerprintSortedKeys(authFpLines, 'md5');
+  console.log(
+    `Auth inventory fingerprint (MD5): ${inventoryFingerprintMd5.fingerprint} · count=${inventoryFingerprintMd5.count}`,
+  );
   return {
     complete: inventory.truncated !== false,
     partial: !inventory.truncated,
@@ -1123,6 +1206,7 @@ async function captureAuth(config, rawDir) {
     checklist: 'AUTH-CUTOVER.md',
     inventoryFile: 'auth-inventory.json',
     reason: inventory.reason || null,
+    inventoryFingerprintMd5,
   };
 }
 
