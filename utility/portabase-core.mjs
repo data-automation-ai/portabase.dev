@@ -60,6 +60,63 @@ export function safeObjectPath(value) {
   return cleaned.split(/[\\/]/).join(sep);
 }
 
+/**
+ * Stable inventory fingerprint: concatenate sorted keys, hash.
+ * Used as a snapshot at capture start (full source listing) and again on destination after restore.
+ * Names-only is cheap and independent of downloading every object byte.
+ *
+ * @param {string[]} keys  e.g. ["bucket/path/to/file.png", ...]
+ * @param {'md5'|'sha256'} algo
+ * @returns {{ algo: string, count: number, fingerprint: string, method: string }}
+ */
+export function fingerprintSortedKeys(keys = [], algo = 'md5') {
+  const list = (Array.isArray(keys) ? keys : [])
+    .map(k => String(k || '').replaceAll('\\', '/').replace(/^\/+/, '').trim())
+    .filter(Boolean)
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const payload = list.join('\n');
+  const hashAlgo = algo === 'sha256' ? 'sha256' : 'md5';
+  const fingerprint = createHash(hashAlgo).update(payload, 'utf8').digest('hex');
+  return {
+    method: 'sorted-names-concat',
+    algo: hashAlgo,
+    count: list.length,
+    fingerprint,
+  };
+}
+
+/**
+ * Build storage object keys from inventory-style structures.
+ * Accepts:
+ *  - [{ id, objects: [{ fullName|name }] }]
+ *  - inventory.buckets from capture
+ *  - storage-manifest buckets
+ */
+export function storageObjectKeysFromBuckets(buckets = []) {
+  const keys = [];
+  for (const bucket of buckets || []) {
+    const bid = bucket.id || bucket.name;
+    if (!bid) continue;
+    const objects = bucket.objects || [];
+    if (objects.length === 0 && Number(bucket.objectCount) >= 0 && !objects.length) {
+      // listing-only inventory rows may only have counts — skip keys
+      continue;
+    }
+    for (const object of objects) {
+      const name = object.fullName || object.name || object.path;
+      if (!name) continue;
+      keys.push(`${bid}/${String(name).replaceAll('\\', '/')}`);
+    }
+  }
+  return keys;
+}
+
+/** Compare two fingerprint records from fingerprintSortedKeys. */
+export function fingerprintsMatch(a, b) {
+  if (!a?.fingerprint || !b?.fingerprint) return false;
+  return a.algo === b.algo && a.fingerprint === b.fingerprint && Number(a.count) === Number(b.count);
+}
+
 /** Normalize Storage list entry metadata (from supabase-backup DR sync patterns). */
 export function storageObjectIdentity(object = {}) {
   const meta = object.metadata || {};

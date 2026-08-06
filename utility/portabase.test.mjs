@@ -38,6 +38,9 @@ import {
   isLocalProvider,
   FIRST_PER_BUCKET_STORAGE,
   TRIAL_LIMITS,
+  fingerprintSortedKeys,
+  storageObjectKeysFromBuckets,
+  fingerprintsMatch,
 } from './portabase-core.mjs';
 
 test('first-per-bucket storage sample is not a schema-only trial', () => {
@@ -45,6 +48,21 @@ test('first-per-bucket storage sample is not a schema-only trial', () => {
   assert.equal(FIRST_PER_BUCKET_STORAGE.firstObjectPerBucket, true);
   assert.equal(FIRST_PER_BUCKET_STORAGE.maxFunctions, null);
   assert.equal(TRIAL_LIMITS.databaseSchemaOnly, true);
+});
+
+test('storage names fingerprint is order-independent and stable', () => {
+  const a = fingerprintSortedKeys(['b/z', 'a/x', 'a/y'], 'md5');
+  const b = fingerprintSortedKeys(['a/y', 'b/z', 'a/x'], 'md5');
+  assert.equal(a.fingerprint, b.fingerprint);
+  assert.equal(a.count, 3);
+  assert.equal(a.method, 'sorted-names-concat');
+  assert.equal(fingerprintsMatch(a, b), true);
+  const c = fingerprintSortedKeys(['a/x', 'a/y'], 'md5');
+  assert.equal(fingerprintsMatch(a, c), false);
+  const keys = storageObjectKeysFromBuckets([
+    { id: 'images', objects: [{ name: 'a.png' }, { fullName: 'b/c.png' }] },
+  ]);
+  assert.deepEqual(keys.sort(), ['images/a.png', 'images/b/c.png'].sort());
 });
 import { cleanSchemaLine } from './portabase.mjs';
 

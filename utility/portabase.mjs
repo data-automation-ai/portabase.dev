@@ -47,6 +47,9 @@ import {
   TRIAL_LIMITS,
   FIRST_PER_BUCKET_STORAGE,
   trialProtectionLedger,
+  fingerprintSortedKeys,
+  storageObjectKeysFromBuckets,
+  fingerprintsMatch,
   validateBlankRestoreInventory,
   validateDrillCapsule,
   validateRestoreTarget,
@@ -689,13 +692,26 @@ async function captureStorage(rawDir, limits = null, config = {}) {
     const bytes = objects.reduce((total, object) => total + (Number(object.metadata?.size) || 0), 0);
     return { bucketId: bucket.id, objects, bytes };
   });
+  const sourceObjectKeys = [];
   for (const row of listResults) {
     listedObjects.set(row.bucketId, row.objects);
     inventory.buckets.push({ id: row.bucketId, objectCount: row.objects.length, totalBytes: row.bytes });
     inventory.objectCount += row.objects.length;
     inventory.totalBytes += row.bytes;
+    for (const object of row.objects) {
+      const name = object.fullName || object.name;
+      if (name) sourceObjectKeys.push(`${row.bucketId}/${name}`);
+    }
   }
-  console.log(`Storage inventory: ${inventory.bucketCount} buckets · ${inventory.objectCount} objects · ${formatBytes(inventory.totalBytes)} · concurrency=${concurrency}`);
+  // Snapshot at list-time: name inventory fingerprint (not full object bytes).
+  inventory.namesFingerprintMd5 = fingerprintSortedKeys(sourceObjectKeys, 'md5');
+  inventory.namesFingerprintSha256 = fingerprintSortedKeys(sourceObjectKeys, 'sha256');
+  console.log(
+    `Storage inventory: ${inventory.bucketCount} buckets · ${inventory.objectCount} objects · ${formatBytes(inventory.totalBytes)} · concurrency=${concurrency}`,
+  );
+  console.log(
+    `Storage names snapshot (MD5): ${inventory.namesFingerprintMd5.fingerprint} · count=${inventory.namesFingerprintMd5.count}`,
+  );
 
   // firstObjectPerBucket: every bucket, one object each (empty buckets kept in manifest with 0 objects).
   // trial: cap buckets + total objects.
@@ -869,6 +885,13 @@ async function captureStorage(rawDir, limits = null, config = {}) {
 
   // W8: reconcile — drop prior keys no longer present (stale index entries)
   manifest.reconciledDropped = [...priorIndex.keys()].filter(k => !seenKeys.has(k)).length;
+  // Capsule-side fingerprint: only objects actually written into this capsule
+  const capsuleObjectKeys = storageObjectKeysFromBuckets(manifest.buckets);
+  manifest.capsuleNamesFingerprintMd5 = fingerprintSortedKeys(capsuleObjectKeys, 'md5');
+  manifest.capsuleNamesFingerprintSha256 = fingerprintSortedKeys(capsuleObjectKeys, 'sha256');
+  // Source-side fingerprint: full listing snapshot from backup start (may be larger when sampling)
+  manifest.sourceNamesFingerprintMd5 = inventory.namesFingerprintMd5;
+  manifest.sourceNamesFingerprintSha256 = inventory.namesFingerprintSha256;
   manifest.sourceInventory = inventory;
   const manifestPath = join(storageDir, 'storage-manifest.json');
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
@@ -878,6 +901,12 @@ async function captureStorage(rawDir, limits = null, config = {}) {
   } else if (limits) {
     limitation = `first ${limits.maxStorageObjects} objects across ${limits.maxStorageBuckets} buckets`;
   }
+  console.log(
+    `Storage capsule names (MD5): ${manifest.capsuleNamesFingerprintMd5.fingerprint} · count=${manifest.capsuleNamesFingerprintMd5.count}`
+    + (limits
+      ? ` · source inventory MD5=${manifest.sourceNamesFingerprintMd5.fingerprint} (count=${manifest.sourceNamesFingerprintMd5.count})`
+      : ''),
+  );
   return {
     complete: true,
     limited: Boolean(limits),
@@ -890,6 +919,8 @@ async function captureStorage(rawDir, limits = null, config = {}) {
     downloaded: manifest.downloaded,
     concurrency,
     inventory,
+    namesFingerprintMd5: manifest.capsuleNamesFingerprintMd5,
+    sourceNamesFingerprintMd5: manifest.sourceNamesFingerprintMd5,
     manifestPath,
   };
 }
@@ -1643,6 +1674,28 @@ async function simulate() {
                 `source inventory ${formatBytes(item.inventory.totalBytes)} · in capsule ${formatBytes(item.totalBytes || 0)} (trial/partial)`,
               );
             }
+            // Recompute names fingerprint from capsule contents vs stored snapshot
+            if (storage.capsuleNamesFingerprintMd5) {
+              const recomputed = fingerprintSortedKeys(storageObjectKeysFromBuckets(storage.buckets), 'md5');
+              if (fingerprintsMatch(storage.capsuleNamesFingerprintMd5, recomputed)) {
+                pass(
+                  'storage-names-fingerprint',
+                  `MD5 ${recomputed.fingerprint} · ${recomputed.count} names`,
+                );
+              } else {
+                fail(
+                  'storage-names-fingerprint',
+                  `stored=${storage.capsuleNamesFingerprintMd5.fingerprint} recomputed=${recomputed.fingerprint}`,
+                );
+              }
+            }
+            if (storage.sourceNamesFingerprintMd5 && item.limited) {
+              warn(
+                'storage-source-names-fingerprint',
+                `source inventory MD5 ${storage.sourceNamesFingerprintMd5.fingerprint} `
+                + `(${storage.sourceNamesFingerprintMd5.count} names) · capsule has sample only`,
+              );
+            }
           }
         } else if (layer === 'functions') {
           const fm = join(extracted, 'functions', 'functions-manifest.json');
@@ -1761,6 +1814,7 @@ async function restoreStorage(extracted) {
   if (!existsSync(manifestPath)) return { verified: false, reason: 'Storage manifest is missing.', bucketCount: 0, objectCount: 0, hashesVerified: 0 };
   const storage = JSON.parse(await readFile(manifestPath, 'utf8'));
   let hashesVerified = 0;
+  const restoredKeys = [];
   for (const bucket of storage.buckets) {
     const created = await targetFetch('/storage/v1/bucket', {
       method: 'POST',
@@ -1788,9 +1842,98 @@ async function restoreStorage(extracted) {
       const expectedHash = object.sha256 || createHash('sha256').update(body).digest('hex');
       if (remoteHash !== expectedHash) throw new Error(`Read-back hash mismatch for ${bucket.id}/${object.name}.`);
       hashesVerified += 1;
+      restoredKeys.push(`${bucket.id}/${object.name}`);
     }
   }
-  return { verified: hashesVerified === Number(storage.objectCount || 0), bucketCount: storage.buckets.length, objectCount: storage.objectCount, hashesVerified };
+  // Name-inventory fingerprint: destination restored set vs capsule snapshot
+  const expectedNames = storage.capsuleNamesFingerprintMd5
+    || fingerprintSortedKeys(storageObjectKeysFromBuckets(storage.buckets), 'md5');
+  const actualNames = fingerprintSortedKeys(restoredKeys, expectedNames.algo || 'md5');
+  const namesMatch = fingerprintsMatch(expectedNames, actualNames);
+  if (!namesMatch) {
+    console.warn(
+      `WARNING: Storage names fingerprint mismatch — capsule=${expectedNames.fingerprint} `
+      + `destination=${actualNames.fingerprint} (count ${expectedNames.count} vs ${actualNames.count})`,
+    );
+  } else {
+    console.log(`Storage names fingerprint OK (MD5 ${actualNames.fingerprint} · ${actualNames.count} names)`);
+  }
+  // Optional: live target listing fingerprint vs full source inventory (only meaningful after full restore)
+  let liveNamesMatch = null;
+  let liveNamesFingerprint = null;
+  if (storage.sourceNamesFingerprintMd5 && !storage.limitation) {
+    try {
+      liveNamesFingerprint = await fingerprintLiveTargetStorageNames();
+      liveNamesMatch = fingerprintsMatch(storage.sourceNamesFingerprintMd5, liveNamesFingerprint);
+      console.log(
+        liveNamesMatch
+          ? `Live target names match source inventory snapshot (MD5 ${liveNamesFingerprint.fingerprint})`
+          : `Live target names differ from source snapshot — capsule=${storage.sourceNamesFingerprintMd5.fingerprint} live=${liveNamesFingerprint.fingerprint}`,
+      );
+    } catch (err) {
+      console.warn(`WARNING: could not fingerprint live target Storage: ${err.message}`);
+    }
+  }
+  return {
+    verified: hashesVerified === Number(storage.objectCount || 0) && namesMatch,
+    bucketCount: storage.buckets.length,
+    objectCount: storage.objectCount,
+    hashesVerified,
+    namesFingerprint: actualNames,
+    expectedNamesFingerprint: expectedNames,
+    namesMatch,
+    liveNamesFingerprint,
+    liveNamesMatch,
+    sourceNamesFingerprint: storage.sourceNamesFingerprintMd5 || null,
+  };
+}
+
+/** List all object names on the restore target and fingerprint (same method as capture). */
+async function fingerprintLiveTargetStorageNames() {
+  const bucketsResponse = await targetFetch('/storage/v1/bucket', { signal: AbortSignal.timeout(15000) });
+  if (!bucketsResponse.ok) throw new Error(`list buckets HTTP ${bucketsResponse.status}`);
+  const buckets = await bucketsResponse.json();
+  const keys = [];
+  for (const bucket of buckets) {
+    const id = bucket.id || bucket.name;
+    if (!id) continue;
+    const objects = await listTargetBucketObjects(id);
+    for (const object of objects) {
+      const name = object.fullName || object.name;
+      if (name) keys.push(`${id}/${name}`);
+    }
+  }
+  return fingerprintSortedKeys(keys, 'md5');
+}
+
+async function listTargetBucketObjects(bucketId, prefix = '') {
+  const objects = [];
+  let offset = 0;
+  for (;;) {
+    const response = await targetFetch(`/storage/v1/object/list/${encodeURIComponent(bucketId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prefix, limit: 1000, offset }),
+    });
+    if (!response.ok) throw new Error(`list ${bucketId}: HTTP ${response.status}`);
+    const batch = await response.json();
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    for (const entry of batch) {
+      const name = entry.name;
+      if (!name) continue;
+      const path = prefix ? `${prefix}${name}` : name;
+      // folders end with / in some listings
+      if (entry.id == null && !entry.metadata) {
+        const nested = await listTargetBucketObjects(bucketId, path.endsWith('/') ? path : `${path}/`);
+        objects.push(...nested);
+      } else {
+        objects.push({ fullName: path, name: path, metadata: entry.metadata || {} });
+      }
+    }
+    if (batch.length < 1000) break;
+    offset += batch.length;
+  }
+  return objects;
 }
 
 async function restoreFunctions(extracted, manifest, targetRef) {
