@@ -55,6 +55,26 @@ Cloud stores only refs, capsule id, and step status — never target service key
 | **`replay`** | Full path into a **new blank** project |
 | Cutover | Your DNS/app switch — separate deliberate step after a green replay |
 
+## Size-bounded full-path capture (`--storage-first-per-bucket`)
+
+When you want **full** database, Auth, and Edge Functions but Storage would blow a multi‑GB budget:
+
+```bash
+portabase backup --storage-first-per-bucket
+# or in config: "capture": { "storageSample": "first-per-bucket" }
+```
+
+| Layer | Captured |
+| --- | --- |
+| Database | **Full** (schema + data) |
+| Auth | **Full** (as always captured) |
+| Edge Functions | **All** function source |
+| Storage | **Every bucket**, but only the **first object** in each (empty buckets still listed) |
+
+Source inventory (all object counts/bytes) is still recorded in the capsule for honesty. Capsule status is COMPLETE for layers, with `storage.limited` + limitation text.
+
+Use this for under‑5 GB path proof; full object inventory still requires a normal `backup` without the flag.
+
 ## Offline simulate (no destination)
 
 When you have a capsule but **no blank Supabase project yet**, prove integrity locally:

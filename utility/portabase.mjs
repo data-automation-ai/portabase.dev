@@ -45,6 +45,7 @@ import {
   mapPool,
   resolveStorageConcurrency,
   TRIAL_LIMITS,
+  FIRST_PER_BUCKET_STORAGE,
   trialProtectionLedger,
   validateBlankRestoreInventory,
   validateDrillCapsule,
@@ -696,15 +697,33 @@ async function captureStorage(rawDir, limits = null, config = {}) {
   }
   console.log(`Storage inventory: ${inventory.bucketCount} buckets · ${inventory.objectCount} objects · ${formatBytes(inventory.totalBytes)} · concurrency=${concurrency}`);
 
-  const selectedBuckets = limits ? buckets.slice(0, limits.maxStorageBuckets) : buckets;
+  // firstObjectPerBucket: every bucket, one object each (empty buckets kept in manifest with 0 objects).
+  // trial: cap buckets + total objects.
+  // default: all buckets, all objects.
+  const selectedBuckets = limits?.firstObjectPerBucket
+    ? buckets
+    : limits?.maxStorageBuckets
+      ? buckets.slice(0, limits.maxStorageBuckets)
+      : buckets;
   // Flatten work queue so concurrency is global (not stuck on one huge bucket).
   const jobs = [];
-  for (const bucket of selectedBuckets) {
-    for (const object of listedObjects.get(bucket.id) || []) {
-      if (limits && jobs.length >= limits.maxStorageObjects) break;
-      jobs.push({ bucket, object });
+  if (limits?.firstObjectPerBucket) {
+    for (const bucket of selectedBuckets) {
+      const objects = listedObjects.get(bucket.id) || [];
+      if (objects.length > 0) jobs.push({ bucket, object: objects[0] });
     }
-    if (limits && jobs.length >= limits.maxStorageObjects) break;
+    console.log(
+      `Storage sample: first object per bucket → ${jobs.length} download(s) `
+      + `(of ${inventory.objectCount} source objects across ${inventory.bucketCount} buckets)`,
+    );
+  } else {
+    for (const bucket of selectedBuckets) {
+      for (const object of listedObjects.get(bucket.id) || []) {
+        if (limits?.maxStorageObjects != null && jobs.length >= limits.maxStorageObjects) break;
+        jobs.push({ bucket, object });
+      }
+      if (limits?.maxStorageObjects != null && jobs.length >= limits.maxStorageObjects) break;
+    }
   }
 
   let completed = 0;
@@ -853,10 +872,16 @@ async function captureStorage(rawDir, limits = null, config = {}) {
   manifest.sourceInventory = inventory;
   const manifestPath = join(storageDir, 'storage-manifest.json');
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  let limitation = null;
+  if (limits?.firstObjectPerBucket) {
+    limitation = `first object per bucket (${manifest.objectCount} of ${inventory.objectCount} source objects; ${inventory.bucketCount} buckets)`;
+  } else if (limits) {
+    limitation = `first ${limits.maxStorageObjects} objects across ${limits.maxStorageBuckets} buckets`;
+  }
   return {
     complete: true,
     limited: Boolean(limits),
-    limitation: limits ? `first ${limits.maxStorageObjects} objects across ${limits.maxStorageBuckets} buckets` : null,
+    limitation,
     bucketCount: manifest.buckets.length,
     objectCount: manifest.objectCount,
     totalBytes: manifest.totalBytes,
@@ -933,7 +958,9 @@ async function captureFunctions(config, rawDir, limits = null) {
     if (!Array.isArray(availableFunctions)) availableFunctions = availableFunctions?.functions || [];
   }
 
-  const functions = limits ? availableFunctions.slice(0, limits.maxFunctions) : availableFunctions;
+  const functions = (limits?.maxFunctions != null)
+    ? availableFunctions.slice(0, limits.maxFunctions)
+    : availableFunctions;
   const functionMeta = [];
   for (const fn of functions) {
     const name = fn.name || fn.slug;
@@ -986,10 +1013,11 @@ async function captureFunctions(config, rawDir, limits = null) {
   await writeFile(join(functionsDir, 'REDEPLOY-ALL.ps1'), redeploy.ps1);
   await writeFile(join(functionsDir, 'redeploy-all.sh'), redeploy.bash);
 
+  const functionsLimited = limits?.maxFunctions != null;
   return {
     complete: true,
-    limited: Boolean(limits),
-    limitation: limits ? `first ${limits.maxFunctions} Functions` : null,
+    limited: functionsLimited,
+    limitation: functionsLimited ? `first ${limits.maxFunctions} Functions` : null,
     count: functions.length,
     names: functionMeta.map(fn => fn.name),
     verifyJwt: Object.fromEntries(functionMeta.map(fn => [fn.name, fn.verifyJwt])),
@@ -1230,10 +1258,25 @@ async function backup() {
   const { config } = await loadConfig();
   const entitlement = await resolveEdition({ forceTrial: hasFlag('trial'), licensePath: flag('license') });
   const trial = entitlement.edition === 'trial';
-  console.log(trial
-    ? 'Portabase demo mode (--trial): limited sample capture for safe drills. Full open-source capture is the default without this flag.'
-    : 'Portabase community edition: full open-source capture. No license required.');
-  const limits = trial ? TRIAL_LIMITS : null;
+  const firstPerBucket = !trial && (
+    hasFlag('storage-first-per-bucket')
+    || config.capture?.storageSample === 'first-per-bucket'
+  );
+  if (trial) {
+    console.log('Portabase demo mode (--trial): limited sample capture for safe drills. Full open-source capture is the default without this flag.');
+  } else if (firstPerBucket) {
+    console.log(
+      'Portabase community edition: FULL database, Functions, and Auth; '
+      + 'Storage = first object from every bucket (size-bounded multi-bucket proof).',
+    );
+  } else {
+    console.log('Portabase community edition: full open-source capture. No license required.');
+  }
+  const limits = trial
+    ? TRIAL_LIMITS
+    : firstPerBucket
+      ? FIRST_PER_BUCKET_STORAGE
+      : null;
   const passphraseEnv = config.encryption?.passphraseEnv || 'PORTABASE_ENCRYPTION_PASSPHRASE';
   const passphrase = process.env[passphraseEnv];
   if (!passphrase || passphrase.length < 16) throw new Error(`${passphraseEnv} must contain at least 16 characters.`);
@@ -1701,10 +1744,12 @@ async function restoreDatabase(extracted) {
   const targetDb = process.env.PORTABASE_TARGET_DB_URL;
   if (!psql || !targetDb) throw new Error('psql and PORTABASE_TARGET_DB_URL are required for database restore.');
   const applied = [];
+  // Dirty-target drills: continue past "already exists" / duplicate object errors.
+  const stopOnError = hasFlag('allow-occupied-target') ? '0' : '1';
   for (const file of ['roles.sql', 'schema.sql', 'data.sql']) {
     const path = join(extracted, 'database', file);
     if (existsSync(path)) {
-      await run(psql, [targetDb, '--set', 'ON_ERROR_STOP=1', '--file', path]);
+      await run(psql, [targetDb, '--set', `ON_ERROR_STOP=${stopOnError}`, '--file', path]);
       applied.push(file);
     }
   }
@@ -1720,23 +1765,27 @@ async function restoreStorage(extracted) {
     const created = await targetFetch('/storage/v1/bucket', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: bucket.id, name: bucket.name, public: bucket.public, file_size_limit: bucket.fileSizeLimit, allowed_mime_types: bucket.allowedMimeTypes }),
+      body: JSON.stringify({ id: bucket.id, name: bucket.name || bucket.id, public: bucket.public, file_size_limit: bucket.fileSizeLimit, allowed_mime_types: bucket.allowedMimeTypes }),
     });
-    if (!created.ok) throw new Error(`Unable to create blank-target bucket ${bucket.id}: HTTP ${created.status}`);
+    // 200/201 = created; 409/400 often means bucket already exists (dirty-target drill)
+    if (!created.ok && created.status !== 409 && created.status !== 400) {
+      throw new Error(`Unable to create blank-target bucket ${bucket.id}: HTTP ${created.status}`);
+    }
     for (const object of bucket.objects) {
       const source = join(extracted, 'storage', safeObjectPath(bucket.id), safeObjectPath(object.name));
       const objectPath = object.name.split('/').map(encodeURIComponent).join('/');
+      // Buffer body avoids Node/Windows spawn EINVAL with stream+fetch duplex on some builds
+      const body = await readFile(source);
       const response = await targetFetch(`/storage/v1/object/${encodeURIComponent(bucket.id)}/${objectPath}`, {
         method: 'POST',
-        headers: { 'Content-Type': object.contentType || 'application/octet-stream', 'x-upsert': 'false' },
-        body: createReadStream(source),
-        duplex: 'half',
+        headers: { 'Content-Type': object.contentType || 'application/octet-stream', 'x-upsert': 'true' },
+        body,
       });
       if (!response.ok) throw new Error(`Unable to restore blank-target object ${bucket.id}/${object.name}: HTTP ${response.status}`);
       const readback = await targetFetch(`/storage/v1/object/authenticated/${encodeURIComponent(bucket.id)}/${objectPath}`);
       if (!readback.ok) throw new Error(`Unable to read back ${bucket.id}/${object.name}: HTTP ${readback.status}`);
       const remoteHash = createHash('sha256').update(Buffer.from(await readback.arrayBuffer())).digest('hex');
-      const expectedHash = object.sha256 || await hashFile(source);
+      const expectedHash = object.sha256 || createHash('sha256').update(body).digest('hex');
       if (remoteHash !== expectedHash) throw new Error(`Read-back hash mismatch for ${bucket.id}/${object.name}.`);
       hashesVerified += 1;
     }
@@ -1813,7 +1862,7 @@ async function writeRecoveryEvidence(report) {
   return { jsonPath, htmlPath };
 }
 
-async function readTargetInventory(targetRef) {
+async function readTargetInventory(targetRef, opts = {}) {
   const psql = resolveTool('psql');
   const supabase = resolveTool('supabase');
   const targetDb = process.env.PORTABASE_TARGET_DB_URL;
@@ -1835,23 +1884,34 @@ async function readTargetInventory(targetRef) {
   if (!usersResponse.ok) throw new Error(`Target Auth inspection failed: HTTP ${usersResponse.status}`);
   const buckets = await bucketsResponse.json();
   const users = await usersResponse.json();
+  let edgeFunctions = 0;
   const functionsResult = spawnSync(supabase, ['functions', 'list', '--project-ref', targetRef, '--output', 'json'], {
     encoding: 'utf8', windowsHide: true, env: process.env,
   });
-  if (functionsResult.status !== 0) throw new Error(`Target Function inspection failed: ${(functionsResult.stderr || '').trim().slice(0, 240)}`);
-  let functions;
-  try { functions = JSON.parse(functionsResult.stdout || '[]'); } catch { throw new Error('Target Function inspection returned invalid JSON.'); }
+  if (functionsResult.status !== 0) {
+    const detail = `${functionsResult.stderr || ''}${functionsResult.stdout || ''}`.trim().slice(0, 240);
+    if (opts.allowOccupied) {
+      console.warn(`WARNING: target Function list failed (continuing with --allow-occupied-target): ${detail || 'no detail'}`);
+      edgeFunctions = 0;
+    } else {
+      throw new Error(`Target Function inspection failed: ${detail || 'supabase functions list failed'}`);
+    }
+  } else {
+    let functions;
+    try { functions = JSON.parse(functionsResult.stdout || '[]'); } catch { throw new Error('Target Function inspection returned invalid JSON.'); }
+    edgeFunctions = Array.isArray(functions) ? functions.length : 0;
+  }
   const inventory = {
     applicationTables: tableCount,
     authUsers: Array.isArray(users?.users) ? users.users.length : 0,
     storageBuckets: Array.isArray(buckets) ? buckets.length : 0,
-    edgeFunctions: Array.isArray(functions) ? functions.length : 0,
+    edgeFunctions,
   };
   return inventory;
 }
 
-async function inspectRestoreTarget(targetRef) {
-  return validateBlankRestoreInventory(await readTargetInventory(targetRef));
+async function inspectRestoreTarget(targetRef, opts = {}) {
+  return validateBlankRestoreInventory(await readTargetInventory(targetRef, opts), opts);
 }
 
 async function restore() {
@@ -1893,13 +1953,27 @@ async function restore() {
       return;
     }
     const targetRef = process.env.PORTABASE_TARGET_PROJECT_REF;
-    validateRestoreTarget(manifest.projectRef, targetRef, writesTarget ? flag('confirm-target') : targetRef, process.env.PORTABASE_TARGET_SUPABASE_URL);
+    const allowOccupied = hasFlag('allow-occupied-target');
+    const allowSourceTarget = hasFlag('allow-source-target');
+    if (allowOccupied) {
+      console.log('\nWARNING: --allow-occupied-target — restoring into a NON-BLANK project. Collisions and partial failures are expected.');
+    }
+    if (allowSourceTarget) {
+      console.log('\nWARNING: --allow-source-target — target may be the same ref as the capsule source (disposable drill only).');
+    }
+    validateRestoreTarget(
+      manifest.projectRef,
+      targetRef,
+      writesTarget ? flag('confirm-target') : targetRef,
+      process.env.PORTABASE_TARGET_SUPABASE_URL,
+      { allowSourceTarget },
+    );
     const health = await targetFetch('/storage/v1/bucket', { signal: AbortSignal.timeout(10000) });
     if (!health.ok) throw new Error(`Target credential check failed: HTTP ${health.status}`);
-    const inventory = await inspectRestoreTarget(targetRef);
-    evidence.preflight = { verified: true, inventory };
-    console.log(`\nTARGET PREFLIGHT PASSED: ${targetRef}`);
-    console.log(`Blank inventory: ${Object.entries(inventory).map(([name, count]) => `${name}=${count}`).join(', ')}`);
+    const inventory = await inspectRestoreTarget(targetRef, { allowOccupied });
+    evidence.preflight = { verified: true, inventory, allowOccupied, allowSourceTarget };
+    console.log(`\nTARGET PREFLIGHT PASSED: ${targetRef}${allowOccupied ? ' (occupied allowed)' : ' (blank)'}`);
+    console.log(`Inventory: ${Object.entries(inventory).map(([name, count]) => `${name}=${count}`).join(', ')}`);
     if (!writesTarget) {
       console.log('\nNO-WRITE PREFLIGHT COMPLETE. The target was not changed. Type the exact target ref and execute only after reviewing this plan.');
       evidence.status = recoveryEvidenceStatus({ mode: 'preflight', captureStatus: manifest.status });
@@ -2085,6 +2159,8 @@ Commands:
   backup              Capture, encrypt, transfer, and verify a capsule
                       Default: full community capture (no license)
                       Add --trial for a deliberately limited demo sample
+                      Add --storage-first-per-bucket for full DB/Functions/Auth
+                        but only the first Storage object in each bucket
                       Local Starter: add --allow-large-local to bypass ${LOCAL_STARTER_MAX_LABEL} cap
   verify              Verify checksums; add --decrypt for authenticated decryption
   simulate            Offline validation: decrypt, unpack, match layers to manifest
@@ -2097,6 +2173,8 @@ Commands:
   replay              Validate a capsule by restoring into a NEW Supabase project
                       (never the source). Requires target env vars + --confirm-target.
                       Same guards as restore --execute; clearer validation report.
+                      Dirty-target drill: --allow-occupied-target
+                      Same-ref drill:     --allow-source-target (with --confirm-target)
 
 Optional Cloud:
   Set cloud.enabled=true and PORTABASE_CLOUD_URL / PORTABASE_CLOUD_TOKEN

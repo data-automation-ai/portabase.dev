@@ -37,6 +37,16 @@ export const TRIAL_LIMITS = Object.freeze({
   maxFunctions: 2,
 });
 
+/**
+ * Full DB / Functions / Auth; Storage = first object only in every bucket.
+ * Keeps multi-bucket path validated while staying under multi‑GB budgets.
+ */
+export const FIRST_PER_BUCKET_STORAGE = Object.freeze({
+  databaseSchemaOnly: false,
+  firstObjectPerBucket: true,
+  maxFunctions: null,
+});
+
 export function editionFor({ trialFlag = false, environment = process.env.PORTABASE_EDITION } = {}) {
   // Open-core: full capture is the default. Only explicit demo/trial limits payload.
   return trialFlag || environment === 'trial' ? 'trial' : 'community';
@@ -394,9 +404,14 @@ export function localStarterPolicyNote() {
     + 'Not a substitute for off-machine storage for production Escape.';
 }
 
-export function validateRestoreTarget(sourceRef, targetRef, confirmation, targetUrl = '') {
+export function validateRestoreTarget(sourceRef, targetRef, confirmation, targetUrl = '', opts = {}) {
   if (!targetRef) throw new Error('PORTABASE_TARGET_PROJECT_REF is required.');
-  if (sourceRef === targetRef) throw new Error('Restore refused: target project is the source project.');
+  if (sourceRef === targetRef && !opts.allowSourceTarget) {
+    throw new Error(
+      'Restore refused: target project is the source project. '
+      + 'For a disposable drill only, pass --allow-source-target.',
+    );
+  }
   if (confirmation !== targetRef) {
     throw new Error('Restore refused: --confirm-target must exactly match the new target project ref.');
   }
@@ -409,10 +424,14 @@ export function validateRestoreTarget(sourceRef, targetRef, confirmation, target
   return true;
 }
 
-export function validateBlankRestoreInventory(inventory) {
+export function validateBlankRestoreInventory(inventory, opts = {}) {
   const occupied = Object.entries(inventory || {}).filter(([, count]) => Number(count) > 0);
-  if (occupied.length) {
-    throw new Error(`Restore refused: target is not blank (${occupied.map(([name, count]) => `${name}=${count}`).join(', ')}). Create a fresh project or explicitly clear the disposable target outside Portabase.`);
+  if (occupied.length && !opts.allowOccupied) {
+    throw new Error(
+      `Restore refused: target is not blank (${occupied.map(([name, count]) => `${name}=${count}`).join(', ')}). `
+      + 'Create a fresh project, clear the disposable target outside Portabase, '
+      + 'or pass --allow-occupied-target for an explicit dirty-target drill.',
+    );
   }
   return inventory;
 }

@@ -36,7 +36,16 @@ import {
   LOCAL_STARTER_MAX_BYTES,
   directoryByteSize,
   isLocalProvider,
+  FIRST_PER_BUCKET_STORAGE,
+  TRIAL_LIMITS,
 } from './portabase-core.mjs';
+
+test('first-per-bucket storage sample is not a schema-only trial', () => {
+  assert.equal(FIRST_PER_BUCKET_STORAGE.databaseSchemaOnly, false);
+  assert.equal(FIRST_PER_BUCKET_STORAGE.firstObjectPerBucket, true);
+  assert.equal(FIRST_PER_BUCKET_STORAGE.maxFunctions, null);
+  assert.equal(TRIAL_LIMITS.databaseSchemaOnly, true);
+});
 import { cleanSchemaLine } from './portabase.mjs';
 
 test('demo trial is opt-in; default is full community capture', () => {
@@ -205,6 +214,15 @@ test('restore target guards refuse source and mismatched confirmation', () => {
 test('restore refuses any occupied destination inventory', () => {
   assert.deepEqual(validateBlankRestoreInventory({ applicationTables: 0, authUsers: 0, storageBuckets: 0, edgeFunctions: 0 }), { applicationTables: 0, authUsers: 0, storageBuckets: 0, edgeFunctions: 0 });
   assert.throws(() => validateBlankRestoreInventory({ applicationTables: 0, authUsers: 1, storageBuckets: 0, edgeFunctions: 0 }), /target is not blank.*authUsers=1/);
+  assert.deepEqual(
+    validateBlankRestoreInventory({ applicationTables: 2, authUsers: 1, storageBuckets: 0, edgeFunctions: 0 }, { allowOccupied: true }),
+    { applicationTables: 2, authUsers: 1, storageBuckets: 0, edgeFunctions: 0 },
+  );
+});
+
+test('restore can allow source==target only with explicit opt-in', () => {
+  assert.throws(() => validateRestoreTarget('same', 'same', 'same'), /source project/);
+  assert.equal(validateRestoreTarget('same', 'same', 'same', '', { allowSourceTarget: true }), true);
 });
 
 test('limited restore drill accepts only a deliberately limited trial capsule', () => {
