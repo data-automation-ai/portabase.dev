@@ -627,10 +627,27 @@ function EscapeVsSupabaseDiagram() {
           </tbody>
         </table>
       </div>
-      <p className="esc-cmp-foot">
-        <strong>Did you know — bottom line:</strong> a backup you can only reach through the same locked door is not an Escape —
-        and waiting <strong>~48 hours for support</strong> (their own guidance) is not a recovery SLA for your company.
-        Portabase exists so the way out is already in <em>your</em> building.
+      <p
+        className="escape-bottom-line"
+        style={{
+          margin: 0,
+          padding: '18px 20px',
+          border: '2px solid #111216',
+          borderLeft: '6px solid #5c7a18',
+          background: '#ffffff',
+          color: '#111216',
+          fontSize: 16,
+          lineHeight: 1.65,
+          fontWeight: 600,
+        }}
+      >
+        <strong style={{ color: '#000000', fontWeight: 800 }}>Did you know — bottom line:</strong>
+        {' '}a backup you can only reach through the same locked door is not an Escape —
+        and waiting <strong style={{ color: '#000000', fontWeight: 800 }}>~48 hours for support</strong>
+        {' '}(their own guidance) is not a recovery SLA for your company.
+        Portabase exists so the way out is already in{' '}
+        <em style={{ color: '#3d5510', fontStyle: 'normal', fontWeight: 800 }}>your</em>
+        {' '}building.
       </p>
     </div>
   );

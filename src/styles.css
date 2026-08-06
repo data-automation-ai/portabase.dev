@@ -110,20 +110,20 @@ button { font:inherit; }
 .esc-cmp-yes{display:inline-block;font:10px 'DM Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:#0d1a0a;background:var(--acid);padding:4px 8px}
 .esc-cmp-no{display:inline-block;font:10px 'DM Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:#f0c0bc;background:rgba(255,75,62,.18);border:1px solid rgba(255,75,62,.4);padding:4px 8px}
 .esc-cmp-note{color:#a7a6a0;font-size:12px;line-height:1.45;max-width:280px}
-/* Bottom line lives on paper section — solid warm panel + dark ink (never light-on-light) */
-.esc-cmp-foot{
+/* Bottom line — class renamed from esc-cmp-foot so stale CSS cannot wash it out */
+.escape-bottom-line{
   margin:0;
   padding:18px 20px;
-  border:2px solid #1c1d14;
-  border-left:5px solid #5c7a18;
-  background:#ebe8df;
-  color:#1a1b16;
-  font-size:15px;
+  border:2px solid #111216;
+  border-left:6px solid #5c7a18;
+  background:#fff;
+  color:#111216;
+  font-size:16px;
   line-height:1.65;
-  font-weight:500;
+  font-weight:600;
 }
-.esc-cmp-foot strong{color:#0a0b08;font-weight:800}
-.esc-cmp-foot em{color:#3d5510;font-style:normal;font-weight:800}
+.escape-bottom-line strong{color:#000;font-weight:800}
+.escape-bottom-line em{color:#3d5510;font-style:normal;font-weight:800}
 @media(max-width:900px){
   .esc-cmp-panels{grid-template-columns:1fr}
   .esc-cmp-lock{grid-template-columns:1fr;gap:8px}
