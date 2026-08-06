@@ -1415,6 +1415,7 @@ function SecurityPage() {
           <Logo href="/" />
           <nav className="nav cloud-page-nav">
             <a href="#keys-protected">Your keys</a>
+            <a href="#supabase-keys">Supabase secrets</a>
             <a href="#choose">Choose trust</a>
             <a href="#options">Controls</a>
             <a href="#retroactive">Past access</a>
@@ -1486,8 +1487,212 @@ function SecurityPage() {
               </div>
             </div>
 
+            <div className="keys-supabase-fortify" id="supabase-keys">
+              <h3>Supabase keys — how they are stored, protected, logged, and alerted</h3>
+              <p className="security-prose">
+                This section is only about <strong>source credentials to Supabase</strong> (service-role / secret key, DB connection string,
+                optional Management API token, project URL). These open the <em>live</em> project for capture and restore.
+                They are <strong>not</strong> the capsule encryption passphrase — and they alone cannot open a sealed <code>.pbase</code> without that passphrase.
+              </p>
+
+              <div className="keys-fortify-banner" role="note">
+                <strong>Why this matters:</strong> a service-role key is effectively root on your project.
+                Portabase treats it as toxic material: short-lived use, never in SMS or telemetry, never as the recovery vault, and always subject to audit and alert paths you can open later.
+              </div>
+
+              <h4 className="keys-fortify-h4">1 · How Supabase credentials are stored</h4>
+              <div className="keys-fortify-grid">
+                <article>
+                  <small>STANDALONE / OSS</small>
+                  <b>Only on infrastructure you operate</b>
+                  <p>
+                    Env vars or OS secret store on <em>your</em> runner (for example <code>SUPABASE_SERVICE_ROLE_KEY</code>, DB URL).
+                    Nothing is uploaded to Portabase. Rotating means changing your env and restarting the job process.
+                  </p>
+                </article>
+                <article>
+                  <small>CLOUD · MANAGED RUNNER</small>
+                  <b>Workspace-scoped secret store for the job path</b>
+                  <p>
+                    You attach source credentials so unattended schedules can connect.
+                    Material is held <strong>per workspace / project binding</strong>, encrypted at rest in the Cloud secrets path
+                    (not dumped into marketing analytics, support chat, or the multi-tenant “product of record” database as plaintext dumps).
+                    On the “Trust Portabase” posture, we retain what the runner needs so jobs can fire without you pasting keys every night —
+                    that is an <strong>explicit convenience trade</strong>, not a hidden one.
+                  </p>
+                </article>
+                <article>
+                  <small>CLOUD · CUSTOMER KMS (OPTIONAL)</small>
+                  <b>Crypto authority under a CMK you own</b>
+                  <p>
+                    Prefer wrapping job material under a CMK in <em>your</em> AWS account with a revocable grant to our runner role.
+                    Revoke the grant → our ability to unwrap ends without waiting on a ticket. CloudTrail in <em>your</em> account records the KMS API calls.
+                  </p>
+                </article>
+                <article>
+                  <small>NEVER STORED AS</small>
+                  <b>What we refuse by design</b>
+                  <ul>
+                    <li>Plaintext service-role in telemetry, SMS bodies, or email alerts</li>
+                    <li>Service-role in browser localStorage as the long-term vault</li>
+                    <li>“Share with support” default that includes live secrets</li>
+                    <li>Capsule destination = Portabase’s only copy of your Supabase key</li>
+                  </ul>
+                </article>
+              </div>
+
+              <h4 className="keys-fortify-h4">2 · How use of those keys is protected (runtime fortifications)</h4>
+              <ol className="security-steps keys-deep-steps">
+                <li>
+                  <b>Least privilege for the job, not forever-open admin in the console</b>
+                  <p>
+                    Credentials are injected into the <strong>job runner for the Escape window</strong> — capture, encrypt, verify, or guarded restore —
+                    not painted into every screen of the marketing site or console UI.
+                    The console shows <em>that</em> a project is connected and job status; it is not a museum of raw service-role values.
+                  </p>
+                </li>
+                <li>
+                  <b>Ephemeral staging disk on managed runners</b>
+                  <p>
+                    Work happens on short-lived runner volume. When the job ends, staging is torn down.
+                    The durable artifact is the <strong>sealed capsule in your vault</strong>, not an open project dump left on shared Cloud disk.
+                  </p>
+                </li>
+                <li>
+                  <b>Separation of duties across secret classes</b>
+                  <p>
+                    Supabase source keys ≠ capsule passphrase ≠ vault (S3/Dropbox) credentials ≠ console login ≠ SMS route.
+                    Compromising console auth should not automatically print your service-role.
+                    Compromising a vault object still requires the passphrase to become a usable restore.
+                  </p>
+                </li>
+                <li>
+                  <b>Guarded restore refuses casual overwrite of the source project</b>
+                  <p>
+                    Restore targets a <strong>new / blank</strong> project ref you confirm. Panic-click “restore into production”
+                    is not the default path — reducing the blast radius if credentials are ever misused under stress.
+                  </p>
+                </li>
+                <li>
+                  <b>Agent / API tokens are not the Supabase key</b>
+                  <p>
+                    Runner or agent tokens used to talk to Portabase Cloud are workspace-scoped and stored hashed where applicable.
+                    They authorize ops actions; they are not a substitute for your Supabase service-role and must not be treated as one.
+                  </p>
+                </li>
+              </ol>
+
+              <h4 className="keys-fortify-h4">3 · Logging — what is always recorded (and what is redacted)</h4>
+              <div className="keys-fortify-log-table-wrap">
+                <table className="security-table keys-deep-table">
+                  <thead>
+                    <tr>
+                      <th>Event</th>
+                      <th>Logged?</th>
+                      <th>What you can see later</th>
+                      <th>Secret values in the log?</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>Job started / finished / failed</strong></td>
+                      <td>Yes — every managed run</td>
+                      <td>Timestamps, project binding, duration, status, error <em>class</em></td>
+                      <td><strong>No</strong> — service-role / passphrase patterns redacted or rejected</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Capture layers completed</strong></td>
+                      <td>Yes</td>
+                      <td>Which layers ran (DB, Auth, Storage, Functions), verify outcome</td>
+                      <td>No raw credentials; no capsule plaintext</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Credential attach / rotate / remove</strong></td>
+                      <td>Yes — console audit trail</td>
+                      <td>Who (workspace member) changed the binding, when</td>
+                      <td>Event only — not the new secret body</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Failed auth to Supabase during a job</strong></td>
+                      <td>Yes</td>
+                      <td>Failure class (e.g. unauthorized / network) so you can fix access</td>
+                      <td>No key material echoed back</td>
+                    </tr>
+                    <tr>
+                      <td><strong>CloudWatch-style job log tail</strong></td>
+                      <td>Yes for managed jobs</td>
+                      <td>Account → CloudWatch live, <strong>scoped to one secret / job stream</strong></td>
+                      <td>Redaction pass strips password / passphrase / token-shaped fields</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Your AWS CloudTrail (optional)</strong></td>
+                      <td>When Trail is on in <em>your</em> account</td>
+                      <td><code>kms:*</code>, <code>s3:PutObject</code> on your vault — entirely in your AWS</td>
+                      <td>AWS records API metadata; you own retention</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Telemetry / health to Portabase Cloud</strong></td>
+                      <td>Opt-in for self-host; on for Cloud job health</td>
+                      <td>Status, RPO age, missed window, error class</td>
+                      <td>Schema / denylist <strong>rejects secret-shaped fields</strong></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p className="security-prose keys-fortify-note">
+                <strong>Design rule:</strong> logs exist so you can answer “what ran against my project?” weeks later without filing a support ticket.
+                Logs must <strong>never</strong> become a second place we accidentally publish your service-role.
+                If a field looks like a secret, the pipeline redacts or drops it rather than “helpfully” storing it.
+              </p>
+
+              <h4 className="keys-fortify-h4">4 · Alerting — when humans get woken up</h4>
+              <div className="keys-fortify-alert-grid">
+                <article>
+                  <small>JOB FAILED</small>
+                  <b>Escape did not complete</b>
+                  <p>SMS / email / webhook when a scheduled or manual job fails — including failures that look like bad or revoked Supabase credentials. You are not dependent on noticing a red badge in the console alone.</p>
+                </article>
+                <article>
+                  <small>MISSED WINDOW / SILENCE</small>
+                  <b>No successful escape in the expected interval</b>
+                  <p>If the schedule should have run and nothing healthy finished, the alert chain fires. A quiet runner is treated as an incident, not “probably fine.”</p>
+                </article>
+                <article>
+                  <small>VERIFY / INTEGRITY</small>
+                  <b>Capsule did not pass checks</b>
+                  <p>Failed destination integrity, auth-tag, or layer verify escalates. Partial success stays partial — never fake-green that would hide a broken key or truncated capture.</p>
+                </article>
+                <article>
+                  <small>MULTI-PERSON CHAIN</small>
+                  <b>Admin → Ops → Security → You</b>
+                  <p>Cloud plans support escalation so a single ignored inbox does not bury a credential or job failure. Alert config is not a secret channel for keys — only status and links into the console.</p>
+                </article>
+                <article>
+                  <small>AUDIT OF SECRET CHANGES</small>
+                  <b>Who attached or rotated Supabase credentials</b>
+                  <p>Workspace members’ changes to project bindings are audit events. Unusual rotation patterns are something your team can review from the console history without asking us to export a spreadsheet.</p>
+                </article>
+                <article>
+                  <small>YOUR AWS ALARMS (OPTIONAL)</small>
+                  <b>Unexpected principals on your vault / KMS</b>
+                  <p>With CloudTrail + your own alarms, you can page on <code>kms:Decrypt</code> or vault writes from principals you do not recognize — independent of Portabase’s SMS path.</p>
+                </article>
+              </div>
+
+              <h4 className="keys-fortify-h4">5 · Fortifications checklist (Supabase source keys)</h4>
+              <ul className="keys-fortify-checklist">
+                <li><strong>Rotate</strong> service-role / DB passwords when staff leave, after a suspected leak, or on a calendar — Portabase jobs will fail closed on bad creds and alert, rather than silently using a zombie key forever without notice when you rotate in Supabase.</li>
+                <li><strong>Prefer customer KMS</strong> when you want revocable crypto authority for material Portabase must use on managed runners.</li>
+                <li><strong>Enable Trail early</strong> on the AWS account that holds your vault and CMK so API history is continuous, not invented after an incident.</li>
+                <li><strong>Read job logs after the first production Escape</strong> once — prove redaction and status look right before you ignore them for months.</li>
+                <li><strong>Limit workspace seats</strong> who can attach Supabase credentials; treat that permission like production root.</li>
+                <li><strong>Never paste service-role into chat, tickets, or screenshots</strong> when asking for help — share job IDs and error classes instead.</li>
+                <li><strong>Standalone path remains available:</strong> if zero Portabase custody of Supabase keys is mandatory, run the OSS engine only; Cloud is optional ops, not a gate on Escape.</li>
+              </ul>
+            </div>
+
             <div className="keys-deep-crypto">
-              <h3>How encryption actually works</h3>
+              <h3>How capsule encryption actually works</h3>
               <ol className="security-steps keys-deep-steps">
                 <li>
                   <b>Capture happens on a runner you authorize</b>
