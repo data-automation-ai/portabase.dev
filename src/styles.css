@@ -56,7 +56,7 @@ button { font:inherit; }
 .escape-vault-hero figcaption{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:14px 16px;background:#121317;border-top:1px solid #2a2b30;color:#c9c8c1;font-size:13px;line-height:1.45}
 .escape-vault-hero figcaption small{color:#6f706b;font:8px 'DM Mono',monospace;letter-spacing:.08em;text-transform:uppercase;text-align:right}
 @media(max-width:700px){.escape-vault-hero figcaption,.escape-vault-hero .viz-panel-label{flex-direction:column;align-items:flex-start}.escape-vault-hero figcaption small{text-align:left}}
-.esc-cmp{margin:42px 0 48px}
+.esc-cmp{margin:42px 0 48px;color:#c9c8c1}
 .esc-cmp-didyou{
   padding:26px 28px;
   border:1px solid rgba(255,75,62,.5);
@@ -75,39 +75,43 @@ button { font:inherit; }
 .esc-cmp-doclinks{display:flex;flex-wrap:wrap;gap:10px 18px;margin-top:4px}
 .esc-cmp-doclinks a{color:var(--acid);font-weight:700;font-size:12px}
 .esc-cmp-panels{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px}
-.esc-cmp-panel{border:1px solid #2c2d32;background:#121317;padding:22px 22px 20px;display:flex;flex-direction:column;gap:16px}
+/* Escape section is paper+ink — dark cards must force light text or titles go black-on-black */
+.esc-cmp-panel{border:1px solid #2c2d32;background:#121317;padding:22px 22px 20px;display:flex;flex-direction:column;gap:16px;color:#c9c8c1}
 .esc-cmp-panel header small{display:block;font:8px 'DM Mono',monospace;letter-spacing:.12em;margin-bottom:8px}
 .esc-cmp-panel-locked header small{color:var(--red)}
 .esc-cmp-panel-escape header small{color:var(--acid)}
-.esc-cmp-panel header h3{margin:0;font-size:22px;letter-spacing:-.03em}
+.esc-cmp-panel header h3{margin:0;font-size:22px;letter-spacing:-.03em;color:#faf8f2}
 .esc-cmp-lock{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;min-height:120px}
-.esc-cmp-lock-door,.esc-cmp-lock-vault{border:1px solid #34353a;background:#0d0e12;padding:16px 14px;min-height:108px;display:flex;flex-direction:column;justify-content:center;gap:6px}
-.esc-cmp-lock-door{border-color:rgba(255,75,62,.45);background:rgba(255,75,62,.07)}
-.esc-cmp-lock-door-open{opacity:.85}
-.esc-cmp-lock-door i{display:block;width:28px;height:28px;border:2px solid var(--red);border-radius:50%;margin-bottom:4px;position:relative}
-.esc-cmp-lock-door i::after{content:'';position:absolute;inset:6px;border:2px solid var(--red);border-radius:50%;border-top-color:transparent;transform:rotate(-40deg)}
-.esc-cmp-lock-door b,.esc-cmp-lock-vault b{font-size:13px;letter-spacing:-.02em;line-height:1.25}
-.esc-cmp-lock-door span,.esc-cmp-lock-vault span{font:10px 'DM Mono',monospace;color:#8a8b85;letter-spacing:.04em;line-height:1.4}
-.esc-cmp-lock-vault{border-color:rgba(201,255,74,.35);background:rgba(201,255,74,.06)}
-.esc-cmp-lock-vault-dead{border-color:#3a3b40;background:#16171c;opacity:.75}
-.esc-cmp-lock-vault-dead b{color:#9a9b95}
-.esc-cmp-lock-arrow{font-size:22px;color:#55565a;text-align:center}
+.esc-cmp-lock-door,.esc-cmp-lock-vault{border:1px solid #34353a;background:#0d0e12;padding:16px 14px;min-height:108px;display:flex;flex-direction:column;justify-content:center;gap:6px;color:#e8e7e2}
+.esc-cmp-lock-door{border-color:rgba(255,75,62,.55);background:rgba(40,12,12,.95)}
+.esc-cmp-lock-door-open{opacity:1}
+.esc-cmp-lock-door i{display:block;width:28px;height:28px;border:2px solid #ff7a72;border-radius:50%;margin-bottom:4px;position:relative}
+.esc-cmp-lock-door i::after{content:'';position:absolute;inset:6px;border:2px solid #ff7a72;border-radius:50%;border-top-color:transparent;transform:rotate(-40deg)}
+.esc-cmp-lock-door b,.esc-cmp-lock-vault b{font-size:13px;letter-spacing:-.02em;line-height:1.25;color:#faf8f2}
+.esc-cmp-lock-door span,.esc-cmp-lock-vault span{font:10px 'DM Mono',monospace;color:#c4c3bd;letter-spacing:.04em;line-height:1.4}
+.esc-cmp-lock-vault{border-color:rgba(201,255,74,.45);background:rgba(28,36,12,.95)}
+.esc-cmp-lock-vault b{color:#f0eee8}
+.esc-cmp-lock-vault span{color:#c9c8c1}
+.esc-cmp-lock-vault-dead{border-color:#3a3b40;background:#16171c;opacity:1}
+.esc-cmp-lock-vault-dead b{color:#d4d3cd}
+.esc-cmp-lock-vault-dead span{color:#a7a6a0}
+.esc-cmp-lock-arrow{font-size:22px;color:#8a8b85;text-align:center}
 .esc-cmp-lock-arrow-ok{color:var(--acid)}
-.esc-cmp-bullets{margin:0;padding:0 0 0 18px;display:grid;gap:8px;color:#a7a6a0;font-size:13px;line-height:1.45}
-.esc-cmp-bullets strong{color:#eceae3}
-.esc-cmp-bullets em{color:#d4d3cd;font-style:normal}
+.esc-cmp-bullets{margin:0;padding:0 0 0 18px;display:grid;gap:8px;color:#c4c3bd;font-size:13px;line-height:1.45}
+.esc-cmp-bullets strong{color:#fff}
+.esc-cmp-bullets em{color:#e8e7e2;font-style:normal}
 .esc-cmp-table-wrap{overflow:auto;border:1px solid #2c2d32;margin-bottom:16px}
-.esc-cmp-table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
+.esc-cmp-table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px;color:#c9c8c1}
 .esc-cmp-table th,.esc-cmp-table td{padding:12px 14px;text-align:left;border-bottom:1px solid #2c2d32;vertical-align:top}
-.esc-cmp-table th{font:8px 'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#7a7b75;background:#0e0f12}
+.esc-cmp-table th{font:8px 'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:#a7a6a0;background:#0e0f12}
 .esc-cmp-table td{background:#141519;color:#c9c8c1}
 .esc-cmp-table tr:last-child td{border-bottom:0}
 .esc-cmp-table td strong{color:#f0eee8;font-weight:600}
 .esc-cmp-yes{display:inline-block;font:10px 'DM Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:#0d1a0a;background:var(--acid);padding:4px 8px}
 .esc-cmp-no{display:inline-block;font:10px 'DM Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:#f0c0bc;background:rgba(255,75,62,.18);border:1px solid rgba(255,75,62,.4);padding:4px 8px}
-.esc-cmp-note{color:#8a8b85;font-size:12px;line-height:1.45;max-width:280px}
-.esc-cmp-foot{margin:0;padding:16px 18px;border:1px solid rgba(201,255,74,.28);background:rgba(201,255,74,.05);color:#b8b7b1;font-size:14px;line-height:1.55}
-.esc-cmp-foot strong{color:#f0eee8}
+.esc-cmp-note{color:#a7a6a0;font-size:12px;line-height:1.45;max-width:280px}
+.esc-cmp-foot{margin:0;padding:16px 18px;border:1px solid rgba(201,255,74,.35);background:#141519;color:#c4c3bd;font-size:14px;line-height:1.55}
+.esc-cmp-foot strong{color:#faf8f2}
 .esc-cmp-foot em{color:var(--acid);font-style:normal}
 @media(max-width:900px){
   .esc-cmp-panels{grid-template-columns:1fr}
