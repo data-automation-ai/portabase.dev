@@ -47,7 +47,32 @@ Cloud stores only refs, capsule id, and step status — never target service key
 
 | Action | Meaning |
 | --- | --- |
-| `verify --decrypt` | Crypto OK; no new project |
-| `restore` dry-run | Plan only |
+| `verify` | Outer file checksums only |
+| `verify --decrypt` | Crypto OK (auth tag); no unpack / layer inventory |
+| **`simulate`** | **Offline:** decrypt + unpack + match layers to manifest · **no Supabase target** |
+| `restore` dry-run | Plan only (still needs passphrase; no writes) |
+| `replay --preflight` | Live blank-target check; no writes |
 | **`replay`** | Full path into a **new blank** project |
 | Cutover | Your DNS/app switch — separate deliberate step after a green replay |
+
+## Offline simulate (no destination)
+
+When you have a capsule but **no blank Supabase project yet**, prove integrity locally:
+
+```bash
+export PORTABASE_ENCRYPTION_PASSPHRASE='…'
+portabase simulate --capsule ./portabase-capsules/<id>
+# or
+node utility/portabase.mjs simulate --capsule ./portabase-capsules/<id>
+```
+
+What it checks:
+
+1. Outer `checksums.sha256`  
+2. AES-256-GCM decrypt of `capsule.pbase`  
+3. Unpack of compressed archive  
+4. Outer `capsule.json` vs inner `manifest.json` (id, project ref, status)  
+5. Each layer (database / storage / functions / auth): complete flag + expected files / object hashes  
+6. Warns on TRIAL / PARTIAL and source-inventory vs in-capsule Storage size  
+
+What it does **not** do: create a project, run `psql`, upload Storage, or deploy Functions. Those need **`replay`** against a blank target.

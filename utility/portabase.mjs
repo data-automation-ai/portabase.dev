@@ -1413,6 +1413,257 @@ async function verify() {
   if (failures) process.exitCode = 4;
 }
 
+/**
+ * Offline capsule simulation — no Supabase target required.
+ * Decrypts, unpacks, checks layers against outer capsule.json + inner manifest.json.
+ */
+async function simulate() {
+  const capsuleArg = flag('capsule', argv[1] || '.');
+  const materialized = await materializeCapsule(capsuleArg);
+  const capsuleDir = materialized.capsuleDir;
+  const lines = [];
+  const checks = [];
+  const pass = (name, detail = '') => {
+    checks.push({ ok: true, name, detail });
+    lines.push(`PASS  ${name}${detail ? ` — ${detail}` : ''}`);
+  };
+  const fail = (name, detail = '') => {
+    checks.push({ ok: false, name, detail });
+    lines.push(`FAIL  ${name}${detail ? ` — ${detail}` : ''}`);
+  };
+  const warn = (name, detail = '') => {
+    checks.push({ ok: true, name, detail, warn: true });
+    lines.push(`WARN  ${name}${detail ? ` — ${detail}` : ''}`);
+  };
+
+  console.log([
+    'Portabase SIMULATE (offline)',
+    'No destination Supabase project is used.',
+    'Decrypt → unpack → match components to capture manifest.',
+    '',
+    `Capsule: ${capsuleDir}`,
+    '',
+  ].join('\n'));
+
+  try {
+    // 1 · Outer envelope checksums
+    const checksumPath = join(capsuleDir, 'checksums.sha256');
+    if (!existsSync(checksumPath)) fail('outer-checksums', 'checksums.sha256 missing');
+    else {
+      const results = await verifyChecksumFile(capsuleDir, checksumPath);
+      const bad = results.filter(r => !r.ok);
+      if (bad.length) fail('outer-checksums', bad.map(b => b.path).join(', '));
+      else pass('outer-checksums', `${results.length} file(s)`);
+    }
+
+    // 2 · Outer capsule.json present
+    const outerPath = join(capsuleDir, 'capsule.json');
+    if (!existsSync(outerPath)) {
+      fail('capsule.json', 'missing outer metadata');
+      throw new Error('Cannot continue without capsule.json');
+    }
+    const outer = JSON.parse(await readFile(outerPath, 'utf8'));
+    pass('capsule.json', `id=${outer.id} status=${outer.status} edition=${outer.edition || 'n/a'}`);
+
+    if (!process.env.PORTABASE_ENCRYPTION_PASSPHRASE) {
+      fail('passphrase', 'PORTABASE_ENCRYPTION_PASSPHRASE not set');
+      throw new Error('Passphrase required to open capsule');
+    }
+
+    // 3 · Decrypt + extract (same path as restore plan)
+    let opened;
+    try {
+      opened = await openCapsule(capsuleDir, process.env.PORTABASE_ENCRYPTION_PASSPHRASE);
+      pass('decrypt+unpack', 'AES-256-GCM auth + tar extract');
+    } catch (error) {
+      fail('decrypt+unpack', error.message);
+      throw error;
+    }
+
+    const { metadata, manifest, extracted, temp } = opened;
+    try {
+      // 4 · Outer vs inner identity
+      if (metadata.id && manifest.projectRef && outer.projectRef && metadata.id !== outer.id) {
+        fail('id-match', `outer id ${outer.id} ≠ encrypted metadata ${metadata.id}`);
+      } else if (outer.id && metadata.id && outer.id !== metadata.id) {
+        fail('id-match', `outer ${outer.id} ≠ meta ${metadata.id}`);
+      } else {
+        pass('id-match', outer.id || metadata.id);
+      }
+
+      if (outer.projectRef && manifest.projectRef && outer.projectRef !== manifest.projectRef) {
+        fail('project-ref', `outer ${outer.projectRef} ≠ inner ${manifest.projectRef}`);
+      } else {
+        pass('project-ref', manifest.projectRef || outer.projectRef);
+      }
+
+      if (outer.status && manifest.status && outer.status !== manifest.status) {
+        warn('status-sync', `outer=${outer.status} inner=${manifest.status}`);
+      } else {
+        pass('status', manifest.status || outer.status);
+      }
+
+      if (['PARTIAL', 'TRIAL'].includes(manifest.status) || ['PARTIAL', 'TRIAL'].includes(outer.status)) {
+        warn(
+          'capture-completeness',
+          `${manifest.status || outer.status} — not a full production Escape; gaps expected`,
+        );
+      } else if (manifest.status === 'COMPLETE') {
+        pass('capture-completeness', 'COMPLETE');
+      }
+
+      // 5 · Layer presence vs manifest
+      const contents = manifest.contents || outer.contents || {};
+      for (const layer of ['database', 'storage', 'functions', 'auth']) {
+        const item = contents[layer];
+        if (!item) {
+          warn(`layer:${layer}`, 'not listed in manifest');
+          continue;
+        }
+        if (item.skipped) {
+          warn(`layer:${layer}`, item.reason || 'skipped');
+          continue;
+        }
+        if (!item.complete) {
+          fail(`layer:${layer}`, item.error || item.reason || 'incomplete');
+          continue;
+        }
+
+        if (layer === 'database') {
+          const expected = item.files?.length
+            ? item.files
+            : ['roles.sql', 'schema.sql', 'database-inventory.json'].filter(f => true);
+          // data.sql may be absent for trial/schema-only
+          let missing = [];
+          for (const f of expected) {
+            if (!existsSync(join(extracted, 'database', f))) missing.push(f);
+          }
+          // Always require inventory or schema for a "complete" db layer claim
+          if (!existsSync(join(extracted, 'database', 'schema.sql')) && !existsSync(join(extracted, 'database', 'roles.sql'))) {
+            missing.push('schema.sql|roles.sql');
+          }
+          if (missing.length) fail('layer:database', `missing ${missing.join(', ')}`);
+          else {
+            const extra = item.limited ? ` limited: ${item.limitation || 'yes'}` : '';
+            const sum = item.summary
+              ? ` tables≈${item.summary.tables} rows≈${item.summary.rows}`
+              : '';
+            pass('layer:database', `files OK${extra}${sum}`);
+          }
+        } else if (layer === 'storage') {
+          const smPath = join(extracted, 'storage', 'storage-manifest.json');
+          if (!existsSync(smPath)) {
+            // trial may claim complete with empty objects
+            if (item.limited && Number(item.objectCount || 0) === 0) {
+              warn('layer:storage', 'limited trial with 0 captured objects (inventory-only)');
+            } else {
+              fail('layer:storage', 'storage-manifest.json missing');
+            }
+          } else {
+            const storage = JSON.parse(await readFile(smPath, 'utf8'));
+            let hashOk = 0;
+            let hashFail = 0;
+            let missingObj = 0;
+            for (const bucket of storage.buckets || []) {
+              for (const object of bucket.objects || []) {
+                const source = join(
+                  extracted,
+                  'storage',
+                  safeObjectPath(bucket.id),
+                  safeObjectPath(object.name),
+                );
+                if (!existsSync(source)) {
+                  missingObj += 1;
+                  continue;
+                }
+                if (object.sha256) {
+                  const actual = await hashFile(source);
+                  if (actual === object.sha256) hashOk += 1;
+                  else hashFail += 1;
+                } else {
+                  hashOk += 1;
+                }
+              }
+            }
+            const expectedCount = Number(storage.objectCount ?? item.objectCount ?? 0);
+            const detail = `manifest objects=${expectedCount} on-disk hash_ok=${hashOk} hash_fail=${hashFail} missing=${missingObj}`;
+            if (hashFail || missingObj) fail('layer:storage', detail);
+            else if (item.limited) warn('layer:storage', `${detail} (limited sample)`);
+            else pass('layer:storage', detail);
+
+            // Inventory totals (source truth at capture) vs what is in the capsule
+            if (item.inventory?.totalBytes != null && item.totalBytes != null
+              && Number(item.inventory.totalBytes) > Number(item.totalBytes || 0)
+              && item.limited) {
+              warn(
+                'storage-source-vs-capsule',
+                `source inventory ${formatBytes(item.inventory.totalBytes)} · in capsule ${formatBytes(item.totalBytes || 0)} (trial/partial)`,
+              );
+            }
+          }
+        } else if (layer === 'functions') {
+          const fm = join(extracted, 'functions', 'functions-manifest.json');
+          if (!existsSync(fm) && !(item.names?.length)) {
+            if (item.limited || item.error) fail('layer:functions', item.error || item.reason || 'no functions payload');
+            else warn('layer:functions', 'no functions-manifest.json');
+          } else if (existsSync(fm)) {
+            const functions = JSON.parse(await readFile(fm, 'utf8'));
+            const names = functions.functions?.map(f => f.name) || functions.names || item.names || [];
+            let missingSrc = 0;
+            for (const name of names) {
+              const dir = join(extracted, 'functions', safeObjectPath(name));
+              if (!existsSync(dir)) missingSrc += 1;
+            }
+            if (missingSrc) fail('layer:functions', `${missingSrc}/${names.length} function dirs missing`);
+            else pass('layer:functions', `${names.length} function(s) present`);
+          } else {
+            pass('layer:functions', `${(item.names || []).length} name(s) in outer metadata`);
+          }
+        } else if (layer === 'auth') {
+          const authDir = join(extracted, 'auth');
+          if (!existsSync(authDir)) warn('layer:auth', 'no auth/ directory (may be embedded in database dump)');
+          else pass('layer:auth', 'auth artifacts present');
+        }
+      }
+
+      // 6 · Manual reconfig reminders (always — not failures)
+      console.log('\n--- Manifest summary (what a new Supabase would need) ---');
+      console.log(`Source project: ${manifest.projectRef}`);
+      console.log(`Capture status: ${manifest.status} · edition: ${manifest.edition || outer.edition || 'community'}`);
+      for (const layer of ['database', 'storage', 'functions', 'auth']) {
+        const item = contents[layer];
+        if (!item) continue;
+        const flag = item.complete ? (item.limited ? 'LIMITED' : 'READY') : (item.skipped ? 'SKIP' : 'GAP');
+        console.log(`  ${flag.padEnd(8)} ${layer}${item.limitation ? ` — ${item.limitation}` : ''}${item.error ? ` — ${item.error}` : ''}${item.reason && !item.limitation ? ` — ${item.reason}` : ''}`);
+      }
+      if (contents.functions?.secretNames?.length) {
+        console.log(`\nSecrets to re-create on a new project (names only): ${contents.functions.secretNames.join(', ')}`);
+      }
+      console.log('\nNot simulated (requires live blank project): psql apply, Storage upload, Functions deploy, blank-target guards.');
+      console.log('Next live proof: portabase replay --capsule <dir> --confirm-target <NEW_REF>');
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
+  } finally {
+    if (materialized.cleanup) await rm(materialized.cleanup, { recursive: true, force: true });
+  }
+
+  console.log(`\n--- Checks ---\n${lines.join('\n')}`);
+  const failures = checks.filter(c => !c.ok).length;
+  const warnings = checks.filter(c => c.warn).length;
+  const report = {
+    mode: 'simulate',
+    capsule: capsuleDir,
+    failures,
+    warnings,
+    checks,
+  };
+  if (hasFlag('json')) console.log(JSON.stringify(report, null, 2));
+  console.log(`\n${failures ? 'SIMULATE FAILED' : 'SIMULATE OK'}: ${checks.length - failures}/${checks.length} checks passed${warnings ? ` · ${warnings} warning(s)` : ''}`);
+  console.log('No Supabase destination was contacted.');
+  if (failures) process.exitCode = 4;
+}
+
 async function openCapsule(capsuleDir, passphrase) {
   const metadata = JSON.parse(await readFile(join(capsuleDir, 'capsule.json'), 'utf8'));
   const temp = await mkdtemp(join(tmpdir(), 'portabase-restore-'));
@@ -1836,6 +2087,8 @@ Commands:
                       Add --trial for a deliberately limited demo sample
                       Local Starter: add --allow-large-local to bypass ${LOCAL_STARTER_MAX_LABEL} cap
   verify              Verify checksums; add --decrypt for authenticated decryption
+  simulate            Offline validation: decrypt, unpack, match layers to manifest
+                      No Supabase destination required. Optional --json
   status              Show the last durable backup result
   prune               Preview retention; add --execute to delete recognized capsules
   install-schedule    Preview a scheduled backup; add --execute to install
@@ -1903,6 +2156,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     else if (command === 'plan') await plan();
     else if (command === 'backup') await backup();
     else if (command === 'verify') await verify();
+    else if (command === 'simulate') await simulate();
     else if (command === 'status') await status();
     else if (command === 'prune') await prune();
     else if (command === 'install-schedule') await installSchedule();
