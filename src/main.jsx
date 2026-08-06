@@ -205,29 +205,69 @@ function Hero() {
 function HeroConcept() {
   return <section className="section hero-concept-section" aria-label="Open core and Cloud split">
     <div className="shell">
-      <figure className="hero-concept">
-        <div className="hero-concept-label"><span>OPEN SOURCE FIRST</span><b>How to read this picture</b></div>
-        <img src="/images/open-core-split.jpg" alt="Portabase Community open-source engine on the left; customer vault (Drive Dropbox S3) in the center with keys; Portabase Cloud ops console on the right for health and alerts only" width="1920" height="1080" />
-        <div className="split-read">
-          <article>
-            <small>LEFT · COMMUNITY (GREEN)</small>
-            <b>The Escape engine you can run yourself</b>
-            <p>Open-source capture, encrypt, verify, restore. Full job. No Portabase login required. This is the real recovery path.</p>
-          </article>
-          <article>
-            <small>CENTER · YOUR VAULT (NOT OURS)</small>
-            <b>Sealed capsules · your keys · your storage</b>
-            <p><strong>Drive / Dropbox / S3</strong> are <em>your</em> destinations for encrypted capsules — not Portabase object storage. The locked “RESTRICTED” door is the problem we solve: <strong>Supabase can lock the dashboard</strong>; your off-site capsule still exists.</p>
-          </article>
-          <article>
-            <small>RIGHT · CLOUD (ORANGE)</small>
-            <b>Ops only — not where recovery bytes live</b>
-            <p>GUI, telemetry, SMS, alert chains (Admin → Ops → Security → You). The thin green “HEALTH ONLY” line is status metadata, not your passphrase or capsule ciphertext.</p>
-          </article>
+      <figure className="hero-concept hero-concept-diagram">
+        <div className="hero-concept-label"><span>OPEN SOURCE FIRST</span><b>Where recovery bytes actually go</b></div>
+        <div className="split-map" role="img" aria-label="Portabase product model: Community engine encrypts capsules into your vault; Portabase Cloud receives health status only">
+          <div className="split-map-threat">
+            <span>THE PROBLEM</span>
+            <div>
+              <b>Supabase project can lock, delete, or unpaid-fail</b>
+              <p>Official backups miss Storage bytes and Edge Functions. Escape is the off-site restorable copy.</p>
+            </div>
+          </div>
+          <div className="split-map-zones">
+            <article className="split-zone split-zone-oss">
+              <header>
+                <small>01 · COMMUNITY · FREE · OSS</small>
+                <b>Escape engine</b>
+              </header>
+              <ul>
+                <li>Capture DB · Auth · Storage · Functions</li>
+                <li>Encrypt · verify · restore</li>
+                <li>You run it — or Cloud runs this same code</li>
+              </ul>
+              <footer>Recovery path lives here</footer>
+            </article>
+            <div className="split-map-arrow split-map-arrow-main" aria-hidden="true">
+              <i /><span>ENCRYPT<br />&amp; STORE</span>
+            </div>
+            <article className="split-zone split-zone-vault">
+              <header>
+                <small>02 · YOUR VAULT · NOT OURS</small>
+                <b>Sealed capsules</b>
+              </header>
+              <div className="split-vault-dests">
+                <span>Drive</span>
+                <span>Dropbox</span>
+                <span>S3</span>
+                <span>Local Starter</span>
+              </div>
+              <p><strong>Your keys.</strong> Capsule ciphertext lands only in destinations you own.</p>
+              <footer>This is the Escape of record</footer>
+            </article>
+            <div className="split-map-arrow split-map-arrow-thin" aria-hidden="true">
+              <i /><span>STATUS<br />ONLY</span>
+            </div>
+            <article className="split-zone split-zone-cloud">
+              <header>
+                <small>03 · CLOUD · OPTIONAL · PAID</small>
+                <b>GUI · telemetry · SMS</b>
+              </header>
+              <ul>
+                <li>Console &amp; managed runners</li>
+                <li>Job health · missed windows</li>
+                <li>Admin → Ops → Security → You</li>
+              </ul>
+              <footer>Never holds capsules or passphrases</footer>
+            </article>
+          </div>
+          <p className="split-map-one-line">
+            <strong>One sentence:</strong> the open-source engine builds the Escape; capsules and keys stay with you; Cloud only watches and wakes people.
+          </p>
         </div>
         <figcaption>
-          <span><strong>One sentence:</strong> Community (or a Cloud-managed runner running that same engine) builds the Escape; capsules and keys stay with you; Cloud only watches and wakes people.</span>
-          <small>Conceptual art · product model · not a live console</small>
+          <span>Same engine under Community and Cloud — commercial difference is hosted ops, not custody of recovery bytes.</span>
+          <small>Product model · not a live console</small>
         </figcaption>
       </figure>
       <figure className="hero-concept hero-concept-secondary">
