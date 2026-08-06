@@ -50,19 +50,20 @@ test('first-per-bucket storage sample is not a schema-only trial', () => {
   assert.equal(TRIAL_LIMITS.databaseSchemaOnly, true);
 });
 
-test('storage names fingerprint is order-independent and stable', () => {
-  const a = fingerprintSortedKeys(['b/z', 'a/x', 'a/y'], 'md5');
-  const b = fingerprintSortedKeys(['a/y', 'b/z', 'a/x'], 'md5');
+test('storage name+size fingerprint is order-independent and size-sensitive', () => {
+  const a = fingerprintSortedKeys(['b/z\t10', 'a/x\t1', 'a/y\t2'], 'md5');
+  const b = fingerprintSortedKeys(['a/y\t2', 'b/z\t10', 'a/x\t1'], 'md5');
   assert.equal(a.fingerprint, b.fingerprint);
   assert.equal(a.count, 3);
-  assert.equal(a.method, 'sorted-names-concat');
+  assert.equal(a.method, 'sorted-name-size-concat');
   assert.equal(fingerprintsMatch(a, b), true);
-  const c = fingerprintSortedKeys(['a/x', 'a/y'], 'md5');
+  // same names, different reported size → different fingerprint
+  const c = fingerprintSortedKeys(['b/z\t11', 'a/x\t1', 'a/y\t2'], 'md5');
   assert.equal(fingerprintsMatch(a, c), false);
   const keys = storageObjectKeysFromBuckets([
-    { id: 'images', objects: [{ name: 'a.png' }, { fullName: 'b/c.png' }] },
+    { id: 'images', objects: [{ name: 'a.png', size: 9 }, { fullName: 'b/c.png', size: 3 }] },
   ]);
-  assert.deepEqual(keys.sort(), ['images/a.png', 'images/b/c.png'].sort());
+  assert.deepEqual(keys.sort(), ['images/a.png\t9', 'images/b/c.png\t3'].sort());
 });
 import { cleanSchemaLine } from './portabase.mjs';
 

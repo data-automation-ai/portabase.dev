@@ -75,21 +75,22 @@ Source inventory (all object counts/bytes) is still recorded in the capsule for 
 
 Use this for under‑5 GB path proof; full object inventory still requires a normal `backup` without the flag.
 
-## Storage names fingerprint (inventory snapshot)
+## Storage name+size fingerprint (inventory snapshot)
 
-At **backup start**, after listing every Storage object name (even if only a sample is downloaded):
+At **backup start**, after listing every Storage object (even if only a sample is downloaded):
 
-1. Sort `bucket/objectPath` keys  
-2. Concatenate with newlines  
-3. **MD5** (and SHA-256) → `sourceNamesFingerprintMd5`  
-4. Same method for names **actually in the capsule** → `capsuleNamesFingerprintMd5`
+1. Build lines `bucket/objectPath\treportedSizeBytes` (size from listing metadata)  
+2. Sort lines  
+3. Concatenate with newlines  
+4. **MD5** (and SHA-256) → `sourceNamesFingerprintMd5`  
+5. Same method for objects **actually in the capsule** → `capsuleNamesFingerprintMd5`
 
 After restore:
 
-- Recompute fingerprint of restored names → must match **capsule** fingerprint  
+- Recompute fingerprint of restored name+size → must match **capsule** fingerprint  
 - Optional live target list → can match **source** fingerprint only after a **full** Storage restore  
 
-This does **not** replace per-object SHA-256 of downloaded bytes; it proves the **name inventory** snapshot is consistent (cheap, works when you only sample first-per-bucket).
+Renames **or** size drift both change the hash. This does **not** replace per-object SHA-256 of downloaded bytes; it proves the **inventory snapshot** (path + reported size) without reading every byte.
 
 ## Offline simulate (no destination)
 

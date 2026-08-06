@@ -61,11 +61,12 @@ export function safeObjectPath(value) {
 }
 
 /**
- * Stable inventory fingerprint: concatenate sorted keys, hash.
+ * Stable inventory fingerprint: concatenate sorted lines, hash.
  * Used as a snapshot at capture start (full source listing) and again on destination after restore.
- * Names-only is cheap and independent of downloading every object byte.
+ * Each line is `bucket/path\treportedSize` so renames OR size drift both change the fingerprint
+ * without downloading every object byte.
  *
- * @param {string[]} keys  e.g. ["bucket/path/to/file.png", ...]
+ * @param {string[]} keys  e.g. ["bucket/path/to/file.png\t1234", ...] or plain paths (size treated as 0)
  * @param {'md5'|'sha256'} algo
  * @returns {{ algo: string, count: number, fingerprint: string, method: string }}
  */
@@ -73,24 +74,39 @@ export function fingerprintSortedKeys(keys = [], algo = 'md5') {
   const list = (Array.isArray(keys) ? keys : [])
     .map(k => String(k || '').replaceAll('\\', '/').replace(/^\/+/, '').trim())
     .filter(Boolean)
+    .map(k => {
+      // Normalize: path\tsize  (accept path|size or path only)
+      if (k.includes('\t')) {
+        const [path, size] = k.split('\t');
+        return `${path.trim()}\t${Number(size) || 0}`;
+      }
+      if (k.includes('|') && /\|-?\d+$/.test(k)) {
+        const i = k.lastIndexOf('|');
+        return `${k.slice(0, i).trim()}\t${Number(k.slice(i + 1)) || 0}`;
+      }
+      return `${k}\t0`;
+    })
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   const payload = list.join('\n');
   const hashAlgo = algo === 'sha256' ? 'sha256' : 'md5';
   const fingerprint = createHash(hashAlgo).update(payload, 'utf8').digest('hex');
   return {
-    method: 'sorted-names-concat',
+    method: 'sorted-name-size-concat',
     algo: hashAlgo,
     count: list.length,
     fingerprint,
   };
 }
 
+/** One inventory line: bucket/path + reported listing size (bytes). */
+export function storageInventoryLine(bucketId, objectPath, sizeBytes = 0) {
+  const path = `${bucketId}/${String(objectPath || '').replaceAll('\\', '/')}`.replace(/^\/+/, '');
+  return `${path}\t${Number(sizeBytes) || 0}`;
+}
+
 /**
- * Build storage object keys from inventory-style structures.
- * Accepts:
- *  - [{ id, objects: [{ fullName|name }] }]
- *  - inventory.buckets from capture
- *  - storage-manifest buckets
+ * Build storage inventory lines from bucket/object structures.
+ * Accepts storage-manifest buckets (objects with name + size) or listing shapes.
  */
 export function storageObjectKeysFromBuckets(buckets = []) {
   const keys = [];
@@ -98,14 +114,16 @@ export function storageObjectKeysFromBuckets(buckets = []) {
     const bid = bucket.id || bucket.name;
     if (!bid) continue;
     const objects = bucket.objects || [];
-    if (objects.length === 0 && Number(bucket.objectCount) >= 0 && !objects.length) {
-      // listing-only inventory rows may only have counts — skip keys
-      continue;
-    }
     for (const object of objects) {
       const name = object.fullName || object.name || object.path;
       if (!name) continue;
-      keys.push(`${bid}/${String(name).replaceAll('\\', '/')}`);
+      const size = Number(
+        object.size
+        ?? object.metadata?.size
+        ?? object.metadata?.contentLength
+        ?? 0,
+      ) || 0;
+      keys.push(storageInventoryLine(bid, name, size));
     }
   }
   return keys;
