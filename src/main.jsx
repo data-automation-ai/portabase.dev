@@ -206,11 +206,28 @@ function HeroConcept() {
   return <section className="section hero-concept-section" aria-label="Open core and Cloud split">
     <div className="shell">
       <figure className="hero-concept">
-        <div className="hero-concept-label"><span>OPEN SOURCE FIRST</span><b>Hosted convenience is optional</b></div>
-        <img src="/images/open-core-split.jpg" alt="Split concept: Portabase Community open-source runner keeps keys and capsules on the customer side; Portabase Cloud receives only thin health telemetry for monitoring and multi-person alerts" width="1920" height="1080" />
+        <div className="hero-concept-label"><span>OPEN SOURCE FIRST</span><b>How to read this picture</b></div>
+        <img src="/images/open-core-split.jpg" alt="Portabase Community open-source engine on the left; customer vault (Drive Dropbox S3) in the center with keys; Portabase Cloud ops console on the right for health and alerts only" width="1920" height="1080" />
+        <div className="split-read">
+          <article>
+            <small>LEFT · COMMUNITY (GREEN)</small>
+            <b>The Escape engine you can run yourself</b>
+            <p>Open-source capture, encrypt, verify, restore. Full job. No Portabase login required. This is the real recovery path.</p>
+          </article>
+          <article>
+            <small>CENTER · YOUR VAULT (NOT OURS)</small>
+            <b>Sealed capsules · your keys · your storage</b>
+            <p><strong>Drive / Dropbox / S3</strong> are <em>your</em> destinations for encrypted capsules — not Portabase object storage. The locked “RESTRICTED” door is the problem we solve: <strong>Supabase can lock the dashboard</strong>; your off-site capsule still exists.</p>
+          </article>
+          <article>
+            <small>RIGHT · CLOUD (ORANGE)</small>
+            <b>Ops only — not where recovery bytes live</b>
+            <p>GUI, telemetry, SMS, alert chains (Admin → Ops → Security → You). The thin green “HEALTH ONLY” line is status metadata, not your passphrase or capsule ciphertext.</p>
+          </article>
+        </div>
         <figcaption>
-          <span>Community runs recovery. Cloud pages people. Keys never cross the wall.</span>
-          <small>Conceptual illustration · product model</small>
+          <span><strong>One sentence:</strong> Community (or a Cloud-managed runner running that same engine) builds the Escape; capsules and keys stay with you; Cloud only watches and wakes people.</span>
+          <small>Conceptual art · product model · not a live console</small>
         </figcaption>
       </figure>
       <figure className="hero-concept hero-concept-secondary">
