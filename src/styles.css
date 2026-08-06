@@ -793,15 +793,22 @@ button { font:inherit; }
 .github-aside p{margin:0;color:#8b8c87;font-size:14px;line-height:1.6}
 .cloud-teaser{padding:80px 0;background:#0a0b0d}
 .cloud-teaser-card{display:grid;grid-template-columns:1.4fr .7fr;gap:40px;align-items:center;padding:36px;border:1px solid #34353a;background:#121317}
-.cloud-teaser-card h2{margin:14px 0 16px;font-size:clamp(28px,3.5vw,40px);line-height:1.08;letter-spacing:-.04em}
-.cloud-teaser-card p{color:#9a9b95;font-size:16px;line-height:1.65;max-width:520px}
+.cloud-teaser-card h2{margin:14px 0 16px;font-size:clamp(28px,3.5vw,40px);line-height:1.08;letter-spacing:-.04em;color:#faf8f2}
+.cloud-teaser-card p{color:#b4b5af;font-size:16px;line-height:1.65;max-width:560px}
+.cloud-teaser-card p strong{color:#f0eee8}
+.cloud-teaser-card p em{color:#e8e7e2;font-style:normal}
+.cloud-teaser-benefits{list-style:none;margin:18px 0 0;padding:0;display:grid;gap:10px;max-width:560px}
+.cloud-teaser-benefits li{padding:12px 14px;border:1px solid #2c2d32;background:#0e0f12;color:#c9c8c1;font-size:14px;line-height:1.45}
+.cloud-teaser-benefits li strong{display:block;margin-bottom:4px;font:700 11px 'DM Mono',monospace;letter-spacing:.08em;color:var(--acid)}
 .cloud-teaser-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:22px}
-.cloud-teaser-price{padding:28px;border:1px solid rgba(201,255,74,.35);background:#17181c;text-align:center}
-.cloud-teaser-price span{font:8px 'DM Mono';letter-spacing:.12em;color:var(--acid)}
-.cloud-teaser-price b{display:block;margin:14px 0 6px;font-size:64px;letter-spacing:-.06em;line-height:1}
+.cloud-teaser-price{padding:28px 24px;border:1px solid rgba(201,255,74,.4);background:#17181c;text-align:center}
+.cloud-teaser-price-lead{display:block;font:700 11px 'DM Mono',monospace;letter-spacing:.14em;color:var(--acid);margin-bottom:10px}
+.cloud-teaser-price-hero{display:block;font-size:clamp(18px,2vw,22px);letter-spacing:-.03em;line-height:1.2;color:#faf8f2;font-weight:800;margin:0 0 8px}
+.cloud-teaser-price-sub{display:block;font:12px/1.4 'DM Mono',monospace;letter-spacing:.04em;color:#9a9b95;margin-bottom:18px}
+.cloud-teaser-price b{display:block;margin:0 0 8px;font-size:clamp(48px,5vw,64px);letter-spacing:-.06em;line-height:1;color:#fff}
 .cloud-teaser-price b small{font-size:18px;color:#8b8c87}
-.cloud-teaser-price em{display:block;font-style:normal;color:#8b8c87;font-size:13px}
-.cloud-teaser-price p{margin:12px 0 0;color:#6f706b;font:10px 'DM Mono';letter-spacing:.08em}
+.cloud-teaser-price em{display:block;font-style:normal;color:#c4c3bd;font-size:14px}
+.cloud-teaser-price p{margin:12px 0 0;color:#8b8c87;font:12px 'DM Mono',monospace;letter-spacing:.06em}
 @media(max-width:900px){
   .key-grid,.github-split,.cloud-teaser-card,.zones-diagram{grid-template-columns:1fr}
   .flow-track,.sideband-row{grid-template-columns:1fr;gap:12px}

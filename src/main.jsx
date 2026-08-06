@@ -1061,8 +1061,19 @@ function CloudTeaser() {
     <div className="shell cloud-teaser-card">
       <div>
         <div className="section-kicker green">USP · ESCAPE OPS</div>
-        <h2>Open source is the Escape.<br />Cloud keeps the Escape running.</h2>
-        <p><strong>Supabase only.</strong> GitHub = free Escape engine. <strong>This site</strong> = hosted <strong>GUI</strong>, guided configuration, <strong>telemetry</strong>, SMS on success/failure — so the Escape is not a forgotten cron job. <strong>7-day free trial</strong> then <strong>$17/mo</strong> (1 escape / 24h) or <strong>$27/mo</strong> (up to 3 escapes / day) · ≤12 agents. You provide capsule storage.</p>
+        <h2>Open source is the Escape.<br />Cloud runs the Escape for you.</h2>
+        <p>
+          <strong>Supabase only.</strong> GitHub = free Escape engine you can run yourself.
+          <strong> This site</strong> = <strong>managed runner infrastructure</strong> so Escape jobs stage
+          on isolated hosts — not a laptop cron — then land capsules in <em>your</em> storage.
+          GUI, telemetry, and SMS are how you operate that fleet. <strong>7-day free trial</strong>, then
+          {' '}<strong>$17/mo</strong> (1 escape / 24h) or <strong>$27/mo</strong> (up to 3 escapes / day) · ≤12 agents.
+        </p>
+        <ul className="cloud-teaser-benefits">
+          <li><strong>01 · Managed runners</strong> Hosted compute for capture, encrypt, verify — no babysitting a local box</li>
+          <li><strong>02 · Your vault still</strong> Capsules to Drive / Dropbox / S3 you own — never our blob store</li>
+          <li><strong>03 · Ops layer</strong> GUI · schedule · telemetry · SMS when a job fails or goes quiet</li>
+        </ul>
         <div className="cloud-teaser-actions">
           <a className="button button-primary" href="/login?mode=signup&next=/app">Start free trial <Arrow /></a>
           <a className="button button-ghost" href="/cloud">Open source vs Cloud <Arrow /></a>
@@ -1070,7 +1081,9 @@ function CloudTeaser() {
         </div>
       </div>
       <div className="cloud-teaser-price">
-        <span>GUI · CONFIG · TELEMETRY · SMS</span>
+        <span className="cloud-teaser-price-lead">#1 BENEFIT</span>
+        <strong className="cloud-teaser-price-hero">Managed runner infrastructure</strong>
+        <span className="cloud-teaser-price-sub">Then GUI · config · telemetry · SMS</span>
         <b>$17–27<small>/mo</small></b>
         <em>Card required · auto-converts</em>
         <p>After 7-day free trial</p>
