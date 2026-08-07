@@ -120,21 +120,22 @@ Details: `AGENTS.md` · global `C:\Users\ryanh\.grok\AGENTS.md`.
 
 ## Owner’s priority right now
 
-**Prove the product (QUEUED):**  
+**Prove the product:**
 
-1. Backup Supabase project **`ekklokrukxmqlahtonnc`** (DataAutomation)  
-2. Land capsule on **S3** (or Dropbox later)  
-3. **`portabase replay`** into a **new blank** Supabase project  
+1. ~~Backup Supabase project **`ekklokrukxmqlahtonnc`** → S3~~ — **DONE** (sample Escape COMPLETE 2026-08-06)  
+2. **`portabase replay`** into a **new blank** Supabase project — **still open**  
+3. Optional later: full multi‑GB Storage Escape on **EC2/container**  
 
 | Item | Value |
 | --- | --- |
-| Source | `ekklokrukxmqlahtonnc` |
-| S3 prefix used | `s3://dataautomation-ai-backups/portabase/ekklokrukxmqlahtonnc/` |
-| Replay target created | `svltssnxzqsrxtbjgaex` (`portabase-replay-proof`) — re-verify ACTIVE + keys |
-| E2E status | **Not successfully completed** in last arc (local F:/path failures, user STOP) |
-| **Queue rule** | **EC2/container spool only** — never F:; no workstation thrash |
+| Source | `ekklokrukxmqlahtonnc` (**project**-scoped, not whole org) |
+| S3 prefix | `s3://dataautomation-ai-backups/portabase/ekklokrukxmqlahtonnc/` |
+| Gold capsule | `…2026-08-06T16-33-17.909Z` — first-per-bucket Storage sample · **COMPLETE** · S3 verified |
+| Replay target | Need **blank** project (`svltssnxzqsrxtbjgaex` may exist — re-verify; whitepaper is **not** blank) |
+| E2E status | **Backup path green (sampled Storage).** **Replay not green yet.** |
+| **Queue rule** | Full Storage spool → **EC2/container** — never F:; no workstation thrash |
 
-**Correct way to finish proof:** run engine on **EC2/container**, not F:/C: thrash.
+Detail: `docs/HANDOFF.md` §9 · `docs/E2E-ESCAPE-TEST.md`.
 
 ---
 
@@ -147,19 +148,21 @@ Details: `AGENTS.md` · global `C:\Users\ryanh\.grok\AGENTS.md`.
 - Console shell (demo mode)  
 - Billing constants + SMS management UI (demo)  
 - Cycle pricing model in product constants  
-- CLI capture/restore/replay design  
+- CLI capture / restore / **replay** / **simulate**  
+- **`--storage-first-per-bucket`** Escape + inventory fingerprints (DB/Auth/Functions/Storage)  
 - Parallel Storage downloads + Node tar.gz packer  
 - Security page + trust docs  
 - Netlify cloud function scaffolding (auth, subscribe, audit, CloudWatch live)  
+- Live **COMPLETE** sample capsule on S3 (2026-08-06)
 
 ### Incomplete / fragile
 
-- Full **E2E backup + green replay** of production-sized project  
+- **Green live `replay`** of the COMPLETE capsule into a blank project  
+- Full multi‑GB Storage download proof on cloud runner  
 - Managed runner **actually** spooling in ECS/EC2 for product  
 - Dropbox **OAuth + token** productized in console  
 - Square **extra-cycle** SKUs live  
 - Real SMS provider send path  
-- Large uncommitted working tree (many features not cleanly committed/Pushed)
 
 ---
 
@@ -168,15 +171,16 @@ Details: `AGENTS.md` · global `C:\Users\ryanh\.grok\AGENTS.md`.
 ### First hour
 
 1. Read **this file** + `docs/HANDOFF.md` + `AGENTS.md`.  
-2. `git status` / `git log` — expect dirty tree and branch ahead of origin.  
+2. `git status` / `git log` — prefer clean tree on `main`; use org PAT if push 403 as `lcapece`.  
 3. Confirm you will **not** write to F: or start multi‑GB local backup without explicit ask.  
-4. Ask owner: next priority = **cloud proof**, **Dropbox OAuth**, **billing**, or **commit hygiene**?
+4. Ask owner: next priority = **blank replay**, **full Storage cloud proof**, **Dropbox**, or **billing**?
 
 ### If owner wants “make it work” (proof)
 
-1. Provision/use **EC2 or container** with Node, `pg_dump`, AWS CLI, disk for ~15–30 GB.  
-2. Inject secrets from operator process (secrets-bundle / env) — never commit.  
-3. `portabase doctor` → `backup` → S3.  
+1. Prefer **`simulate`** on gold capsule, then **replay** to a **blank** target.  
+2. For full Storage: provision **EC2 or container** with Node, `pg_dump`, AWS CLI, disk for ~15–30 GB.  
+3. Inject secrets from operator process (secrets-bundle / env) — never commit.  
+4. Or re-run sample: `backup --storage-first-per-bucket` → S3.  
 4. Ensure blank target project → `replay --confirm-target <NEW_REF>`.  
 5. Report COMPLETE/PARTIAL/FAILED with capsule path and S3 URI — no silent multi-hour loops without status lines.
 
@@ -246,4 +250,4 @@ Secrets live in AWS Secrets Manager `secrets-bundle` and Netlify env — **never
 
 ---
 
-*This is the “what is the project / what do I do” brief. Keep it updated when E2E proof succeeds or pricing/rules change.*
+*This is the “what is the project / what do I do” brief. Keep it updated when proof status or pricing/rules change. Last refresh: 2026-08-07.*
