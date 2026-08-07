@@ -13,6 +13,7 @@ private/
 portabase.config.json
 portabase-capsules/
 portabase-status/
+portabase-evidence/
 .portabase-sandbox-destination/
 .portabase/
 .netlify/

@@ -5,7 +5,8 @@
 
 **Owner:** Ryan (operator). **Entity:** DataAutomation.ai, LLC · GitHub repo [data-automation-ai/portabase.dev](https://github.com/data-automation-ai/portabase.dev).  
 **Live site:** https://portabase.dev  
-**Repo:** `C:\Users\ryanh\git\portabase.dev` (branch `main`, often ahead of origin with local/uncommitted work).
+**Repo:** `C:\Users\ryanh\git\portabase.dev` (branch `main`).  
+**Last handoff refresh:** 2026-08-07 (post Escape sample COMPLETE + fingerprints).
 
 ---
 
@@ -18,6 +19,8 @@
 | **Portabase Cloud** | Hosted console + Netlify Functions + Supabase Auth + Square billing. Ops product, not capsule vault. |
 
 **Product promise:** Encrypted recovery capsules **outside** the customer’s Supabase account so lockout/billing bans don’t destroy the only copy.
+
+**Scope unit:** **One Supabase project** (`projectRef`) per config/agent — **not** the entire org/account in one shot. Multiple projects → multiple agents. Capture stack for that project: Postgres + Auth inventory + Storage + Edge Functions.
 
 **Not affiliated with Supabase, Inc.**
 
@@ -110,9 +113,37 @@ Browser
 | Capsule at rest | **Encrypted archive** (AES-256-GCM `.pbase` + manifest + checksums) |
 
 CLI: `utility/portabase.mjs` + `utility/portabase-core.mjs`.  
-Commands: `init`, `doctor`, `backup`, `verify`, `restore`, **`replay`**, `status`, schedule/prune.
+Commands: `init`, `doctor`, `backup`, `verify`, `restore`, **`replay`**, **`simulate`** (offline decrypt/unpack/layer check), `status`, schedule/prune.
 
 **Replay** = prove capsule by restoring into a **new blank** Supabase project (never source). See `docs/REPLAY.md`.
+
+### 4.2.1 Escape sample mode (under multi‑GB Storage)
+
+```bash
+node utility/portabase.mjs backup --storage-first-per-bucket
+# or config: "capture": { "storageSample": "first-per-bucket" }
+```
+
+| Layer | Behavior |
+| --- | --- |
+| Database | **Full** (schema + data) — not trial/schema-only |
+| Auth | **Full** inventory |
+| Functions | **All** (ghost 404 names skipped) |
+| Storage | **First object per bucket only**; full listing still recorded in inventory |
+
+### 4.2.2 Inventory fingerprints (integrity without hashing every Storage byte)
+
+| Fingerprint | What it covers |
+| --- | --- |
+| `contents.database.inventoryFingerprintMd5` | Tables `schema.name` + reported row counts |
+| `contents.auth.inventoryFingerprintMd5` | User id + email |
+| `contents.functions.inventoryFingerprintMd5` | Function file paths + content SHA-256 |
+| Storage **source** `sourceNamesFingerprintMd5` | Full listing: `bucket/path\tsize` for **all** objects |
+| Storage **sample-expected** | First-per-bucket plan at list time (scaled) |
+| Storage **capsule** `namesFingerprintMd5` | Objects actually in the capsule |
+
+Under first-per-bucket: **source ≠ capsule by design**; **sample-expected must match capsule** (`sampleMatchesCapsule: true`).  
+Details: `docs/REPLAY.md`.
 
 ### 4.3 AWS (ops)
 
@@ -243,14 +274,44 @@ Open `/app?demo=1`.
 
 | | |
 | --- | --- |
-| **Source** | `ekklokrukxmqlahtonnc` (DataAutomation) — ~15k Storage objects / ~9.6 GB last inventory |
+| **Source** | `ekklokrukxmqlahtonnc` (DataAutomation) — ~15 973 Storage objects / ~9.6 GB inventory |
 | **Vault used in sessions** | `s3://dataautomation-ai-backups/portabase/ekklokrukxmqlahtonnc/` |
 | **Replay target created** | `svltssnxzqsrxtbjgaex` (`portabase-replay-proof`) — verify still ACTIVE; may need service_role + DB URL |
+| **Whitepaper / smoke** | `kiuwcdpjsdotkoojbkoi` — local smoke COMPLETE earlier; **not blank** → bad as replay target without wipe |
 | **Must not** | Restore into source; spool on F:; silent multi-hour local thrash |
 
-**Status as of handoff:** Full E2E **not completed successfully**. Failures included: Windows `tar`, path/`mkdir '\\?'` when F: dropped, aborted runs after user STOP. **No reliable COMPLETE capsule + green replay** was finished in the last session arc.
+### Status as of 2026-08-06/07
 
-**Correct next proof:** EC2/container runner with cloud disk → S3 → `replay` to blank project.
+| Proof | Status |
+| --- | --- |
+| **Escape sample (first-per-bucket) → S3** | **COMPLETE** — capsule `ekklokrukxmqlahtonnc-2026-08-06T16-33-17.909Z`, destination **verified**, ~262 MB encrypted, ~7.3 min |
+| Full Storage (~9.6 GB object download) | **Not** run as complete Escape on this pass (intentionally sampled) |
+| **`replay` into blank project** | **Still open** — no green live replay of the COMPLETE capsule yet |
+| **`simulate` offline** | Available; recommended before live replay |
+
+**Gold capsule (sample Escape):**
+
+```text
+s3://dataautomation-ai-backups/portabase/ekklokrukxmqlahtonnc/ekklokrukxmqlahtonnc-2026-08-06T16-33-17.909Z
+local: portabase-capsules/ekklokrukxmqlahtonnc-2026-08-06T16-33-17.909Z/
+```
+
+Fingerprint highlights from that run:
+
+| Layer | MD5 (prefix) | Notes |
+| --- | --- | --- |
+| Database inventory | `4845d671…` | 588 tables, full data dump |
+| Auth | `be3797a7…` | 19 users |
+| Functions | `89503fbf…` | 232 functions listed; 463 file rows |
+| Storage source | `4b943fa4…` | count **15973** |
+| Storage sample/capsule | `4fd76ac4…` | count **12**, `sampleMatchesCapsule: true` |
+
+Earlier same day: PARTIAL capsule `…15-35-27.337Z` (Functions Management API **502**). Prefer the COMPLETE capsule above.
+
+**Correct next proof:** `simulate` on gold capsule → **blank** target `replay` (prefer EC2/container if doing full Storage later). Whitepaper is **not** blank.
+
+Local env: `.env.portabase.local` (source) · `.env.replay-target.local` (target). Load secrets-bundle keys via operator env docs.  
+**Git push to `data-automation-ai/portabase.dev`:** local `gh` user `lcapece` has **pull only**; use Secrets Manager `github-dataautomation-ia-pat` (org admin) for push.
 
 ---
 
@@ -258,22 +319,25 @@ Open `/app?demo=1`.
 
 1. **F: drive** — unstable/missing; never use.  
 2. **`mkdir '\\?'` on Windows** — seen when drive path invalid / long-path edge cases.  
-3. **Storage size** — ~10 GB; workstation free space often insufficient.  
+3. **Storage size** — ~10 GB full; use `--storage-first-per-bucket` for under-budget path proof; full object download still prefers cloud runner.  
 4. **Parallel Storage** — implemented (`mapPool`, concurrency 8–12); cache dual-key + EBUSY hardening partially done.  
-5. **Node packTarGz** — pure-Node tar.gz fallback when system tar fails (`portabase-core.mjs`).  
+5. **Node packTarGz** — pure-Node tar.gz fallback when system tar fails (`portabase-core.mjs`). May emit `MaxListenersExceededWarning` on large packs (non-fatal).  
 6. **Functions 404** — ghost function names (e.g. `generate-image`) should skip, not kill layer.  
-7. **Rolldown/lightningcss native bindings** on Windows can break after `npm install` — may need re-extract `binding-win32-x64-msvc` / `lightningcss-win32-x64-msvc`.  
-8. **Launch flag** — keep AWS Cognito UI off until product says otherwise.  
-9. **Square cycle add-ons** — product constants exist; live catalog SKUs may still need wiring.
+7. **Functions 502** — Management API intermittent HTML 502 → layer PARTIAL; retry often succeeds (seen 2026-08-06).  
+8. **Rolldown/lightningcss native bindings** on Windows can break after `npm install` — may need re-extract `binding-win32-x64-msvc` / `lightningcss-win32-x64-msvc`.  
+9. **Launch flag** — keep AWS Cognito UI off until product says otherwise.  
+10. **Square cycle add-ons** — product constants exist; live catalog SKUs may still need wiring.  
+11. **First-per-bucket ≠ trial** — `FIRST_PER_BUCKET_STORAGE.databaseSchemaOnly` is **false**; do not confuse with `--trial`.
 
 ---
 
 ## 11. Git / deploy state
 
-- Branch: **`main`**, often **ahead of origin** + many **uncommitted** docs/features (console, Netlify cloud functions, security page, etc.).
-- Checkpoints appear as `auto-checkpoint …` commits.
+- Branch: **`main`** tracking **`origin/main`** (`data-automation-ai/portabase.dev`).
+- Escape sample + fingerprint work **pushed** through `6549ecb` (2026-08-06); handoff refresh may be a later commit.
 - Deploy: Netlify build from repo (confirm site link in Netlify UI for `portabase.dev`).
 - Do not force-push or rewrite published history without owner approval.
+- Do **not** commit: `portabase-capsules/`, `portabase-status/`, `portabase-evidence/`, terraform `tfplan` / `outputs.json` / state.
 
 ---
 
@@ -281,29 +345,30 @@ Open `/app?demo=1`.
 
 ### Queued (owner — do next)
 
-1. **E2E Escape proof (QUEUED)** — **EC2 or container only** (never F: / no workstation thrash):  
-   `doctor` → `backup` of `ekklokrukxmqlahtonnc` → S3 → `replay` into blank target (`svltssnxzqsrxtbjgaex` or new free project).  
-   Pass: capsule on S3 + secondary project shows data / Storage / Functions.  
-2. **EC2-only runbook script** — single script for the proof above.
+1. **Green `replay`** of COMPLETE sample capsule into a **blank** project (not whitepaper unless wiped).  
+   Optional: `simulate` first. Pass: target has DB rows / sample Storage / Functions.  
+2. Full Storage Escape on **EC2/container** when proving multi‑GB path (not laptop thrash).  
+3. **EC2-only runbook script** — single script for full proof above.
 
 ### Product backlog
 
-3. **Dropbox** — OAuth (simple) + access token (ops-stable); destination UX without S3 jargon.  
-4. **Square** — base $17 + $10 extra-cycle add-ons end-to-end.  
-5. **SMS sender** — wire real provider (ClickSend/Twilio); STOP/HELP; success+failure at job end.  
-6. **Managed runners** — real log groups matching CloudWatch live secret scope.  
-7. Commit/PR hygiene — consolidate handoff-era uncommitted work with owner.
+4. **Dropbox** — OAuth (simple) + access token (ops-stable); destination UX without S3 jargon.  
+5. **Square** — base $17 + $10 extra-cycle add-ons end-to-end.  
+6. **SMS sender** — wire real provider (ClickSend/Twilio); STOP/HELP; success+failure at job end.  
+7. **Managed runners** — real log groups matching CloudWatch live secret scope.
 
 ---
 
 ## 13. Doc index (read order for a new agent)
 
-1. **`docs/HANDOFF.md`** (this file)  
-2. **`AGENTS.md`**  
-3. **`docs/PRODUCT_SPEC.md`** · **`docs/LAUNCH-SCOPE.md`** · **`docs/OPEN_CORE.md`**  
-4. **`docs/SECURITY-TRUST.md`** · **`docs/BILLING.md`** · **`docs/REPLAY.md`**  
-5. **`docs/CLOUD_CONSOLE.md`** · **`docs/CLOUD_INFRASTRUCTURE.md`** · **`docs/AUTH_AND_TRIAL.md`**  
-6. **`docs/ESSENTIALS_RUNBOOK.md`** (CLI operator path)
+1. **`PROJECT.md`** (USP + what to do)  
+2. **`docs/HANDOFF.md`** (this file)  
+3. **`AGENTS.md`**  
+4. **`docs/E2E-ESCAPE-TEST.md`** · **`docs/REPLAY.md`**  
+5. **`docs/PRODUCT_SPEC.md`** · **`docs/LAUNCH-SCOPE.md`** · **`docs/OPEN_CORE.md`**  
+6. **`docs/SECURITY-TRUST.md`** · **`docs/BILLING.md`**  
+7. **`docs/CLOUD_CONSOLE.md`** · **`docs/CLOUD_INFRASTRUCTURE.md`** · **`docs/AUTH_AND_TRIAL.md`**  
+8. **`docs/ESSENTIALS_RUNBOOK.md`** (CLI operator path)
 
 ---
 
@@ -316,4 +381,20 @@ Open `/app?demo=1`.
 
 ---
 
-*Handoff written for continuity to Claude Code or any successor. Update this file when proof E2E succeeds or product constants change.*
+## 15. Session continuity (2026-08-06 Grok arc)
+
+Work done that day (committed/pushed):
+
+- Offline **`simulate`**
+- Whitepaper local smoke config + capsule-smoke Edge Function
+- **`--storage-first-per-bucket`** Escape mode
+- Storage name+size fingerprints (source / sample-expected / capsule) + sizes in hash lines
+- Non-storage fingerprints (DB / Auth / Functions)
+- Fix: first-per-bucket no longer mis-labels database as schema-only
+- Live COMPLETE Escape sample to S3 (see §9)
+
+Left for successor: **live replay**, full multi‑GB Storage proof on cloud runner, product backlog §12.
+
+---
+
+*Handoff for Claude Code, Grok, or any successor. Update this file when proof status or product constants change.*
