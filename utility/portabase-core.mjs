@@ -741,6 +741,28 @@ export async function packDirectoryTarGz(sourceDir, archivePath) {
 }
 
 /**
+ * Classify a capsule's Edge Function entries against the directories actually present.
+ *
+ * A "ghost" function is one Supabase still lists but 404s when fetched (a stale list entry).
+ * Capture records it as captureVia:'skipped-missing' with no files and continues, so its
+ * absent directory is expected and must NOT be reported as a lost source. Any other absent
+ * directory is a genuine gap and must still fail verification.
+ *
+ * @param {Array<{name: string, captureVia?: string}>} entries functions-manifest entries
+ * @param {(name: string) => boolean} hasDir  returns true if that function's dir exists
+ */
+export function classifyFunctionDirs(entries = [], hasDir = () => false) {
+  const missing = [];
+  const skipped = [];
+  for (const entry of entries) {
+    if (hasDir(entry.name)) continue;
+    if (entry.captureVia === 'skipped-missing') skipped.push(entry.name);
+    else missing.push(entry.name);
+  }
+  return { missing, skipped, present: entries.length - missing.length - skipped.length, total: entries.length };
+}
+
+/**
  * Restore plans select a subset of a capsule (tables, storage objects, functions) to write
  * into a target project, capped by a byte budget. The capsule itself is always captured in
  * full — plans only constrain what gets RESTORED, e.g. to fit a free-tier Supabase project

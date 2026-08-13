@@ -63,6 +63,7 @@ import {
   assertLocalStarterSize,
   localStarterPolicyNote,
   DEFAULT_RESTORE_PLAN_MAX_BYTES,
+  classifyFunctionDirs,
   measureDataSqlTables,
   filterDataSqlByTables,
   buildRestorePlan,
@@ -1801,14 +1802,18 @@ async function simulate() {
             else warn('layer:functions', 'no functions-manifest.json');
           } else if (existsSync(fm)) {
             const functions = JSON.parse(await readFile(fm, 'utf8'));
-            const names = functions.functions?.map(f => f.name) || functions.names || item.names || [];
-            let missingSrc = 0;
-            for (const name of names) {
-              const dir = join(extracted, 'functions', safeObjectPath(name));
-              if (!existsSync(dir)) missingSrc += 1;
+            const entries = functions.functions || (functions.names || item.names || []).map(name => ({ name }));
+            const { missing, skipped, present } = classifyFunctionDirs(
+              entries,
+              name => existsSync(join(extracted, 'functions', safeObjectPath(name))),
+            );
+            if (missing.length) {
+              fail('layer:functions', `${missing.length}/${entries.length} function dirs missing: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '…' : ''}`);
+            } else if (skipped.length) {
+              warn('layer:functions', `${present}/${entries.length} function(s) present · ${skipped.length} ghost name(s) skipped at capture (404 on source): ${skipped.join(', ')}`);
+            } else {
+              pass('layer:functions', `${entries.length} function(s) present`);
             }
-            if (missingSrc) fail('layer:functions', `${missingSrc}/${names.length} function dirs missing`);
-            else pass('layer:functions', `${names.length} function(s) present`);
           } else {
             pass('layer:functions', `${(item.names || []).length} name(s) in outer metadata`);
           }

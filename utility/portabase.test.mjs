@@ -50,6 +50,7 @@ import {
   restorePlanSelectedTableKeys,
   filterStorageManifestByPlan,
   restorePlanSelectedFunctionNames,
+  classifyFunctionDirs,
 } from './portabase-core.mjs';
 
 test('first-per-bucket storage sample is not a schema-only trial', () => {
@@ -546,6 +547,38 @@ test('filterStorageManifestByPlan keeps only selected buckets and recomputes obj
   const filtered = filterStorageManifestByPlan(storageManifest, plan);
   assert.deepEqual(filtered.buckets.map(b => b.id), ['avatars']);
   assert.equal(filtered.objectCount, 1);
+});
+
+test('classifyFunctionDirs treats a captured function with its directory as present', () => {
+  const entries = [{ name: 'fn-a', captureVia: 'cli' }, { name: 'fn-b', captureVia: 'management-api' }];
+  const result = classifyFunctionDirs(entries, () => true);
+  assert.deepEqual(result.missing, []);
+  assert.deepEqual(result.skipped, []);
+  assert.equal(result.present, 2);
+});
+
+test('classifyFunctionDirs excuses a ghost function that capture skipped as 404', () => {
+  const entries = [
+    { name: 'fn-a', captureVia: 'cli' },
+    { name: 'generate-image', captureVia: 'skipped-missing' },
+  ];
+  const result = classifyFunctionDirs(entries, name => name !== 'generate-image');
+  assert.deepEqual(result.missing, [], 'a deliberately skipped ghost is not a lost source');
+  assert.deepEqual(result.skipped, ['generate-image']);
+  assert.equal(result.present, 1);
+});
+
+test('classifyFunctionDirs still fails a function that was captured but lost its directory', () => {
+  // The adversarial case: the ghost-function excuse must NOT mask a genuine gap.
+  const entries = [
+    { name: 'fn-a', captureVia: 'cli' },
+    { name: 'fn-lost', captureVia: 'cli' },
+    { name: 'generate-image', captureVia: 'skipped-missing' },
+  ];
+  const result = classifyFunctionDirs(entries, name => name === 'fn-a');
+  assert.deepEqual(result.missing, ['fn-lost'], 'a captured function with no directory is still missing');
+  assert.deepEqual(result.skipped, ['generate-image']);
+  assert.equal(result.present, 1);
 });
 
 test('restorePlanSelectedFunctionNames reflects only selected: true entries', () => {
