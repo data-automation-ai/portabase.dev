@@ -21,7 +21,7 @@
     "check": "npm run build",
     "portabase": "node utility/portabase.mjs",
     "trial": "node utility/portabase.mjs backup --trial",
-    "test": "node --test utility/*.test.mjs tests/*.test.mjs tests/*.test.cjs",
+    "test": "node --test utility/*.test.mjs tests/*.test.mjs tests/*.test.cjs src/console/data/*.test.mjs",
     "desktop": "electron .",
     "desktop:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stage-desktop-tools.ps1 && electron-builder --win nsis",
     "desktop:linux": "node -e \"console.error('Launch desktop is Windows 11 only. Use the open-source CLI on Linux.'); process.exit(1)\"",

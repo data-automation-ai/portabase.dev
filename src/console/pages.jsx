@@ -11,6 +11,9 @@ import {
   agentSlotsUsed,
   getCloudPlan,
 } from '../lib/product.js';
+import { IngestMonitor } from './IngestMonitor.jsx';
+import { createIngestState, applyIngestEvent } from './data/ingest-stream.js';
+import { demoIngestSource } from './data/ingest-demo.js';
 
 function Badge({ tone, children }) {
   const t = tone === 'ok' || tone === 'online' || tone === 'healthy' || tone === 'COMPLETE' || tone === 'running' || tone === 'completed' || tone === 'active' || tone === 'trialing'
@@ -196,9 +199,74 @@ export function BackupsHubPage(props) {
       <PageHead title="Backups" subtitle="Encrypted capsules on your destinations, plus the schedule Cloud expects agents to meet." />
       <div className="pb-tabs">
         <button type="button" className={tab === 'capsules' ? 'is-active' : ''} onClick={() => setTab('capsules')}>Capsules</button>
+        <button type="button" className={tab === 'live' ? 'is-active' : ''} onClick={() => setTab('live')}>Live capture</button>
         <button type="button" className={tab === 'schedules' ? 'is-active' : ''} onClick={() => setTab('schedules')}>Schedule</button>
       </div>
-      {tab === 'capsules' ? <CapsulesPage {...props} embedded /> : <SchedulesPage {...props} embedded />}
+      {tab === 'capsules' ? <CapsulesPage {...props} embedded />
+        : tab === 'live' ? <LiveIngestPage {...props} embedded />
+          : <SchedulesPage {...props} embedded />}
+    </>
+  );
+}
+
+/* ─── LIVE INGESTION ───
+   Real-time view of a capture as it reads the customer's Supabase project. */
+export function LiveIngestPage({ state: consoleState, embedded }) {
+  const [ingest, setIngest] = useState(createIngestState);
+  const [running, setRunning] = useState(false);
+  const stopRef = React.useRef(null);
+
+  const start = useCallback(() => {
+    if (stopRef.current) stopRef.current();
+    setIngest(createIngestState());
+    setRunning(true);
+    stopRef.current = demoIngestSource(event => {
+      setIngest(prev => applyIngestEvent(prev, event));
+      if (event.phase === 'done' || event.phase === 'failed') setRunning(false);
+    });
+  }, []);
+
+  const stop = useCallback(() => {
+    if (stopRef.current) stopRef.current();
+    stopRef.current = null;
+    setRunning(false);
+  }, []);
+
+  useEffect(() => () => { if (stopRef.current) stopRef.current(); }, []);
+
+  const source = consoleState?.projects?.[0]?.projectRef || 'ekklokrukxmqlahtonnc';
+  const idle = ingest.status === 'idle';
+
+  const body = (
+    <>
+      <div className="pb-inline" style={{ marginBottom: 14, justifyContent: 'space-between' }}>
+        <p style={{ margin: 0, color: 'var(--c-muted)', fontSize: 12.5 }}>
+          Progress is weighted by estimated table size, not table count — a few large tables
+          dominate most captures.
+        </p>
+        <button type="button" className="pb-btn pb-btn-primary" onClick={start} disabled={running}>
+          {running ? 'Capture running…' : idle ? 'Start capture' : 'Run again'}
+        </button>
+      </div>
+      {idle ? (
+        <div className="pb-empty">
+          <h3>No capture running</h3>
+          <p>
+            Start a capture to watch each table stream into the capsule in real time, with a
+            size-weighted progress meter and a live read of the object being ingested.
+          </p>
+          <button type="button" className="pb-btn pb-btn-primary" onClick={start}>Start capture</button>
+        </div>
+      ) : (
+        <IngestMonitor state={ingest} source={source} onStop={running ? stop : null} />
+      )}
+    </>
+  );
+  if (embedded) return body;
+  return (
+    <>
+      <PageHead title="Live capture" subtitle="Watch objects enter the capsule as the Escape runs." />
+      {body}
     </>
   );
 }

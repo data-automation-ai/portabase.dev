@@ -430,9 +430,15 @@ function psqlValue(dbUrl, sql) {
 }
 
 function estimateApplicationTables(dbUrl) {
-  const tablesJson = psqlValue(dbUrl, `SELECT COALESCE(json_agg(json_build_object('schema', schemaname, 'name', tablename, 'rows', GREATEST(c.reltuples, 0)::bigint) ORDER BY schemaname, tablename), '[]'::json)::text FROM pg_catalog.pg_tables t JOIN pg_catalog.pg_namespace n ON n.nspname = t.schemaname JOIN pg_catalog.pg_class c ON c.relnamespace = n.oid AND c.relname = t.tablename AND c.relkind IN ('r','p') WHERE ${APPLICATION_SCHEMA_SQL};`);
+  // `bytes` is pg_total_relation_size (heap + indexes + TOAST) — the only honest basis for a
+  // progress meter. Row counts alone mislead badly: one 142 MB table and 400 empty ones would
+  // render as "400/588 done" while almost no data has actually moved.
+  const tablesJson = psqlValue(dbUrl, `SELECT COALESCE(json_agg(json_build_object('schema', schemaname, 'name', tablename, 'rows', GREATEST(c.reltuples, 0)::bigint, 'bytes', pg_total_relation_size(c.oid)::bigint) ORDER BY schemaname, tablename), '[]'::json)::text FROM pg_catalog.pg_tables t JOIN pg_catalog.pg_namespace n ON n.nspname = t.schemaname JOIN pg_catalog.pg_class c ON c.relnamespace = n.oid AND c.relname = t.tablename AND c.relkind IN ('r','p') WHERE ${APPLICATION_SCHEMA_SQL};`);
   const tables = JSON.parse(tablesJson || '[]');
-  for (const table of tables) table.rows = Number(table.rows) || 0;
+  for (const table of tables) {
+    table.rows = Number(table.rows) || 0;
+    table.bytes = Number(table.bytes) || 0;
+  }
   return tables;
 }
 
@@ -444,7 +450,8 @@ function announceApplicationTables(dbUrl) {
       phase: 'database-manifest',
       count: tables.length,
       totalRows: tables.reduce((total, table) => total + table.rows, 0),
-      tables: tables.slice(0, 120).map(table => ({ item: `${table.schema}.${table.name}`, rows: table.rows })),
+      totalBytes: tables.reduce((total, table) => total + table.bytes, 0),
+      tables: tables.slice(0, 120).map(table => ({ item: `${table.schema}.${table.name}`, rows: table.rows, bytes: table.bytes })),
     });
   } catch { /* the animation manifest is optional; capture proceeds regardless */ }
 }
