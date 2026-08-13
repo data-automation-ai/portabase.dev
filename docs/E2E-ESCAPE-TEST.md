@@ -29,6 +29,7 @@
 | Whitepaper DB password | `supabase-redshiftwhitepapers-database-password` |
 | Whitepaper access token | `supbase-redshiftwhitepapers-acccess-token` (typo preserved in bundle) |
 | Git push (org write) | `github-dataautomation-ia-pat` (`lcapece` is pull-only on this repo) |
+| **Management API (org-wide)** | **`supabase-token`** — verified working 2026-08-12. The `SUPABASE_ACCESS_TOKEN` inside `.env.portabase.local` returns **401**; do not use it. |
 
 ## Commands
 
@@ -53,6 +54,31 @@ node utility/portabase.mjs simulate --capsule .\portabase-capsules\<id>
 # Set PORTABASE_TARGET_* from .env.replay-target.local for a blank project
 node utility/portabase.mjs replay --capsule .\portabase-capsules\<id> --confirm-target <NEW_REF>
 ```
+
+## Verified 2026-08-12 — simulate GREEN on gold capsule · replay staged
+
+| Step | Result |
+| --- | --- |
+| `npm test` | **80 / 80 pass** |
+| `simulate` on gold capsule | **OK — 14 / 14 checks passed** (4 warnings, all expected) |
+| Bug found + fixed | `simulate` hard-FAILed the functions layer on the **ghost** `generate-image` (404 at source, `captureVia: skipped-missing`). Verifier now separates deliberately-skipped ghosts (WARN, named) from genuine gaps (still FAIL). Commit `179a0b7`. |
+| Replay target | `svltssnxzqsrxtbjgaex` (`portabase-replay-proof`) · **ACTIVE_HEALTHY** · us-east-1 |
+| Target blank check | **Confirmed blank** — 0 `public` tables · 0 auth users · 0 storage buckets/objects (only platform migration rows) |
+| Target Storage API | **200** with secret key |
+| Target Auth admin API | **200** with secret key |
+| Target env | `.env.replay-target.local` regenerated → now points at the **blank** project (previously pointed at whitepaper `kiuwcdpjsdotkoojbkoi`, which is **not** blank) |
+| `psql` | 18.4 present locally |
+| **Blocker** | **Target DB password.** Management API exposes no reset endpoint (`config/database/*` → 404); dashboard-only action. Everything else for replay is staged. |
+
+**Credential note:** `.env.portabase.local`'s `SUPABASE_ACCESS_TOKEN` is **unauthorized** against the Management API (401). The bundle's `supabase-token` **is** org-scoped and works — use that one.
+
+**To finish:** dashboard → `portabase-replay-proof` → Settings → Database → Reset database password → set `PORTABASE_TARGET_DB_URL` in `.env.replay-target.local` (direct `db.<ref>.supabase.co:5432`, **not** the pooler) → then:
+
+```powershell
+node utility/portabase.mjs replay --capsule .\portabase-capsules\ekklokrukxmqlahtonnc-2026-08-06T16-33-17.909Z --confirm-target svltssnxzqsrxtbjgaex
+```
+
+---
 
 ## Verified 2026-08-06 — sample Escape COMPLETE
 

@@ -286,7 +286,8 @@ Open `/app?demo=1`.
 | --- | --- |
 | **Escape sample (first-per-bucket) → S3** | **COMPLETE** — capsule `ekklokrukxmqlahtonnc-2026-08-06T16-33-17.909Z`, destination **verified**, ~262 MB encrypted, ~7.3 min |
 | Full Storage (~9.6 GB object download) | **Not** run as complete Escape on this pass (intentionally sampled) |
-| **`replay` into blank project** | **Still open** — no green live replay of the COMPLETE capsule yet |
+| **`replay` into blank project** | **Staged, blocked** (2026-08-12) — target `svltssnxzqsrxtbjgaex` verified ACTIVE + genuinely blank; Storage/Auth APIs 200 with secret key; `psql` 18.4 present; `.env.replay-target.local` repointed off the whitepaper. **Only gap: target DB password** (dashboard reset — Management API `config/database/*` returns 404). |
+| **`simulate` on gold capsule** | **GREEN 14/14** (2026-08-12) — fixed verifier bug where the ghost function `generate-image` (404 at source, `captureVia: skipped-missing`) hard-FAILed the functions layer (`179a0b7`) |
 | **`simulate` offline** | Available; recommended before live replay |
 
 **Gold capsule (sample Escape):**

@@ -131,8 +131,9 @@ Details: `AGENTS.md` · global `C:\Users\ryanh\.grok\AGENTS.md`.
 | Source | `ekklokrukxmqlahtonnc` (**project**-scoped, not whole org) |
 | S3 prefix | `s3://dataautomation-ai-backups/portabase/ekklokrukxmqlahtonnc/` |
 | Gold capsule | `…2026-08-06T16-33-17.909Z` — first-per-bucket Storage sample · **COMPLETE** · S3 verified |
-| Replay target | Need **blank** project (`svltssnxzqsrxtbjgaex` may exist — re-verify; whitepaper is **not** blank) |
-| E2E status | **Backup path green (sampled Storage).** **Replay not green yet.** |
+| Replay target | `svltssnxzqsrxtbjgaex` (`portabase-replay-proof`) — **verified ACTIVE + genuinely blank** 2026-08-12 (0 public tables · 0 auth users · 0 buckets) |
+| Simulate | **GREEN 14/14** on gold capsule 2026-08-12 (ghost-function verifier bug fixed, `179a0b7`) |
+| E2E status | **Backup path green (sampled Storage).** **Replay staged, not green yet** — blocked only on target DB password (dashboard reset; Management API has no endpoint). |
 | **Queue rule** | Full Storage spool → **EC2/container** — never F:; no workstation thrash |
 
 Detail: `docs/HANDOFF.md` §9 · `docs/E2E-ESCAPE-TEST.md`.
