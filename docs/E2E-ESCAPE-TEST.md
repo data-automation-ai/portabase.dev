@@ -68,6 +68,8 @@ node utility/portabase.mjs replay --capsule .\portabase-capsules\<id> --confirm-
 | Target Auth admin API | **200** with secret key |
 | Target env | `.env.replay-target.local` regenerated → now points at the **blank** project (previously pointed at whitepaper `kiuwcdpjsdotkoojbkoi`, which is **not** blank) |
 | `psql` | 18.4 present locally |
+| **Connection route** | **Session pooler REQUIRED.** `db.svltssnxzqsrxtbjgaex.supabase.co` is **IPv6-only** (no A record) and this machine has **no IPv6 route** (`ping -6` = 100% loss). Use `postgres.svltssnxzqsrxtbjgaex@aws-0-us-east-1.pooler.supabase.com:5432` (session, port 5432 — **not** transaction 6543). |
+| **Capsule DB size** | **891.3 MB** `data.sql` · 614 tables with data (largest: `public.order_history_lcmd` 142.5 MB, `musicsupplies.order_history_lcmd` 132.7 MB). **Does NOT fit a 500 MB free-tier target** → full replay needs a paid/larger target, or use `--restore-plan` and accept `SELECTIVE_RESTORE_VERIFIED` instead of full green. |
 | **Blocker** | **Target DB password.** Management API exposes no reset endpoint (`config/database/*` → 404); dashboard-only action. Everything else for replay is staged. |
 
 **Credential note:** `.env.portabase.local`'s `SUPABASE_ACCESS_TOKEN` is **unauthorized** against the Management API (401). The bundle's `supabase-token` **is** org-scoped and works — use that one.
