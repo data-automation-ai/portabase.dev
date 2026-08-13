@@ -62,6 +62,16 @@ import {
   directoryByteSize,
   assertLocalStarterSize,
   localStarterPolicyNote,
+  DEFAULT_RESTORE_PLAN_MAX_BYTES,
+  measureDataSqlTables,
+  filterDataSqlByTables,
+  buildRestorePlan,
+  restorePlanSelectedBytes,
+  validateRestorePlan,
+  restorePlanSelectedTableKeys,
+  filterStorageManifestByPlan,
+  restorePlanSelectedFunctionNames,
+  applyRestorePlanToExpectedInventory,
 } from './portabase-core.mjs';
 import { resolveEdition } from './license.mjs';
 import { emitTelemetry } from './telemetry.mjs';
@@ -1822,6 +1832,59 @@ async function simulate() {
       if (contents.functions?.secretNames?.length) {
         console.log(`\nSecrets to re-create on a new project (names only): ${contents.functions.secretNames.join(', ')}`);
       }
+      // 7 · Restore-plan-scoped sampling — validate only the selected subset, offline
+      const planPath = flag('restore-plan');
+      if (planPath) {
+        const plan = JSON.parse(await readFile(resolve(planPath), 'utf8'));
+        try {
+          validateRestorePlan(plan, { capsuleId: metadata.id });
+          pass('restore-plan', `bound to capsule ${metadata.id}, ${formatBytes(restorePlanSelectedBytes(plan))} selected`);
+        } catch (error) {
+          fail('restore-plan', error.message);
+        }
+        const selectedTables = restorePlanSelectedTableKeys(plan);
+        if (selectedTables.size) {
+          const dataSqlPath = join(extracted, 'database', 'data.sql');
+          if (!existsSync(dataSqlPath)) {
+            fail('restore-plan:database', 'data.sql missing — cannot sample selected tables');
+          } else {
+            const measured = new Map((await measureDataSqlTables(dataSqlPath)).map(t => [`${t.schema}.${t.table}`, t.bytes]));
+            const missing = [...selectedTables].filter(key => !measured.has(key));
+            if (missing.length) warn('restore-plan:database', `${missing.length} selected table(s) have no data rows in capsule (empty table, or not in dump): ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '…' : ''}`);
+            else pass('restore-plan:database', `${selectedTables.size} selected table(s) present in data.sql`);
+          }
+        }
+        const selectedBucketIds = new Set((plan.buckets || []).filter(b => b.selected).map(b => b.id));
+        if (selectedBucketIds.size) {
+          const smPath = join(extracted, 'storage', 'storage-manifest.json');
+          if (!existsSync(smPath)) {
+            fail('restore-plan:storage', 'storage-manifest.json missing — cannot sample selected buckets');
+          } else {
+            const storage = JSON.parse(await readFile(smPath, 'utf8'));
+            let hashOk = 0;
+            let hashFail = 0;
+            for (const bucket of (storage.buckets || []).filter(b => selectedBucketIds.has(b.id))) {
+              for (const object of bucket.objects || []) {
+                const source = join(extracted, 'storage', safeObjectPath(bucket.id), safeObjectPath(object.name));
+                if (!existsSync(source)) { hashFail += 1; continue; }
+                if (object.sha256 && await hashFile(source) !== object.sha256) hashFail += 1; else hashOk += 1;
+              }
+            }
+            if (hashFail) fail('restore-plan:storage', `selected buckets: hash_ok=${hashOk} hash_fail_or_missing=${hashFail}`);
+            else pass('restore-plan:storage', `selected buckets: ${hashOk} object(s) hash-verified`);
+          }
+        }
+        const selectedFunctionNames = restorePlanSelectedFunctionNames(plan);
+        if (selectedFunctionNames.size) {
+          let missingSrc = 0;
+          for (const name of selectedFunctionNames) {
+            if (!existsSync(join(extracted, 'functions', safeObjectPath(name)))) missingSrc += 1;
+          }
+          if (missingSrc) fail('restore-plan:functions', `${missingSrc}/${selectedFunctionNames.size} selected function dir(s) missing`);
+          else pass('restore-plan:functions', `${selectedFunctionNames.size} selected function(s) present`);
+        }
+      }
+
       console.log('\nNot simulated (requires live blank project): psql apply, Storage upload, Functions deploy, blank-target guards.');
       console.log('Next live proof: portabase replay --capsule <dir> --confirm-target <NEW_REF>');
     } finally {
@@ -1879,27 +1942,38 @@ function targetFetch(path, options = {}) {
   return fetch(`${url}${path}`, { ...options, headers: supabaseHeaders(key, options.headers || {}) });
 }
 
-async function restoreDatabase(extracted) {
+async function restoreDatabase(extracted, plan = null) {
   const psql = resolveTool('psql');
   const targetDb = process.env.PORTABASE_TARGET_DB_URL;
   if (!psql || !targetDb) throw new Error('psql and PORTABASE_TARGET_DB_URL are required for database restore.');
   const applied = [];
   // Dirty-target drills: continue past "already exists" / duplicate object errors.
   const stopOnError = hasFlag('allow-occupied-target') ? '0' : '1';
+  let filteredDataDir = null;
   for (const file of ['roles.sql', 'schema.sql', 'data.sql']) {
-    const path = join(extracted, 'database', file);
+    let path = join(extracted, 'database', file);
+    if (file === 'data.sql' && plan && existsSync(path)) {
+      // Schema always applies in full (structure is small and required); only DATA rows
+      // are filtered to the plan's selected tables, so restore stays under the byte budget.
+      filteredDataDir = await mkdtemp(join(tmpdir(), 'portabase-plan-'));
+      const filteredPath = join(filteredDataDir, 'data.sql');
+      await filterDataSqlByTables(path, filteredPath, restorePlanSelectedTableKeys(plan));
+      path = filteredPath;
+    }
     if (existsSync(path)) {
       await run(psql, [targetDb, '--set', `ON_ERROR_STOP=${stopOnError}`, '--file', path]);
       applied.push(file);
     }
   }
-  return { applied };
+  if (filteredDataDir) await rm(filteredDataDir, { recursive: true, force: true });
+  return { applied, plan: plan ? { selectedTables: [...restorePlanSelectedTableKeys(plan)] } : null };
 }
 
-async function restoreStorage(extracted) {
+async function restoreStorage(extracted, plan = null) {
   const manifestPath = join(extracted, 'storage', 'storage-manifest.json');
   if (!existsSync(manifestPath)) return { verified: false, reason: 'Storage manifest is missing.', bucketCount: 0, objectCount: 0, hashesVerified: 0 };
-  const storage = JSON.parse(await readFile(manifestPath, 'utf8'));
+  const fullStorage = JSON.parse(await readFile(manifestPath, 'utf8'));
+  const storage = plan ? filterStorageManifestByPlan(fullStorage, plan) : fullStorage;
   let hashesVerified = 0;
   const restoredKeys = [];
   for (const bucket of storage.buckets) {
@@ -1932,23 +2006,27 @@ async function restoreStorage(extracted) {
       restoredKeys.push(storageInventoryLine(bucket.id, object.name, object.size ?? body.length));
     }
   }
-  // Name+size inventory fingerprint: destination restored set vs capsule snapshot
-  const expectedNames = storage.capsuleNamesFingerprintMd5
-    || fingerprintSortedKeys(storageObjectKeysFromBuckets(storage.buckets), 'md5');
+  // Name+size inventory fingerprint: destination restored set vs capsule snapshot (or, with a
+  // plan, vs the plan's selected subset — a filtered restore is expected to differ from the
+  // full capsule by design, same pattern as the trial/sample "limitation" fields).
+  const expectedNames = plan
+    ? fingerprintSortedKeys(storageObjectKeysFromBuckets(storage.buckets), 'md5')
+    : (fullStorage.capsuleNamesFingerprintMd5 || fingerprintSortedKeys(storageObjectKeysFromBuckets(fullStorage.buckets), 'md5'));
   const actualNames = fingerprintSortedKeys(restoredKeys, expectedNames.algo || 'md5');
   const namesMatch = fingerprintsMatch(expectedNames, actualNames);
   if (!namesMatch) {
     console.warn(
-      `WARNING: Storage name+size fingerprint mismatch — capsule=${expectedNames.fingerprint} `
+      `WARNING: Storage name+size fingerprint mismatch — ${plan ? 'plan selection' : 'capsule'}=${expectedNames.fingerprint} `
       + `destination=${actualNames.fingerprint} (count ${expectedNames.count} vs ${actualNames.count})`,
     );
   } else {
     console.log(`Storage name+size fingerprint OK (MD5 ${actualNames.fingerprint} · ${actualNames.count} objects)`);
   }
-  // Optional: live target listing fingerprint vs full source inventory (only meaningful after full restore)
+  // Optional: live target listing fingerprint vs full source inventory (only meaningful after
+  // a full, unfiltered restore — a plan restores a deliberate subset, so skip this comparison).
   let liveNamesMatch = null;
   let liveNamesFingerprint = null;
-  if (storage.sourceNamesFingerprintMd5 && !storage.limitation) {
+  if (!plan && fullStorage.sourceNamesFingerprintMd5 && !fullStorage.limitation) {
     try {
       liveNamesFingerprint = await fingerprintLiveTargetStorageNames();
       liveNamesMatch = fingerprintsMatch(storage.sourceNamesFingerprintMd5, liveNamesFingerprint);
@@ -1963,6 +2041,7 @@ async function restoreStorage(extracted) {
   }
   return {
     verified: hashesVerified === Number(storage.objectCount || 0) && namesMatch,
+    limited: Boolean(plan),
     bucketCount: storage.buckets.length,
     objectCount: storage.objectCount,
     hashesVerified,
@@ -1971,7 +2050,7 @@ async function restoreStorage(extracted) {
     namesMatch,
     liveNamesFingerprint,
     liveNamesMatch,
-    sourceNamesFingerprint: storage.sourceNamesFingerprintMd5 || null,
+    sourceNamesFingerprint: fullStorage.sourceNamesFingerprintMd5 || null,
   };
 }
 
@@ -2025,15 +2104,17 @@ async function listTargetBucketObjects(bucketId, prefix = '') {
   return objects;
 }
 
-async function restoreFunctions(extracted, manifest, targetRef) {
+async function restoreFunctions(extracted, manifest, targetRef, plan = null) {
   const functions = manifest.contents.functions;
   if (!functions?.complete) return { verified: false, reason: functions?.reason || functions?.error || 'Function capture was incomplete.', expected: [], active: [] };
-  if (!functions.names?.length) return { verified: true, expected: [], active: [] };
+  const selectedNames = plan ? restorePlanSelectedFunctionNames(plan) : null;
+  const names = plan ? (functions.names || []).filter(name => selectedNames.has(name)) : (functions.names || []);
+  if (!names.length) return { verified: true, limited: Boolean(plan), expected: [], active: [] };
   const supabase = resolveTool('supabase');
   if (!supabase || !process.env.SUPABASE_ACCESS_TOKEN) throw new Error('Supabase CLI and SUPABASE_ACCESS_TOKEN are required to restore Edge Functions.');
   const workdir = join(extracted, 'functions');
   const verifyMap = functions.verifyJwt || {};
-  for (const name of functions.names) {
+  for (const name of names) {
     const args = ['functions', 'deploy', name, '--project-ref', targetRef, '--workdir', workdir];
     if (verifyMap[name] === false) args.push('--no-verify-jwt');
     await run(supabase, args, { cwd: workdir, env: process.env });
@@ -2043,21 +2124,21 @@ async function restoreFunctions(extracted, manifest, targetRef) {
   });
   if (result.status !== 0) throw new Error(`Unable to verify restored Edge Functions: ${(result.stderr || '').trim().slice(0, 300)}`);
   const active = JSON.parse(result.stdout || '[]').map(fn => fn.name || fn.slug);
-  const missing = functions.names.filter(name => !active.includes(name));
-  return { verified: missing.length === 0, expected: functions.names, active, missing, redeployScripts: functions.redeployScripts || null };
+  const missing = names.filter(name => !active.includes(name));
+  return { verified: missing.length === 0, limited: Boolean(plan), expected: names, active, missing, redeployScripts: functions.redeployScripts || null };
 }
 
-async function verifyRestoredDatabase(extracted, limited = false) {
+async function verifyRestoredDatabase(extracted, limited = false, plan = null) {
   const expectedPath = join(extracted, 'database', 'database-inventory.json');
   if (!existsSync(expectedPath)) return { verified: false, reason: 'Source database inventory is missing.' };
   const expectedSource = JSON.parse(await readFile(expectedPath, 'utf8'));
-  const expected = limited ? {
-    ...expectedSource,
-    tables: (expectedSource.tables || []).map(table => ({ ...table, rows: 0 })),
-    authUsers: 0,
-  } : expectedSource;
+  let expected = expectedSource;
+  if (limited) {
+    expected = { ...expected, tables: (expected.tables || []).map(table => ({ ...table, rows: 0 })), authUsers: 0 };
+  }
+  if (plan) expected = applyRestorePlanToExpectedInventory(expected, plan);
   const actual = await captureDatabaseInventory(process.env.PORTABASE_TARGET_DB_URL);
-  return { ...compareDatabaseInventories(expected, actual), expected, actual };
+  return { ...compareDatabaseInventories(expected, actual), limited: limited || Boolean(plan), expected, actual };
 }
 
 const MANUAL_RECOVERY_ACTIONS = [
@@ -2146,6 +2227,58 @@ async function inspectRestoreTarget(targetRef, opts = {}) {
   return validateBlankRestoreInventory(await readTargetInventory(targetRef, opts), opts);
 }
 
+/**
+ * Generate a restore plan for a capsule: every table, storage bucket, and Function, with
+ * its measured byte size and `selected: true` by default. Edit `selected` per entry (and
+ * optionally `maxBytes`) to fit a budget — the customer's own filter, no GUI required.
+ * The capsule itself always contains everything; this only scopes what gets RESTORED.
+ */
+async function restorePlanCommand() {
+  const materialized = await materializeCapsule(flag('capsule', argv[1] || '.'));
+  const opened = await openCapsule(materialized.capsuleDir, process.env.PORTABASE_ENCRYPTION_PASSPHRASE);
+  try {
+    const { metadata, manifest, extracted } = opened;
+    const dataSqlPath = join(extracted, 'database', 'data.sql');
+    const tableSizes = existsSync(dataSqlPath) ? await measureDataSqlTables(dataSqlPath) : [];
+    const storageManifestPath = join(extracted, 'storage', 'storage-manifest.json');
+    const storageManifest = existsSync(storageManifestPath)
+      ? JSON.parse(await readFile(storageManifestPath, 'utf8'))
+      : null;
+    const maxBytes = Number(flag('max-restore-bytes', DEFAULT_RESTORE_PLAN_MAX_BYTES));
+    const plan = buildRestorePlan({ manifest, capsuleId: metadata.id, tableSizes, storageManifest, maxBytes });
+    const outputPath = resolve(flag('output', `restore-plan-${metadata.id}.json`));
+    if (existsSync(outputPath) && !hasFlag('force')) {
+      throw new Error(`${outputPath} already exists. Add --force to overwrite.`);
+    }
+    await writeFile(outputPath, `${JSON.stringify(plan, null, 2)}\n`);
+    const selectedBytes = restorePlanSelectedBytes(plan);
+    console.log([
+      `Restore plan written: ${outputPath}`,
+      `Capsule: ${metadata.id}`,
+      `Tables: ${plan.tables.length}  Buckets: ${plan.buckets.length}  Functions: ${plan.functions.length}`,
+      `Selected (all, by default): ${formatBytes(selectedBytes)} of budget ${formatBytes(maxBytes)}`,
+      selectedBytes > maxBytes
+        ? '\nOVER BUDGET as generated (everything selected). Edit "selected": false on tables/buckets in the plan file to fit, then pass it to restore/replay/simulate with --restore-plan.'
+        : '\nUnder budget with everything selected — edit "selected" per entry only if you want a smaller/targeted restore (e.g. sampling a few tables for validation).',
+    ].join('\n'));
+    if (hasFlag('json')) console.log(JSON.stringify({ path: outputPath, plan, selectedBytes }));
+  } finally {
+    await rm(opened.temp, { recursive: true, force: true });
+    if (materialized.cleanup) await rm(materialized.cleanup, { recursive: true, force: true });
+  }
+}
+
+/** Load and validate a --restore-plan file against the opened capsule's id. Returns null if no flag was given (unfiltered / full). */
+async function loadRestorePlanFlag(capsuleId) {
+  const planPath = flag('restore-plan');
+  if (!planPath) return null;
+  const plan = JSON.parse(await readFile(resolve(planPath), 'utf8'));
+  const maxBytesOverride = hasFlag('max-restore-bytes') ? Number(flag('max-restore-bytes')) : undefined;
+  const { selectedBytes, maxBytes } = validateRestorePlan(plan, { capsuleId, maxBytesOverride });
+  console.log(`Restore plan OK: ${formatBytes(selectedBytes)} selected of ${formatBytes(maxBytes)} budget (${plan.tables.filter(t => t.selected).length}/${plan.tables.length} tables, ${plan.buckets.filter(b => b.selected).length}/${plan.buckets.length} buckets, ${plan.functions.filter(f => f.selected).length}/${plan.functions.length} functions).`);
+  return plan;
+}
+
 async function restore() {
   const materialized = await materializeCapsule(flag('capsule', argv[1] || '.'));
   let opened;
@@ -2157,6 +2290,8 @@ async function restore() {
   try {
     opened = await openCapsule(materialized.capsuleDir, process.env.PORTABASE_ENCRYPTION_PASSPHRASE);
     const { manifest, metadata, extracted } = opened;
+    evidence.capsuleId = metadata.id;
+    const restorePlan = await loadRestorePlanFlag(metadata.id);
     evidence = {
       ...evidence,
       capsuleId: metadata.id,
@@ -2166,9 +2301,11 @@ async function restore() {
       targetProjectRef: process.env.PORTABASE_TARGET_PROJECT_REF || null,
       captureContents: manifest.contents,
       captureErrors: manifest.errors,
+      restorePlan: restorePlan ? { maxBytes: restorePlan.maxBytes, selectedBytes: restorePlanSelectedBytes(restorePlan) } : null,
     };
     console.log(`Portabase guarded recovery plan\n\nSource: ${manifest.projectRef}\nCapsule: ${metadata.id}\nCapture status: ${manifest.status}\n`);
     if (manifest.edition === 'trial') console.log('TRIAL SAMPLE: database rows and most Storage objects/Functions are intentionally absent. This is not a complete recovery backup.\n');
+    if (restorePlan) console.log(`RESTORE PLAN ACTIVE: only selected tables/buckets/functions will be written to the target (budget ${formatBytes(restorePlan.maxBytes)}).\n`);
     for (const name of ['database', 'storage', 'functions']) {
       const item = manifest.contents[name];
       console.log(`${item?.complete ? 'READY' : 'GAP  '}  ${name}${item?.reason ? ` — ${item.reason}` : ''}${item?.error ? ` — ${item.error}` : ''}`);
@@ -2213,14 +2350,14 @@ async function restore() {
       return;
     }
     console.log(`${drill ? 'LIMITED DRILL' : 'TARGET WRITE'} CONFIRMED: ${targetRef}`);
-    const databaseApplied = await restoreDatabase(extracted);
-    const storage = await restoreStorage(extracted);
-    const functions = await restoreFunctions(extracted, manifest, targetRef);
-    const database = await verifyRestoredDatabase(extracted, drill);
+    const databaseApplied = await restoreDatabase(extracted, restorePlan);
+    const storage = await restoreStorage(extracted, restorePlan);
+    const functions = await restoreFunctions(extracted, manifest, targetRef, restorePlan);
+    const database = await verifyRestoredDatabase(extracted, drill, restorePlan);
     evidence.database = { ...database, applied: databaseApplied.applied };
     evidence.storage = storage;
     evidence.functions = functions;
-    evidence.status = recoveryEvidenceStatus({ mode, captureStatus: manifest.status, database, storage, functions });
+    evidence.status = recoveryEvidenceStatus({ mode, captureStatus: manifest.status, database, storage, functions, restorePlan });
     if (evidence.status === 'FAILED') throw new Error('Recovery verification failed. Review the generated evidence for mismatched or unverified layers.');
     if (drill) {
       const api = await targetFetch('/rest/v1/', { headers: { Accept: 'application/openapi+json' }, signal: AbortSignal.timeout(10000) });
@@ -2228,6 +2365,8 @@ async function restore() {
       const proof = await readTargetInventory(targetRef);
       console.log(`\nREAD-BACK PROOF: ${Object.entries(proof).map(([name, count]) => `${name}=${count}`).join(', ')}`);
       console.log('LIMITED RESTORE DRILL COMPLETE. Database structure/API surface, hash-verified sample Storage objects, and sample Functions were written from the trial capsule. This validates the path; it is not a complete recovery.');
+    } else if (restorePlan) {
+      console.log('\nSELECTIVE RESTORE VERIFIED. Only the tables/buckets/functions selected in the restore plan were written — this proves the plan-restore path and the selected data, not a complete recovery. Finish and verify the listed manual configuration before cutover.');
     } else {
       console.log('\nRECOVERY DATA PATH VERIFIED. Finish and verify the listed manual configuration before cutover.');
     }
@@ -2397,16 +2536,27 @@ Commands:
   verify              Verify checksums; add --decrypt for authenticated decryption
   simulate            Offline validation: decrypt, unpack, match layers to manifest
                       No Supabase destination required. Optional --json
+                      Add --restore-plan <file> to sample/validate only the plan's
+                      selected tables/buckets/functions (no target project needed)
   status              Show the last durable backup result
   prune               Preview retention; add --execute to delete recognized capsules
   install-schedule    Preview a scheduled backup; add --execute to install
   remove-schedule     Preview task removal; add --execute to remove
+  restore-plan        Generate an editable JSON plan listing every table/bucket/function
+                      in a capsule with its byte size, for selective restore under a
+                      budget (default ${formatBytes(DEFAULT_RESTORE_PLAN_MAX_BYTES)}, e.g. to fit a free-tier target project).
+                      Edit "selected": false on entries to trim; --output <file>
+                      --max-restore-bytes <n> --force (overwrite) --json
   restore             Decrypt and plan restore; execution requires two target guards
+                      Add --restore-plan <file> to restore only the plan's selected
+                      tables/buckets/functions (hard-stops if the plan is over budget
+                      or was generated for a different capsule)
   replay              Validate a capsule by restoring into a NEW Supabase project
                       (never the source). Requires target env vars + --confirm-target.
                       Same guards as restore --execute; clearer validation report.
                       Dirty-target drill: --allow-occupied-target
                       Same-ref drill:     --allow-source-target (with --confirm-target)
+                      Accepts --restore-plan <file> the same as restore
 
 Optional Cloud:
   Set cloud.enabled=true and PORTABASE_CLOUD_URL / PORTABASE_CLOUD_TOKEN
@@ -2471,6 +2621,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     else if (command === 'prune') await prune();
     else if (command === 'install-schedule') await installSchedule();
     else if (command === 'remove-schedule') await removeSchedule();
+    else if (command === 'restore-plan') await restorePlanCommand();
     else if (command === 'restore') await restore();
     else if (command === 'replay') await replay();
     else if (command === 'probe') await probe();

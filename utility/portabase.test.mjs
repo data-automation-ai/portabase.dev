@@ -41,6 +41,15 @@ import {
   fingerprintSortedKeys,
   storageObjectKeysFromBuckets,
   fingerprintsMatch,
+  DEFAULT_RESTORE_PLAN_MAX_BYTES,
+  measureDataSqlTables,
+  filterDataSqlByTables,
+  buildRestorePlan,
+  restorePlanSelectedBytes,
+  validateRestorePlan,
+  restorePlanSelectedTableKeys,
+  filterStorageManifestByPlan,
+  restorePlanSelectedFunctionNames,
 } from './portabase-core.mjs';
 
 test('first-per-bucket storage sample is not a schema-only trial', () => {
@@ -386,4 +395,161 @@ test('encrypted capsules authenticate and reject the wrong passphrase', async ()
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+const SYNTHETIC_DATA_SQL = [
+  '--',
+  '-- Data for Name: orders; Type: TABLE DATA; Schema: public; Owner: postgres',
+  '--',
+  '',
+  'COPY "public"."orders" ("id", "customer", "note") FROM stdin;',
+  '1\tAlice\thas a tab\\tescaped in this field',
+  '2\tBob\t\\N',
+  '\\.',
+  '',
+  '--',
+  '-- Data for Name: empty_table; Type: TABLE DATA; Schema: public; Owner: postgres',
+  '--',
+  '',
+  'COPY "public"."empty_table" ("id") FROM stdin;',
+  '\\.',
+  '',
+  '--',
+  '-- Data for Name: users; Type: TABLE DATA; Schema: auth; Owner: supabase_auth_admin',
+  '--',
+  '',
+  'COPY "auth"."users" ("id", "email") FROM stdin;',
+  '11111111-1111-1111-1111-111111111111\ta@example.com',
+  '22222222-2222-2222-2222-222222222222\tb@example.com',
+  '\\.',
+  '',
+  'SELECT pg_catalog.setval(\'public.orders_id_seq\', 2, true);',
+  '',
+].join('\n');
+
+test('measureDataSqlTables measures each COPY block including its header and terminator', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'portabase-plan-test-'));
+  try {
+    const dataSqlPath = join(root, 'data.sql');
+    await writeFile(dataSqlPath, SYNTHETIC_DATA_SQL);
+    const sizes = await measureDataSqlTables(dataSqlPath);
+    const byKey = Object.fromEntries(sizes.map(t => [`${t.schema}.${t.table}`, t.bytes]));
+    assert.equal(Object.keys(byKey).length, 3);
+    assert.ok(byKey['public.orders'] > 0);
+    assert.ok(byKey['public.empty_table'] > 0, 'empty table still has a measurable header+terminator block');
+    assert.ok(byKey['auth.users'] > byKey['public.empty_table']);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('filterDataSqlByTables keeps only selected COPY blocks and preserves other lines', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'portabase-plan-test-'));
+  try {
+    const sourcePath = join(root, 'data.sql');
+    const targetPath = join(root, 'filtered.sql');
+    await writeFile(sourcePath, SYNTHETIC_DATA_SQL);
+    await filterDataSqlByTables(sourcePath, targetPath, new Set(['public.orders']));
+    const filtered = await readFile(targetPath, 'utf8');
+    assert.match(filtered, /COPY "public"\."orders"/);
+    assert.doesNotMatch(filtered, /COPY "public"\."empty_table"/);
+    assert.doesNotMatch(filtered, /COPY "auth"\."users"/);
+    assert.doesNotMatch(filtered, /b@example\.com/);
+    assert.match(filtered, /Alice/);
+    // non-COPY lines (comments, setval) pass through untouched
+    assert.match(filtered, /setval\('public\.orders_id_seq', 2, true\)/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('filterDataSqlByTables can select zero tables, producing a dump with no data rows', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'portabase-plan-test-'));
+  try {
+    const sourcePath = join(root, 'data.sql');
+    const targetPath = join(root, 'filtered.sql');
+    await writeFile(sourcePath, SYNTHETIC_DATA_SQL);
+    await filterDataSqlByTables(sourcePath, targetPath, new Set());
+    const filtered = await readFile(targetPath, 'utf8');
+    assert.doesNotMatch(filtered, /^COPY /m);
+    assert.match(filtered, /setval/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('buildRestorePlan selects everything by default and binds to the capsule id', () => {
+  const manifest = { projectRef: 'abcxyz', contents: { functions: { names: ['fn-a', 'fn-b'] } } };
+  const storageManifest = { buckets: [{ id: 'avatars', objects: [{ name: 'a.png', size: 1000 }, { name: 'b.png', size: 2000 }] }] };
+  const tableSizes = [{ schema: 'public', table: 'orders', bytes: 500 }];
+  const plan = buildRestorePlan({ manifest, capsuleId: 'abcxyz-2026-01-01T00-00-00Z', tableSizes, storageManifest });
+  assert.equal(plan.capsuleId, 'abcxyz-2026-01-01T00-00-00Z');
+  assert.equal(plan.tables.length, 1);
+  assert.equal(plan.buckets.length, 1);
+  assert.equal(plan.buckets[0].bytes, 3000);
+  assert.equal(plan.functions.length, 2);
+  assert.ok(plan.tables.every(t => t.selected));
+  assert.equal(restorePlanSelectedBytes(plan), 3500);
+  assert.equal(plan.maxBytes, DEFAULT_RESTORE_PLAN_MAX_BYTES);
+});
+
+test('validateRestorePlan refuses a plan generated for a different capsule', () => {
+  const plan = buildRestorePlan({ manifest: { projectRef: 'abc' }, capsuleId: 'abc-2026-01-01T00-00-00Z', tableSizes: [] });
+  assert.throws(
+    () => validateRestorePlan(plan, { capsuleId: 'abc-2026-02-02T00-00-00Z' }),
+    /different capsule|abc-2026-02-02T00-00-00Z/,
+  );
+});
+
+test('validateRestorePlan hard-stops when selected bytes exceed the budget', () => {
+  const plan = buildRestorePlan({
+    manifest: { projectRef: 'abc' },
+    capsuleId: 'abc-2026-01-01T00-00-00Z',
+    tableSizes: [{ schema: 'public', table: 'big_table', bytes: 600 * 1024 * 1024 }],
+    maxBytes: 500 * 1024 * 1024,
+  });
+  assert.throws(() => validateRestorePlan(plan, { capsuleId: 'abc-2026-01-01T00-00-00Z' }), /over the .* budget/);
+});
+
+test('validateRestorePlan passes once over-budget tables are deselected', () => {
+  const plan = buildRestorePlan({
+    manifest: { projectRef: 'abc' },
+    capsuleId: 'abc-2026-01-01T00-00-00Z',
+    tableSizes: [{ schema: 'public', table: 'big_table', bytes: 600 * 1024 * 1024 }],
+    maxBytes: 500 * 1024 * 1024,
+  });
+  plan.tables[0].selected = false;
+  const { selectedBytes } = validateRestorePlan(plan, { capsuleId: 'abc-2026-01-01T00-00-00Z' });
+  assert.equal(selectedBytes, 0);
+});
+
+test('restorePlanSelectedTableKeys reflects only selected: true entries', () => {
+  const plan = buildRestorePlan({
+    manifest: { projectRef: 'abc' },
+    capsuleId: 'abc-2026-01-01T00-00-00Z',
+    tableSizes: [{ schema: 'public', table: 'a', bytes: 1 }, { schema: 'public', table: 'b', bytes: 1 }],
+  });
+  plan.tables.find(t => t.table === 'b').selected = false;
+  const keys = restorePlanSelectedTableKeys(plan);
+  assert.deepEqual([...keys], ['public.a']);
+});
+
+test('filterStorageManifestByPlan keeps only selected buckets and recomputes objectCount', () => {
+  const storageManifest = {
+    buckets: [
+      { id: 'avatars', objects: [{ name: 'a.png', size: 100 }] },
+      { id: 'invoices', objects: [{ name: 'x.pdf', size: 200 }, { name: 'y.pdf', size: 300 }] },
+    ],
+  };
+  const plan = buildRestorePlan({ manifest: { projectRef: 'abc' }, capsuleId: 'id', tableSizes: [], storageManifest });
+  plan.buckets.find(b => b.id === 'invoices').selected = false;
+  const filtered = filterStorageManifestByPlan(storageManifest, plan);
+  assert.deepEqual(filtered.buckets.map(b => b.id), ['avatars']);
+  assert.equal(filtered.objectCount, 1);
+});
+
+test('restorePlanSelectedFunctionNames reflects only selected: true entries', () => {
+  const plan = buildRestorePlan({ manifest: { projectRef: 'abc', contents: { functions: { names: ['fn-a', 'fn-b'] } } }, capsuleId: 'id', tableSizes: [] });
+  plan.functions.find(f => f.name === 'fn-b').selected = false;
+  assert.deepEqual([...restorePlanSelectedFunctionNames(plan)], ['fn-a']);
 });
