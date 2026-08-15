@@ -31,6 +31,14 @@ export {
   requirePassphrase,
 };
 
+/** Mutate a CLI argv slice so hasFlag-style readers see `--name`. */
+export function enableCliFlag(argvList, name) {
+  const token = `--${name}`;
+  if (!Array.isArray(argvList)) throw new Error('enableCliFlag requires an argv array');
+  if (!argvList.includes(token)) argvList.push(token);
+  return argvList;
+}
+
 export const TRIAL_LIMITS = Object.freeze({
   databaseSchemaOnly: true,
   maxStorageBuckets: 2,

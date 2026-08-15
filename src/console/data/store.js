@@ -177,6 +177,7 @@ export function seedWorkspace(user = {}) {
     sms: {
       onFailure: true,
       onSuccess: true,
+      onKeyAccess: true,
       quietHoursEnabled: false,
       quietStart: '22:00',
       quietEnd: '07:00',

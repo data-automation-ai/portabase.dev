@@ -51,7 +51,17 @@ import {
   filterStorageManifestByPlan,
   restorePlanSelectedFunctionNames,
   classifyFunctionDirs,
+  enableCliFlag,
 } from './portabase-core.mjs';
+
+test('enableCliFlag mutates the argv slice hasFlag-style readers use', () => {
+  const slice = ['replay', '--confirm-target', 'abc'];
+  assert.equal(slice.includes('--execute'), false);
+  enableCliFlag(slice, 'execute');
+  assert.equal(slice.includes('--execute'), true);
+  enableCliFlag(slice, 'execute');
+  assert.equal(slice.filter(a => a === '--execute').length, 1);
+});
 
 test('first-per-bucket storage sample is not a schema-only trial', () => {
   assert.equal(FIRST_PER_BUCKET_STORAGE.databaseSchemaOnly, false);

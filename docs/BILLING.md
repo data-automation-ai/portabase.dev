@@ -25,7 +25,22 @@ An **escape** is one full managed job (capture → encrypt capsule → destinati
 | `cloud-17` | $17 | 1 |
 | `cloud-27` | $27 | up to 3 |
 
-There is **no** à-la-carte extra SKU. Choose Daily or Triple.
+There is **no** à-la-carte extra-cycle SKU. Choose Daily or Triple.
+
+### Intended size fence + egress (2026-08-15 — not yet a hard engine gate)
+
+Cadence SKUs stay $17 / $27. They are **not** unlimited GB if **Portabase** pays the pipe.
+
+| Rule | Intent |
+| --- | --- |
+| Included transfer | **10 GB per Escape** (bytes we ship that day, after incrementals) |
+| Triple | same 10 GB **per** Escape (max 30 GB/day) |
+| Same-region customer S3 | no transfer surcharge |
+| Internet vault (Dropbox / Drive / cross-region) over include | quote **before** run · ~**$0.15/GB** |
+| OSS / customer agent | they pay their pipe — no Portabase egress SKU |
+| Hosted locker | paid nicety · separate disk rent · not the default vault |
+
+Do not silently run a 50–500 GB first full to Dropbox on the $17 plan.
 
 Flow: sign in → `POST /api/cloud/subscribe` with `{ "planId": "cloud-17" | "cloud-27" }` → Square payment link → card on file → trial phase $0 → monthly plan.
 

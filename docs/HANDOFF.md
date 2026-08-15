@@ -6,7 +6,7 @@
 **Owner:** Ryan (operator). **Entity:** DataAutomation.ai, LLC · GitHub repo [data-automation-ai/portabase.dev](https://github.com/data-automation-ai/portabase.dev).  
 **Live site:** https://portabase.dev  
 **Repo:** `C:\Users\ryanh\git\portabase.dev` (branch `main`).  
-**Last handoff refresh:** 2026-08-07 (post Escape sample COMPLETE + fingerprints).
+**Last handoff refresh:** 2026-08-15 (Grok manager takeover — owner out for medical; replay argv fix + key-custody landing; live restore still blocked on target DB password).
 
 ---
 
@@ -279,6 +279,22 @@ Open `/app?demo=1`.
 | **Replay target created** | `svltssnxzqsrxtbjgaex` (`portabase-replay-proof`) — verify still ACTIVE; may need service_role + DB URL |
 | **Whitepaper / smoke** | `kiuwcdpjsdotkoojbkoi` — local smoke COMPLETE earlier; **not blank** → bad as replay target without wipe |
 | **Must not** | Restore into source; spool on F:; silent multi-hour local thrash |
+
+### Status as of 2026-08-15 (manager session)
+
+Owner asked Grok to take over (medical). **Do not wait** on cosmetic work. **Do not** restore, push, or spend without the password / explicit ask.
+
+| Item | Status |
+| --- | --- |
+| Product story locked | Customer custodian of capsule. Cloud = posting + GUI. Hosted locker / PC+Tailscale = niceties. If Portabase dies, OSS + their vault still restore. |
+| Key custody copy | Landing `/#key-custody`: least-privilege source key, live log, SMS on every access including theirs, reply **`REVOKE KEY`** deletes our secret (`STOP` ≠ kill). SMS *send/inbound* still unwired. |
+| Pricing intent | Keep **$17 / $27** cadence. Put back **10 GB transferred per Escape**. Surcharge **internet egress only** (~$0.15/GB over include). Same-region customer S3 = no transfer fee. Not yet coded as a hard fence. |
+| `replay` argv bug | **Fixed this session** (`enableCliFlag` on the argv slice `hasFlag` reads). Was: fake “proven restorable” with no writes. |
+| Restore-plan | Generated from gold capsule: 614 tables · 15 buckets · 232 functions · **895 MB** selected vs 477 MB cheap budget. Selective = whole tables/buckets/functions today — **not** per-object or uuid-`0` rows yet. |
+| Live restore | **Still BLOCKED** — `svltssnxzqsrxtbjgaex` ACTIVE; preflight opened COMPLETE capsule then `psql` FATAL password. `.env.replay-target.local` still `<DB_PASSWORD>`. Dashboard reset only. |
+| Must not | F:; workstation multi‑GB Storage; restore into `ekklokrukxmqlahtonnc`; claim product-done |
+
+**Human unblock:** Dashboard → portabase-replay-proof → Settings → Database → Reset password → session pooler URL in `.env.replay-target.local` → then dry-run / selective / small full restore in that order.
 
 ### Status as of 2026-08-06/07
 

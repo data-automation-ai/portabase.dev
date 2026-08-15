@@ -30,6 +30,8 @@ export const CLOUD_PLANS = Object.freeze({
   }),
 });
 
+export const SMS_KEY_KILL_PHRASE = 'REVOKE KEY';
+
 export const CLOUD_DEFAULT_PLAN_ID = 'cloud-17';
 export const CLOUD_PLAN_ID = CLOUD_DEFAULT_PLAN_ID;
 export const CLOUD_PRICE_MONTHLY_CENTS = CLOUD_PLANS['cloud-17'].priceMonthlyCents;
@@ -78,5 +80,5 @@ export function monthlyTotalCents(extraCyclesOrPlan = 0) {
 
 export function subscriptionDescription(planId = CLOUD_DEFAULT_PLAN_ID) {
   const plan = getCloudPlan(planId);
-  return `Portabase Cloud for Supabase — ${CLOUD_TRIAL_DAYS}-day trial then $${plan.priceMonthlyUsd}/mo (Square). ${plan.cadenceLabel}. SMS on success/failure. Up to ${CLOUD_MAX_AGENTS} agents. Card required. Customer provides capsule storage.`;
+  return `Portabase Cloud for Supabase — ${CLOUD_TRIAL_DAYS}-day trial then $${plan.priceMonthlyUsd}/mo (Square). ${plan.cadenceLabel}. SMS on success/failure and on every source-key access. Up to ${CLOUD_MAX_AGENTS} agents. Card required. Customer provides capsule storage.`;
 }

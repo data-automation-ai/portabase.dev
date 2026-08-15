@@ -170,7 +170,7 @@ function Header() {
       <Logo href="/#top" />
       <button className="menu" onClick={() => setOpen(!open)} aria-label="Toggle navigation">{open ? 'Close' : 'Menu'}</button>
       <nav className={open ? 'nav open' : 'nav'}>
-        <a href="/#what-is-this">What is this?</a><a href="/#why-now">Why now</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">The escape plan</a><a href="/security">Security</a><a href="/cloud">Cloud · $17 / $27</a><a href="/login">Sign in</a>
+        <a href="/#what-is-this">What is this?</a><a href="/#why-now">Why now</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">The escape plan</a><a href="/#key-custody">Your keys</a><a href="/security">Security</a><a href="/cloud">Cloud · $17 / $27</a><a href="/login">Sign in</a>
       </nav>
       <a className="button button-small desktop-cta" href="/login?next=/app">Start free trial <Arrow /></a>
     </div>
@@ -187,14 +187,14 @@ function Hero() {
         <p className="hero-usp"><span>USP</span><strong>Your Supabase Escape</strong> — a customer-owned way out when the dashboard is locked.</p>
         <h1>A Supabase lockout can freeze your <em>entire business.</em></h1>
         <p className="hero-risk-headline"><strong>No API. No Auth. No dashboard. No reachable backups.</strong></p>
-        <p className="hero-lead"><strong>Portabase is the Escape for Supabase</strong> — open source, Supabase-only. The free engine captures your <strong>database, Auth records, Storage object bytes, and Edge Functions</strong>; encrypts them; and stores the capsule where <em>you</em> choose. Platform backups cover the database — <strong>not your Storage files</strong>. Optional Cloud (this site) is the <strong>GUI, easy setup, and telemetry</strong> so the Escape keeps running — never custody of your keys.</p>
+        <p className="hero-lead"><strong>Portabase is the Escape for Supabase</strong> — open source, Supabase-only. The free engine captures your <strong>database, Auth records, Storage object bytes, and Edge Functions</strong>; encrypts them; and stores the capsule where <em>you</em> choose. Platform backups cover the database — <strong>not your Storage files</strong>. Optional Cloud (this site) is the <strong>GUI, easy setup, and telemetry</strong> so the Escape keeps running. The capsule stays in <em>your</em> storage. If Cloud holds a Supabase key so a job can run while you sleep, we hold it <strong>least-privilege</strong> — and you can watch every use, including your own.</p>
         <div className="hero-analogy"><span aria-hidden="true">⌂</span><p><b>Your landlord changed the locks.</b> The backup inside the building is not an Escape. Portabase keeps your way out in another building—tested, current, and under your control.</p></div>
         <div className="incident-factline"><b>MY INCIDENT · 95+ HOURS</b><span>“Billing dispute” cited</span><span>No details or paperwork</span><span>Card issuer found nothing identifiable</span><span>Singapore payment entity</span><span>No response from Supabase</span></div>
         <div className="hero-actions">
           <a className="button button-primary" href="#escape">Build your Escape <Arrow /></a>
           <a className="text-link" href="#stories">See what lockout looks like <span>↓</span></a>
         </div>
-        <div className="hero-proof"><span>USP · Escape</span><span>Supabase only</span><span>OSS free · Cloud = GUI &amp; telemetry</span></div>
+        <div className="hero-proof"><span>USP · Escape</span><span>Supabase only</span><span>OSS free · Cloud = GUI &amp; telemetry</span><span>Key access · live log + SMS</span></div>
       </div>
       {/* Bridge: headline → ban dialog (same placement as design example) */}
       <img
@@ -350,7 +350,7 @@ function WhatIsThis() {
         <h2>Open-source recovery.<br />Hosted convenience.</h2>
         <div>
           <p><strong>Community (free · open source):</strong> run the engine on a server, NAS, container, or your cloud account. Built for <strong>Supabase only</strong> today — database, Auth, <strong>Storage files (not just metadata)</strong>, and Edge Functions; encrypt; store where you choose; restore into a fresh project.</p>
-          <p><strong>Cloud (this website · paid):</strong> hosted <strong>GUI</strong>, easier configuration, <strong>telemetry</strong>, SMS on success/failure, and multi-person alerts. Same engine underneath. Never needs your passphrase or capsule bytes to page people.</p>
+          <p><strong>Cloud (this website · paid):</strong> hosted <strong>GUI</strong>, easier configuration, <strong>telemetry</strong>, SMS on success/failure, and a text on <strong>every source-key access — including yours</strong>. Same engine underneath. Never needs your passphrase or capsule bytes to page people.</p>
           <p><strong>Full capture is free. No license gate. Encryption code you can read.</strong></p>
         </div>
       </div>
@@ -710,6 +710,88 @@ function Escape() {
         <article><span>2</span><div><h3>Capture the application—not just Postgres</h3><p>Database and Auth records, Storage objects, Function source, manifests, and checksums become one encrypted recovery capsule.</p></div></article>
         <article><span>3</span><div><h3>Verify more than an upload message</h3><p>Destination integrity, ciphertext, AES-GCM authentication, and decrypted payload. Partial layers stay partial — never fake-green.</p></div></article>
         <article><span>4</span><div><h3>Restore offline; alert via Cloud if you want</h3><p>Guarded restore into a fresh project works without Cloud. Turn on Cloud when you want multi-person escalation if the schedule goes silent.</p></div></article>
+      </div>
+    </div>
+  </section>;
+}
+
+/**
+ * Landing: Cloud as least-privilege custodian of the Supabase source key.
+ * Aesthetic: live inspection window / camera on the key — not a three-card trust brochure.
+ */
+function KeyCustody() {
+  const feed = [
+    { t: '02:14:07', who: 'ESCAPE JOB', ev: 'GetSecretValue · workspace secret', you: false },
+    { t: '02:14:08', who: 'SMS', ev: 'Text sent · key retrieved (scheduled Escape)', you: false },
+    { t: '09:41:22', who: 'YOU', ev: 'Console opened the live key feed', you: true },
+    { t: '09:41:22', who: 'SMS', ev: 'Text sent · access includes your own session', you: true },
+    { t: '18:03:11', who: 'YOU', ev: 'Rotated the dump credential', you: true },
+    { t: '18:03:44', who: 'YOU', ev: 'SMS in · REVOKE KEY → secret deleted', you: true },
+  ];
+  return <section className="section key-custody" id="key-custody">
+    <div className="shell">
+      <div className="section-kicker green">CLOUD · LEAST-PRIVILEGE KEY CUSTODY</div>
+      <div className="key-custody-heading">
+        <h2>If we hold a key so Escape can run,<br /><em>you watch every time it is used.</em></h2>
+        <p>
+          You remain custodian of the <strong>capsule</strong> — sealed files in <em>your</em> Dropbox, S3, or other vault.
+          Open source still restores it if this website disappears.
+          Cloud is different on one point: an unattended job needs a way into Supabase.
+          When you choose that path, we are a <strong>least-privilege custodian of the source credential</strong>, not a silent landlord of your business.
+        </p>
+      </div>
+      <div className="key-custody-honest" role="note">
+        <strong>Honest:</strong> a managed runner must use the credential during the job window. We do not pretend that risk is zero.
+        We make the use <strong>narrow, brief, visible, and texted</strong> — including when <em>you</em> touch it.
+      </div>
+      <div className="key-custody-layout">
+        <ol className="key-custody-steps">
+          <li>
+            <b>Least privilege — not the god key if we can avoid it</b>
+            <p>Prefer a <strong>read-only dump role</strong> (SELECT / <code>pg_dump</code> / Storage read) over a standing <code>service_role</code> that can empty production. The credential is injected for the job, then gone. It is not painted on the console.</p>
+          </li>
+          <li>
+            <b>Locked in AWS — only the isolated runner can fetch it</b>
+            <p>Stored in Secrets Manager. Retrieve is allowed from the isolated runner network (VPC endpoint), not from the public internet. Operators do not get standing <code>GetSecretValue</code>.</p>
+          </li>
+          <li>
+            <b>Live log — your key, your stream</b>
+            <p>Every retrieve is written to a CloudWatch stream scoped to <em>your</em> secret. You open it in the console: time, role, “fetched” or “denied.” The key value is never in the feed.</p>
+          </li>
+          <li>
+            <b>SMS on every access — including yours</b>
+            <p>A text as soon as the credential is used: scheduled Escape, rotate, or you opening the live feed. No silent look. Your own access is not exempt.</p>
+          </li>
+          <li>
+            <b>Reply <code>REVOKE KEY</code> — we delete it from our account</b>
+            <p>
+              Wrong access? Text back that exact phrase from a number on the workspace.
+              We destroy the source credential in our Secrets Manager. Your capsules stay where they are. Next Escape fails until you attach a new key.
+              <code>STOP</code> only opts out of texts — it does not kill the key. Optional: your KMS, or run OSS and we never hold it.
+            </p>
+          </li>
+        </ol>
+        <aside className="key-custody-board" aria-label="Example live key-access feed">
+          <div className="key-custody-board-head">
+            <span>LIVE · SECRET ACCESS</span>
+            <b>workspace / supabase-dump</b>
+            <i>demo picture — not a live secret</i>
+          </div>
+          <ul className="key-custody-feed">
+            {feed.map((row, i) => (
+              <li key={i} className={row.you ? 'is-you' : ''}>
+                <time>{row.t}</time>
+                <em>{row.who}</em>
+                <span>{row.ev}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="key-custody-sms" aria-hidden="true">
+            <small>SMS · NOW</small>
+            <p>Portabase: source key retrieved at 02:14 UTC for scheduled Escape. Unexpected? Reply REVOKE KEY — we delete it from our account. STOP opts out of texts only.</p>
+          </div>
+          <a className="text-link" href="/security#supabase-keys">Full security write-up <Arrow /></a>
+        </aside>
       </div>
     </div>
   </section>;
@@ -1241,7 +1323,7 @@ function CloudPage() {
                 <tr><td>Read every line that encrypts your capsule</td><td className="yes">Yes · public GitHub</td><td className="yes">Same public code</td></tr>
                 <tr><td>Hosted GUI / ease of configuration</td><td className="no">CLI / self-host config</td><td className="yes">Yes · this website</td></tr>
                 <tr><td>Telemetry &amp; fleet / job status</td><td className="no">Local status only</td><td className="yes">Yes</td></tr>
-                <tr><td>SMS on success &amp; failure · multi-person alerts</td><td className="no">DIY webhooks only</td><td className="yes">Yes</td></tr>
+                <tr><td>SMS on success, failure, and every key access (including yours)</td><td className="no">DIY webhooks only</td><td className="yes">Yes</td></tr>
                 <tr><td>Advanced reports &amp; RPO / miss dashboards</td><td className="no">No</td><td className="yes">Yes</td></tr>
                 <tr><td>Portabase account required</td><td className="no">No</td><td className="mid">Yes · for Cloud only</td></tr>
               </tbody>
@@ -1343,7 +1425,7 @@ function CloudPage() {
             <p><strong>Launch: Supabase only.</strong> Protect database, Auth, Storage, and Edge Functions. <strong>Payment: Square</strong> (card on file). Cloud is ops only — <strong>you provide capsule storage</strong>. Portabase never hosts recovery bytes.</p>
             <div className="subscribe-case">
               <article><small>01 · SUPABASE FIRST</small><b>Built for Supabase projects.</b><p>Sign in with Supabase Auth (email or Google). Capture DB, Auth inventory, Storage objects, Edge Functions.</p></article>
-              <article><small>02 · TWO PLANS</small><b>$17 · 1 escape / 24h · or · $27 · up to 3 escapes / day.</b><p>Pick how often an escape may run. SMS on success and failure. Up to 12 agents.</p></article>
+              <article><small>02 · TWO PLANS</small><b>$17 · 1 escape / 24h · or · $27 · up to 3 escapes / day.</b><p>Pick how often an escape may run. SMS on success, failure, and every source-key access. Up to 12 agents.</p></article>
               <article><small>03 · BYO CAPSULE STORAGE</small><b>You supply the vault.</b><p>S3, Dropbox, NAS, or Local Starter (≤100 MB). Capsules never live on Portabase. Keys stay on your runner.</p></article>
             </div>
             <div className="one-time-math">
@@ -1375,7 +1457,7 @@ function CloudPage() {
               <li><span>✓</span> Supabase projects only (launch)</li>
               <li><span>✓</span> $17 · 1 escape / 24h</li>
               <li><span>✓</span> $27 · up to 3 escapes / day</li>
-              <li><span>✓</span> SMS on success &amp; failure · up to 12 agents</li>
+              <li><span>✓</span> SMS on success, failure, and every key access</li>
               <li><span>✓</span> 7-day free trial · card on file</li>
               <li><span>✓</span> You provide capsule storage</li>
               <li><span>✓</span> Console · telemetry · alert chains</li>
@@ -1399,7 +1481,7 @@ function LegacyPurchaseNotice() {
 }
 
 function Footer() {
-  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#reality">The reality</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">Escape plan</a><a href="/#audit">Risk check</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · $17 / $27</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">GitHub · portabase.dev</a><span>Independent product.<br />Not affiliated with Supabase.</span><span>Apache-2.0 open core. Cloud is ops subscription — never custody of keys or capsule contents. $17/mo · 1 escape/24h · or · $27/mo · up to 3 escapes/day.</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your cloud. Your way out.</span></div></footer>;
+  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#reality">The reality</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">Escape plan</a><a href="/#key-custody">Key custody</a><a href="/#audit">Risk check</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · $17 / $27</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">GitHub · portabase.dev</a><span>Independent product.<br />Not affiliated with Supabase.</span><span>Apache-2.0 open core. Capsule stays in your vault. If Cloud holds a source key, it is least-privilege, logged live, and texted on every access — including yours. $17/mo · 1 escape/24h · or · $27/mo · up to 3 escapes/day.</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your cloud. Your way out.</span></div></footer>;
 }
 
 /**
@@ -1548,7 +1630,8 @@ function SecurityPage() {
                   <p>
                     Credentials are injected into the <strong>job runner for the Escape window</strong> — capture, encrypt, verify, or guarded restore —
                     not painted into every screen of the marketing site or console UI.
-                    The console shows <em>that</em> a project is connected and job status; it is not a museum of raw service-role values.
+                    Prefer a <strong>read-only dump role</strong> (SELECT / <code>pg_dump</code> / Storage read) over a standing <code>service_role</code> that can mutate or empty production.
+                    The console shows <em>that</em> a project is connected and job status; it is not a museum of raw secret values.
                   </p>
                 </li>
                 <li>
@@ -1625,6 +1708,12 @@ function SecurityPage() {
                       <td>Redaction pass strips password / passphrase / token-shaped fields</td>
                     </tr>
                     <tr>
+                      <td><strong>Source-key retrieve (<code>GetSecretValue</code>)</strong></td>
+                      <td>Yes — every fetch, including yours</td>
+                      <td>Time, principal/role, fetched or denied, on <em>your</em> secret ARN only</td>
+                      <td><strong>No</strong> — event only; the key body is never in the stream</td>
+                    </tr>
+                    <tr>
                       <td><strong>Your AWS CloudTrail (optional)</strong></td>
                       <td>When Trail is on in <em>your</em> account</td>
                       <td><code>kms:*</code>, <code>s3:PutObject</code> on your vault — entirely in your AWS</td>
@@ -1647,6 +1736,16 @@ function SecurityPage() {
 
               <h4 className="keys-fortify-h4">4 · Alerting — when humans get woken up</h4>
               <div className="keys-fortify-alert-grid">
+                <article>
+                  <small>KEY ACCESS · INCLUDING YOURS</small>
+                  <b>SMS as soon as the credential is used</b>
+                  <p>
+                    A text on every retrieve of the source key: scheduled Escape, rotate, or you opening the live feed.
+                    Your own access is not exempt. The message says <em>that</em> it was used — never the secret itself.
+                    Reply <strong>REVOKE KEY</strong> from a registered number and we delete that credential from our Secrets Manager immediately.
+                    Capsules in your vault are untouched. <code>STOP</code> is carrier opt-out only — it does not destroy the key.
+                  </p>
+                </article>
                 <article>
                   <small>JOB FAILED</small>
                   <b>Escape did not complete</b>
@@ -2201,7 +2300,7 @@ function SecurityPage() {
 
 function HomePage() {
   useEffect(() => { document.title = 'Portabase — Your Supabase Escape'; }, []);
-  return <><Header /><main><Hero /><HeroConcept /><WhatIsThis /><WhyNow /><Reality /><ClosureRisk /><Stories /><Escape /><Audit /><Cutover /><PublicDeal /><CloudTeaser /></main><Footer /></>;
+  return <><Header /><main><Hero /><HeroConcept /><WhatIsThis /><WhyNow /><Reality /><ClosureRisk /><Stories /><Escape /><KeyCustody /><Audit /><Cutover /><PublicDeal /><CloudTeaser /></main><Footer /></>;
 }
 
 function App() {

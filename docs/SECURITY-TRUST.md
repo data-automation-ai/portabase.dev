@@ -50,6 +50,8 @@ Most users will not know KMS, CloudTrail, or CloudWatch. That is expected. The *
 | **Customer KMS CMK** | Authority in their account; revocable |
 | **Customer CloudTrail** | Their API audit; CloudTrail live in console |
 | **Job CloudWatch** | Secret-scoped live tail + retroactive history |
+| **SMS on source-key access** | Text on every retrieve, including the customer's own console access |
+| **SMS kill switch** | Reply `REVOKE KEY` from a registered number → delete the Cloud-held source secret. Does not delete capsules. `STOP` is opt-out only. |
 
 ## Always true on Cloud
 

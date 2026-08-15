@@ -290,7 +290,7 @@ export function AlertsHubPage(props) {
   const [tab, setTab] = useState('sms');
   return (
     <>
-      <PageHead title="Alerts" subtitle="SMS on success/failure at run time · escalation chains · channels." />
+      <PageHead title="Alerts" subtitle="SMS on success, failure, and every source-key access · escalation chains · channels." />
       <div className="pb-tabs">
         <button type="button" className={tab === 'sms' ? 'is-active' : ''} onClick={() => setTab('sms')}>SMS texts</button>
         <button type="button" className={tab === 'policies' ? 'is-active' : ''} onClick={() => setTab('policies')}>Escalation</button>
@@ -1382,7 +1382,7 @@ export function AlertsPage({ state, setState, toast, forcedTab, embedded }) {
   if (embedded) return inner;
   return (
     <>
-      <PageHead title="Alerts" subtitle="SMS on success/failure · escalation chains · channels." />
+      <PageHead title="Alerts" subtitle="SMS on success, failure, and every source-key access · escalation chains · channels." />
       {inner}
     </>
   );

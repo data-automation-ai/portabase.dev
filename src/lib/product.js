@@ -61,9 +61,13 @@ export const CLOUD_MAX_EXTRA_CYCLES = 0;
 export const SMS_DEFAULTS = {
   onFailure: true,
   onSuccess: true,
+  onKeyAccess: true,
   maxNumbersBase: 3,
   quietHoursOptional: true,
 };
+
+/** Exact inbound SMS phrase that deletes the Cloud-held source credential. Not STOP (carrier opt-out). */
+export const SMS_KEY_KILL_PHRASE = 'REVOKE KEY';
 
 export const STORAGE_POLICY = {
   owner: 'customer',
@@ -140,7 +144,7 @@ export function whatCloudIncludes(planIdOrExtra = CLOUD_DEFAULT_PLAN_ID) {
     'Supabase project recovery ops (launch scope)',
     'Hosted ops console (status, alerts, replay, CloudWatch/CloudTrail live)',
     plan.cadenceLabel,
-    'SMS on success and failure at run time (manage numbers in console)',
+    'SMS on success, failure, and every source-key access — including yours',
     `Up to ${CLOUD_MAX_AGENTS} agents (telemetry runners)`,
     'Opt-in agent health metadata only',
     'Multi-person alert chains (SMS / email / Slack)',
@@ -161,7 +165,7 @@ export function agentSlotsUsed(count) {
 export function whatCloudDoesNotInclude() {
   return [
     'Capsule storage (you bring S3, Drive, Dropbox, NAS, Local Starter, etc.)',
-    'Encryption passphrases or Supabase service keys',
+    'Your capsule encryption passphrase as our recovery vault (source keys, when you opt into Cloud custody, are least-privilege and watched)',
     'Capsule ciphertext (never lands in Portabase Cloud)',
     'Managed object store billed by Portabase',
     'Unlimited escapes (choose $17 · 1 escape/24h or $27 · up to 3 escapes/day)',
@@ -172,6 +176,8 @@ export function smsManagementFeatures() {
   return [
     { id: 'on_failure', label: 'Text on run failure', defaultOn: true },
     { id: 'on_success', label: 'Text on run success', defaultOn: true },
+    { id: 'on_key_access', label: 'Text on every source-key access (including your own)', defaultOn: true },
+    { id: 'revoke_key_sms', label: 'Reply REVOKE KEY to delete the source credential from Portabase', defaultOn: true },
     { id: 'numbers', label: 'Manage phone numbers (E.164)', defaultOn: true },
     { id: 'verify', label: 'Verify numbers before they can receive alerts', defaultOn: true },
     { id: 'quiet', label: 'Optional quiet hours (success only)', defaultOn: false },

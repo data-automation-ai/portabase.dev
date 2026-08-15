@@ -73,6 +73,7 @@ import {
   filterStorageManifestByPlan,
   restorePlanSelectedFunctionNames,
   applyRestorePlanToExpectedInventory,
+  enableCliFlag,
 } from './portabase-core.mjs';
 import { resolveEdition } from './license.mjs';
 import { emitTelemetry } from './telemetry.mjs';
@@ -2607,9 +2608,10 @@ async function replay() {
     throw new Error('Set PORTABASE_TARGET_SUPABASE_URL, PORTABASE_TARGET_SERVICE_ROLE_KEY (or SECRET_KEY), and PORTABASE_TARGET_DB_URL for the new project only.');
   }
 
-  // Force write path used by restore() (unless user asked preflight-only)
+  // Force write path used by restore() (unless user asked preflight-only).
+  // Must mutate `argv` (the slice hasFlag reads), not only process.argv.
   if (!hasFlag('preflight') && !hasFlag('execute') && !hasFlag('drill')) {
-    process.argv.push('--execute');
+    enableCliFlag(argv, 'execute');
   }
 
   console.log('REPLAY STEPS: open capsule → decrypt/verify → refuse source target → blank preflight → restore layers → read-back evidence\n');
