@@ -192,7 +192,7 @@ function Hero() {
         <div className="incident-factline"><b>MY INCIDENT · 95+ HOURS</b><span>“Billing dispute” cited</span><span>No details or paperwork</span><span>Card issuer found nothing identifiable</span><span>Singapore payment entity</span><span>No response from Supabase</span></div>
         <div className="hero-actions">
           <a className="button button-primary" href="#escape">Build your Escape <Arrow /></a>
-          <a className="text-link" href="#stories">See what lockout looks like <span>↓</span></a>
+          <a className="text-link" href="#capsule">See what a capsule is <span>↓</span></a>
         </div>
         <div className="hero-proof"><span>USP · Escape</span><span>Supabase only</span><span>OSS free · Cloud = GUI &amp; telemetry</span><span>Key access · live log + SMS</span></div>
       </div>
@@ -215,6 +215,76 @@ function Hero() {
     </div>
     <div className="reality-ticker"><div><span>PROJECT DELETED</span><span>OWNER LOCKED OUT</span><span>PAYMENT FAILED</span><span>STORAGE NOT IN BACKUP</span><span>API KEYS REVOKED</span><span>SUPPORT TICKET OPEN</span><span>PROJECT DELETED</span><span>OWNER LOCKED OUT</span></div></div>
   </section>;
+}
+
+/** Homepage teaching visual: backup vs capsule, readable in one glance. */
+function CapsuleBoard() {
+  const rows = [
+    { name: 'Database', backup: true, capsule: true, note: 'Schema + data' },
+    { name: 'Auth users', backup: true, capsule: true, note: 'Still behind their login' },
+    { name: 'Your files', backup: false, capsule: true, extra: true, note: 'Storage bytes, not metadata' },
+    { name: 'Edge Functions', backup: false, capsule: true, extra: true, note: 'Source code' },
+    { name: 'Works if you are banned', backup: false, capsule: true, extra: true, note: 'The whole point' },
+  ];
+  return (
+    <section className="capsule-board-section" id="capsule" aria-label="Platform backup versus Escape capsule">
+      <div className="shell">
+        <div className="capsule-board-head">
+          <div className="section-kicker green">THE VISUAL</div>
+          <h2>Their backup is still in the building.<br /><em>The capsule already left.</em></h2>
+        </div>
+        <div className="capsule-board">
+          <article className="cb-col cb-dead">
+            <header>
+              <small>INSIDE THE LOCKED ACCOUNT</small>
+              <h3>Platform backup</h3>
+              <p>A database snapshot behind the same door. If you cannot log in, you cannot take it with you.</p>
+            </header>
+            <div className="cb-stage" aria-hidden="true">
+              <div className="cb-door">
+                <i />
+                <b>LOCKED</b>
+                <span>No dashboard · no download</span>
+              </div>
+            </div>
+            <ul className="cb-rows">
+              {rows.map(row => (
+                <li key={row.name} className={row.backup ? 'is-on' : 'is-off'}>
+                  <em>{row.backup ? 'IN' : 'OUT'}</em>
+                  <b>{row.name}</b>
+                  <span>{row.backup ? row.note : 'Not in their snapshot'}</span>
+                </li>
+              ))}
+            </ul>
+          </article>
+          <article className="cb-col cb-live">
+            <header>
+              <small>IN STORAGE YOU OWN</small>
+              <h3>Escape capsule</h3>
+              <p>One sealed kit in <em>your</em> Dropbox, S3, or NAS. Open it into a new Supabase. We never keep the box.</p>
+            </header>
+            <figure className="cb-stage cb-stage-photo">
+              <img src="/images/diagrams/capsule-sealed.jpg" alt="Sealed Portabase capsule case" width="1920" height="1080" />
+              <figcaption>.pbase · manifest · checksums</figcaption>
+            </figure>
+            <ul className="cb-rows">
+              {rows.map(row => (
+                <li key={row.name} className={row.capsule ? (row.extra ? 'is-on is-extra' : 'is-on') : 'is-off'}>
+                  <em>{row.capsule ? 'IN' : 'OUT'}</em>
+                  <b>{row.name}</b>
+                  <span>{row.extra ? 'Not in official backup' : row.note}</span>
+                </li>
+              ))}
+            </ul>
+          </article>
+        </div>
+        <p className="capsule-board-line">
+          <strong>Backup</strong> = copy you can only reach if the landlord still lets you in.
+          <strong> Capsule</strong> = the same business, plus the files and Functions, already in a building you hold the key to.
+        </p>
+      </div>
+    </section>
+  );
 }
 
 function HeroConcept() {
@@ -283,14 +353,6 @@ function HeroConcept() {
         <figcaption>
           <span>Same engine under Community and Cloud — commercial difference is hosted ops, not custody of recovery bytes.</span>
           <small>Product model · not a live console</small>
-        </figcaption>
-      </figure>
-      <figure className="hero-concept hero-concept-secondary">
-        <div className="hero-concept-label"><span>WHEN SUPABASE IS LOCKED</span><b>Your pre-incident capsule still exists</b></div>
-        <img src="/images/supabase-vt1.png" alt="Conceptual scene: locked Supabase project while Portabase evacuates encrypted recovery streams to independent destinations and a new project" width="1920" height="1080" />
-        <figcaption>
-          <span>OSS engine · customer destinations · restore without the original account</span>
-          <small>Conceptual illustration · not a live dashboard</small>
         </figcaption>
       </figure>
     </div>
@@ -668,20 +730,65 @@ function EscapeVsSupabaseDiagram() {
   );
 }
 
+function CapsuleVisual() {
+  const layers = [
+    { n: '01', title: 'Database', body: 'Roles, schema, data — the only layer official backup usually covers.' },
+    { n: '02', title: 'Auth', body: 'Users and identities. Still trapped if the dashboard is banned.' },
+    { n: '03', title: 'Your files', body: 'Real Storage object bytes. Official backups keep metadata, not the files.', extra: true },
+    { n: '04', title: 'Edge Functions', body: 'Function source. Outside the Postgres snapshot. Gone in a platform restore.', extra: true },
+  ];
+  return (
+    <div className="capsule-viz" id="what-is-a-capsule">
+      <div className="section-kicker green">WHAT A CAPSULE IS</div>
+      <h3>A backup lives in their building.<br /><em>A capsule already left.</em></h3>
+      <p className="capsule-viz-lead">
+        Official backup is a database snapshot <strong>behind the same login</strong>.
+        A Portabase capsule is a sealed kit — database, Auth, <strong>the actual files</strong>, and Function source —
+        encrypted and posted to <em>your</em> Dropbox, S3, or NAS. If they lock the door, you still have the box.
+      </p>
+      <div className="capsule-viz-duo">
+        <figure>
+          <img src="/images/diagrams/capsule-other-building.jpg" alt="Locked glass office on the left, sealed Portabase case already sitting outside in the rain by another building" width="1920" height="1080" />
+          <figcaption>
+            <span className="capsule-tag capsule-tag-bad">Their backup</span>
+            still inside the locked office.
+            <span className="capsule-tag capsule-tag-ok">Your capsule</span>
+            already in the other building.
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="/images/diagrams/capsule-sealed.jpg" alt="Sealed black Portabase flight case with an acid-lime gasket on a warehouse floor" width="1920" height="1080" />
+          <figcaption>
+            Encrypted <code>.pbase</code> + manifest + checksums. You hold the case. We do not.
+          </figcaption>
+        </figure>
+      </div>
+      <div className="capsule-cutaway">
+        <figure>
+          <img src="/images/diagrams/capsule-open-trays.jpg" alt="Open Portabase case showing four sealed trays — the layers of a complete Escape" width="1600" height="1200" />
+          <figcaption>Four trays. One kit. Official backup is only the first tray.</figcaption>
+        </figure>
+        <ol className="capsule-layers">
+          {layers.map(layer => (
+            <li key={layer.n} className={layer.extra ? 'is-extra' : ''}>
+              <small>{layer.n}{layer.extra ? ' · NOT IN THEIR BACKUP' : ''}</small>
+              <b>{layer.title}</b>
+              <p>{layer.body}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </div>
+  );
+}
+
 function Escape() {
   return <section className="section escape" id="escape">
     <div className="shell">
       <div className="section-kicker green">USP · THE ESCAPE</div>
       <div className="escape-heading"><h2>When the front door fails,<br /><em>leave through your own.</em></h2><p><strong>Escape</strong> is the USP: a customer-owned way out of a Supabase lockout — not a second landlord. Open-source engine builds the encrypted capsule in storage you own (DB, Auth, Storage bytes, Functions). Cloud (this site) keeps the Escape easy with GUI, configuration, and telemetry — and who to wake if the job goes quiet.</p></div>
+      <CapsuleVisual />
       <EscapeVsSupabaseDiagram />
-      <figure className="escape-vault-hero">
-        <div className="viz-panel-label"><span>USP · THE ESCAPE CAPSULE</span><b>Armored · off-site · under guard</b></div>
-        <img loading="lazy" src="/images/diagrams/escape-capsule-vault.jpg" alt="Armored Escape recovery capsule sealed on a pedestal inside a vast high-security storage facility with guards and surveillance" width="1920" height="1080" />
-        <figcaption>
-          <span>Your Escape is not “another login to Supabase.” It is a sealed capsule in storage you control.</span>
-          <small>Conceptual · product illustration</small>
-        </figcaption>
-      </figure>
       <div className="viz-panel-grid escape-viz">
         <figure className="viz-panel">
           <div className="viz-panel-label"><span>HOW IT WORKS</span><b>Encrypt outside the locked account</b></div>
@@ -1447,7 +1554,7 @@ function CloudPage() {
               </div>
               <p>Ops console, telemetry, multi-person alerts. Capsules encrypt on your runner and land in <strong>your</strong> storage.</p>
             </div>
-            <div className="promo-chip"><strong>Payment: Square.</strong> Card required. Trial free 7 days → <strong>$17</strong> (1 escape/24h) or <strong>$27</strong> (up to 3 escapes/day). Storage is always bring-your-own.</div>
+            <div className="promo-chip"><strong>Payment: Square.</strong> Card required. Trial free 7 days → <strong>$17</strong> (1 escape/24h) or <strong>$27</strong> (up to 3 escapes/day). <strong>7-day money-back is self-serve</strong> — you tap refund, we close the account. Storage is always bring-your-own.</div>
             <div className="purchase-definition">
               <span>WHAT YOU BRING</span>
               <strong>Capsule storage + runner secrets</strong>
@@ -1459,6 +1566,7 @@ function CloudPage() {
               <li><span>✓</span> $27 · up to 3 escapes / day</li>
               <li><span>✓</span> SMS on success, failure, and every key access</li>
               <li><span>✓</span> 7-day free trial · card on file</li>
+              <li><span>✓</span> 7-day money-back · you tap refund, account closes</li>
               <li><span>✓</span> You provide capsule storage</li>
               <li><span>✓</span> Console · telemetry · alert chains</li>
               <li><span>✓</span> Keys &amp; capsules stay yours</li>
@@ -2300,7 +2408,7 @@ function SecurityPage() {
 
 function HomePage() {
   useEffect(() => { document.title = 'Portabase — Your Supabase Escape'; }, []);
-  return <><Header /><main><Hero /><HeroConcept /><WhatIsThis /><WhyNow /><Reality /><ClosureRisk /><Stories /><Escape /><KeyCustody /><Audit /><Cutover /><PublicDeal /><CloudTeaser /></main><Footer /></>;
+  return <><Header /><main><Hero /><CapsuleBoard /><HeroConcept /><WhatIsThis /><WhyNow /><Reality /><ClosureRisk /><Stories /><Escape /><KeyCustody /><Audit /><Cutover /><PublicDeal /><CloudTeaser /></main><Footer /></>;
 }
 
 function App() {

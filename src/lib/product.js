@@ -15,6 +15,8 @@
 export const LAUNCH_PLATFORM = 'supabase';
 
 export const CLOUD_TRIAL_DAYS = 7;
+/** Self-serve money-back window after first paid charge (and always during the $0 trial). */
+export const CLOUD_MONEY_BACK_DAYS = 7;
 export const CLOUD_CURRENCY = 'USD';
 export const CLOUD_PAYMENT_GATEWAY = 'square';
 export const CLOUD_MAX_AGENTS = 12;
@@ -149,6 +151,7 @@ export function whatCloudIncludes(planIdOrExtra = CLOUD_DEFAULT_PLAN_ID) {
     'Opt-in agent health metadata only',
     'Multi-person alert chains (SMS / email / Slack)',
     `7-day trial then ${priceLabel(plan.priceMonthlyCents)} via Square (card required)`,
+    '7-day money-back: you tap refund — we refund Square and close Cloud',
   ];
 }
 

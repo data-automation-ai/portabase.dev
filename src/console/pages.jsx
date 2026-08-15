@@ -1501,7 +1501,7 @@ export function TeamPage({ state, setState, toast, embedded }) {
   return (<><PageHead title="Team" subtitle="Who can see this workspace." />{body}</>);
 }
 
-export function BillingPage({ state, me, startTrial, busy, setState, toast, embedded }) {
+export function BillingPage({ state, me, startTrial, requestRefund, busy, setState, toast, embedded }) {
   const b = { ...state.billing, ...(me?.subscription || {}) };
   const planId = b.plan && CLOUD_PLANS[b.plan] ? b.plan : (state.billing.planId || CLOUD_DEFAULT_PLAN_ID);
   const plan = getCloudPlan(planId);
@@ -1575,6 +1575,23 @@ export function BillingPage({ state, me, startTrial, busy, setState, toast, embe
             >
               {busy ? 'Opening Square…' : `Pay with Square · 7-day trial then $${plan.priceMonthlyUsd}/mo`}
             </button>
+          )}
+          {me?.access?.hasAccess && me?.access?.moneyBack?.ok && (
+            <button
+              type="button"
+              className="pb-btn pb-btn-ghost"
+              style={{ marginTop: 16 }}
+              disabled={busy}
+              onClick={() => requestRefund?.()}
+            >
+              {busy ? 'Closing…' : 'Refund & close account'}
+            </button>
+          )}
+          {me?.access?.hasAccess && (
+            <p className="pb-muted" style={{ marginTop: 10, fontSize: 12, lineHeight: 1.5 }}>
+              7-day money-back is self-serve. You trigger the refund. We cancel Square and close Cloud.
+              Capsules in your vault are not deleted.
+            </p>
           )}
         </div>
         <div className="pb-card">

@@ -6,7 +6,7 @@ import {
 } from './data/store.js';
 import { CLOUD_VERSIONS, normalizeCloudVersion, getStoredCloudVersion, setStoredCloudVersion, isSupabaseOnlyLaunch } from '../lib/cloud-versions.js';
 import { clearSession, loadSession, sessionCloudVersion, sessionUser } from '../lib/session.js';
-import { ensureSessionForVersion, fetchMe, startTrialCheckout, confirmCheckout } from '../lib/cloud-api.js';
+import { ensureSessionForVersion, fetchMe, startTrialCheckout, confirmCheckout, requestSelfRefund } from '../lib/cloud-api.js';
 import * as supabaseAuth from '../lib/supabase-auth.js';
 import * as awsAuth from '../lib/cognito.js';
 import {
@@ -214,6 +214,27 @@ export function ConsoleApp() {
     }
   };
 
+  const requestRefund = async () => {
+    if (sessionStorage.getItem('portabase.console.demo') === '1') {
+      toast('Demo mode — refund is not sent to Square', 'ok');
+      return;
+    }
+    if (!window.confirm('This refunds any first charge still inside the 7-day window, cancels Square, and closes Cloud access. Capsules in your vault stay. Continue?')) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await requestSelfRefund(version);
+      toast(result.message || 'Account closed', 'ok');
+      const data = await fetchMe(version);
+      setMe(data);
+    } catch (e) {
+      toast(e.message || 'Refund failed', 'danger');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const signOut = async () => {
     // Launch: Supabase Auth only. Cognito sign-out retained behind flag.
     if (version === 'aws' && !isSupabaseOnlyLaunch()) {
@@ -270,6 +291,7 @@ export function ConsoleApp() {
     params: { id: route.id },
     busy,
     startTrial,
+    requestRefund,
     resetDemo: () => {
       const next = resetConsoleState({ ...user, cloudVersion: version });
       setStateRaw(next);

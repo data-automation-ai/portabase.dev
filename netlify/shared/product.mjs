@@ -3,6 +3,7 @@
 export const LAUNCH_PLATFORM = 'supabase';
 
 export const CLOUD_TRIAL_DAYS = 7;
+export const CLOUD_MONEY_BACK_DAYS = 7;
 export const CLOUD_CURRENCY = 'USD';
 export const CLOUD_PAYMENT_GATEWAY = 'square';
 export const CLOUD_MAX_AGENTS = 12;

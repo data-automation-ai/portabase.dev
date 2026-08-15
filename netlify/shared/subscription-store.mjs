@@ -79,6 +79,30 @@ export function trialEndsAtFrom(startIso, days = 7) {
   return new Date(start.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
+export function moneyBackEligible(record, now = new Date(), windowDays = 7) {
+  if (!record) return { ok: false, reason: 'no_subscription' };
+  const status = String(record.status || 'none');
+  if (['refunded', 'closed', 'canceled'].includes(status)) {
+    return { ok: false, reason: 'already_closed' };
+  }
+  if (!['trialing', 'active', 'past_due'].includes(status)) {
+    return { ok: false, reason: 'not_active' };
+  }
+  if (status === 'trialing') {
+    return { ok: true, reason: 'trial', refundExpectedCents: 0 };
+  }
+  const paidAt = record.firstPaidAt || record.startedAt;
+  if (!paidAt) return { ok: false, reason: 'no_paid_timestamp' };
+  const deadline = new Date(paidAt).getTime() + windowDays * 24 * 60 * 60 * 1000;
+  if (now.getTime() > deadline) return { ok: false, reason: 'window_closed' };
+  return {
+    ok: true,
+    reason: 'paid_window',
+    refundExpectedCents: Number(record.lastPaymentAmountCents) || 0,
+    deadline: new Date(deadline).toISOString(),
+  };
+}
+
 export function deriveAccess(record) {
   if (!record) return { status: 'none', hasAccess: false, label: 'No subscription' };
   const status = String(record.status || 'none');
@@ -91,10 +115,13 @@ export function deriveAccess(record) {
         : status === 'active' ? 'Active subscription'
           : status === 'past_due' ? 'Past due'
             : status === 'canceled' ? 'Canceled'
+              : status === 'refunded' ? 'Refunded · closed'
+                : status === 'closed' ? 'Closed'
               : status === 'checkout_pending' ? 'Checkout pending'
                 : 'No subscription',
     trialEndsAt: record.trialEndsAt || null,
     currentPeriodEnd: record.currentPeriodEnd || null,
     priceMonthlyCents: record.priceMonthlyCents || 1700,
+    moneyBack: moneyBackEligible(record),
   };
 }

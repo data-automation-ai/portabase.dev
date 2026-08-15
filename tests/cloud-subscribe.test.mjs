@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildSubscriptionPaymentLinkRequest, PRICE_MONTHLY_CENTS, STORAGE_POLICY, TRIAL_DAYS } from '../netlify/shared/square-cloud.mjs';
 import { CLOUD_MAX_AGENTS, CLOUD_PAYMENT_GATEWAY, CLOUD_PRICE_MONTHLY_CENTS, CLOUD_PLANS, getCloudPlan } from '../netlify/shared/product.mjs';
-import { deriveAccess, trialEndsAtFrom } from '../netlify/shared/subscription-store.mjs';
+import { deriveAccess, moneyBackEligible, trialEndsAtFrom } from '../netlify/shared/subscription-store.mjs';
 
 test('subscription payment link is $0 trial with plan variation id', () => {
   const body = buildSubscriptionPaymentLinkRequest({
@@ -60,5 +60,13 @@ test('deriveAccess treats trialing as hasAccess', () => {
   assert.equal(deriveAccess({ status: 'trialing' }).hasAccess, true);
   assert.equal(deriveAccess({ status: 'active' }).hasAccess, true);
   assert.equal(deriveAccess({ status: 'checkout_pending' }).hasAccess, false);
+  assert.equal(deriveAccess({ status: 'refunded' }).hasAccess, false);
   assert.equal(deriveAccess(null).status, 'none');
+});
+
+test('self-serve money-back is open during trial and first 7 paid days', () => {
+  assert.equal(moneyBackEligible({ status: 'trialing' }).ok, true);
+  assert.equal(moneyBackEligible({ status: 'active', firstPaidAt: '2026-08-14T00:00:00.000Z' }, new Date('2026-08-15T00:00:00.000Z')).ok, true);
+  assert.equal(moneyBackEligible({ status: 'active', firstPaidAt: '2026-08-01T00:00:00.000Z' }, new Date('2026-08-15T00:00:00.000Z')).ok, false);
+  assert.equal(moneyBackEligible({ status: 'refunded' }).ok, false);
 });

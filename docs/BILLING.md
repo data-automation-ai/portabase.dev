@@ -15,6 +15,7 @@
 | **Agents** | **Up to 12** telemetry runners per workspace |
 | **SMS** | Success **and** failure texts at run time |
 | **Trial** | 7 free days · **card required** · auto-converts |
+| **Money-back** | **7 days · self-serve** · customer taps refund → Square refund + Cloud closed |
 
 An **escape** is one full managed job (capture → encrypt capsule → destination verify) counted against the rolling 24h window.
 
@@ -43,6 +44,20 @@ Cadence SKUs stay $17 / $27. They are **not** unlimited GB if **Portabase** pays
 Do not silently run a 50–500 GB first full to Dropbox on the $17 plan.
 
 Flow: sign in → `POST /api/cloud/subscribe` with `{ "planId": "cloud-17" | "cloud-27" }` → Square payment link → card on file → trial phase $0 → monthly plan.
+
+### 7-day money-back (automated, customer-triggered)
+
+The customer does **not** email support. They tap **Refund & close account** in Cloud → Plan.
+
+| When | What happens |
+| --- | --- |
+| During the $0 trial | Square subscription canceled. No charge to refund. Cloud access closed. |
+| Within **7 days of first paid charge** | That payment is refunded via Square. Subscription canceled. Cloud access closed. |
+| After the window | Button is gone. Not a forever refund. |
+
+Account close means **our** Cloud record and Square subscription. **Capsules in their vault stay.** Source keys we held for the runner should be treated as revoked (customer can also `REVOKE KEY`).
+
+API: `POST /api/cloud/self-refund` (signed-in). Function: `netlify/functions/cloud-self-refund.mjs`.
 
 Secrets: `SQUARE_ACCESS_TOKEN`, `SQUARE_LOCATION_ID`, `SQUARE_WEBHOOK_SIGNATURE_KEY`. Optional pins: `SQUARE_CLOUD_PLAN_VARIATION_ID` ($17), `SQUARE_CLOUD_PLAN_VARIATION_ID_27` ($27).
 

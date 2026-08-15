@@ -45,3 +45,7 @@ export function startTrialCheckout(version, planId = 'cloud-17') {
 export function confirmCheckout({ attempt, version } = {}) {
   return api('/api/cloud/confirm-checkout', { method: 'POST', body: { attempt: attempt || null }, version });
 }
+
+export function requestSelfRefund(version) {
+  return api('/api/cloud/self-refund', { method: 'POST', body: {}, version });
+}

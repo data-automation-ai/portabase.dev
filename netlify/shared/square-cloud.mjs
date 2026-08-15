@@ -155,3 +155,30 @@ export function buildSubscriptionPaymentLinkRequest({
     payment_note: `portabase-cloud plan=${plan.id} $${plan.priceMonthlyUsd}/mo gateway=square byo_storage=true user=${cognitoSub} attempt=${attempt}`,
   };
 }
+
+export async function cancelSquareSubscription(subscriptionId) {
+  if (!subscriptionId) return { skipped: true, reason: 'no_subscription_id' };
+  return squareFetch(`/v2/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`, { method: 'POST' });
+}
+
+export async function refundSquarePayment({ paymentId, amountCents, reason, idempotencyKey }) {
+  if (!paymentId) return { skipped: true, reason: 'no_payment_id' };
+  const amount = Number(amountCents) || 0;
+  if (amount <= 0) return { skipped: true, reason: 'zero_amount' };
+  return squareFetch('/v2/refunds', {
+    method: 'POST',
+    body: {
+      idempotency_key: idempotencyKey,
+      payment_id: paymentId,
+      amount_money: { amount, currency: 'USD' },
+      reason: reason || 'Customer self-serve 7-day money-back. Account closed.',
+    },
+  });
+}
+
+export async function findCompletedPaymentForOrder(orderId) {
+  if (!orderId) return null;
+  const listed = await squareFetch(`/v2/payments?order_id=${encodeURIComponent(orderId)}`);
+  const payments = listed.payments || [];
+  return payments.find(p => String(p.status).toUpperCase() === 'COMPLETED' && Number(p.amount_money?.amount) > 0) || null;
+}
