@@ -52,7 +52,7 @@
     "@netlify/blobs": "^10.7.9",
     "@supabase/supabase-js": "^2.112.0",
     "aws-jwt-verify": "^5.2.1",
-    "react": "19.2.7",
+    "react": "19.2.8",
     "react-dom": "19.2.7",
     "square": "^44.2.0",
     "supabase": "2.109.1"
