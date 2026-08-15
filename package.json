@@ -45,7 +45,7 @@
     "desktop:mac": "node -e \"console.error('Launch desktop is Windows 11 only — do not build for Mac. Use the open-source CLI on macOS if needed.'); process.exit(1)\""
   },
   "dependencies": {
-    "@aws-sdk/client-cloudtrail": "^3.1102.0",
+    "@aws-sdk/client-cloudtrail": "^3.1109.0",
     "@aws-sdk/client-cloudwatch-logs": "^3.1102.0",
     "@aws-sdk/client-secrets-manager": "^3.1085.0",
     "@aws-sdk/client-sts": "^3.1102.0",
