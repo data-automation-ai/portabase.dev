@@ -1,6 +1,7 @@
 # Portabase — what this project is and what you must do
 
 **Audience:** Any new AI (Claude, etc.) or engineer taking over.  
+**Public GitHub face:** [README.md](./README.md) (Community first). This file is **maintainer** context.  
 **Also read:** `docs/HANDOFF.md` (detail) · `AGENTS.md` (hard rules).
 
 ---

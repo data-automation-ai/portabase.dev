@@ -1,0 +1,33 @@
+name: Feature
+description: A change to the Community engine or docs
+title: '[feature] '
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: Cloud-only product requests can go here too — say so. The engine stays usable without Cloud.
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Layer
+      options:
+        - Capture / capsule
+        - Restore / replay
+        - Destinations (S3, Dropbox, local)
+        - Docs
+        - Cloud console
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What can you not do today?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+      description: Optional. We may solve it differently.

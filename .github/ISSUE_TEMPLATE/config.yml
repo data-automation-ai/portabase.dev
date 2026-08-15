@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/data-automation-ai/portabase.dev/blob/main/SECURITY.md
+    about: Email escape@portabase.dev — do not file a public issue
+  - name: Portabase Cloud billing / refund
+    url: https://portabase.dev/cloud
+    about: Self-serve 7-day money-back is in Cloud → Plan. Billing email: escape@portabase.dev
+  - name: What is a capsule?
+    url: https://portabase.dev/#capsule
+    about: Backup vs Escape — read this before asking “is this just pg_dump?”

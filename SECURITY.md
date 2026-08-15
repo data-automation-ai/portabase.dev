@@ -21,6 +21,8 @@ Optional Portabase Cloud accepts only **opt-in health metadata** (see `docs/TELE
 
 Email **escape@portabase.dev** with a description, impact, and reproduction steps. Do not open a public issue for active exploits against customer systems.
 
+We aim to acknowledge within a few business days. Please give us a reasonable window before public disclosure.
+
 ## Scope notes
 
 - Capsule passphrase strength and key storage are customer responsibilities.

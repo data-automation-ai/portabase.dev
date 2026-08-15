@@ -1,88 +1,120 @@
-# Portabase.dev
+# Portabase
 
-Open-source, customer-owned Supabase continuity and recovery. Encrypted recovery capsules stay under your control. Optional **Portabase Cloud** adds a hosted console, telemetry, and multi-person alert chains — never custody of your keys.
+**Your Supabase Escape.** An Apache-2.0 engine that captures a Supabase project — database, Auth, **Storage object bytes**, and Edge Functions — seals it, and stores the capsule in **your** vault.
 
-Live site: [https://portabase.dev](https://portabase.dev)
+If the dashboard is banned, official backups are still behind that door. A capsule is already in another building.
 
-**New AI / new engineer:** start with **[PROJECT.md](./PROJECT.md)** (what this is + what to do), then **[docs/HANDOFF.md](./docs/HANDOFF.md)** and **[AGENTS.md](./AGENTS.md)**.
+[Website](https://portabase.dev) · [What a capsule is](https://portabase.dev/#capsule) · [Security](https://portabase.dev/security) · [Open core](docs/OPEN_CORE.md)
 
-License: **Apache-2.0** — see [LICENSE](./LICENSE) and [docs/OPEN_CORE.md](./docs/OPEN_CORE.md).
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/data-automation-ai/portabase.dev/actions/workflows/ci.yml/badge.svg)](https://github.com/data-automation-ai/portabase.dev/actions/workflows/ci.yml)
 
-**Capsule key protection (open source):** [`utility/capsule-crypto.mjs`](./utility/capsule-crypto.mjs) — scrypt + AES-256-GCM. See [docs/KEY-PROTECTION.md](./docs/KEY-PROTECTION.md).
+<p align="center">
+  <img src="public/images/diagrams/capsule-sealed.jpg" alt="Sealed Portabase recovery capsule" width="720" />
+</p>
 
-## Open core vs Cloud
+<p align="center"><em>A capsule is not a backup you can only reach if the landlord still lets you in.</em></p>
 
-| | Community (OSS) | Portabase Cloud |
+## Community vs Cloud
+
+| | **Community (this repo)** | **Portabase Cloud** |
 | --- | --- | --- |
-| Full backup / encrypt / verify / restore | Yes | Uses the same engine |
-| Basic CLI / self-hosted runner | Yes | Yes |
-| License required | **No** | N/A |
-| Hosted console, fleet, escalation alerts | Self-wire webhooks | Paid product (early access) |
-| Passphrase & capsule bytes | Always on your runner | Never received |
+| Capture, encrypt, verify, restore, replay | Yes — full, no license gate | Same engine |
+| Who runs the job | You (laptop, VM, NAS, your cloud) | Managed runners |
+| Where the capsule lives | **Your** S3 / Dropbox / disk | **Your** S3 / Dropbox (we do not keep the archive) |
+| GUI, SMS, live key feed, billing | No | Yes — [$17 / $27](https://portabase.dev/cloud) |
+| If portabase.dev disappears | You still have the engine + your capsule | Convenience is gone; Escape is not |
 
-## Run the marketing site locally
+Cloud is optional. The Escape is this repository.
 
-```powershell
+Not affiliated with Supabase, Inc.
+
+## What is in a capsule
+
+| Layer | Official platform backup | Portabase capsule |
+| --- | --- | --- |
+| Postgres schema + data | Yes | Yes |
+| Auth inventory | Behind the same login | Yes |
+| Storage **files** (object bytes) | **No** — metadata only | **Yes** |
+| Edge Function source | **No** | **Yes** |
+| Usable if you cannot log in | **No** | **Yes** — restore into a **new** project |
+
+Each run writes a **manifest** (inventory, fingerprints, COMPLETE / PARTIAL / FAILED). Proof is `replay` into a blank project, not a green upload.
+
+## Quick start
+
+**Need:** Node 20+, `pg_dump` / `psql` on `PATH`, and a Supabase project you are allowed to read.
+
+```bash
+git clone https://github.com/data-automation-ai/portabase.dev.git
+cd portabase.dev
 npm install
-npm run dev
-```
 
-## Recovery utility (full capture by default)
-
-```powershell
+# Configure (writes portabase.config.json — do not commit secrets)
 npm run portabase -- init
+
+# Check tools and config
 npm run portabase -- doctor
-npm run portabase -- plan
+
+# Full capture → encrypted capsule in your destination
 npm run portabase -- backup
-npm run portabase -- backup --trial   # optional limited demo sample
-npm run portabase -- verify --capsule .\portabase-capsules\CAPSULE_NAME
-npm run portabase -- status
-npm run portabase -- restore --capsule .\portabase-capsules\CAPSULE_NAME
+
+# Offline integrity (no target project)
+npm run portabase -- simulate --capsule ./portabase-capsules/<id>
+
+# Plan a restore (optionally shrink it to fit a cheap test project)
+npm run portabase -- restore-plan --capsule ./portabase-capsules/<id>
+
+# Restore / prove into a NEW blank project only
+npm run portabase -- replay --capsule ./portabase-capsules/<id> --confirm-target <NEW_REF>
 ```
 
-Optional Cloud telemetry (off by default): set `cloud.enabled` in config and `PORTABASE_CLOUD_URL` / `PORTABASE_CLOUD_TOKEN`. Schema: [docs/TELEMETRY_SCHEMA.md](./docs/TELEMETRY_SCHEMA.md).
+Set `PORTABASE_ENCRYPTION_PASSPHRASE` (≥16 characters) and the usual `SUPABASE_*` / target `PORTABASE_TARGET_*` variables in a **gitignored** env file. Never commit keys.
 
-## Production build
+Limited demo (deliberately not a real Escape):
 
-```powershell
-npm run build
+```bash
+npm run portabase -- backup --trial
+```
+
+Size-bounded path proof (full DB / Auth / Functions, first object per bucket):
+
+```bash
+npm run portabase -- backup --storage-first-per-bucket
+```
+
+Operator runbook: [docs/ESSENTIALS_RUNBOOK.md](docs/ESSENTIALS_RUNBOOK.md) · Replay: [docs/REPLAY.md](docs/REPLAY.md)
+
+## Crypto
+
+Open source, no closed encryptor: [`utility/capsule-crypto.mjs`](utility/capsule-crypto.mjs) — scrypt → AES-256-GCM. [docs/KEY-PROTECTION.md](docs/KEY-PROTECTION.md)
+
+Standalone: keys never leave your runner. Cloud (optional) may hold a **source** credential for unattended jobs — least privilege, logged, SMS on access, reply `REVOKE KEY` to delete it. Capsule passphrase and capsule bytes stay yours. Details: [docs/SECURITY-TRUST.md](docs/SECURITY-TRUST.md)
+
+## Development
+
+```bash
 npm test
+npm run dev      # marketing site + console (Vite)
+npm run build
 ```
 
-Deploy the static site from `dist/` to the isolated Netlify project for portabase.dev.
+## Contributing
 
-## Privacy model
-
-- Readiness checks and encryption run on the customer runner.
-- No analytics on the public site.
-- Telemetry to Portabase Cloud is opt-in and health-metadata only.
-- Credentials and passphrases never go to Portabase infrastructure.
-
-## Portabase Cloud infrastructure
-
-**Launch scope: Supabase only** — Cloud login is hosted Supabase Auth (email + Google). Cognito/AWS product identity is reserved for a later release (see [docs/LAUNCH-SCOPE.md](./docs/LAUNCH-SCOPE.md)).
-
-Control plane: trial/billing (Square), Supabase account DB, optional ECS runners, CloudWatch:
-
-- Launch scope: [docs/LAUNCH-SCOPE.md](./docs/LAUNCH-SCOPE.md)
-- Design: [docs/CLOUD_INFRASTRUCTURE.md](./docs/CLOUD_INFRASTRUCTURE.md)
-- Billing: [docs/BILLING.md](./docs/BILLING.md)
-- Terraform (future AWS path / customer vault): [aws/cloud/](./aws/cloud/)
-- Control-plane SQL: [supabase/cloud/0001_control_plane.sql](./supabase/cloud/0001_control_plane.sql)
+See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Bug reports and pull requests are welcome. Security issues: [SECURITY.md](SECURITY.md) — do not file a public issue for an active exploit.
 
 ## Docs
 
-- **[Project handoff (for agents / new providers)](./docs/HANDOFF.md)** — start here for Claude or any successor
-- [Agent rules](./AGENTS.md) — never F:; cloud spool for backups
-- [Launch scope (Supabase only)](./docs/LAUNCH-SCOPE.md)
-- [Open-core model](./docs/OPEN_CORE.md)
-- [Security & trust](./docs/SECURITY-TRUST.md)
-- [Billing](./docs/BILLING.md)
-- [Replay proof](./docs/REPLAY.md)
-- [Cloud infrastructure](./docs/CLOUD_INFRASTRUCTURE.md)
-- [Product specification](./docs/PRODUCT_SPEC.md)
-- [Essentials runbook](./docs/ESSENTIALS_RUNBOOK.md)
-- [Telemetry schema](./docs/TELEMETRY_SCHEMA.md)
-- [Restore drill](./docs/RESTORE_DRILL.md)
+Public index: [docs/README.md](docs/README.md)
 
-Portabase is independent and is not affiliated with Supabase, Inc.
+| For | Start here |
+| --- | --- |
+| Using the engine | This README · [ESSENTIALS_RUNBOOK.md](docs/ESSENTIALS_RUNBOOK.md) |
+| Open core vs paid | [OPEN_CORE.md](docs/OPEN_CORE.md) |
+| Trust / keys | [SECURITY-TRUST.md](docs/SECURITY-TRUST.md) |
+| Cloud billing | [BILLING.md](docs/BILLING.md) |
+| Maintainers / agents | [PROJECT.md](PROJECT.md) · [docs/HANDOFF.md](docs/HANDOFF.md) |
+
+## License
+
+[Apache License 2.0](LICENSE) · Copyright 2026 [DataAutomation.ai, LLC](https://github.com/DataAutomation-ai)

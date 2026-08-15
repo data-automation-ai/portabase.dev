@@ -2,11 +2,28 @@
   "name": "portabase",
   "private": true,
   "version": "0.4.0",
-  "description": "Open-source, customer-owned encrypted Supabase backup and recovery. Optional Portabase Cloud for monitoring and alert chains.",
+  "description": "Open-source Supabase Escape — encrypted customer-owned recovery capsules (database, Auth, Storage bytes, Edge Functions). Optional Portabase Cloud for GUI and alerts.",
   "homepage": "https://portabase.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/data-automation-ai/portabase.dev.git"
+  },
+  "bugs": {
+    "url": "https://github.com/data-automation-ai/portabase.dev/issues",
+    "email": "escape@portabase.dev"
+  },
+  "keywords": [
+    "supabase",
+    "backup",
+    "recovery",
+    "escape",
+    "disaster-recovery",
+    "open-source",
+    "aes-256-gcm"
+  ],
   "author": {
-    "name": "Portabase",
-    "email": "support@portabase.dev"
+    "name": "DataAutomation.ai, LLC",
+    "email": "escape@portabase.dev"
   },
   "desktopName": "Portabase",
   "type": "module",
