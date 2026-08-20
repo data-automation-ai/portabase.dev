@@ -11,6 +11,7 @@ import {
   versionFromSearch,
 } from './lib/cloud-versions.js';
 import * as supabaseAuth from './lib/supabase-auth.js';
+import * as googleAuth from './lib/google-gis-auth.js';
 import * as awsAuth from './lib/cognito.js';
 import { sessionCloudVersion } from './lib/session.js';
 import { ensureSessionForVersion } from './lib/cloud-api.js';
@@ -106,10 +107,16 @@ function GoogleButton({ version, next, label }) {
             sessionStorage.setItem('portabase.auth.version', version);
             if (version === 'aws') {
               window.location.href = awsAuth.googleSignInUrl({ next });
-            } else {
-              await supabaseAuth.signInWithGoogle({ next });
+              return;
             }
+            // Popup id_token flow: resolves with a live session, no redirect.
+            await supabaseAuth.signInWithGoogle({ next });
+            sessionStorage.removeItem('portabase.auth.next');
+            sessionStorage.removeItem('portabase.auth.version');
+            window.location.replace(next.includes('version=') ? next : `${next}${next.includes('?') ? '&' : '?'}version=supabase`);
           } catch (err) {
+            // The popup-blocked fallback navigates away; nothing to report.
+            if (err?.message === 'REDIRECTING') return;
             setError(version === 'aws' ? awsAuth.describeCognitoError(err) : supabaseAuth.describeAuthError(err));
             setBusy(false);
           }
@@ -118,7 +125,7 @@ function GoogleButton({ version, next, label }) {
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
           <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.6 3.9-5.5 3.9-3.3 0-6-2.7-6-6s2.7-6 6-6c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3.4 14.6 2.4 12 2.4 6.9 2.4 2.8 6.5 2.8 11.6S6.9 20.8 12 20.8c6.9 0 8.5-4.8 8.5-7.3 0-.5 0-.9-.1-1.3H12z" />
         </svg>
-        {busy ? 'Redirecting…' : label}
+        {busy ? 'Opening Google…' : label}
       </button>
       {error && <p className="auth-error" style={{ marginTop: 12 }}>{error}</p>}
     </>
@@ -350,9 +357,34 @@ export function LoginPage() {
 
 export function AuthCallbackPage() {
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   useEffect(() => {
     document.title = 'Signing in · Portabase Cloud';
+
+    // Google id_token flow lands here with the credential in the URL fragment.
+    // Handle it before anything else: the Supabase code-exchange path below
+    // would find no `code` and report "No session found after auth redirect".
+    if (googleAuth.deliverGoogleIdTokenFromCallback()) {
+      const isPopup = Boolean(window.opener && window.opener !== window);
+      if (isPopup) {
+        // The opener completes sign-in and closes this window.
+        setNotice('Returning to Portabase…');
+        return;
+      }
+      // Popup-blocked fallback: this is the full page, so finish here.
+      supabaseAuth.completeGoogleRedirectSignIn()
+        .then((session) => {
+          if (!session) throw new Error('Google sign-in did not return a session.');
+          const dest = sessionStorage.getItem('portabase.auth.next') || '/app?version=supabase';
+          sessionStorage.removeItem('portabase.auth.next');
+          sessionStorage.removeItem('portabase.auth.version');
+          window.location.replace(dest);
+        })
+        .catch(e => setError(supabaseAuth.describeAuthError(e)));
+      return;
+    }
+
     const params = new URLSearchParams(window.location.search);
     const err = params.get('error_description') || params.get('error');
     const state = params.get('state') || '';
@@ -407,7 +439,7 @@ export function AuthCallbackPage() {
           <a className="button button-primary" href="/login">Back to sign in <Arrow /></a>
         </>
       ) : (
-        <p className="auth-hint">One moment…</p>
+        <p className="auth-hint">{notice || 'One moment…'}</p>
       )}
     </AuthShell>
   );

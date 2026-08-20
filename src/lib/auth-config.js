@@ -18,18 +18,27 @@ export const productConfig = {
   storage: STORAGE_POLICY,
 };
 
+/**
+ * Portabase Cloud identity lives on its own Supabase project — one product, one
+ * project, one Google OAuth client. The Google client's callback URL embeds this
+ * ref, so pointing this anywhere else silently authenticates against the wrong
+ * project rather than failing loudly.
+ */
+export const SUPABASE_PROJECT_REF = 'eoiqvdmvgaurlecdzqkp';
+const SUPABASE_DEFAULT_URL = `https://${SUPABASE_PROJECT_REF}.supabase.co`;
+
 /** @deprecated use productConfig */
 export const authConfig = {
   provider: 'supabase',
   launchPlatform: 'supabase',
   ...productConfig,
   // defaults used by older imports
-  url: import.meta.env.VITE_SUPABASE_URL || 'https://ekklokrukxmqlahtonnc.supabase.co',
+  url: import.meta.env.VITE_SUPABASE_URL || SUPABASE_DEFAULT_URL,
   anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '',
 };
 
 export const supabasePublicDefaults = {
-  url: import.meta.env.VITE_SUPABASE_URL || 'https://ekklokrukxmqlahtonnc.supabase.co',
+  url: import.meta.env.VITE_SUPABASE_URL || SUPABASE_DEFAULT_URL,
   anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '',
 };
 

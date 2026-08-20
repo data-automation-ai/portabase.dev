@@ -1,7 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { resolveServerSecret } from './secrets.mjs';
 
-const DEFAULT_URL = 'https://ekklokrukxmqlahtonnc.supabase.co';
+/**
+ * Portabase Cloud's own Supabase project. Must match the ref embedded in the
+ * Google OAuth client's callback URL — a stale ref here verifies tokens against
+ * a different project's users instead of failing loudly.
+ */
+const SUPABASE_PROJECT_REF = 'eoiqvdmvgaurlecdzqkp';
+const DEFAULT_URL = `https://${SUPABASE_PROJECT_REF}.supabase.co`;
 
 let cachedPublic;
 

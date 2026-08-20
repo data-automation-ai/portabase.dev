@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { authCallbackUrl, productConfig, supabasePublicDefaults } from './auth-config.js';
+import { consumeStoredGoogleIdToken, requestGoogleIdToken } from './google-gis-auth.js';
 import { clearSession, isTokenExpired, loadSession, saveSession } from './session.js';
 
 let client;
@@ -45,7 +46,10 @@ export async function getSupabase() {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true,
+      // The /auth/callback route handles the URL explicitly via
+      // completeOAuthCallback(). Leaving this true put a second handler on the
+      // same URL, racing the explicit one for the same code/fragment.
+      detectSessionInUrl: false,
       storageKey: 'portabase.supabase.auth',
       flowType: 'pkce',
     },
@@ -138,20 +142,41 @@ export async function signInWithEmail({ email, password }) {
   return persistFromSupabaseSession(data.session);
 }
 
-export async function signInWithGoogle({ next = '/app' } = {}) {
+/** Exchange a Google id_token for a Supabase session and persist it. */
+async function completeGoogleIdToken({ idToken, nonce }) {
   const supabase = await getSupabase();
-  sessionStorage.setItem('portabase.auth.next', next);
-  sessionStorage.setItem('portabase.auth.version', 'supabase');
-  const { data, error } = await supabase.auth.signInWithOAuth({
+  const { data, error } = await supabase.auth.signInWithIdToken({
     provider: 'google',
-    options: {
-      redirectTo: authCallbackUrl('supabase'),
-      queryParams: { access_type: 'offline', prompt: 'consent' },
-    },
+    token: idToken,
+    nonce,
   });
   if (error) throw error;
-  if (data?.url) window.location.href = data.url;
-  return data;
+  return persistFromSupabaseSession(data.session);
+}
+
+/**
+ * Google sign-in via id_token, not Supabase's server-side code exchange.
+ *
+ * Resolves to a persisted session — the caller navigates. Nothing here may
+ * `await` before the popup opens: an await first makes the browser treat
+ * window.open as unsolicited and block it, which is why getSupabase() is
+ * resolved only after the token comes back.
+ */
+export async function signInWithGoogle({ next = '/app' } = {}) {
+  sessionStorage.setItem('portabase.auth.next', next);
+  sessionStorage.setItem('portabase.auth.version', 'supabase');
+  const { idToken, nonce } = await requestGoogleIdToken();
+  return completeGoogleIdToken({ idToken, nonce });
+}
+
+/**
+ * Finish a popup-blocked Google sign-in that came back as a full-page redirect.
+ * Returns the session, or null when no redirect flow was in progress.
+ */
+export async function completeGoogleRedirectSignIn() {
+  const stored = consumeStoredGoogleIdToken();
+  if (!stored?.idToken) return null;
+  return completeGoogleIdToken(stored);
 }
 
 export async function requestPasswordReset({ email }) {
