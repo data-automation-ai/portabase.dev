@@ -78,6 +78,16 @@ Not done until every row below reads **verified**.
 - [ ] Popup-blocked path: block popups, confirm the redirect fallback completes
 - [ ] Bundle scan: correct client id present, no client secret, no other product's id
 
+**Regression rows for the `detectSessionInUrl: false` flip.** Email confirmation
+and password-recovery links also land on `/auth/callback`. Under PKCE they
+arrive as `?code=` and `completeOAuthCallback()` handles them — but if the new
+project's email templates emit implicit-flow fragments (`#access_token=`), the
+handler that used to catch those is now off and `completeOAuthCallback()` will
+throw "No session found after auth redirect." These must be proven, not assumed:
+
+- [ ] Email signup confirmation link completes and lands in `/app`
+- [ ] Password recovery link completes and allows a password change
+
 Identity is not entitlement — a signed-in user is not a paying one. Cloud
 membership must still be checked server-side.
 
@@ -100,9 +110,19 @@ membership must still be checked server-side.
 
 - Nothing has been tested against a live Google account — the OAuth client does
   not exist yet.
+- Email signup confirmation and password recovery have **not** been re-tested
+  since `detectSessionInUrl` was set to false. Both land on the same callback
+  route this change touches.
 - Nothing is deployed. Work sits on branch
   `agent-checkpoints/claude/5075c12e-google-oauth`, pushed to **`old-origin`**
-  (`github.com/lcapece/portabase.dev`) only — `origin`
+  (`github.com/lcapece/portabase.dev`) only. `origin`
   (`github.com/data-automation-ai/portabase.dev`) rejected the push with 403
-  for user `lcapece`. That org permission needs fixing before this work can
-  reach the deploy branch.
+  because the cached credential is `lcapece`. The org PAT in `secrets-bundle`
+  (`github-dataautomation-ia-pat`, user `data-automation-ai`) **does** hold
+  `push: true, admin: true` on that repo — verified via the GitHub API — but the
+  push itself was denied twice by the local permission classifier and was not
+  retried around. Work reaching the org remote and then `main` is still open.
+- `.env.example` changes (`VITE_GOOGLE_OAUTH_CLIENT_ID`, new project URL) are
+  **local-only and uncommitted** — that file already carried pre-existing edits,
+  so it was deliberately excluded from the checkpoint commit rather than
+  entangling two authors' work. It is not crash-safe.
