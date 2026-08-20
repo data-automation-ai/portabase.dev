@@ -33,7 +33,9 @@ Not done until every row below reads **verified**.
 | Capability | Source | Provisioned | Configured | Deployed | Live proof | Security proof | Status | Blocker |
 |---|---|---|---|---|---|---|---|---|
 | Dedicated Supabase project | Supabase org `capece` (Pro) | ✅ `eoiqvdmvgaurlecdzqkp`, us-east-1, ACTIVE_HEALTHY, created 2026-08-20 | ❌ Google provider not set | n/a | ❌ | n/a | **provisioned** | Google client id/secret |
-| Google OAuth client | Google Cloud Console | ❌ does not exist | ❌ | n/a | ❌ | n/a | **BLOCKED** | Human step — console values published to the operator 2026-08-20 |
+| GCP project (consent screen host) | gcloud | ✅ `portabase-dev`, number `495102144848`, created 2026-08-20 | ❌ consent screen not created | n/a | ❌ | n/a | **provisioned** | Console-only step |
+| Consent screen logo | `scripts/make-app-icon.py` | ✅ `public/icons/portabase-consent-120.png` | n/a | ❌ not merged | ✅ 120x120, 6.3 KB, verified by test | n/a | **implemented** | Upload is console-only |
+| Google OAuth client | Google Cloud Console | ❌ does not exist | ❌ | n/a | ❌ | n/a | **BLOCKED** | Console-only — **not creatable by gcloud**, see below |
 | Google client secrets in `secrets-bundle` | AWS `899867382621` | ❌ no `portabase-google-oauth-*` keys | ❌ | n/a | ❌ | n/a | **BLOCKED** | Depends on the row above |
 | Supabase Auth → Google provider | Supabase Management API | n/a | ❌ | n/a | ❌ | n/a | **BLOCKED** | Depends on client id/secret. Automatable via `supabase-token` — no dashboard step needed |
 | id_token sign-in flow (browser) | `src/lib/google-gis-auth.js` | n/a | n/a | ❌ not merged to `main` | ❌ | ⚠️ partial | **implemented** | Live proof requires the OAuth client |
@@ -48,17 +50,42 @@ Not done until every row below reads **verified**.
 | Supabase project (identity) | `eoiqvdmvgaurlecdzqkp` — "portabase.dev" |
 | Supabase project (replay restore target — **not** identity) | `svltssnxzqsrxtbjgaex` — "portabase-replay-proof" |
 | Shared portfolio project (**must not** be used for this product) | `ekklokrukxmqlahtonnc` — "DataAutomation" |
+| GCP project (Portabase consent screen) | `portabase-dev` / `495102144848` |
+| GCP project that must **not** be used | `massageexam` — NYS Massage Exam |
 | Netlify site id | `794217cc-42ab-4a9f-81da-06a661403573` |
 | Deploy branch | `main` (Netlify builds `dist/` from it) |
 | Publishable key (public) | `sb_publishable_OSrYsvzHMubG3YWYUSq6vw_BqEpNQyL` |
 
 ---
 
+## Why the OAuth client cannot be created from the CLI
+
+This was tested, not assumed (2026-08-20):
+
+- `gcloud` 550.0.0 is installed and authenticated as `rfiddomains@gmail.com`.
+- The only programmatic path to an OAuth brand/client is the IAP API
+  (`iap.googleapis.com` → `projects.brands`). Calling it returns:
+  `400 INVALID_ARGUMENT — "Project must belong to an organization."`
+- `gcloud organizations list` returns **0 items** — this is a consumer Gmail
+  account with no Workspace organization, so no brand can be created via API.
+- Even with an organization, `brands.create` produces **internal** (org-only)
+  brands and **IAP-typed** clients. Portabase needs an **external** brand so any
+  Google account can sign in, and a general **Web application** client. Google
+  exposes no API for either.
+- `gcloud alpha` is not installed and cannot be added without administrator
+  rights on `C:\Program Files (x86)\Google\Cloud SDK`. This is moot — the alpha
+  commands wrap the same org-restricted IAP API.
+
+**Conclusion:** the consent screen and Web application client are console-only.
+This is a Google platform limitation, not a tooling or permission gap in this
+environment. Everything downstream of the client id/secret *is* automatable.
+
 ## Remaining holes, in order
 
-1. **Create the Google OAuth client** (human, Google Cloud Console). Exact
-   consent-screen values, JavaScript origins, and the five redirect URIs were
-   published to the operator on 2026-08-20.
+1. **Create the Google OAuth client** (human, Google Cloud Console, in project
+   `portabase-dev`). Exact consent-screen values, JavaScript origins, and the
+   five redirect URIs were published to the operator on 2026-08-20. Upload
+   `public/icons/portabase-consent-120.png` as the consent-screen logo.
 2. **Store** `portabase-google-oauth-client-id` / `-client-secret` /
    `-updated-at` in `secrets-bundle`.
 3. **Configure** Supabase Auth → Google provider on `eoiqvdmvgaurlecdzqkp` with
@@ -97,6 +124,7 @@ membership must still be checked server-side.
 
 - Build passes: `npm run build` → 746.50 kB bundle, no errors.
 - Full suite passes: `npm test` → **107/107**, including the 9 new isolation tests.
+- Full suite passes: 109/109 (11 isolation tests).
 - Isolation guard **mutation-tested** — shared project ref reintroduced,
   client id hardcoded, `detectSessionInUrl` flipped true, and a foreign product
   domain leaked in were each caught, and the baseline restored to 9/9.
