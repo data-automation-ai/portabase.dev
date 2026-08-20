@@ -12,7 +12,7 @@
  * user table.
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -27,6 +27,16 @@ const PRODUCT_DOMAIN = 'portabase.dev';
 
 /** Exact app name as registered on the Google consent screen. */
 const APP_NAME = 'Portabase';
+
+/**
+ * Plain-language purpose phrase shown to Google's verification reviewers, who
+ * open the homepage looking for the app identity. A redesign that drops it is a
+ * common verification rejection, so it is pinned rather than trusted.
+ */
+const APP_PURPOSE = 'Supabase Escape';
+
+/** Consent-screen logo. Google requires 120x120 and under 1MB. */
+const CONSENT_LOGO = 'public/icons/portabase-consent-120.png';
 
 /** Portabase Cloud's dedicated Supabase project ref. */
 const SUPABASE_PROJECT_REF = 'eoiqvdmvgaurlecdzqkp';
@@ -58,9 +68,17 @@ const SERVER_AUTH_SOURCES = [
   'netlify/shared/supabase-auth.mjs',
 ];
 
-/** Files that must carry consent-screen branding for Google's reviewers. */
+/**
+ * Root document and public landing page. Both must carry the app name AND the
+ * purpose phrase — these are the two surfaces Google's reviewers open.
+ */
 const BRANDING_SOURCES = [
   'index.html',
+  'src/main.jsx',
+];
+
+/** Sign-in surface. Must at least name the app it is signing you into. */
+const NAME_ONLY_SOURCES = [
   'src/auth-pages.jsx',
 ];
 
@@ -141,9 +159,29 @@ test('does not use Google One Tap / FedCM', () => {
 });
 
 for (const file of BRANDING_SOURCES) {
-  test(`renders the consent-screen app name on ${file}`, () => {
+  test(`renders the consent-screen app name and purpose on ${file}`, () => {
     // Google's verification reviewers open the homepage looking for the app
-    // identity. A redesign that drops the name fails verification.
+    // identity. A redesign that drops either fails verification.
+    const source = read(file);
+    assert.ok(source.includes(APP_NAME), `expected app name "${APP_NAME}" in ${file}`);
+    assert.ok(source.includes(APP_PURPOSE), `expected purpose "${APP_PURPOSE}" in ${file}`);
+  });
+}
+
+for (const file of NAME_ONLY_SOURCES) {
+  test(`names the app on the sign-in surface ${file}`, () => {
     assert.ok(read(file).includes(APP_NAME), `expected app name "${APP_NAME}" in ${file}`);
   });
 }
+
+test('ships a consent-screen logo within Google’s limits', () => {
+  // 120x120 PNG, under 1MB. Regenerate with: python scripts/make-app-icon.py
+  const { size } = statSync(resolve(root, CONSENT_LOGO));
+  assert.ok(size > 0, `${CONSENT_LOGO} is empty`);
+  assert.ok(size < 1024 * 1024, `${CONSENT_LOGO} exceeds Google's 1MB limit`);
+
+  // PNG IHDR carries width/height as big-endian uint32 at bytes 16 and 20.
+  const buf = readFileSync(resolve(root, CONSENT_LOGO));
+  assert.equal(buf.readUInt32BE(16), 120, 'consent logo must be 120px wide');
+  assert.equal(buf.readUInt32BE(20), 120, 'consent logo must be 120px tall');
+});
