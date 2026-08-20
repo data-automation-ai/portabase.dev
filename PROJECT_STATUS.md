@@ -40,7 +40,7 @@ Not done until every row below reads **verified**.
 | Supabase Auth → Google provider | Supabase Management API | n/a | ❌ | n/a | ❌ | n/a | **BLOCKED** | Depends on client id/secret. Automatable via `supabase-token` — no dashboard step needed |
 | id_token sign-in flow (browser) | `src/lib/google-gis-auth.js` | n/a | n/a | ❌ not merged to `main` | ❌ | ⚠️ partial | **implemented** | Live proof requires the OAuth client |
 | Single GoTrue client / no URL-handler race | `src/lib/supabase-auth.js` | n/a | ✅ `detectSessionInUrl: false` | ❌ | ❌ | ✅ guarded by test | **implemented** | — |
-| Product isolation guard | `tests/google-oauth-isolation.test.mjs` | n/a | ✅ | ❌ | ✅ 9/9 pass, **mutation-tested** (4/4 seeded regressions caught) | ✅ | **verified (CI-level)** | — |
+| Product isolation guard | `tests/google-oauth-isolation.test.mjs` | n/a | ✅ | ❌ | ✅ 11/11 pass, **mutation-tested** (6/6 seeded regressions caught), runs in CI via `.github/workflows/ci.yml:23` | ✅ | **verified (CI-level)** | — |
 | Netlify env vars for the new project | Netlify site `794217cc-…` | n/a | ❌ `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_GOOGLE_OAUTH_CLIENT_ID` not set | ❌ | ❌ | n/a | **not configured** | Must be set before merge, or the deployed bundle ships an unconfigured client |
 
 ### Non-secret target identity (so a later agent picks the right target)
@@ -123,11 +123,12 @@ membership must still be checked server-side.
 ## Verified so far (2026-08-20)
 
 - Build passes: `npm run build` → 746.50 kB bundle, no errors.
-- Full suite passes: `npm test` → **107/107**, including the 9 new isolation tests.
-- Full suite passes: 109/109 (11 isolation tests).
-- Isolation guard **mutation-tested** — shared project ref reintroduced,
-  client id hardcoded, `detectSessionInUrl` flipped true, and a foreign product
-  domain leaked in were each caught, and the baseline restored to 9/9.
+- Full suite passes: `npm test` → **109/109**, including the 11 new isolation tests.
+- Isolation guard **mutation-tested**, 6 seeded regressions, all caught:
+  shared project ref reintroduced; client id hardcoded as a literal;
+  `detectSessionInUrl` flipped back to true; a foreign product domain leaked in;
+  the purpose phrase dropped from the root document; a wrong-size consent logo
+  substituted. Baseline restored to 11/11 after each.
 - Built bundle contains **no** `GOCSPX-` client secret and **no** foreign
   product domain in auth code. (`ekklokrukxmqlahtonnc`, `svltssnxzqsrxtbjgaex`,
   and `musicsupplies.*` do appear in the bundle — they are console *demo data*
