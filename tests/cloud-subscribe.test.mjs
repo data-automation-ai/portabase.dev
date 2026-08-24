@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSubscriptionPaymentLinkRequest, PRICE_MONTHLY_CENTS, STORAGE_POLICY, TRIAL_DAYS } from '../netlify/shared/square-cloud.mjs';
+import { buildSubscriptionPaymentLinkRequest, PRICE_MONTHLY_CENTS, STORAGE_POLICY, TRIAL_DAYS, squareCheckoutIsFulfilled } from '../netlify/shared/square-cloud.mjs';
 import { CLOUD_MAX_AGENTS, CLOUD_PAYMENT_GATEWAY, CLOUD_PRICE_MONTHLY_CENTS, CLOUD_PLANS, getCloudPlan } from '../netlify/shared/product.mjs';
 import { deriveAccess, moneyBackEligible, trialEndsAtFrom } from '../netlify/shared/subscription-store.mjs';
 
@@ -62,6 +62,43 @@ test('deriveAccess treats trialing as hasAccess', () => {
   assert.equal(deriveAccess({ status: 'checkout_pending' }).hasAccess, false);
   assert.equal(deriveAccess({ status: 'refunded' }).hasAccess, false);
   assert.equal(deriveAccess(null).status, 'none');
+});
+
+test('squareCheckoutIsFulfilled accepts $0 COMPLETED trial payment on an OPEN order', () => {
+  const result = squareCheckoutIsFulfilled({
+    order: { state: 'OPEN', tenders: [] },
+    payments: [{ id: 'pay_trial', status: 'COMPLETED', amount_money: { amount: 0, currency: 'USD' } }],
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.via, 'payment');
+  assert.equal(result.amountCents, 0);
+});
+
+test('squareCheckoutIsFulfilled treats CAPTURED payment as paid even when order is OPEN', () => {
+  const result = squareCheckoutIsFulfilled({
+    order: { state: 'OPEN' },
+    payments: [{ id: 'pay_1', status: 'CAPTURED', amount_money: { amount: 1700, currency: 'USD' } }],
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.via, 'payment');
+});
+
+test('squareCheckoutIsFulfilled accepts PENDING Square subscription with card on file', () => {
+  const result = squareCheckoutIsFulfilled({
+    order: { state: 'OPEN' },
+    payments: [],
+    subscription: { id: 'sub_1', status: 'PENDING' },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.via, 'subscription');
+});
+
+test('squareCheckoutIsFulfilled rejects checkout_pending with no Square capture', () => {
+  const result = squareCheckoutIsFulfilled({
+    order: { state: 'DRAFT' },
+    payments: [],
+  });
+  assert.equal(result.ok, false);
 });
 
 test('self-serve money-back is open during trial and first 7 paid days', () => {

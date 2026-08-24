@@ -5,6 +5,7 @@ import { nightmares as stories } from './data/nightmares.js';
 import { diagrams, modelLayers, trustBoundary } from './data/diagrams.js';
 import { closureReasons, closureCases } from './data/closure-cases.js';
 import { AppPage, AuthCallbackPage, LoginPage } from './auth-pages.jsx';
+import { PrivacyPage, TermsPage } from './legal-pages.jsx';
 import { loadSession } from './lib/session.js';
 
 const Arrow = () => <span aria-hidden="true">↗</span>;
@@ -1589,7 +1590,7 @@ function LegacyPurchaseNotice() {
 }
 
 function Footer() {
-  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#reality">The reality</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">Escape plan</a><a href="/#key-custody">Key custody</a><a href="/#audit">Risk check</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · $17 / $27</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">GitHub · portabase.dev</a><span>Independent product.<br />Not affiliated with Supabase.</span><span>Apache-2.0 open core. Capsule stays in your vault. If Cloud holds a source key, it is least-privilege, logged live, and texted on every access — including yours. $17/mo · 1 escape/24h · or · $27/mo · up to 3 escapes/day.</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your cloud. Your way out.</span></div></footer>;
+  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#reality">The reality</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">Escape plan</a><a href="/#key-custody">Key custody</a><a href="/#audit">Risk check</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · $17 / $27</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">GitHub · portabase.dev</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><span>Independent product.<br />Not affiliated with Supabase.</span><span>Apache-2.0 open core. Capsule stays in your vault. If Cloud holds a source key, it is least-privilege, logged live, and texted on every access — including yours. $17/mo · 1 escape/24h · or · $27/mo · up to 3 escapes/day.</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your cloud. Your way out.</span></div></footer>;
 }
 
 /**
@@ -2419,6 +2420,8 @@ function App() {
   if (path === '/app' || path === '/console' || path.startsWith('/app/')) return <AppPage />;
   if (path === '/cloud' || path === '/pricing') return <CloudPage />;
   if (path === '/security' || path === '/trust') return <SecurityPage />;
+  if (path === '/privacy') return <PrivacyPage />;
+  if (path === '/terms') return <TermsPage />;
   return <HomePage />;
 }
 

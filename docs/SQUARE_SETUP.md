@@ -9,13 +9,17 @@ Legacy `GET /api/square/order` and `POST /api/license/claim` remain only for cus
 
 ## Required configuration (Cloud + Square)
 
+Credentials are **product-scoped**. Do not reuse `square-nysmassageexam-*` (or any other product's Square application) to open Portabase checkout.
+
 | Runtime name | AWS `secrets-bundle` selector | Browser-visible |
 | --- | --- | --- |
-| `SQUARE_ACCESS_TOKEN` | `square.access_token` | No |
-| `SQUARE_LOCATION_ID` | `square.location_id` | No |
-| `SQUARE_WEBHOOK_SIGNATURE_KEY` | `square.webhook_signature_key` | No |
+| `SQUARE_ACCESS_TOKEN` (fallback) | **`square-portabase-production-access-token`** first | No |
+| `SQUARE_LOCATION_ID` | `square-location-id` | No |
+| `SQUARE_WEBHOOK_SIGNATURE_KEY` (fallback) | **`square-portabase-webhook-signature-key`** first | No |
 | `SQUARE_ENV` | not secret; `production` or `sandbox` | No |
 | `PORTABASE_SITE_URL` | not secret; `https://portabase.dev` | No |
+
+Also store `square-portabase-application-id` and `square-portabase-production-application-secret` in the bundle when the Portabase Square application is created. Functions refuse a token that byte-matches another product's Square secret.
 
 Optional legacy only: `PORTABASE_LICENSE_PRIVATE_KEY` for historical offline license re-issue.
 
@@ -42,8 +46,10 @@ The functions resolve private values from AWS Secrets Manager secret `secrets-bu
 
 ## Fail-closed behavior
 
-Cloud subscribe fails closed when Square config is missing. Invalid webhook signatures return HTTP 401. Errors are logged without tokens, keys, request bodies, or card data.
+Cloud subscribe fails closed when Square config is missing, and when the resolved access token matches another product's Square secret. `POST /api/cloud/confirm-checkout` does **not** grant trial access from `checkout_pending` alone — it retrieves the Square order/payments (and subscription if present) and requires a COMPLETED/CAPTURED payment (including the $0 trial card-on-file) or a PENDING/ACTIVE subscription. CAPTURED payments count even when the Square order is still OPEN. Invalid webhook signatures are rejected. Errors are logged without tokens, keys, request bodies, or card data.
+
+Jobs (`/api/cloud/jobs`) return HTTP 402 until the account has `trialing` / `active` / `past_due` access.
 
 ## Site password note
 
-Netlify site-wide password protection intercepts anonymous webhook traffic. Remove blanket lock before enabling public Square webhooks.
+Netlify site-wide password protection (`has_password` / `password_context=all` on site `portabase-dev`) intercepts anonymous webhook traffic **and** stranger checkout. Remove the blanket lock before taking a customer order. The live site returned Netlify's password form for `/api/auth/config` on 2026-08-23.

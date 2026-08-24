@@ -2,8 +2,23 @@ import { GetSecretValueCommand, SecretsManagerClient } from '@aws-sdk/client-sec
 
 const VALUE_FIELDS = ['value', 'secret', 'secret_value', 'val'];
 
+let cachedBundle = undefined;
+
 function normalized(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/** Other products' Square applications. Never open Portabase checkout with these. */
+export const FOREIGN_SQUARE_KEY_MARKERS = [
+  'nysmassageexam',
+  'dicefootball',
+  'bookedaf',
+  'musicsupplies',
+];
+
+export function isForeignSquareSecretName(name) {
+  const n = normalized(name);
+  return FOREIGN_SQUARE_KEY_MARKERS.some(marker => n.includes(marker));
 }
 
 export function findBundleValue(bundle, { service, key, envName }) {
@@ -30,22 +45,63 @@ export function findBundleValue(bundle, { service, key, envName }) {
   return null;
 }
 
-export async function resolveServerSecret(envName, selector) {
+export async function loadSecretsBundle() {
+  if (cachedBundle !== undefined) return cachedBundle;
   try {
     const client = new SecretsManagerClient({ region: process.env.AWS_REGION || 'us-east-1' });
     const response = await client.send(new GetSecretValueCommand({ SecretId: process.env.SECRETS_BUNDLE_ID || 'secrets-bundle' }));
     const raw = response.SecretString || Buffer.from(response.SecretBinary || '').toString('utf8');
-    const value = findBundleValue(JSON.parse(raw), { ...selector, envName });
-    if (value) return value;
-    console.warn('payment_secret_resolution=record_missing');
+    cachedBundle = JSON.parse(raw);
+    return cachedBundle;
+  } catch {
+    cachedBundle = null;
+    return null;
+  }
+}
+
+export async function resolveServerSecret(envName, selector, { optional = false, allowEnvFallback = true } = {}) {
+  try {
+    const bundle = await loadSecretsBundle();
+    if (bundle) {
+      const value = findBundleValue(bundle, { ...selector, envName });
+      if (value) return value;
+      console.warn('payment_secret_resolution=record_missing');
+    } else {
+      console.warn('payment_secret_resolution=aws_unreachable');
+    }
   } catch {
     console.warn('payment_secret_resolution=aws_unreachable');
   }
-  const fallback = process.env[envName];
-  if (fallback) {
-    console.warn('payment_secret_resolution=fallback_used');
-    return fallback;
+  if (allowEnvFallback) {
+    const fallback = process.env[envName];
+    if (fallback) {
+      console.warn('payment_secret_resolution=fallback_used');
+      return fallback;
+    }
   }
+  if (optional) return null;
   console.error('payment_secret_resolution=fallback_missing');
   throw new Error(`Server configuration is missing ${envName}.`);
 }
+
+/**
+ * Portabase Cloud may only charge through its own Square application.
+ * The NYS Massage Exam token lives in the same bundle and on the Netlify
+ * *dev* context today — using it here would mix another product's merchant
+ * application into Portabase checkout.
+ */
+export function refuseForeignSquareSecret(value, bundle) {
+  if (!value) return;
+  if (!bundle || typeof bundle !== 'object') return;
+  for (const [name, candidate] of Object.entries(bundle)) {
+    if (typeof candidate !== 'string' || !candidate) continue;
+    if (!isForeignSquareSecretName(name)) continue;
+    if (candidate === value) {
+      const err = new Error('refusing_foreign_square_credentials');
+      err.code = 'refusing_foreign_square_credentials';
+      throw err;
+    }
+  }
+}
+
+export const refuseForeignSquareAccessToken = refuseForeignSquareSecret;

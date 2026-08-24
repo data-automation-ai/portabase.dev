@@ -1,5 +1,5 @@
 import { WebhooksHelper } from 'square';
-import { resolveServerSecret } from '../shared/secrets.mjs';
+import { loadSecretsBundle, refuseForeignSquareSecret, resolveServerSecret } from '../shared/secrets.mjs';
 import {
   getSubscriptionByUserId,
   getUserIdBySquareOrder,
@@ -59,7 +59,12 @@ async function markCanceled(userId, patch = {}) {
 export async function handler(event) {
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers: { Allow: 'POST' }, body: 'Method not allowed' };
   try {
-    const signatureKey = await resolveServerSecret('SQUARE_WEBHOOK_SIGNATURE_KEY', { service: 'square', key: 'webhook_signature_key' });
+    const signatureKey = await resolveServerSecret(
+      'square-portabase-webhook-signature-key',
+      { service: 'square', key: 'portabase-webhook-signature-key' },
+      { optional: true, allowEnvFallback: false },
+    ) || await resolveServerSecret('SQUARE_WEBHOOK_SIGNATURE_KEY', { service: 'square', key: 'webhook_signature_key' });
+    refuseForeignSquareSecret(signatureKey, await loadSecretsBundle());
     const siteUrl = (process.env.PORTABASE_SITE_URL || process.env.URL || 'https://portabase.dev').replace(/\/$/, '');
     const notificationUrl = `${siteUrl}/api/square/webhook`;
     const body = event.isBase64Encoded ? Buffer.from(event.body || '', 'base64').toString('utf8') : event.body || '';

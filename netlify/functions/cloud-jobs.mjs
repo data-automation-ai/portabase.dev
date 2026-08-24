@@ -4,6 +4,7 @@
  */
 import { getStore } from '@netlify/blobs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
+import { requireCloudAccess } from '../shared/entitlement.mjs';
 
 function store() {
   return getStore({ name: 'portabase-cloud-jobs', consistency: 'strong' });
@@ -23,6 +24,18 @@ export async function handler(event) {
     user = await verifyCloudUser(event);
   } catch {
     return jsonResponse(401, { error: 'unauthorized' });
+  }
+
+  try {
+    await requireCloudAccess(user);
+  } catch (error) {
+    if (error.code === 'payment_required') {
+      return jsonResponse(402, {
+        error: 'payment_required',
+        message: 'Start the Square trial before queueing Cloud jobs.',
+      });
+    }
+    throw error;
   }
 
   const key = `jobs:${user.cloudVersion}:${user.id}`;

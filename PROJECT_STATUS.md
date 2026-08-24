@@ -1,15 +1,66 @@
 # Portabase — capability & evidence ledger
 
-Scope of this file: **Google sign-in for Portabase Cloud identity.** Other
-capabilities (capture, restore, replay, Square billing) are tracked in
-`PROJECT.md` and `docs/HANDOFF.md`.
+Status vocabulary: *scaffolded → implemented → provisioned → configured → deployed → verified → complete*. Never substitute one for another.
 
-Status vocabulary is the portfolio one: *scaffolded → implemented → provisioned
-→ configured → deployed → verified → complete*. Never substitute one for
-another.
+**Overall status: INCOMPLETE.** The engine can capture. The Cloud API can start Square checkout in code. A stranger still cannot place a real order on https://portabase.dev.
 
-**Overall status: INCOMPLETE — provisioning and configuration are done and
-verified; blocked on deploying the app bundle and running the live sign-in proof.**
+---
+
+## Definition of Done — take a customer order
+
+Who: a stranger customer (not an operator with the Netlify password).
+Surface: **https://portabase.dev** (public, no site password).
+Happy path:
+
+1. Visit the site. Sign up with email or Google.
+2. Land in `/app`, see plan picker — not unpaid ops with demo projects.
+3. Choose **$17** (1 escape/24h) or **$27** (up to 3/day).
+4. Complete Square checkout (card on file, $0 × 7-day trial).
+5. Return to `/app` with **server-side** `hasAccess: true` (Square payment COMPLETED/CAPTURED including $0, or subscription PENDING/ACTIVE). UI gate is not enough.
+6. Self-serve refund during trial closes Cloud.
+
+Holes that make “we can take an order” a lie:
+
+- Site password
+- Subscribe using another product’s Square application
+- Entitlement granted because the user came back from `/app?checkout=complete` with no Square proof
+- Jobs API accepting any signed-in user
+- Google “Access blocked” if we advertise Google to strangers
+- Confirm/webhook unreachable because of the site password
+
+**Not in this Definition of Done:** live `replay` into a blank project, full multi-GB Storage proof, SMS actually sending, Dropbox OAuth, a managed runner executing capture. Those remain product work. They are not required to *charge a card and grant Cloud access*.
+
+---
+
+## Customer-order rows
+
+| Capability | Source | Provisioned | Configured | Deployed | Live proof | Security proof | Status | Blocker |
+|---|---|---|---|---|---|---|---|---|
+| Public site (no Netlify password) | Netlify site `794217cc-…` (`portabase-dev`) | ✅ site exists | ❌ `has_password=true`, `password_context=all` (probed 2026-08-23) | n/a | ❌ `/api/auth/config` returns Netlify password HTML | n/a | **BLOCKED** | Owner: disable visitor password. Webhooks cannot land while this is on. |
+| Dedicated identity project | Supabase `eoiqvdmvgaurlecdzqkp` | ✅ | ✅ Netlify `SUPABASE_URL` production = this ref | ⚠️ OAuth app bundle not on prod | ❌ | n/a | **configured** | Manual `netlify deploy --prod` (no Git linkage) |
+| Portabase Square application | Square | ❌ no `square-portabase-*` keys in `secrets-bundle` | ⚠️ Netlify `SQUARE_ACCESS_TOKEN` **dev** context **equals** `square-nysmassageexam-production-access-token`. Production value is redacted (`****`) so identity is unverified. | ❌ | ❌ | ❌ refuse-foreign-token guard is **implemented**, not live | **BLOCKED** | Owner: create Portabase Square app; store `square-portabase-production-access-token` + webhook signature; never reuse NYS. |
+| Square catalog $17 / $27 trial plans | `ensureCloudPlanVariationId` | n/a | ⚠️ pins `SQUARE_CLOUD_PLAN_VARIATION_ID` optional; otherwise creates catalog | ❌ | ❌ | n/a | **implemented** | Needs Portabase Square token |
+| `POST /api/cloud/subscribe` | `cloud-subscribe.mjs` | n/a | code yes | ❌ current prod behind password | ❌ | fail-closed on missing/foreign Square | **implemented** | Password + Portabase Square token |
+| Confirm checkout verifies Square | `cloud-confirm-checkout.mjs` | n/a | ✅ CAPTURED-but-OPEN + $0 trial | ❌ | ❌ | ✅ does not grant on `checkout_pending` alone | **implemented** | Deploy + live card |
+| Webhook | `square-webhook.mjs` | ❌ no Portabase webhook key in bundle; not in Netlify env | ❌ | ❌ | ❌ | HMAC verify exists; NYS webhook key refused if it matches | **implemented** | Password + Portabase webhook subscription to `https://portabase.dev/api/square/webhook` |
+| Entitlement on jobs | `cloud-jobs.mjs` | n/a | ✅ HTTP 402 without `hasAccess` | ❌ | ❌ | ✅ | **implemented** | Deploy |
+| Console paywall | `ConsoleApp.jsx` | n/a | ✅ signed-in ≠ entitled | ❌ | ❌ | UI only — server jobs already 402 | **implemented** | Deploy |
+| Privacy + terms | `/privacy` `/terms` | n/a | ✅ | ❌ | ❌ | n/a | **implemented** | Needed to publish Google External app |
+| Google sign-in (stranger) | see table below | ✅ client + consent | ⚠️ **Testing** | ❌ bundle | ⚠️ chooser only | ⚠️ | **implemented** | Deploy + publish-or-test-users. Email signup can take an order without Google publish. |
+
+### Non-secret target identity
+
+| Thing | Value |
+|---|---|
+| Supabase project (identity) | `eoiqvdmvgaurlecdzqkp` — "portabase.dev" |
+| Supabase project (replay restore target — **not** identity) | `svltssnxzqsrxtbjgaex` — "portabase-replay-proof" |
+| Shared portfolio project (**must not** be used for this product) | `ekklokrukxmqlahtonnc` — "DataAutomation" |
+| GCP project (Portabase consent screen) | `portabase-dev` / `495102144848` |
+| Netlify site id | `794217cc-42ab-4a9f-81da-06a661403573` |
+| Deploy mechanism | **No Git linkage** — `netlify deploy --prod`. Merging to `main` ships nothing. |
+| Square in secrets-bundle | `square-location-id` (shared) + **`square-nysmassageexam-*` only**. No `square-portabase-*`. |
+| Netlify Square env | `SQUARE_ENV=production`. Dev access token **is** the NYS token (byte-equal). Production token redacted by API. |
+| Publishable key (public) | `sb_publishable_OSrYsvzHMubG3YWYUSq6vw_BqEpNQyL` |
 
 ---
 
@@ -25,11 +76,11 @@ Agreed finish line for this capability:
 - Sign-out clears the session and `/app` is denied afterward.
 - The popup-blocked path still completes via full-page redirect.
 
-Not done until every row below reads **verified**.
+Not done until every row below reads **verified**. Identity is not entitlement.
 
 ---
 
-## Capability rows
+## Google capability rows
 
 | Capability | Source | Provisioned | Configured | Deployed | Live proof | Security proof | Status | Blocker |
 |---|---|---|---|---|---|---|---|---|
@@ -39,23 +90,10 @@ Not done until every row below reads **verified**.
 | Google OAuth client | Google Cloud Console (browser-automated) | ✅ `portabase-web`, client id `495102144848-jvd6gi5nk948t0v3l527n2hpldcr56bd` | ✅ 4 JS origins + 5 redirect URIs | n/a | ✅ account chooser renders "to continue to portabase.dev"; unregistered-URI control correctly returns `Error 400: redirect_uri_mismatch` | ✅ secret never in bundle/repo | **verified** | — |
 | Google client secrets in `secrets-bundle` | AWS `899867382621` | ✅ `portabase-google-oauth-client-id` / `-client-secret` / `-updated-at` | ✅ | n/a | ✅ round-trip read back byte-exact; 293→296 keys, no key lost | ✅ | **verified** | — |
 | Supabase Auth → Google provider | Supabase Management API | n/a | ✅ enabled; `site_url=https://portabase.dev`; 4-entry redirect allow list | n/a | ✅ read back: `external_google_client_id` matches the client the app sends (the `aud` check) | ✅ secret set, never echoed | **verified** | — |
-| id_token sign-in flow (browser) | `src/lib/google-gis-auth.js` | n/a | n/a | ❌ not merged to `main` | ❌ | ⚠️ partial | **implemented** | Live proof requires the OAuth client |
+| id_token sign-in flow (browser) | `src/lib/google-gis-auth.js` | n/a | n/a | ❌ not merged to `main` | ❌ | ⚠️ partial | **implemented** | Live proof requires the deployed bundle |
 | Single GoTrue client / no URL-handler race | `src/lib/supabase-auth.js` | n/a | ✅ `detectSessionInUrl: false` | ❌ | ❌ | ✅ guarded by test | **implemented** | — |
 | Product isolation guard | `tests/google-oauth-isolation.test.mjs` | n/a | ✅ | ❌ | ✅ 11/11 pass, **mutation-tested** (6/6 seeded regressions caught), runs in CI via `.github/workflows/ci.yml:23` | ✅ | **verified (CI-level)** | — |
 | Netlify env vars | Netlify site `794217cc-…` (`portabase-dev`) | n/a | ✅ all 5 set across all 4 contexts | ❌ not yet deployed | ✅ read back; **0** occurrences of the shared ref remain | n/a | **configured** | Takes effect only on next deploy |
-
-### Non-secret target identity (so a later agent picks the right target)
-
-| Thing | Value |
-|---|---|
-| Supabase project (identity) | `eoiqvdmvgaurlecdzqkp` — "portabase.dev" |
-| Supabase project (replay restore target — **not** identity) | `svltssnxzqsrxtbjgaex` — "portabase-replay-proof" |
-| Shared portfolio project (**must not** be used for this product) | `ekklokrukxmqlahtonnc` — "DataAutomation" |
-| GCP project (Portabase consent screen) | `portabase-dev` / `495102144848` |
-| GCP project that must **not** be used | `massageexam` — NYS Massage Exam |
-| Netlify site id | `794217cc-42ab-4a9f-81da-06a661403573` |
-| Deploy mechanism | **No Git linkage** — `build_settings` is empty, so Netlify does **not** build from a branch. Deploys are manual (`netlify deploy --prod`). Merging to `main` alone ships nothing. |
-| Publishable key (public) | `sb_publishable_OSrYsvzHMubG3YWYUSq6vw_BqEpNQyL` |
 
 ---
 
@@ -94,28 +132,19 @@ page, which documents creation solely as a console flow. A Google platform
 limitation, not a tooling gap. Everything downstream *is* automatable, and was
 automated. The console steps were completed by browser automation instead.
 
-## Remaining holes, in order
+## Remaining holes, in order (customer order)
 
-1. **Deploy the app bundle.** The browser code (id_token flow, single GoTrue
-   client, callback handling) is committed but **not deployed**. The live site
-   still serves the old bundle, which uses the broken `signInWithOAuth` code
-   exchange and still points at the shared project. Nothing about sign-in works
-   for a real user until this ships. Note the site has no Git linkage — merging
-   to `main` does **not** deploy; someone must run a manual deploy.
-2. **Get the branch to the org remote.** Work is on
-   `agent-checkpoints/claude/5075c12e-google-oauth`, pushed only to
-   `old-origin` (`lcapece/portabase.dev`). Pushes to `origin`
-   (`data-automation-ai/portabase.dev`) were denied twice by the local
-   permission classifier; the org PAT itself holds `push: true, admin: true`.
-3. **Upload the consent logo** (manual, ~30s): Branding → Browse →
-   `public/icons/portabase-consent-120.png`. Free while in Testing.
-4. **Decide on publishing status.** The app is in **Testing**, so only listed
-   test users can sign in — everyone else gets "Access blocked". Publishing to
-   Production is required for real users. See the tradeoff below.
-5. **Write a privacy policy and terms page.** Both consent-screen fields are
-   empty because `portabase.dev` has no `/privacy` or `/terms` route. Google
-   requires a privacy policy to publish an External app.
-6. **Run the live proof** (below).
+1. **Disable the Netlify visitor password** on `portabase-dev` (`password_context=all`). Until that click, no stranger and no Square webhook can reach the site. Confirm before I flip it — it makes the site public.
+2. **Provision a Portabase Square application** (not NYS Massage Exam). Put in `secrets-bundle`:
+   - `square-portabase-application-id`
+   - `square-portabase-production-access-token`
+   - `square-portabase-production-application-secret`
+   - `square-portabase-webhook-signature-key`
+   Then set Netlify production `SQUARE_ACCESS_TOKEN` / webhook key to those values. Dev context today is the NYS token; the code now refuses that match when the bundle is readable.
+3. **Deploy this bundle** (`netlify deploy --prod`). No Git linkage.
+4. Register Square webhook `https://portabase.dev/api/square/webhook`.
+5. **Google:** deploy is required even for email; publishing to Production (or listing test users) is required for stranger Google. Privacy and terms routes now exist in code. Logo upload still manual. Testing vs Production tradeoff unchanged (logo triggers brand verification).
+6. **Live proof:** one real (or Square sandbox) checkout, then `/api/cloud/me` shows `hasAccess: true`, jobs no longer 402, refund during trial closes access.
 
 ### Publishing tradeoff (a real decision, not a detail)
 
@@ -146,13 +175,17 @@ before deploying if any real signups may have occurred.
       `Error 400: redirect_uri_mismatch`, so the check discriminates.
       (An earlier `curl` probe of the same thing was **discarded** — its
       control passed too, meaning it proved nothing.)
-- [ ] Click Google on the deployed `https://portabase.dev/login` (needs the new bundle)
+- [ ] Click Google on the deployed `https://portabase.dev/login` (needs the new bundle **and** the site password off)
 - [ ] Returns to the app with a **valid session** (inspect the user object, not just the UI)
 - [ ] `/app` (protected route) loads
 - [ ] Sign out clears the session
 - [ ] After sign-out, `/app` is denied
 - [ ] Popup-blocked path: block popups, confirm the redirect fallback completes
 - [ ] Bundle scan: correct client id present, no client secret, no other product's id
+- [ ] Square checkout for `cloud-17` returns a payment link on the **Portabase** application
+- [ ] Confirm after redirect does **not** grant if Square was skipped
+- [ ] After a real card-on-file trial, `hasAccess` is true and `POST /api/cloud/jobs` is not 402
+- [ ] Trial self-refund closes access
 
 **Regression rows for the `detectSessionInUrl: false` flip.** Email confirmation
 and password-recovery links also land on `/auth/callback`. Under PKCE they
@@ -169,7 +202,15 @@ membership must still be checked server-side.
 
 ---
 
-## Verified so far (2026-08-20)
+## Verified so far (2026-08-23)
+
+- Live `https://portabase.dev/api/auth/config` is **not** the Cloud API — it is Netlify's password gate (`has_password=true`).
+- `secrets-bundle` has **no** `square-portabase-*` keys. Square keys present: `square-location-id`, `m-square-validation-key`, `square-nysmassageexam-*`.
+- Netlify `SQUARE_ACCESS_TOKEN` **dev** context is byte-equal to `square-nysmassageexam-production-access-token`. Production value is API-redacted.
+- Confirm-checkout previously granted `trialing` without talking to Square. That is fixed in this session's code (not deployed).
+- Jobs previously accepted any verified JWT. That is fixed in this session's code (not deployed).
+
+## Verified so far (2026-08-20) — Google scaffolding
 
 - Build passes: `npm run build` → 746.50 kB bundle, no errors.
 - Full suite passes: `npm test` → **109/109**, including the 11 new isolation tests.
@@ -186,21 +227,12 @@ membership must still be checked server-side.
 
 ## Not verified
 
-- Nothing has been tested against a live Google account — the OAuth client does
-  not exist yet.
+- Nothing has been tested against a live Google account on the deployed site.
 - Email signup confirmation and password recovery have **not** been re-tested
-  since `detectSessionInUrl` was set to false. Both land on the same callback
-  route this change touches.
-- Nothing is deployed. Work sits on branch
-  `agent-checkpoints/claude/5075c12e-google-oauth`, pushed to **`old-origin`**
-  (`github.com/lcapece/portabase.dev`) only. `origin`
-  (`github.com/data-automation-ai/portabase.dev`) rejected the push with 403
-  because the cached credential is `lcapece`. The org PAT in `secrets-bundle`
-  (`github-dataautomation-ia-pat`, user `data-automation-ai`) **does** hold
-  `push: true, admin: true` on that repo — verified via the GitHub API — but the
-  push itself was denied twice by the local permission classifier and was not
-  retried around. Work reaching the org remote and then `main` is still open.
-- `.env.example` changes (`VITE_GOOGLE_OAUTH_CLIENT_ID`, new project URL) are
-  **local-only and uncommitted** — that file already carried pre-existing edits,
-  so it was deliberately excluded from the checkpoint commit rather than
-  entangling two authors' work. It is not crash-safe.
+  since `detectSessionInUrl` was set to false.
+- No Portabase Square payment link has been created with a Portabase-scoped token.
+- Nothing from this order-path session is deployed. Work is local on
+  `agent-checkpoints/claude/5075c12e-google-oauth` plus uncommitted order-path
+  files. Pre-existing dirty files in this tree (proof-case wall, replay docs,
+  engine edits) are **not** this session and must not be absorbed into an
+  order-path commit.

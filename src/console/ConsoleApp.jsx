@@ -11,8 +11,13 @@ import * as supabaseAuth from '../lib/supabase-auth.js';
 import * as awsAuth from '../lib/cognito.js';
 import {
   OverviewPage, ProjectsPage, ProjectDetailPage, RestoresPage,
-  BackupsHubPage, AgentsHubPage, AlertsHubPage, AccountHubPage,
+  BackupsHubPage, AgentsHubPage, AlertsHubPage, AccountHubPage, BillingPage,
 } from './pages.jsx';
+
+function isDemoMode() {
+  return new URLSearchParams(window.location.search).get('demo') === '1'
+    || sessionStorage.getItem('portabase.console.demo') === '1';
+}
 
 /** Portabase-native IA — recovery ops only (not a Supabase Studio clone). */
 const NAV = [
@@ -85,6 +90,7 @@ export function ConsoleApp() {
   const [route, setRoute] = useState(() => parseRoute());
   const [state, setStateRaw] = useState(null);
   const [me, setMe] = useState(null);
+  const [meReady, setMeReady] = useState(false);
   const [ready, setReady] = useState(false);
   const [authError, setAuthError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -113,11 +119,13 @@ export function ConsoleApp() {
   }, [user]);
 
   const navigate = useCallback((page, opts = {}) => {
-    const path = buildPath(page, { id: opts.id, version, tab: opts.tab });
+    const entitled = isDemoMode() || me?.access?.hasAccess === true;
+    const nextPage = !entitled && page !== 'account' ? 'account' : page;
+    const path = buildPath(nextPage, { id: opts.id, version, tab: opts.tab || (!entitled ? 'billing' : undefined) });
     window.history.pushState({}, '', path);
     setRoute(parseRoute());
     setSideOpen(false);
-  }, [version]);
+  }, [version, me]);
 
   useEffect(() => {
     const onPop = () => setRoute(parseRoute());
@@ -163,13 +171,17 @@ export function ConsoleApp() {
           setReady(true);
         }
         if (demoMode) {
-          if (!cancelled) setMe({ user: profile, access: { hasAccess: true, status: 'trialing', label: '7-day trial (demo)' }, subscription: consoleState.billing });
+          if (!cancelled) {
+            setMe({ user: profile, access: { hasAccess: true, status: 'trialing', label: '7-day trial (demo)' }, subscription: consoleState.billing });
+            setMeReady(true);
+          }
           return;
         }
         try {
           const data = await fetchMe(version);
           if (!cancelled) {
             setMe(data);
+            setMeReady(true);
             if (data.subscription) {
               setStateRaw(s => {
                 const next = { ...s, billing: { ...s.billing, ...data.subscription, cloudVersion: version } };
@@ -182,6 +194,11 @@ export function ConsoleApp() {
           if (err.status === 401) {
             clearSession();
             window.location.replace(`/login?version=${version}&next=/app`);
+            return;
+          }
+          if (!cancelled) {
+            setMe({ access: { hasAccess: false, status: 'none', label: 'No subscription' }, subscription: null });
+            setMeReady(true);
           }
         }
       } catch (e) {
@@ -299,16 +316,42 @@ export function ConsoleApp() {
     },
   };
 
+  const demoMode = isDemoMode();
+  const entitled = demoMode || me?.access?.hasAccess === true;
+
   let body;
-  switch (route.page) {
-    case 'projects': body = <ProjectsPage {...pageProps} />; break;
-    case 'project': body = <ProjectDetailPage {...pageProps} />; break;
-    case 'backups': body = <BackupsHubPage {...pageProps} />; break;
-    case 'agents': body = <AgentsHubPage {...pageProps} />; break;
-    case 'alerts': body = <AlertsHubPage {...pageProps} />; break;
-    case 'restore': body = <RestoresPage {...pageProps} />; break;
-    case 'account': body = <AccountHubPage {...pageProps} tab={route.accountTab} />; break;
-    default: body = <OverviewPage {...pageProps} />;
+  if (!demoMode && !meReady) {
+    body = (
+      <div className="pb-gate-card" style={{ margin: 24, maxWidth: 520 }}>
+        <div className="pb-mono pb-faint">PLAN</div>
+        <h1>Checking Square entitlement…</h1>
+        <p>Signed in. Loading whether this account has a Cloud trial or paid plan.</p>
+      </div>
+    );
+  } else if (!entitled) {
+    body = (
+      <>
+        <div className="pb-callout warn" style={{ margin: '18px 24px 0' }}>
+          <Icon name="cloud" size={16} />
+          <div>
+            <strong>Card required to open Cloud ops</strong>
+            <p>Sign-in is not a subscription. Start the 7-day Square trial ($17 or $27/mo after) to use Sources, capsules, agents, and replay.</p>
+          </div>
+        </div>
+        <BillingPage {...pageProps} />
+      </>
+    );
+  } else {
+    switch (route.page) {
+      case 'projects': body = <ProjectsPage {...pageProps} />; break;
+      case 'project': body = <ProjectDetailPage {...pageProps} />; break;
+      case 'backups': body = <BackupsHubPage {...pageProps} />; break;
+      case 'agents': body = <AgentsHubPage {...pageProps} />; break;
+      case 'alerts': body = <AlertsHubPage {...pageProps} />; break;
+      case 'restore': body = <RestoresPage {...pageProps} />; break;
+      case 'account': body = <AccountHubPage {...pageProps} tab={route.accountTab} />; break;
+      default: body = <OverviewPage {...pageProps} />;
+    }
   }
 
   const crumb = route.page === 'project'
@@ -334,6 +377,7 @@ export function ConsoleApp() {
             <button
               key={item.id}
               type="button"
+              disabled={!entitled && item.id !== 'account'}
               className={route.page === item.id || (route.page === 'project' && item.id === 'projects') ? 'is-active' : ''}
               onClick={() => navigate(item.id)}
             >

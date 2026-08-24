@@ -1,4 +1,4 @@
-import { resolveServerSecret } from './secrets.mjs';
+import { loadSecretsBundle, refuseForeignSquareAccessToken, resolveServerSecret } from './secrets.mjs';
 import {
   CLOUD_DEFAULT_PLAN_ID,
   CLOUD_PLANS,
@@ -19,11 +19,27 @@ export const PRICE_MONTHLY_CENTS = CLOUD_PRICE_MONTHLY_CENTS;
 export const PRICE_TRIPLE_MONTHLY_CENTS = CLOUD_PLANS['cloud-27'].priceMonthlyCents;
 export { STORAGE_POLICY, getCloudPlan, CLOUD_DEFAULT_PLAN_ID };
 
+async function resolvePortabaseSquareAccessToken() {
+  const scoped = await resolveServerSecret(
+    'square-portabase-production-access-token',
+    { service: 'square', key: 'portabase-production-access-token' },
+    { optional: true, allowEnvFallback: false },
+  ) || await resolveServerSecret(
+    'square-portabase-access-token',
+    { service: 'square', key: 'portabase-access-token' },
+    { optional: true, allowEnvFallback: false },
+  );
+  if (scoped) return scoped;
+  return resolveServerSecret('SQUARE_ACCESS_TOKEN', { service: 'square', key: 'access_token' });
+}
+
 export async function squareCredentials() {
+  const bundle = await loadSecretsBundle();
   const [accessToken, locationId] = await Promise.all([
-    resolveServerSecret('SQUARE_ACCESS_TOKEN', { service: 'square', key: 'access_token' }),
+    resolvePortabaseSquareAccessToken(),
     resolveServerSecret('SQUARE_LOCATION_ID', { service: 'square', key: 'location_id' }),
   ]);
+  refuseForeignSquareAccessToken(accessToken, bundle);
   const env = (process.env.SQUARE_ENV || 'production') === 'sandbox' ? 'sandbox' : 'production';
   const baseUrl = env === 'sandbox' ? 'https://connect.squareupsandbox.com' : 'https://connect.squareup.com';
   return { accessToken, locationId, baseUrl, env };
@@ -176,9 +192,65 @@ export async function refundSquarePayment({ paymentId, amountCents, reason, idem
   });
 }
 
+export function paymentIsCaptured(payment) {
+  const status = String(payment?.status || '').toUpperCase();
+  return status === 'COMPLETED' || status === 'CAPTURED';
+}
+
+export function findCapturedPayment(payments = []) {
+  return payments.find(paymentIsCaptured) || null;
+}
+
+/**
+ * Square payment-link orders often stay OPEN until PayOrder. Treat a CAPTURED
+ * or COMPLETED payment as fulfilled even when the order state is still OPEN,
+ * including the $0 trial authorization that puts a card on file.
+ */
+export function squareCheckoutIsFulfilled({ order, payments, subscription } = {}) {
+  const payment = findCapturedPayment(payments || []);
+  if (payment) {
+    return { ok: true, via: 'payment', payment, amountCents: Number(payment.amount_money?.amount) || 0 };
+  }
+  const subStatus = String(subscription?.status || '').toUpperCase();
+  if (subStatus === 'PENDING' || subStatus === 'ACTIVE') {
+    return { ok: true, via: 'subscription', subscription, amountCents: 0 };
+  }
+  const state = String(order?.state || '').toUpperCase();
+  const tenders = Array.isArray(order?.tenders) && order.tenders.length > 0;
+  if (state === 'COMPLETED' && tenders) {
+    return { ok: true, via: 'order', order, amountCents: Number(order?.total_money?.amount) || 0 };
+  }
+  return { ok: false, via: null, state: state || null };
+}
+
+export async function retrieveCheckoutEvidence(orderId) {
+  if (!orderId) return { order: null, payments: [], subscription: null };
+  const [orderResp, payResp] = await Promise.all([
+    squareFetch(`/v2/orders/${encodeURIComponent(orderId)}`),
+    squareFetch(`/v2/payments?order_id=${encodeURIComponent(orderId)}`),
+  ]);
+  const order = orderResp.order || null;
+  const payments = payResp.payments || [];
+  let subscription = null;
+  const customerId = order?.customer_id || payments[0]?.customer_id || null;
+  if (customerId) {
+    try {
+      const found = await squareFetch('/v2/subscriptions/search', {
+        method: 'POST',
+        body: { query: { filter: { customer_ids: [customerId] } } },
+      });
+      subscription = (found.subscriptions || [])[0] || null;
+    } catch {
+      subscription = null;
+    }
+  }
+  return { order, payments, subscription };
+}
+
+/** Refund path: a captured payment with a positive amount. $0 trial auths do not refund. */
 export async function findCompletedPaymentForOrder(orderId) {
   if (!orderId) return null;
   const listed = await squareFetch(`/v2/payments?order_id=${encodeURIComponent(orderId)}`);
   const payments = listed.payments || [];
-  return payments.find(p => String(p.status).toUpperCase() === 'COMPLETED' && Number(p.amount_money?.amount) > 0) || null;
+  return payments.find(p => paymentIsCaptured(p) && Number(p.amount_money?.amount) > 0) || null;
 }
