@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSubscriptionPaymentLinkRequest, PRICE_MONTHLY_CENTS, STORAGE_POLICY, TRIAL_DAYS, squareCheckoutIsFulfilled } from '../netlify/shared/square-cloud.mjs';
+import { buildSubscriptionPaymentLinkRequest, PRICE_MONTHLY_CENTS, STORAGE_POLICY, TRIAL_DAYS, VARIATION_NAME, squareCheckoutIsFulfilled, catalogVariationIdFromUpsert, findNamedPlanVariation } from '../netlify/shared/square-cloud.mjs';
 import { CLOUD_MAX_AGENTS, CLOUD_PAYMENT_GATEWAY, CLOUD_PRICE_MONTHLY_CENTS, CLOUD_PLANS, getCloudPlan } from '../netlify/shared/product.mjs';
 import { deriveAccess, moneyBackEligible, trialEndsAtFrom } from '../netlify/shared/subscription-store.mjs';
 
@@ -91,6 +91,31 @@ test('squareCheckoutIsFulfilled accepts PENDING Square subscription with card on
   });
   assert.equal(result.ok, true);
   assert.equal(result.via, 'subscription');
+});
+
+test('catalogVariationIdFromUpsert reads id_mappings when objects are omitted', () => {
+  const id = catalogVariationIdFromUpsert({
+    id_mappings: [
+      { client_object_id: '#portabase-cloud-plan', object_id: 'PLAN1' },
+      { client_object_id: '#portabase-cloud-daily-trial', object_id: 'VAR1' },
+    ],
+  }, '#portabase-cloud-daily-trial');
+  assert.equal(id, 'VAR1');
+});
+
+test('findNamedPlanVariation reads nested subscription plan variations', () => {
+  const id = findNamedPlanVariation({
+    objects: [{
+      type: 'SUBSCRIPTION_PLAN',
+      subscription_plan_data: {
+        subscription_plan_variations: [{
+          id: 'NESTED_VAR',
+          subscription_plan_variation_data: { name: VARIATION_NAME },
+        }],
+      },
+    }],
+  }, VARIATION_NAME);
+  assert.equal(id, 'NESTED_VAR');
 });
 
 test('squareCheckoutIsFulfilled rejects checkout_pending with no Square capture', () => {

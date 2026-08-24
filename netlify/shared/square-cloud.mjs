@@ -67,6 +67,37 @@ export async function squareFetch(path, { method = 'GET', body } = {}) {
   return result;
 }
 
+export function findNamedPlanVariation(listed, variationName) {
+  for (const obj of listed?.objects || []) {
+    if (
+      obj.type === 'SUBSCRIPTION_PLAN_VARIATION'
+      && obj.subscription_plan_variation_data?.name === variationName
+      && obj.present_at_all_locations !== false
+      && obj.id
+    ) {
+      return obj.id;
+    }
+    const nested = obj.subscription_plan_data?.subscription_plan_variations || [];
+    const hit = nested.find(v =>
+      (v.subscription_plan_variation_data?.name === variationName || v.name === variationName) && v.id,
+    );
+    if (hit?.id) return hit.id;
+  }
+  return null;
+}
+
+export function catalogVariationIdFromUpsert(batch, variationClientId) {
+  const fromObjects = (batch?.objects || []).find(o => o.type === 'SUBSCRIPTION_PLAN_VARIATION')?.id;
+  if (fromObjects) return fromObjects;
+  for (const obj of batch?.objects || []) {
+    const nested = obj.subscription_plan_data?.subscription_plan_variations || [];
+    const hit = nested.find(v => v.id && !String(v.id).startsWith('#'));
+    if (hit?.id) return hit.id;
+  }
+  const mapped = (batch?.id_mappings || []).find(m => m.client_object_id === variationClientId);
+  return mapped?.object_id || null;
+}
+
 /**
  * Ensure Catalog plan + variation for a Cloud plan id.
  * @param {'cloud-17'|'cloud-27'} [planId]
@@ -79,13 +110,9 @@ export async function ensureCloudPlanVariationId(planId = CLOUD_DEFAULT_PLAN_ID)
   if (configured) return configured;
 
   const variationName = isTriple ? VARIATION_NAME_TRIPLE : VARIATION_NAME;
-  const listed = await squareFetch('/v2/catalog/list?types=SUBSCRIPTION_PLAN_VARIATION');
-  const existing = (listed.objects || []).find(obj =>
-    obj.type === 'SUBSCRIPTION_PLAN_VARIATION'
-    && obj.subscription_plan_variation_data?.name === variationName
-    && obj.present_at_all_locations !== false,
-  );
-  if (existing?.id) return existing.id;
+  const listed = await squareFetch('/v2/catalog/list?types=SUBSCRIPTION_PLAN,SUBSCRIPTION_PLAN_VARIATION');
+  const existingId = findNamedPlanVariation(listed, variationName);
+  if (existingId) return existingId;
 
   const catalogPlanId = `#portabase-cloud-plan`;
   const variationId = isTriple ? `#portabase-cloud-triple-trial` : `#portabase-cloud-daily-trial`;
@@ -138,9 +165,9 @@ export async function ensureCloudPlanVariationId(planId = CLOUD_DEFAULT_PLAN_ID)
     },
   });
 
-  const createdVariation = (batch.objects || []).find(o => o.type === 'SUBSCRIPTION_PLAN_VARIATION');
-  if (!createdVariation?.id) throw new Error('plan_variation_create_failed');
-  return createdVariation.id;
+  const createdId = catalogVariationIdFromUpsert(batch, variationId);
+  if (!createdId) throw new Error('plan_variation_create_failed');
+  return createdId;
 }
 
 export function buildSubscriptionPaymentLinkRequest({
