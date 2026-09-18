@@ -155,7 +155,7 @@ function Header() {
       <Logo href="/#top" />
       <button className="menu" onClick={() => setOpen(!open)} aria-label="Toggle navigation">{open ? 'Close' : 'Menu'}</button>
       <nav className={open ? 'nav open' : 'nav'}>
-        <a href="/#what-is-this">What is this?</a><a href="/#why-now">Why now</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">The escape plan</a><a href="/security">Security</a><a href="/cloud">Cloud · $17 / $27</a><a href="/login">Sign in</a>
+        <a href="/#what-is-this">What is this?</a><a href="/#never-hold-keys">Keys</a><a href="/#cli-vs-cloud">CLI vs Cloud</a><a href="/#why-now">Why now</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">The escape plan</a><a href="/security">Security</a><a href="/cloud">Cloud · $17 / $27</a><a href="/login">Sign in</a>
       </nav>
       <a className="button button-small desktop-cta" href="/login?next=/app">Start free trial <Arrow /></a>
     </div>
@@ -169,9 +169,12 @@ function Hero() {
       <div className="hero-brandline"><SupabaseMark /><span>Is great—until the doors are locked.</span></div>
       <div className="hero-grid">
        <div className="hero-copy">
+        <div className="hero-copy-top">
         <p className="hero-usp"><span>USP</span><strong>Your Supabase Escape</strong> — a customer-owned way out when the dashboard is locked.</p>
         <h1>A Supabase lockout can freeze your <em>entire business.</em></h1>
         <p className="hero-risk-headline"><strong>No API. No Auth. No dashboard. No reachable backups.</strong></p>
+        </div>
+        <div className="hero-copy-rest">
         <p className="hero-lead"><strong>Portabase is the Escape for Supabase</strong> — open source, Supabase-only. The free engine captures your <strong>database, Auth records, Storage object bytes, and Edge Functions</strong>; encrypts them; and stores the capsule where <em>you</em> choose. Platform backups cover the database — <strong>not your Storage files</strong>. Optional Cloud (this site) is the <strong>GUI, easy setup, and telemetry</strong> so the Escape keeps running — never custody of your keys.</p>
         <div className="hero-analogy"><span aria-hidden="true">⌂</span><p><b>Your landlord changed the locks.</b> The backup inside the building is not an Escape. Portabase keeps your way out in another building—tested, current, and under your control.</p></div>
         <div className="incident-factline"><b>MY INCIDENT · 95+ HOURS</b><span>“Billing dispute” cited</span><span>No details or paperwork</span><span>Card issuer found nothing identifiable</span><span>Singapore payment entity</span><span>No response from Supabase</span></div>
@@ -180,6 +183,7 @@ function Hero() {
           <a className="text-link" href="#stories">See what lockout looks like <span>↓</span></a>
         </div>
         <div className="hero-proof"><span>USP · Escape</span><span>Supabase only</span><span>OSS free · Cloud = GUI &amp; telemetry</span></div>
+        </div>
       </div>
       {/* Bridge: headline → ban dialog (same placement as design example) */}
       <img
@@ -221,6 +225,95 @@ function HeroConcept() {
           <small>Conceptual illustration · not a live dashboard</small>
         </figcaption>
       </figure>
+    </div>
+  </section>;
+}
+
+function NeverHoldKeys() {
+  return <section className="section never-hold-keys" id="never-hold-keys">
+    <div className="shell">
+      <div className="section-kicker green">KEY CUSTODY</div>
+      <div className="split-heading">
+        <h2>We never see your private keys.</h2>
+        <p>Supabase is an excellent product. Portabase does not replace it. It keeps a copy you can still reach if that one account is locked.</p>
+      </div>
+      <div className="keys-path-grid">
+        <article>
+          <small>FREE OPEN-SOURCE CLI</small>
+          <b>Keys stay on your machine.</b>
+          <p>You run the engine locally or on a VM you control. Service-role keys, database URLs, and the capsule passphrase never leave that box. There is no Portabase account required.</p>
+        </article>
+        <article>
+          <small>PORTABASE CLOUD</small>
+          <b>The browser seals keys to your runner.</b>
+          <p>You enter keys in the browser form. They are sealed to your Cloud Runner. This site is supposed to receive job status and hashes only — not the keys, not the capsule bytes.</p>
+        </article>
+      </div>
+      <p className="keys-honest">
+        <strong>Honest limit:</strong> the Cloud path above is the intended design, shown in the diagram.
+        It is not a completed, independently proven isolation guarantee. Do not treat Cloud key-sealing as proven-green.
+        If you need zero Portabase key path, use the free open-source CLI on infrastructure only you operate.
+      </p>
+      <figure className="keys-diagram">
+        <img src="/never-hold-keys-diagram.png" alt="Your keys never reach Portabase" width="1280" height="720" />
+        <figcaption>
+          <span>Customer browser → your Cloud Runner. Portabase site: status and hashes only.</span>
+          <small>Product design · not a completed isolation audit</small>
+        </figcaption>
+      </figure>
+    </div>
+  </section>;
+}
+
+function CliVsCloud() {
+  const rows = [
+    ['Who runs it', 'You. On your machine, VM, or NAS.', 'Your Cloud Runner. Browser seals keys to it.'],
+    ['Full capsule', 'Yes. Database, Auth, Storage bytes, Edge Functions.', 'Yes. Same open-source engine.'],
+    ['Destinations', 'S3, Dropbox, local, NAS — or a free Supabase project if the capsule fits.', 'S3 or Dropbox. Guided setup.'],
+    ['Doctor', 'You run portabase doctor.', 'Same check, invoked for you.'],
+    ['Managed service', 'No. You operate it.', 'Yes.'],
+    ['Scheduled backups', 'You add cron or Task Scheduler.', 'Yes.'],
+    ['Targeted restores', 'You run restore / replay.', 'Yes. Console-guided.'],
+    ['Telemetry reports', 'Local status only.', 'Yes. Status and hashes.'],
+    ['SMS status alerts', 'No.', '$17 optional. Status only. No keys.'],
+    ['Price', 'Free', '$7 / $17'],
+  ];
+  return <section className="section cli-vs-cloud" id="cli-vs-cloud">
+    <div className="shell">
+      <div className="section-kicker">FREE CLI · CLOUD</div>
+      <div className="split-heading">
+        <h2>Free open-source CLI vs Cloud.</h2>
+        <p>Cloud is convenience. The free CLI has friction: install, disk, cron, and you watch the job. Same capsule engine either way.</p>
+      </div>
+      <div className="cli-free-path">
+        <p className="cli-free-lead"><strong>Most Supabase users can operate completely free.</strong> Free open-source CLI plus a free destination account. Back up and restore into a free Supabase project when it fits. No Portabase subscription required.</p>
+        <ul>
+          <li>Fits when the <strong>full capsule is genuinely small</strong> — about under 500&nbsp;MB including binaries.</li>
+          <li>Or use <code>--exclude-binaries</code>, or leave out a huge unimportant table, so the rest fits.</li>
+        </ul>
+        <p className="cli-free-loud"><strong>Production-sized full capsules with all Storage bytes will not fit on a free destination.</strong></p>
+      </div>
+      <div className="compare-table-wrap cli-cloud-table-wrap">
+        <table className="compare-table cli-cloud-table">
+          <thead>
+            <tr>
+              <th>Compare</th>
+              <th>Free open-source CLI<br /><span>You run it</span></th>
+              <th>Portabase Cloud<br /><span>Convenience</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(([label, cli, cloud]) => (
+              <tr key={label}>
+                <td>{label}</td>
+                <td>{cli}</td>
+                <td>{cloud}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="cli-cloud-note">Cloud key-sealing is the intended design. It is not a shipped, proven-green isolation audit.</p>
     </div>
   </section>;
 }
@@ -435,18 +528,79 @@ function Reality() {
   </section>;
 }
 
+function hrefKey(href) {
+  try {
+    const url = new URL(href);
+    return `${url.hostname}${url.pathname}`.replace(/\/$/, '');
+  } catch {
+    return href;
+  }
+}
+
+function storySeverity(story) {
+  const t = `${story.tag} ${story.title}`.toLowerCase();
+  if (t.includes('banned')) return 10;
+  if (t.includes('takeover')) return 11;
+  if (t.includes('project deleted')) return 12;
+  if (t.includes('identity')) return 13;
+  if (t.includes('billing freeze')) return 14;
+  if (t.includes('missing files')) return 20;
+  if (t.includes('export blocked')) return 21;
+  if (t.includes('empty restore')) return 22;
+  if (t.includes('table deleted')) return 23;
+  if (t.includes('restore')) return 24;
+  if (t.includes('expired')) return 25;
+  if (t.includes('production')) return 30;
+  if (t.includes('database unreachable')) return 31;
+  if (t.includes('multi-service') || t.includes('platform outage')) return 32;
+  if (t.includes('critical')) return 33;
+  if (t.includes('ten days')) return 34;
+  if (t.includes('self-lockout')) return 40;
+  if (t.includes('restricted')) return 41;
+  if (t.includes('stuck')) return 42;
+  if (t.includes('disputed')) return 43;
+  if (t.includes('login') || t.includes('dashboard')) return 50;
+  if (t.includes('official')) return 60;
+  if (t.includes('billing') || t.includes('phantom')) return 70;
+  return 80;
+}
+
+function homepageIncidents() {
+  const known = new Set(stories.map(story => hrefKey(story.href)));
+  const extras = retiredStories
+    .filter(story => !known.has(hrefKey(story.href)))
+    .map((story, index) => ({ ...story, id: `R${index + 1}`, kind: 'firsthand' }));
+  return [...stories, ...extras].sort((a, b) => {
+    const rank = storySeverity(a) - storySeverity(b);
+    return rank !== 0 ? rank : String(a.id).localeCompare(String(b.id));
+  });
+}
+
 function Stories() {
-  const homepageStories = stories.slice(0, Math.ceil(stories.length / 2));
+  const homepageStories = useMemo(() => homepageIncidents(), []);
   return <section className="section stories" id="stories">
     <div className="shell">
       <div className="section-kicker red">DOCUMENTED REAL-LIFE INCIDENTS · ZERO HYPOTHETICALS</div>
-      <div className="split-heading"><h2>These actually<br />happened.</h2><p>Founders lost dashboards, databases, Storage access, and days waiting for help. These linked reports are not fortune-cookie warnings. They are the mornings other businesses already woke up to. This homepage presents a curated selection from a continuously maintained source archive.</p></div>
-      <div className="story-grid">
-        {homepageStories.map((story, index) => <a className="story-card" href={story.href} target="_blank" rel="noreferrer" key={story.id}>
-          <div className="story-meta"><span>{story.tag}</span><b>{String(index + 1).padStart(2, '0')}</b></div>
-          <h3>{story.title}</h3><p>{story.body}</p>
-          <div className="story-source"><span>{story.source}<small>{story.verified}</small></span><Arrow /></div>
-        </a>)}
+      <div className="split-heading">
+        <h2>These actually<br />happened.</h2>
+        <p>Public reports with source links. Account loss, bans, backup holes, and production-down cases first. A report is what the poster said — not independent proof of cause.</p>
+      </div>
+      <div className="story-list" role="list">
+        {homepageStories.map((story, index) => (
+          <article className="story-row" role="listitem" key={story.id}>
+            <details open={index === 0}>
+              <summary>
+                <span className="story-row-tag">{story.tag}</span>
+                <span className="story-row-title">{story.title}</span>
+              </summary>
+              <p>{story.body}</p>
+              <small>{story.verified}</small>
+            </details>
+            <a className="story-row-source" href={story.href} target="_blank" rel="noreferrer">
+              {story.source} <Arrow />
+            </a>
+          </article>
+        ))}
       </div>
       <p className="source-note">No policies, feature requests, hypotheticals or backup-market discussions are counted. Community reports document what the poster reported; official incidents document what Supabase confirmed. A report is not presented as independent proof of cause.</p>
     </div>
@@ -1865,7 +2019,7 @@ function SecurityPage() {
 
 function HomePage() {
   useEffect(() => { document.title = 'Portabase — Your Supabase Escape'; }, []);
-  return <><Header /><main><Hero /><HeroConcept /><WhatIsThis /><WhyNow /><Reality /><ClosureRisk /><Stories /><Escape /><Audit /><Cutover /><PublicDeal /><CloudTeaser /></main><Footer /></>;
+  return <><Header /><main><Hero /><HeroConcept /><NeverHoldKeys /><CliVsCloud /><WhatIsThis /><WhyNow /><Reality /><ClosureRisk /><Stories /><Escape /><Audit /><Cutover /><PublicDeal /><CloudTeaser /></main><Footer /></>;
 }
 
 function App() {
