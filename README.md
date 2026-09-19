@@ -60,12 +60,14 @@ Deploy the static site from `dist/` to the isolated Netlify project for portabas
 
 ## Portabase Cloud infrastructure
 
-**Launch scope: Supabase only** — Cloud login is hosted Supabase Auth (email + Google). Cognito/AWS product identity is reserved for a later release (see [docs/LAUNCH-SCOPE.md](./docs/LAUNCH-SCOPE.md)).
+**Launch scope: Supabase only** — Cloud login is hosted Supabase Auth (email + Google + GitHub). Cognito/AWS product identity is reserved for a later release (see [docs/LAUNCH-SCOPE.md](./docs/LAUNCH-SCOPE.md)).
 
 Control plane: trial/billing (Square), Supabase account DB, optional ECS runners, CloudWatch:
 
+- How Cloud layers on the free CLI: [docs/CLOUD.md](./docs/CLOUD.md)
 - Launch scope: [docs/LAUNCH-SCOPE.md](./docs/LAUNCH-SCOPE.md)
 - Design: [docs/CLOUD_INFRASTRUCTURE.md](./docs/CLOUD_INFRASTRUCTURE.md)
+- Control-plane store: [docs/CLOUD_CONTROL_PLANE_STORE.md](./docs/CLOUD_CONTROL_PLANE_STORE.md)
 - Billing: [docs/BILLING.md](./docs/BILLING.md)
 - Terraform (future AWS path / customer vault): [aws/cloud/](./aws/cloud/)
 - Control-plane SQL: [supabase/cloud/0001_control_plane.sql](./supabase/cloud/0001_control_plane.sql)
@@ -77,7 +79,9 @@ Control plane: trial/billing (Square), Supabase account DB, optional ECS runners
 - [Launch scope (Supabase only)](./docs/LAUNCH-SCOPE.md)
 - [Open-core model](./docs/OPEN_CORE.md)
 - [Security & trust](./docs/SECURITY-TRUST.md)
-- [Billing](./docs/BILLING.md)
+- [Cloud on the free CLI](./docs/CLOUD.md)
+- [Billing](./docs/BILLING.md) — Square **$7 / $17 / $37** (1 / 10 / 100 GB)
+- [Site ship checklist](./docs/SITE-SHIP.md) — Netlify deploy + Louis env
 - [Replay proof](./docs/REPLAY.md)
 - [Cloud infrastructure](./docs/CLOUD_INFRASTRUCTURE.md)
 - [Product specification](./docs/PRODUCT_SPEC.md)

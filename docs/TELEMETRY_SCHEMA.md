@@ -30,11 +30,17 @@ Opt-in only. Implemented in `utility/telemetry.mjs`. Cloud ingest: `POST /api/cl
 | --- | --- | --- |
 | `agent.heartbeat` | Periodic / doctor | `scheduleEveryHours`, `providerType`, `lastCapsuleAgeHours` |
 | `backup.started` | Backup begins | `capsuleId`, `edition` |
-| `backup.completed` | Success (COMPLETE or TRIAL) | `capsuleId`, `status`, `destinationKind`, `verified`, `durationMs`, `errorCount` |
+| `backup.completed` | Success (COMPLETE or TRIAL) | `capsuleId`, `status`, `destinationKind`, `verified`, `durationMs`, `errorCount`, optional `sizeBytes` (ciphertext total — not object lists) |
 | `backup.failed` | Hard failure | `capsuleId`, `errorClass`, `durationMs` |
 | `verify.failed` | Remote/local verify fail | `capsuleId`, `errorClass` |
 | `restore.completed` | Guarded restore finished | `mode`, `evidenceStatus`, `durationMs` |
 | `schedule.missed` | Heartbeat detects overdue job | `expectedEveryHours`, `hoursSinceLastSuccess` |
+
+## Cloud dashboard (graphs)
+
+The signed-in Telemetry page visualizes **health signals only** (provably zero-knowledge): success/fail, duration, encrypted-byte aggregates, worker heartbeat counts, plan usage vs GB cap, rescue readiness, drift pass/fail counts, a status timeline.
+
+It must **not** browse Storage object names/paths, table row contents, or capsule plaintext inventory. Dashboard sanitizer: `src/lib/telemetry-view.js`.
 
 ## Forbidden content (reject)
 
@@ -43,6 +49,7 @@ Any string field matching (case-insensitive):
 - `password`, `passphrase`, `secret`, `service_role`, `sb_secret_`, `private_key`
 - `postgres://`, `postgresql://` with credentials
 - PEM blocks (`BEGIN .* PRIVATE KEY`)
+- Identifying inventory: Storage object names/paths, table row payloads, decrypted dump listings
 
 ## Authentication
 

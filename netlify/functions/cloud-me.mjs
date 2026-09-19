@@ -1,5 +1,6 @@
 import { publicAuthConfigBoth, jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { deriveAccess, getSubscriptionByUserId } from '../shared/subscription-store.mjs';
+import { BASE_TRANSFERS_PER_24H, extraTransfersAddonPublic, transferWindow } from '../shared/product.mjs';
 
 export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
@@ -32,12 +33,17 @@ export async function handler(event) {
       subscription: record
         ? {
           status: record.status,
+          plan: record.plan || null,
           trialEndsAt: record.trialEndsAt,
           currentPeriodEnd: record.currentPeriodEnd,
           priceMonthlyCents: record.priceMonthlyCents || 1700,
           squareSubscriptionId: record.squareSubscriptionId || null,
           startedAt: record.startedAt || null,
           cloudVersion: record.cloudVersion || user.cloudVersion,
+          storageCapGb: record.storageCapGb || null,
+          extraTransfersAddon: Boolean(record.extraTransfersAddon),
+          transfersPer24h: transferWindow({ extraTransfersAddon: Boolean(record.extraTransfersAddon) }).allowance,
+          cyclesPerDay: record.cyclesPerDay || BASE_TRANSFERS_PER_24H,
         }
         : null,
       access,
@@ -52,6 +58,7 @@ export async function handler(event) {
           supabase: { available: product.versions.supabase.available },
           aws: { available: product.versions.aws.available },
         },
+        extraTransfersAddon: extraTransfersAddonPublic(),
       },
     });
   } catch (error) {

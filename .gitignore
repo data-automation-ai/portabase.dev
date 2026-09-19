@@ -15,6 +15,14 @@ portabase-capsules/
 portabase-status/
 .portabase-sandbox-destination/
 .portabase/
+.portabase-cloud/
+.portabase-cloud-test/
+cloud/control-plane/*.db
+cloud/control-plane/*.db-wal
+cloud/control-plane/*.db-shm
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
 .netlify/
 supabase/.temp/
 research/evidence/original-attachments/

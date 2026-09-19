@@ -51,7 +51,7 @@ Audience: teams who expect **Portabase to perform staging** and operate the cont
 
 **Launch platform: Supabase only** (see [LAUNCH-SCOPE.md](./LAUNCH-SCOPE.md)).
 
-Commercial defaults: **$17/mo** (Square), **7-day trial with card**, **up to 12 agents/runners**, **customer-provided capsule destination (BYO storage)**.
+Commercial defaults: **$7 / $17 / $37** (Square, 1 / 10 / 100 GB), **1 capsule transfer / 24h** included, optional Extra transfers add-on (**up to 3 / 24h**, +$3 on $7, +$5 on $17 / $37), **7-day trial with card**, **up to 12 agents/runners**, **customer-provided capsule destination (BYO storage)**.
 
 Includes:
 

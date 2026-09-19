@@ -29,7 +29,7 @@ function VersionPicker({ version, onChange }) {
       <div className="version-callout" style={{ marginBottom: 18, maxWidth: 'none' }}>
         <span>LAUNCH SCOPE</span>
         <b>Supabase only</b>
-        <p>Portabase protects Supabase projects (database, Auth, Storage, Edge Functions). Sign in with Supabase Auth — email or Google.</p>
+        <p>Portabase protects Supabase projects (database, Auth, Storage, Edge Functions). Sign in with Supabase Auth — email, Google, or GitHub.</p>
       </div>
     );
   }
@@ -75,10 +75,10 @@ function AuthShell({ children, title, lead, version }) {
             </div>
             <ul className="auth-bullets">
               <li><span>✓</span> Built for <strong>Supabase</strong> projects first</li>
-              <li><span>✓</span> Google or email via <strong>Supabase Auth</strong></li>
+              <li><span>✓</span> GitHub, Google, or email via <strong>Supabase Auth</strong></li>
               <li><span>✓</span> 7-day free trial — <strong>card required</strong> (Square)</li>
-              <li><span>✓</span> Then <strong>${productConfig.priceMonthly}/mo</strong> · up to 12 agents</li>
-              <li><span>✓</span> You provide binary storage · keys stay on your runner</li>
+              <li><span>✓</span> Then <strong>{productConfig.priceRangeLabel}/mo</strong> · 1 / 10 / 100 GB caps · up to 12 agents</li>
+              <li><span>✓</span> You provide binary storage · provably zero-knowledge of your encryption keys</li>
             </ul>
           </div>
           <div className="auth-card">{children}</div>
@@ -125,6 +125,40 @@ function GoogleButton({ version, next, label }) {
   );
 }
 
+function GitHubButton({ version, next, label }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  if (version === 'aws') return null;
+  return (
+    <>
+      <button
+        type="button"
+        className="button google-btn"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setError('');
+          try {
+            setStoredCloudVersion(version);
+            sessionStorage.setItem('portabase.auth.next', next);
+            sessionStorage.setItem('portabase.auth.version', version);
+            await supabaseAuth.signInWithGitHub({ next });
+          } catch (err) {
+            setError(supabaseAuth.describeAuthError(err));
+            setBusy(false);
+          }
+        }}
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path fill="currentColor" d="M12 2C6.48 2 2 6.58 2 12.26c0 4.52 2.87 8.36 6.84 9.71.5.1.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.36 1.12 2.94.86.09-.67.35-1.12.63-1.38-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05A9.3 9.3 0 0 1 12 6.84c.85 0 1.71.12 2.51.35 1.9-1.32 2.74-1.05 2.74-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.8-4.57 5.06.36.32.68.94.68 1.9 0 1.38-.01 2.49-.01 2.83 0 .27.18.6.69.49A10.03 10.03 0 0 0 22 12.26C22 6.58 17.52 2 12 2Z" />
+        </svg>
+        {busy ? 'Redirecting…' : label}
+      </button>
+      {error && <p className="auth-error" style={{ marginTop: 12 }}>{error}</p>}
+    </>
+  );
+}
+
 export function LoginPage() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const fromUrl = versionFromSearch(window.location.search);
@@ -140,6 +174,7 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [awaitingConfirm, setAwaitingConfirm] = useState(false);
+  const [magicSent, setMagicSent] = useState(false);
 
   const selectVersion = (v) => {
     const nextV = normalizeCloudVersion(v);
@@ -187,7 +222,7 @@ export function LoginPage() {
     <AuthShell
       version={version}
       title={mode === 'signup' ? 'Create your Cloud account' : mode === 'forgot' ? 'Reset password' : 'Sign in to Cloud'}
-      lead="Portabase Cloud launches for Supabase only. Sign in with email or Google, then start $17/mo (1 escape/24h) or $27/mo (up to 3 escapes/day) via Square — you bring capsule storage."
+      lead="Portabase Cloud launches for Supabase only. Sign in with email (password or magic link), Google, or GitHub, then start $7 / $17 / $37 via Square (1 / 10 / 100 GB). You bring capsule storage. We never learn your encryption passphrase."
     >
       <VersionPicker version={version} onChange={selectVersion} />
 
@@ -200,6 +235,11 @@ export function LoginPage() {
         version={version}
         next="/app"
         label={mode === 'signup' ? 'Sign up with Google' : 'Continue with Google'}
+      />
+      <GitHubButton
+        version={version}
+        next="/app"
+        label={mode === 'signup' ? 'Sign up with GitHub' : 'Continue with GitHub'}
       />
       <div className="auth-divider"><span>or email</span></div>
 
@@ -256,7 +296,21 @@ export function LoginPage() {
             {busy ? 'Working…' : mode === 'signup' ? 'Create account' : 'Sign in'}
           </button>
           {mode === 'signin' && (
-            <button type="button" className="auth-text-btn" onClick={() => setMode('forgot')}>Forgot password?</button>
+            <>
+              <button
+                type="button"
+                className="auth-text-btn"
+                disabled={busy || !email || magicSent}
+                onClick={() => go(async () => {
+                  await supabaseAuth.signInWithMagicLink({ email, next });
+                  setMagicSent(true);
+                  setMessage('Magic link sent. Check your email — the link returns here. Portabase never sees your passphrase.');
+                })}
+              >
+                {magicSent ? 'Magic link sent' : 'Email me a magic link instead'}
+              </button>
+              <button type="button" className="auth-text-btn" onClick={() => setMode('forgot')}>Forgot password?</button>
+            </>
           )}
         </form>
       )}
@@ -341,7 +395,8 @@ export function LoginPage() {
       {error && <p className="auth-error">{error}</p>}
       <p className="auth-legal">
         Launch scope: <strong>Supabase projects only</strong> (database, Auth, Storage, Edge Functions).
-        Identity: hosted Supabase Auth. Trial requires a card and becomes ${productConfig.priceMonthly}/mo after {productConfig.trialDays} days unless canceled.
+        Identity: hosted Supabase Auth (email + Google). Trial requires a card and becomes {productConfig.priceRangeLabel}/mo after {productConfig.trialDays} days unless canceled.
+        Portabase is provably zero-knowledge of customer encryption keys and capsule contents.
         {AWS_CLOUD_VERSION_ENABLED ? '' : ' AWS Cognito Cloud is not offered yet.'}
       </p>
     </AuthShell>

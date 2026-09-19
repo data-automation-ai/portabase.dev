@@ -56,6 +56,7 @@ Most users will not know KMS, CloudTrail, or CloudWatch. That is expected. The *
 - Managed staging (no laptop required)
 - BYO binary destination
 - Control plane is not the recovery vault
+- **Provably zero-knowledge** of capsule contents and sealing keys on the website / Cloud APIs (no object names, no peek, no decrypt endpoint) — `docs/ZERO-KNOWLEDGE.md`
 - We stay honest about residual key visibility on managed jobs
 
 ## Related

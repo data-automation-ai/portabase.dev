@@ -6,19 +6,26 @@ import {
 } from './data/store.js';
 import { CLOUD_VERSIONS, normalizeCloudVersion, getStoredCloudVersion, setStoredCloudVersion, isSupabaseOnlyLaunch } from '../lib/cloud-versions.js';
 import { clearSession, loadSession, sessionCloudVersion, sessionUser } from '../lib/session.js';
-import { ensureSessionForVersion, fetchMe, startTrialCheckout, confirmCheckout } from '../lib/cloud-api.js';
+import { ensureSessionForVersion, fetchMe, startTrialCheckout, startAddonCheckout, confirmCheckout } from '../lib/cloud-api.js';
+import { getCloudPlan } from '../lib/product.js';
 import * as supabaseAuth from '../lib/supabase-auth.js';
 import * as awsAuth from '../lib/cognito.js';
 import {
   OverviewPage, ProjectsPage, ProjectDetailPage, RestoresPage,
   BackupsHubPage, AgentsHubPage, AlertsHubPage, AccountHubPage,
 } from './pages.jsx';
+import { TelemetryPage } from './telemetry-page.jsx';
+import { OpenCapsulePage } from './open-capsule.jsx';
+import { SupabaseViewerPage } from './supabase-viewer.jsx';
 
 /** Portabase-native IA — recovery ops only (not a Supabase Studio clone). */
 const NAV = [
   { id: 'home', label: 'Home', icon: 'home' },
   { id: 'projects', label: 'Sources', icon: 'folder' },
+  { id: 'supabase-viewer', label: 'Live Supabase', icon: 'table' },
   { id: 'backups', label: 'Capsules', icon: 'capsule' },
+  { id: 'telemetry', label: 'Telemetry', icon: 'chart' },
+  { id: 'inspect', label: 'Open capsule', icon: 'key' },
   { id: 'agents', label: 'Agents', icon: 'cpu' },
   { id: 'alerts', label: 'Alerts', icon: 'bell' },
   { id: 'restore', label: 'Replay', icon: 'restore' },
@@ -35,7 +42,13 @@ const ALIASES = {
   destinations: 'account',
   restores: 'restore',
   activity: 'alerts',
-  reports: 'home',
+  reports: 'telemetry',
+  telemetry: 'telemetry',
+  inspect: 'inspect',
+  open: 'inspect',
+  live: 'supabase-viewer',
+  'supabase-viewer': 'supabase-viewer',
+  studio: 'supabase-viewer',
   runners: 'agents',
   team: 'account',
   billing: 'account',
@@ -52,6 +65,8 @@ function parseRoute() {
   if (parts[0] === 'app') {
     if (parts[1] === 'projects' && parts[2]) { page = 'project'; id = parts[2]; }
     else if (parts[1]) page = parts[1];
+  } else if (parts[0] === 'tools' && parts[1] === 'supabase-viewer') {
+    page = 'supabase-viewer';
   }
   if (window.location.hash.startsWith('#/')) {
     const h = window.location.hash.slice(2).split('/');
@@ -66,6 +81,7 @@ function parseRoute() {
     version: normalizeCloudVersion(params.get('version') || sessionCloudVersion() || getStoredCloudVersion()),
     checkout: params.get('checkout'),
     attempt: params.get('attempt'),
+    addon: params.get('addon'),
     accountTab: params.get('tab') || null,
   };
 }
@@ -149,8 +165,10 @@ export function ConsoleApp() {
         }
         if (route.checkout === 'complete' && !demoMode) {
           try {
-            await confirmCheckout({ attempt: route.attempt, version });
-            toast('Trial started — card on file', 'ok');
+            const confirmed = await confirmCheckout({ attempt: route.attempt, version, addon: route.addon });
+            toast(confirmed?.addon === 'extra-transfers'
+              ? 'Extra transfers add-on is on — up to 3 / 24h'
+              : 'Trial started — card on file', 'ok');
           } catch (e) {
             toast(e.message || 'Checkout confirmation pending', 'danger');
           }
@@ -190,6 +208,29 @@ export function ConsoleApp() {
     })();
     return () => { cancelled = true; };
   }, [version]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const startAddon = async () => {
+    if (sessionStorage.getItem('portabase.console.demo') === '1') {
+      setStateRaw((s) => {
+        const next = { ...s, billing: { ...s.billing, extraTransfersAddon: true, transfersPer24h: 3 } };
+        saveConsoleState(next);
+        return next;
+      });
+      setMe((m) => (m ? { ...m, subscription: { ...m.subscription, extraTransfersAddon: true, transfersPer24h: 3 } } : m));
+      toast('Demo: Extra transfers add-on on — up to 3 / 24h', 'ok');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await startAddonCheckout(version);
+      if (result.url) window.location.href = result.url;
+      else toast(result.message || 'Add-on checkout URL missing', 'danger');
+    } catch (e) {
+      toast(e.message || 'Add-on checkout failed', 'danger');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const startTrial = async (planId = 'cloud-17') => {
     if (sessionStorage.getItem('portabase.console.demo') === '1') {
@@ -270,6 +311,8 @@ export function ConsoleApp() {
     params: { id: route.id },
     busy,
     startTrial,
+    startAddon,
+    demoMode: sessionStorage.getItem('portabase.console.demo') === '1',
     resetDemo: () => {
       const next = resetConsoleState({ ...user, cloudVersion: version });
       setStateRaw(next);
@@ -282,6 +325,9 @@ export function ConsoleApp() {
     case 'projects': body = <ProjectsPage {...pageProps} />; break;
     case 'project': body = <ProjectDetailPage {...pageProps} />; break;
     case 'backups': body = <BackupsHubPage {...pageProps} />; break;
+    case 'telemetry': body = <TelemetryPage {...pageProps} />; break;
+    case 'inspect': body = <OpenCapsulePage {...pageProps} />; break;
+    case 'supabase-viewer': body = <SupabaseViewerPage {...pageProps} />; break;
     case 'agents': body = <AgentsHubPage {...pageProps} />; break;
     case 'alerts': body = <AlertsHubPage {...pageProps} />; break;
     case 'restore': body = <RestoresPage {...pageProps} />; break;
@@ -304,7 +350,7 @@ export function ConsoleApp() {
         <div className="pb-ws">
           <small>Workspace</small>
           <strong>{state.workspace.name}</strong>
-          <span>{meta.short} · {state.billing.status}</span>
+          <span>{meta.short} · {getCloudPlan(state.billing?.plan || state.billing?.planId).shortLabel} · {state.billing.status}</span>
         </div>
         <nav className="pb-nav">
           <div className="pb-nav-section">Recovery</div>
@@ -353,6 +399,7 @@ export function ConsoleApp() {
             </div>
             <button type="button" className="pb-btn pb-btn-sm" onClick={() => navigate('account', { tab: 'billing' })}>
               <BadgeInline status={state.billing.status} />
+              <span style={{ marginLeft: 6 }}>{getCloudPlan(me?.subscription?.plan || state.billing?.plan).shortLabel}</span>
             </button>
             <span className="pb-badge pb-badge-acid" style={{ height: 28, padding: '0 10px' }}>Supabase</span>
             <a className="pb-btn pb-btn-sm pb-btn-ghost" href="/cloud" target="_blank" rel="noreferrer">

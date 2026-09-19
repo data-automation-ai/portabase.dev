@@ -10,6 +10,8 @@ test('telemetry rejects secrets and connection strings', () => {
   assert.throws(() => assertSafeTelemetryValue({ password: 'x' }), /forbidden key/);
   assert.throws(() => assertSafeTelemetryValue('postgresql://user:secret@host/db'), /forbidden content/);
   assert.throws(() => assertSafeTelemetryValue('sb_secret_abc'), /forbidden content/);
+  assert.throws(() => assertSafeTelemetryValue({ objectName: 'avatars/x.jpg' }), /forbidden key/);
+  assert.throws(() => assertSafeTelemetryValue('buckets/avatars/photo.png'), /object path/);
 });
 
 test('telemetry builds allowlisted backup events', () => {

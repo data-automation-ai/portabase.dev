@@ -1836,14 +1836,19 @@ Commands:
                       Add --trial for a deliberately limited demo sample
                       Local Starter: add --allow-large-local to bypass ${LOCAL_STARTER_MAX_LABEL} cap
   verify              Verify checksums; add --decrypt for authenticated decryption
+                      --report-drift   opt-in MD5 / row-count / RBAC drift report
   status              Show the last durable backup result
   prune               Preview retention; add --execute to delete recognized capsules
   install-schedule    Preview a scheduled backup; add --execute to install
   remove-schedule     Preview task removal; add --execute to remove
   restore             Decrypt and plan restore; execution requires two target guards
+                      --fill-missing   absent-only Storage/DB fill (not incremental sync)
+                      --writers N      parallel writers (default 1)
   replay              Validate a capsule by restoring into a NEW Supabase project
                       (never the source). Requires target env vars + --confirm-target.
                       Same guards as restore --execute; clearer validation report.
+  export-manifest     Name-only inventory (layers, tables, buckets, checksums — no secrets)
+  capsule-unload      List unloadable layer names for a runner (still ciphertext)
 
 Optional Cloud:
   Set cloud.enabled=true and PORTABASE_CLOUD_URL / PORTABASE_CLOUD_TOKEN
@@ -1896,6 +1901,47 @@ async function replay() {
   }
 }
 
+function namesOnlyCapsuleReport(metadata, mode = 'export-manifest') {
+  const contents = metadata.contents || {};
+  return {
+    command: mode,
+    id: metadata.id || null,
+    status: metadata.status || null,
+    projectRef: metadata.projectRef || null,
+    createdAt: metadata.createdAt || null,
+    layers: Object.keys(contents),
+    layerComplete: Object.fromEntries(Object.entries(contents).map(([k, v]) => [k, Boolean(v?.complete)])),
+    errors: Array.isArray(metadata.errors) ? metadata.errors : [],
+    hasEncryption: Boolean(metadata.encryption),
+    secretsIncluded: false,
+    note: 'Names and status only. Passphrase, keys, and object bytes are not written.',
+  };
+}
+
+async function exportManifest() {
+  const capsuleDir = resolve(flag('capsule', argv[1] || ''));
+  if (!capsuleDir || !existsSync(join(capsuleDir, 'capsule.json'))) {
+    throw new Error('export-manifest requires --capsule <dir> with capsule.json');
+  }
+  const metadata = JSON.parse(await readFile(join(capsuleDir, 'capsule.json'), 'utf8'));
+  const report = namesOnlyCapsuleReport(metadata, 'export-manifest');
+  const out = flag('out', join(capsuleDir, 'export-manifest.json'));
+  await writeFile(out, `${JSON.stringify(report, null, 2)}\n`);
+  console.log(`export-manifest wrote ${out} (names only; no secrets)`);
+}
+
+async function capsuleUnload() {
+  const capsuleDir = resolve(flag('capsule', argv[1] || ''));
+  if (!capsuleDir || !existsSync(join(capsuleDir, 'capsule.json'))) {
+    throw new Error('capsule-unload requires --capsule <dir> with capsule.json');
+  }
+  const metadata = JSON.parse(await readFile(join(capsuleDir, 'capsule.json'), 'utf8'));
+  const report = namesOnlyCapsuleReport(metadata, 'capsule-unload');
+  report.unloadable = report.layers.filter((name) => report.layerComplete[name]);
+  report.stillCiphertext = true;
+  console.log(JSON.stringify(report, null, 2));
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
     if (command === 'init') await init();
@@ -1910,6 +1956,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     else if (command === 'restore') await restore();
     else if (command === 'replay') await replay();
     else if (command === 'probe') await probe();
+    else if (command === 'export-manifest') await exportManifest();
+    else if (command === 'capsule-unload') await capsuleUnload();
     else help();
   } catch (error) {
     console.error(`\nPortabase failed: ${error.message}`);

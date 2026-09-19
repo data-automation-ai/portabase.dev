@@ -8,6 +8,7 @@ export function Icon({ name, size = 16, className = '' }) {
     case 'folder': return <svg {...p}><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" /></svg>;
     case 'cpu': return <svg {...p}><rect x="6" y="6" width="12" height="12" rx="1" /><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3" /></svg>;
     case 'capsule': return <svg {...p}><rect x="4" y="7" width="16" height="10" rx="5" /><path d="M9 7v10M15 7v10" /></svg>;
+    case 'table': return <svg {...p}><rect x="3" y="5" width="18" height="14" rx="1" /><path d="M3 10h18M9 5v14M15 5v14" /></svg>;
     case 'clock': return <svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>;
     case 'cloud': return <svg {...p}><path d="M7 18h10a4 4 0 0 0 .4-8 6 6 0 0 0-11.5-1.5A3.5 3.5 0 0 0 7 18z" /></svg>;
     case 'restore': return <svg {...p}><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /></svg>;

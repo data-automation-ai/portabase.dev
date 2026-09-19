@@ -42,6 +42,18 @@ export function startTrialCheckout(version, planId = 'cloud-17') {
   return api('/api/cloud/subscribe', { method: 'POST', body: { planId }, version });
 }
 
-export function confirmCheckout({ attempt, version } = {}) {
-  return api('/api/cloud/confirm-checkout', { method: 'POST', body: { attempt: attempt || null }, version });
+export function startAddonCheckout(version, addon = 'extra-transfers') {
+  return api('/api/cloud/subscribe', { method: 'POST', body: { addon }, version });
+}
+
+export function confirmCheckout({ attempt, version, addon } = {}) {
+  return api('/api/cloud/confirm-checkout', { method: 'POST', body: { attempt: attempt || null, addon: addon || null }, version });
+}
+
+export function fetchRunners(version) {
+  return api('/api/cloud/runners', { version });
+}
+
+export function provisionRunner(version, body = {}) {
+  return api('/api/cloud/runners', { method: 'POST', body: { action: 'provision', ...body }, version });
 }

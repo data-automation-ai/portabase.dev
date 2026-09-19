@@ -61,6 +61,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/cloud/runners"
+  to = "/.netlify/functions/cloud-runners"
+  status = 200
+
+[[redirects]]
   from = "/api/cloud/audit-trail"
   to = "/.netlify/functions/cloud-audit-trail"
   status = 200

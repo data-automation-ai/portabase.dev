@@ -128,6 +128,20 @@ export async function signUpWithEmail({ email, password, name }) {
   };
 }
 
+export async function signInWithMagicLink({ email, next = '/app' } = {}) {
+  const supabase = await getSupabase();
+  sessionStorage.setItem('portabase.auth.next', next);
+  sessionStorage.setItem('portabase.auth.version', 'supabase');
+  const { error } = await supabase.auth.signInWithOtp({
+    email: email.trim().toLowerCase(),
+    options: {
+      emailRedirectTo: authCallbackUrl('supabase'),
+      shouldCreateUser: true,
+    },
+  });
+  if (error) throw error;
+}
+
 export async function signInWithEmail({ email, password }) {
   const supabase = await getSupabase();
   const { data, error } = await supabase.auth.signInWithPassword({
@@ -147,6 +161,21 @@ export async function signInWithGoogle({ next = '/app' } = {}) {
     options: {
       redirectTo: authCallbackUrl('supabase'),
       queryParams: { access_type: 'offline', prompt: 'consent' },
+    },
+  });
+  if (error) throw error;
+  if (data?.url) window.location.href = data.url;
+  return data;
+}
+
+export async function signInWithGitHub({ next = '/app' } = {}) {
+  const supabase = await getSupabase();
+  sessionStorage.setItem('portabase.auth.next', next);
+  sessionStorage.setItem('portabase.auth.version', 'supabase');
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'github',
+    options: {
+      redirectTo: authCallbackUrl('supabase'),
     },
   });
   if (error) throw error;
@@ -204,7 +233,7 @@ export function describeAuthError(error) {
   if (lower.includes('email not confirmed')) return 'Confirm your email using the link we sent, then sign in.';
   if (lower.includes('user already registered')) return 'An account with this email already exists. Sign in instead.';
   if (lower.includes('provider is not enabled') || lower.includes('unsupported provider')) {
-    return 'Google sign-in is not enabled yet in Supabase Auth. Use email login, or enable Google under Authentication → Providers.';
+    return 'That social provider is not enabled yet in Supabase Auth. Use email, or enable Google / GitHub under Authentication → Providers.';
   }
   if (lower.includes('not configured')) return msg;
   return msg;

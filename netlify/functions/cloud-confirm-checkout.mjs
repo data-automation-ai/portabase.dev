@@ -1,5 +1,6 @@
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { PRICE_MONTHLY_CENTS, TRIAL_DAYS } from '../shared/square-cloud.mjs';
+import { ADDON_TRANSFERS_PER_24H, EXTRA_TRANSFERS_ADDON_ID } from '../shared/product.mjs';
 import {
   deriveAccess,
   getSubscriptionByUserId,
@@ -44,6 +45,32 @@ export async function handler(event) {
   }
 
   const access = deriveAccess(existing);
+  const addonCheckout = existing.checkoutKind === EXTRA_TRANSFERS_ADDON_ID
+    || existing.pendingAddon === EXTRA_TRANSFERS_ADDON_ID
+    || String(body.addon || '') === EXTRA_TRANSFERS_ADDON_ID;
+
+  if (addonCheckout) {
+    const now = new Date().toISOString();
+    const record = await saveSubscription({
+      ...existing,
+      userId: storeKey,
+      extraTransfersAddon: true,
+      transfersPer24h: ADDON_TRANSFERS_PER_24H,
+      cyclesPerDay: ADDON_TRANSFERS_PER_24H,
+      pendingAddon: null,
+      checkoutKind: null,
+      addonConfirmedAt: now,
+    });
+    return jsonResponse(200, {
+      ok: true,
+      addon: EXTRA_TRANSFERS_ADDON_ID,
+      access: deriveAccess(record),
+      subscription: record,
+      cloudVersion: user.cloudVersion,
+      message: 'Extra transfers add-on is on — up to 3 capsule transfers / 24h.',
+    });
+  }
+
   if (access.hasAccess && existing.status !== 'checkout_pending') {
     return jsonResponse(200, { ok: true, alreadyActive: true, access, subscription: existing });
   }

@@ -62,10 +62,11 @@ Do **not** thrash C: for multi‑GB Storage capture. Disk is tight; user rejects
 | --- | --- |
 | Gateway | **Square** |
 | Base | **$17/mo** |
-| Included | **1 backup cycle per 24 hours** (workspace) |
-| Plans | **$17/mo** · 1 escape / 24h · or · **$27/mo** · up to 3 escapes / day |
+| Included | **1 capsule backup / transfer per 24 hours** on every Square base plan |
+| Extra transfers add-on | **Up to 3 / 24h** · **+$3/mo** on $7 · **+$5/mo** on $17 / $37 |
+| Plans | **$7 / 1 GB** · **$17 / 10 GB** · **$37 / 100 GB** |
 | Agents | Up to **12** |
-| SMS | Success **and** failure at run time (console: Alerts → SMS texts) |
+| SMS | Optional on **$17 / $37** (Twilio). Status only — never keys, capsule bytes, or customer data. |
 | Trial | 7 days, **card required**, auto-convert |
 | Vault | **Customer BYO** — not Portabase object storage |
 | Staging (Cloud) | **Portabase managed runners** — not customer laptop |
@@ -147,6 +148,10 @@ Trust dial: Trust Portabase · mix controls · max (KMS+Trail+CW) · standalone.
 
 Console:
 
+- **Provably zero-knowledge** — control plane cannot see object names, rows, plaintext, or sealing keys (`docs/ZERO-KNOWLEDGE.md`)
+- **Telemetry** — graphical health signals only (no object names, rows, or plaintext inventory)
+- **Open capsule** — local file / CLI `verify --decrypt`. Passphrase never posted to Cloud. Browser decrypt is an honest stub. No server-side decrypt path.
+- **Live Supabase viewer** — browser-only live project explorer (`/app/supabase-viewer`). Keys/results never posted to Cloud. Not a capsule viewer.
 - **Account → CloudWatch live** — secret-scoped job logs (`/api/cloud/cloudwatch-live`)
 - **Account → CloudTrail live** — customer Trail via AssumeRole (`/api/cloud/audit-trail`)
 
@@ -165,6 +170,7 @@ portabase.dev/
   docs/SECURITY-TRUST.md
   docs/REPLAY.md
   docs/CLOUD_CONSOLE.md
+  docs/ZERO-KNOWLEDGE.md
   docs/CLOUD_INFRASTRUCTURE.md
   docs/AUTH_AND_TRIAL.md
   src/main.jsx              # Marketing + routes

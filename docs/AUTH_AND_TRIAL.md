@@ -6,7 +6,7 @@
 | --- | --- |
 | **Identity** | Hosted Supabase Auth (email + Google PKCE) |
 | **Product** | Supabase projects (DB · Auth · Storage · Edge Functions) |
-| **Trial** | 7 days · **card required** · auto-converts to **$17/mo** (Square) |
+| **Trial** | 7 days · **card required** · auto-converts to **$7 / $17 / $37** (1 / 10 / 100 GB, Square) |
 | **Agents** | Up to 12 |
 | **Storage** | Customer BYO capsules — Portabase never hosts recovery bytes |
 
@@ -16,7 +16,7 @@ AWS Cognito identity remains in the codebase (`src/lib/cognito.js`, `AWS_CLOUD_V
 
 ## Login
 
-- `/login` — Supabase Auth only (callout: “Supabase only”)
+- `/login` — Supabase Auth only (callout: “Supabase only”) — **email password, email magic link, and Google**
 - `/login?version=aws` is normalized back to Supabase while launch flag is off
 - Session stored client-side; API calls send:
 
@@ -37,7 +37,7 @@ Subscriptions are namespaced as `{version}:{userId}` (always `supabase:…` at l
 ## Trial → subscription
 
 1. Signed-in user opens console (`/app`)
-2. `POST /api/cloud/subscribe` creates Square payment link (trial phase $0 × 7 days → $17/mo)
+2. `POST /api/cloud/subscribe` creates Square payment link (trial phase $0 × 7 days → chosen $7 / $17 / $37 plan)
 3. Redirect back `/app?checkout=complete`
 4. `POST /api/cloud/confirm-checkout` + Square webhooks update subscription state
 5. After trial, Square charges the card on file
@@ -64,7 +64,18 @@ Details: [BILLING.md](./BILLING.md), [SQUARE_SETUP.md](./SQUARE_SETUP.md).
 
 3. Site URL / additional redirects as needed for `/app`
 
-Google OAuth client credentials go in Supabase dashboard (not Portabase Netlify).
+Google OAuth client credentials go in the **Supabase dashboard** (Authentication → Providers → Google), not in Portabase git.
+
+Placeholders (never commit real values):
+
+| Name | Where |
+| --- | --- |
+| `GOOGLE_OAUTH_CLIENT_ID` | Supabase Auth Google provider |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | Supabase Auth Google provider |
+| `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` | Optional Netlify build (public) |
+| `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` | Netlify functions |
+
+The site uses `@supabase/supabase-js` PKCE (`src/lib/supabase-auth.js`). Portabase never stores the Google client secret.
 
 ## Code map
 

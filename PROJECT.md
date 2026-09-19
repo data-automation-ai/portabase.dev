@@ -78,12 +78,13 @@ Live: **https://portabase.dev**
 | Rule | Value |
 | --- | --- |
 | Payment | Square |
-| Daily Escape | **$17/mo** · 1 escape / 24h |
-| Triple Escape | **$27/mo** · up to 3 escapes / day |
-| Included | **1 backup cycle per 24 hours** |
-| (no à-la-carte extras) | Choose $17 or $27 plan only |
+| Starter Escape | **$7/mo** · up to **1 GB** |
+| Daily Escape | **$17/mo** · up to **10 GB** |
+| Scale Escape | **$37/mo** · up to **100 GB** |
+| Included | Console, telemetry, SMS, ≤12 agents, **1 transfer / 24h** |
+| Extra transfers add-on | Up to **3 / 24h** · **+$3/mo** on $7 · **+$5/mo** on $17 / $37 |
 | Agents | Up to **12** |
-| SMS | On **success** and **failure** at run time |
+| SMS | Optional on **$17 / $37** — status only |
 | Trial | 7 days, card required |
 | Launch platform | **Supabase only** (DB/Auth/Storage/Functions) |
 | Identity | **Supabase Auth** only (Cognito off) |
@@ -95,6 +96,7 @@ Live: **https://portabase.dev**
 
 Page: `/security` · Doc: `docs/SECURITY-TRUST.md`
 
+- **Provably zero-knowledge** of capsule contents and sealing keys on the website / Cloud APIs (no object names, no peek, no decrypt endpoint) — `docs/ZERO-KNOWLEDGE.md`
 - Options: Trust Portabase · customer KMS · CloudTrail · CloudWatch live (secret-scoped) · mix  
 - **Up front:** on managed Cloud there is still a **possibility Portabase can see/use key material** during a job  
 - Zero vendor key path → **standalone OSS only**  
@@ -226,7 +228,9 @@ npm run portabase -- doctor
 | `docs/LAUNCH-SCOPE.md` | Supabase-only, Cloud vs standalone staging |
 | `docs/OPEN_CORE.md` | Open core vs paid |
 | `docs/SECURITY-TRUST.md` | Keys, KMS, Trail, CW, honesty |
-| `docs/BILLING.md` | $17, cycles, SMS |
+| `docs/BILLING.md` | $7 / $17 / $37, transfers, SMS |
+| `docs/CLOUD.md` | How Cloud layers on the free CLI |
+| `docs/CLOUD_CONTROL_PLANE_STORE.md` | Supabase primary + SQLite replica |
 | `docs/REPLAY.md` | Proof restore to new project |
 | `docs/CLOUD_CONSOLE.md` | Console IA |
 | `docs/CLOUD_INFRASTRUCTURE.md` | AWS control plane sketch |

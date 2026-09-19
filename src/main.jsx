@@ -5,7 +5,10 @@ import { nightmares as stories } from './data/nightmares.js';
 import { diagrams, modelLayers, trustBoundary } from './data/diagrams.js';
 import { closureReasons, closureCases } from './data/closure-cases.js';
 import { AppPage, AuthCallbackPage, LoginPage } from './auth-pages.jsx';
+import { BackendPage } from './backend-page.jsx';
+import { DocsPage, InstallCta, LegalPage } from './site-pages.jsx';
 import { loadSession } from './lib/session.js';
+import { CLOUD_PLANS, extraTransfersAddonPriceLabel, planPriceRangeLabel } from './lib/product.js';
 
 const Arrow = () => <span aria-hidden="true">↗</span>;
 
@@ -155,7 +158,7 @@ function Header() {
       <Logo href="/#top" />
       <button className="menu" onClick={() => setOpen(!open)} aria-label="Toggle navigation">{open ? 'Close' : 'Menu'}</button>
       <nav className={open ? 'nav open' : 'nav'}>
-        <a href="/#what-is-this">What is this?</a><a href="/#never-hold-keys">Keys</a><a href="/#cli-vs-cloud">CLI vs Cloud</a><a href="/#why-now">Why now</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">The escape plan</a><a href="/security">Security</a><a href="/cloud">Cloud · $17 / $27</a><a href="/login">Sign in</a>
+        <a href="/#what-is-this">What is this?</a><a href="/#never-hold-keys">Keys</a><a href="/#cli-vs-cloud">CLI vs Cloud</a><a href="/#why-now">Why now</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">The escape plan</a><a href="/backend">Backend</a><a href="/docs">Docs</a><a href="/security">Security</a><a href="/cloud">Cloud · $7 / $17</a><a href="/login">Sign in</a>
       </nav>
       <a className="button button-small desktop-cta" href="/login?next=/app">Start free trial <Arrow /></a>
     </div>
@@ -432,10 +435,10 @@ function WhatIsThis() {
           </figure>
         ))}
       </div>
-      <div className="what-actions">
+        <div className="what-actions">
         <a className="button button-primary" href="/cloud">Cloud vs open source <Arrow /></a>
+        <a className="button button-ghost" href="/backend">Backend · capsules &amp; workers <Arrow /></a>
         <a className="button button-ghost" href="#escape">See the escape plan <Arrow /></a>
-        <a className="button button-ghost" href="#stories">Real incidents <Arrow /></a>
       </div>
     </div>
   </section>;
@@ -899,7 +902,7 @@ function HowItWorksDiagrams() {
     <div className="shell">
       <div className="section-kicker green">HOW IT WORKS</div>
       <h2>Diagrams that explain the job — and why it exists.</h2>
-      <p className="cloud-section-lead">Recovery bytes and encryption keys stay on infrastructure you control. Cloud is an optional side channel for health and alerts — never the place capsules live.</p>
+      <p className="cloud-section-lead">Recovery bytes and encryption keys stay on infrastructure you control. Cloud is an optional side channel for health and alerts — never the place capsules live. Full sequence: <a href="/backend" style={{ color: 'var(--acid)', fontWeight: 700 }}>Backend · capsules &amp; workers ↗</a>.</p>
 
       <div className="viz-panel-grid">
         <figure className="viz-panel">
@@ -1127,16 +1130,16 @@ function CloudTeaser() {
       <div>
         <div className="section-kicker green">USP · ESCAPE OPS</div>
         <h2>Open source is the Escape.<br />Cloud keeps the Escape running.</h2>
-        <p><strong>Supabase only.</strong> GitHub = free Escape engine. <strong>This site</strong> = hosted <strong>GUI</strong>, guided configuration, <strong>telemetry</strong>, SMS on success/failure — so the Escape is not a forgotten cron job. <strong>7-day free trial</strong> then <strong>$17/mo</strong> (1 escape / 24h) or <strong>$27/mo</strong> (up to 3 escapes / day) · ≤12 agents. You provide capsule storage.</p>
+        <p><strong>Supabase only.</strong> GitHub = free Escape engine. <strong>This site</strong> = hosted <strong>GUI</strong>, guided configuration, <strong>telemetry</strong>, SMS on success/failure — so the Escape is not a forgotten cron job. <strong>7-day free trial</strong> then <strong>$7 / $17 / $37</strong> (1 / 10 / 100 GB) · <strong>1 transfer / 24h</strong> included · Extra transfers <strong>+$3 / +$5 / +$5</strong> for up to 3 / 24h · ≤12 agents. You provide capsule storage. Zero knowledge of your encryption keys.</p>
         <div className="cloud-teaser-actions">
           <a className="button button-primary" href="/login?mode=signup&next=/app">Start free trial <Arrow /></a>
+          <a className="button button-ghost" href="/backend">Backend · how it talks <Arrow /></a>
           <a className="button button-ghost" href="/cloud">Open source vs Cloud <Arrow /></a>
-          <a className="button button-ghost" href="/app?demo=1">Open console demo <Arrow /></a>
         </div>
       </div>
       <div className="cloud-teaser-price">
         <span>GUI · CONFIG · TELEMETRY · SMS</span>
-        <b>$17–27<small>/mo</small></b>
+        <b>$7–37<small>/mo</small></b>
         <em>Card required · auto-converts</em>
         <p>After 7-day free trial</p>
       </div>
@@ -1187,6 +1190,7 @@ function PublicDeal() {
       </div>
       <div className="cloud-teaser-actions" style={{ marginTop: 28 }}>
         <a className="button button-primary" href="/cloud#subscribe">Cloud · GUI &amp; telemetry <Arrow /></a>
+        <a className="button button-ghost" href="/backend">How the backend works <Arrow /></a>
         <a className="button button-ghost" href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">Open-source engine <Arrow /></a>
       </div>
     </div>
@@ -1212,7 +1216,7 @@ function CloudPage() {
           <a href="#closures">Why accounts close</a>
           <a href="#compare">Compare</a>
           <a href="#keys">Key storage</a>
-          <a href="#github">GitHub</a>
+          <a href="/backend">Backend</a>
           <a href="#subscribe">Pricing</a>
           <a href={signedIn ? '/app' : '/login'}>{signedIn ? 'Console' : 'Sign in'}</a>
         </nav>
@@ -1232,6 +1236,7 @@ function CloudPage() {
             <a className="button button-primary" href={signedIn ? '/app' : '/login?mode=signup&next=/app'}>Start 7-day free trial <Arrow /></a>
             <a className="button button-ghost" href="/app?demo=1">Open full console (demo) <Arrow /></a>
             <a className="button button-ghost" href="#subscribe">See trial → subscription <Arrow /></a>
+            <a className="button button-ghost" href="/backend">Backend · capsules &amp; workers <Arrow /></a>
             <a className="button button-ghost" href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">GitHub · open source <Arrow /></a>
           </div>
         </div>
@@ -1250,7 +1255,7 @@ function CloudPage() {
                 <tr>
                   <th>Capability</th>
                   <th>GitHub / self-host<br /><span>Apache-2.0 · free</span></th>
-                  <th>Portabase Cloud<br /><span>$17 · 1 escape/24h · or · $27 · 3 escapes/day</span></th>
+                  <th>Portabase Cloud<br /><span>$7 · 1 GB · $17 · 10 GB · $37 · 100 GB</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -1264,6 +1269,7 @@ function CloudPage() {
                 <tr><td>Read every line that encrypts your capsule</td><td className="yes">Yes · public GitHub</td><td className="yes">Same public code</td></tr>
                 <tr><td>Hosted GUI / ease of configuration</td><td className="no">CLI / self-host config</td><td className="yes">Yes · this website</td></tr>
                 <tr><td>Telemetry &amp; fleet / job status</td><td className="no">Local status only</td><td className="yes">Yes</td></tr>
+                <tr><td>Capsule transfers / 24h</td><td className="yes">Unlimited (you run it)</td><td className="yes">1 included · add-on up to 3</td></tr>
                 <tr><td>SMS on success &amp; failure · multi-person alerts</td><td className="no">DIY webhooks only</td><td className="yes">Yes</td></tr>
                 <tr><td>Advanced reports &amp; RPO / miss dashboards</td><td className="no">No</td><td className="yes">Yes</td></tr>
                 <tr><td>Portabase account required</td><td className="no">No</td><td className="mid">Yes · for Cloud only</td></tr>
@@ -1359,57 +1365,46 @@ function CloudPage() {
       </section>
 
       <section className="section pricing" id="subscribe">
-        <div className="shell pricing-grid">
-          <div className="price-copy">
-            <div className="section-kicker green">SUPABASE · SQUARE · TWO PLANS · BYO STORAGE</div>
-            <h2>Seven free days.<br />Then $17 or $27/mo.</h2>
-            <p><strong>Launch: Supabase only.</strong> Protect database, Auth, Storage, and Edge Functions. <strong>Payment: Square</strong> (card on file). Cloud is ops only — <strong>you provide capsule storage</strong>. Portabase never hosts recovery bytes.</p>
+        <div className="shell">
+          <div className="price-copy" style={{ maxWidth: 760, marginBottom: 28 }}>
+            <div className="section-kicker green">SUPABASE · SQUARE · THREE PLANS · BYO STORAGE</div>
+            <h2>Seven free days.<br />Then $7, $17, or $37/mo.</h2>
+            <p><strong>Launch: Supabase only.</strong> Protect database, Auth, Storage, and Edge Functions. <strong>Payment: Square</strong> (card on file). Cloud is ops only — <strong>you provide capsule storage</strong>. Portabase never hosts recovery bytes and is <strong>provably zero-knowledge of your encryption keys</strong>.</p>
             <div className="subscribe-case">
-              <article><small>01 · SUPABASE FIRST</small><b>Built for Supabase projects.</b><p>Sign in with Supabase Auth (email or Google). Capture DB, Auth inventory, Storage objects, Edge Functions.</p></article>
-              <article><small>02 · TWO PLANS</small><b>$17 · 1 escape / 24h · or · $27 · up to 3 escapes / day.</b><p>Pick how often an escape may run. SMS on success and failure. Up to 12 agents.</p></article>
-              <article><small>03 · BYO CAPSULE STORAGE</small><b>You supply the vault.</b><p>S3, Dropbox, NAS, or Local Starter (≤100 MB). Capsules never live on Portabase. Keys stay on your runner.</p></article>
+              <article><small>01 · SUPABASE FIRST</small><b>Built for Supabase projects.</b><p>Sign in with Supabase Auth (email, magic link, or Google). Capture DB, Auth inventory, Storage objects, Edge Functions.</p></article>
+              <article><small>02 · STORAGE CAPS</small><b>$7 · 1 GB · $17 · 10 GB · $37 · 100 GB.</b><p>Each plan includes <strong>1 capsule transfer / 24 hours</strong>. Extra transfers add-on (up to 3 / 24h): <strong>+$3/mo</strong> on Starter, <strong>+$5/mo</strong> on Daily and Scale. Optional SMS status on $17 / $37 (never keys or capsule bytes). Up to 12 agents.</p></article>
+              <article><small>03 · BYO CAPSULE STORAGE</small><b>You supply the vault.</b><p>S3, Dropbox, Drive, rclone, NAS, or Local Starter (≤100 MB). Capsules never live on Portabase. Keys stay on your runner or this browser’s local inject — never our database.</p></article>
             </div>
-            <div className="one-time-math">
-              <div><small>TRIAL</small><b>$0<span className="per">/7d</span></b></div>
-              <span>→</span>
-              <div><small>DAILY</small><b>$17<span className="per">/mo</span></b></div>
-              <span>or</span>
-              <div><small>TRIPLE</small><b>$27<span className="per">/mo</span></b></div>
-            </div>
-            <div className="price-note"><span>Capsule storage</span><p><strong>Required from you.</strong> Portabase Cloud does not sell or host capsule storage. You pay S3/Drive/Dropbox/NAS yourself.</p></div>
           </div>
-          <div className="price-card">
-            <div className="price-ribbon">SQUARE · $17 OR $27 · YOU PROVIDE STORAGE</div>
-            <div className="price-top">
-              <span>PORTABASE CLOUD</span>
-              <div className="price-stack">
-                <b>$17<span className="per">/mo</span></b>
-                <small className="list-price">1 escape per 24 hours · or upgrade to $27 for up to 3 escapes / day</small>
-              </div>
-              <p>Ops console, telemetry, multi-person alerts. Capsules encrypt on your runner and land in <strong>your</strong> storage.</p>
-            </div>
-            <div className="promo-chip"><strong>Payment: Square.</strong> Card required. Trial free 7 days → <strong>$17</strong> (1 escape/24h) or <strong>$27</strong> (up to 3 escapes/day). Storage is always bring-your-own.</div>
-            <div className="purchase-definition">
-              <span>WHAT YOU BRING</span>
-              <strong>Capsule storage + runner secrets</strong>
-              <p>Destination for <code>.pbase</code> capsules (S3/Drive/etc.) and passphrase on your machine. Cloud never stores those.</p>
-            </div>
-            <ul>
-              <li><span>✓</span> Supabase projects only (launch)</li>
-              <li><span>✓</span> $17 · 1 escape / 24h</li>
-              <li><span>✓</span> $27 · up to 3 escapes / day</li>
-              <li><span>✓</span> SMS on success &amp; failure · up to 12 agents</li>
-              <li><span>✓</span> 7-day free trial · card on file</li>
-              <li><span>✓</span> You provide capsule storage</li>
-              <li><span>✓</span> Console · telemetry · alert chains</li>
-              <li><span>✓</span> Keys &amp; capsules stay yours</li>
-            </ul>
-            <a className="button button-primary purchase" href={signedIn ? '/app/account?tab=billing' : '/login?mode=signup&next=/app'}>
-              {signedIn ? 'Open console · start Square trial' : 'Sign in with Supabase Auth'} <Arrow />
-            </a>
-            <p className="checkout-hint">Already have an account? <a href="/login">Sign in</a></p>
-            <div className="square-trust"><span><b>Square</b> · $17 · 1 escape/24h</span><span>$27 · up to 3 escapes/day</span><span>SMS · BYO storage</span></div>
+          <div className="plan-grid">
+            {Object.values(CLOUD_PLANS).map((plan) => (
+              <article className={`price-card plan-card${plan.id === 'cloud-17' ? ' is-featured' : ''}`} key={plan.id}>
+                {plan.id === 'cloud-17' && <div className="price-ribbon">MOST TEAMS</div>}
+                <div className="price-top">
+                  <span>{plan.title.toUpperCase()}</span>
+                  <div className="price-stack">
+                    <b>${plan.priceMonthlyUsd}<span className="per">/mo</span></b>
+                    <small className="list-price">up to {plan.storageCapLabel} · Square</small>
+                  </div>
+                  <p>{plan.cadenceLabel}. <strong>1 capsule transfer / 24h</strong> included. Ops console and telemetry. Capsules encrypt on your runner and land in <strong>your</strong> storage.</p>
+                </div>
+                <ul>
+                  <li><span>✓</span> Up to {plan.storageCapLabel} metered usage</li>
+                  <li><span>✓</span> 1 capsule transfer / 24 hours</li>
+                  <li><span>✓</span> Extra transfers (3 / 24h) · +{extraTransfersAddonPriceLabel(plan.id)}</li>
+                  <li><span>✓</span> 7-day trial · card on file</li>
+                  <li><span>✓</span> SMS success &amp; failure · ≤12 agents</li>
+                  <li><span>✓</span> You provide the vault</li>
+                  <li><span>✓</span> Zero knowledge of keys</li>
+                </ul>
+                <a className="button button-primary purchase" href={signedIn ? `/app/account?tab=billing` : `/login?mode=signup&next=${encodeURIComponent('/app/account?tab=billing')}`}>
+                  {signedIn ? `Start ${plan.title}` : 'Sign in · pick this plan'} <Arrow />
+                </a>
+              </article>
+            ))}
           </div>
+          <p className="checkout-hint" style={{ marginTop: 12 }}>Need more than one transfer a day? Extra transfers add-on: <strong>up to 3 / 24h</strong> — <strong>+$3/mo</strong> on $7, <strong>+$5/mo</strong> on $17 and $37. Square catalog IDs are pinned by Louis.</p>
+          <p className="checkout-hint" style={{ marginTop: 18 }}>Already have an account? <a href="/login">Sign in</a> · Independent product, not affiliated with Supabase, Inc.</p>
         </div>
       </section>
     </main>
@@ -1418,11 +1413,11 @@ function CloudPage() {
 }
 
 function LegacyPurchaseNotice() {
-  return <div className="thanks"><div className="thanks-card"><Logo href="/" /><div className="section-kicker green">MODEL UPDATE</div><h1>Portabase is open core + Cloud subscription.</h1><p>There is no $147 software unlock. The recovery engine is free on GitHub. Portabase Cloud is $17/mo (1 escape per 24h) or $27/mo (up to 3 escapes per day) — console, telemetry, and alert chains.</p><a className="button button-primary" href="/cloud">Open source vs Cloud <Arrow /></a><a className="button button-ghost" href="mailto:escape@portabase.dev?subject=Legacy Portabase purchase">Legacy purchase help <Arrow /></a></div></div>;
+  return <div className="thanks"><div className="thanks-card"><Logo href="/" /><div className="section-kicker green">MODEL UPDATE</div><h1>Portabase is open core + Cloud subscription.</h1><p>There is no $147 software unlock. The recovery engine is free on GitHub. Portabase Cloud is $7 / $17 / $37 per month (1 / 10 / 100 GB) — console, telemetry, and alert chains. We do not host your capsules or learn your keys.</p><a className="button button-primary" href="/cloud">Open source vs Cloud <Arrow /></a><a className="button button-ghost" href="mailto:escape@portabase.dev?subject=Legacy Portabase purchase">Legacy purchase help <Arrow /></a></div></div>;
 }
 
 function Footer() {
-  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#reality">The reality</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">Escape plan</a><a href="/#audit">Risk check</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · $17 / $27</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">GitHub · DataAutomation.ai</a><span>Independent product.<br />Not affiliated with Supabase.</span><span>Apache-2.0 open core. Cloud is ops subscription — never custody of keys or capsule contents. $17/mo · 1 escape/24h · or · $27/mo · up to 3 escapes/day.</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your cloud. Your way out.</span></div></footer>;
+  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#reality">The reality</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">Escape plan</a><a href="/#audit">Risk check</a><a href="/backend">Backend</a><a href="/docs">Docs</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · {planPriceRangeLabel()}</a><a href="/legal">Legal</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/DataAutomation-ai/portabase-CLI" target="_blank" rel="noreferrer">GitHub · portabase-CLI</a><span>Independent product.<br />Not affiliated with Supabase, Inc.</span><span>Apache-2.0 open core. Cloud is ops subscription — provably zero-knowledge of keys, never custody of capsule contents. $7 · 1 GB · $17 · 10 GB · $37 · 100 GB.</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your vault. Your way out.</span></div></footer>;
 }
 
 /**
@@ -1440,9 +1435,11 @@ function SecurityPage() {
             <a href="#keys-protected">Your keys</a>
             <a href="#choose">Choose trust</a>
             <a href="#options">Controls</a>
-            <a href="#retroactive">Past access</a>
             <a href="#honest">Honest limits</a>
+            <a href="/backend">Backend</a>
+            <a href="/docs">Docs</a>
             <a href="/cloud">Cloud pricing</a>
+            <a href="/legal">Legal</a>
           </nav>
           <a className="button button-small desktop-cta" href="/login?next=/app">Start free trial <Arrow /></a>
         </div>
@@ -1467,10 +1464,11 @@ function SecurityPage() {
               <span>Optional: job logs</span>
             </div>
             <div className="security-honest-banner" role="note">
-              <strong>Up front:</strong> On managed Cloud, a runner must use encryption material to do its job.
-              That means <strong>there is still a possibility that Portabase can see or use a key</strong> during a run —
-              especially on the simple “Trust Portabase” path. We reduce that risk with customer KMS, short job windows, and your audit trails.
-              We will <strong>not</strong> pretend the risk is zero.
+              <strong>Provably zero-knowledge of capsule contents and sealing keys:</strong> this website and Cloud APIs cannot see object names, row contents, or passphrases.
+              Customer-side key injection (browser-local or CLI) never uploads the secret.
+              On optional <em>managed</em> Cloud runners, a job must still use crypto for the run — if a job key is held, it is
+              <strong> least-privilege and brief</strong>. There is still a residual possibility we can see or use that material during the window.
+              We will <strong>not</strong> pretend that residual risk is zero. Standalone CLI = no Portabase key path.
             </div>
             <p className="security-lead" style={{ marginTop: 22, marginBottom: 0 }}>
               Full detail below: <a href="#keys-protected" style={{ color: 'var(--acid)', fontWeight: 700 }}>How your keys are protected →</a>
@@ -1600,7 +1598,7 @@ function SecurityPage() {
                 <ul>
                   <li>We do <strong>not</strong> store capsule ciphertext as the permanent recovery vault in our control-plane database.</li>
                   <li>We do <strong>not</strong> put your passphrase in marketing analytics, SMS bodies, or “share with support” by default.</li>
-                  <li>We do <strong>not</strong> pretend Cloud is a zero-knowledge black box while also offering unattended managed runners — those two stories conflict, so we stay honest.</li>
+                  <li>We do <strong>not</strong> offer a server-side decrypt or object-name inventory API. The control plane is <strong>provably zero-knowledge</strong> of capsule contents. Managed runners may still use job crypto during a run — that residual path is documented; it is not a peek API.</li>
                   <li>We do <strong>not</strong> require you to give us keys to use the open-source Escape engine at all.</li>
                 </ul>
               </article>
@@ -1995,6 +1993,7 @@ function SecurityPage() {
             </div>
             <div className="security-standalone-actions">
               <a className="button button-primary" href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">GitHub · open source <Arrow /></a>
+              <a className="button button-ghost" href="/backend">Backend · workers &amp; capsules <Arrow /></a>
               <a className="button button-ghost" href="/cloud">Cloud vs open source <Arrow /></a>
             </div>
           </div>
@@ -2008,6 +2007,8 @@ function SecurityPage() {
             <div className="security-cta-actions">
               <a className="button button-primary" href="mailto:escape@portabase.dev?subject=Security%20review%20—%20KMS%20%2B%20CloudTrail">Book a security walkthrough <Arrow /></a>
               <a className="button button-ghost" href="/login?next=/app">Start Cloud trial <Arrow /></a>
+              <a className="button button-ghost" href="/backend">Backend <Arrow /></a>
+              <a className="button button-ghost" href="/docs">Docs <Arrow /></a>
             </div>
           </div>
         </section>
@@ -2019,7 +2020,7 @@ function SecurityPage() {
 
 function HomePage() {
   useEffect(() => { document.title = 'Portabase — Your Supabase Escape'; }, []);
-  return <><Header /><main><Hero /><HeroConcept /><NeverHoldKeys /><CliVsCloud /><WhatIsThis /><WhyNow /><Reality /><ClosureRisk /><Stories /><Escape /><Audit /><Cutover /><PublicDeal /><CloudTeaser /></main><Footer /></>;
+  return <><Header /><main><Hero /><HeroConcept /><NeverHoldKeys /><CliVsCloud /><WhatIsThis /><WhyNow /><Reality /><ClosureRisk /><Stories /><Escape /><InstallCta Arrow={Arrow} /><Audit /><Cutover /><PublicDeal /><CloudTeaser /></main><Footer /></>;
 }
 
 function App() {
@@ -2027,9 +2028,12 @@ function App() {
   if (path === '/thanks' || path === '/buy') return <LegacyPurchaseNotice />;
   if (path === '/login' || path === '/signup') return <LoginPage />;
   if (path === '/auth/callback') return <AuthCallbackPage />;
-  if (path === '/app' || path === '/console' || path.startsWith('/app/')) return <AppPage />;
+  if (path === '/app' || path === '/console' || path.startsWith('/app/') || path === '/tools/supabase-viewer') return <AppPage />;
   if (path === '/cloud' || path === '/pricing') return <CloudPage />;
   if (path === '/security' || path === '/trust') return <SecurityPage />;
+  if (path === '/backend') return <BackendPage Logo={Logo} Arrow={Arrow} Footer={Footer} />;
+  if (path === '/docs') return <DocsPage Logo={Logo} Arrow={Arrow} Footer={Footer} />;
+  if (path === '/legal' || path === '/disclaimer') return <LegalPage Logo={Logo} Arrow={Arrow} Footer={Footer} />;
   return <HomePage />;
 }
 

@@ -6,13 +6,36 @@ import {
   CLOUD_PRICE_MONTHLY_USD,
   CLOUD_TRIAL_DAYS,
   STORAGE_POLICY,
+  planPriceRangeLabel,
 } from './product.js';
+
+/**
+ * Auth-related environment names (never commit secrets).
+ *
+ * Browser (Vite, publishable only):
+ *   VITE_SUPABASE_URL
+ *   VITE_SUPABASE_ANON_KEY  (or VITE_SUPABASE_PUBLISHABLE_KEY)
+ *
+ * Netlify functions:
+ *   SUPABASE_URL
+ *   SUPABASE_ANON_KEY
+ *   SUPABASE_SERVICE_ROLE_KEY
+ *
+ * Google OAuth client ID/secret are configured on the hosted Supabase Auth
+ * project (Authentication → Providers → Google), not stored by Portabase:
+ *   GOOGLE_OAUTH_CLIENT_ID          (placeholder — set in Supabase dashboard)
+ *   GOOGLE_OAUTH_CLIENT_SECRET      (placeholder — set in Supabase dashboard)
+ *
+ * Optional GIS (not used at launch; Supabase OAuth is the path):
+ *   VITE_GOOGLE_CLIENT_ID
+ */
 
 /** Shared product pricing (both auth versions). */
 export const productConfig = {
   trialDays: CLOUD_TRIAL_DAYS,
   priceMonthly: CLOUD_PRICE_MONTHLY_USD,
   listPriceMonthly: CLOUD_LIST_PRICE_MONTHLY_USD,
+  priceRangeLabel: planPriceRangeLabel(),
   promoUntil: '2026-08-31',
   paymentGateway: CLOUD_PAYMENT_GATEWAY,
   storage: STORAGE_POLICY,
