@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Icon } from './icons.jsx';
 import { DualBarChart, EmptyChart, LineChart, StackedBarChart } from './charts.jsx';
 import { BarGauge } from './gauges.jsx';
-import { formatBytes, formatDuration, relativeTime } from './data/store.js';
+import { formatDuration } from './data/store.js';
 import {
   ADDON_TRANSFERS_PER_24H,
   BASE_TRANSFERS_PER_24H,
@@ -12,6 +12,8 @@ import {
 } from '../lib/product.js';
 import { planAllowsOptionalSms } from '../lib/sms-safe.js';
 import { buildDashboardModel, jobsFromConsoleState } from '../lib/dashboard-view.js';
+import { formatGiB, formatHumanSize } from '../lib/human-size.js';
+import { formatOperatorTime } from '../lib/operator-time.js';
 
 function Badge({ tone, children }) {
   const t = tone === 'ok' || tone === 'COMPLETE' || tone === 'green' || tone === 'MATCH'
@@ -20,7 +22,7 @@ function Badge({ tone, children }) {
       ? 'warn'
       : tone === 'danger' || tone === 'FAILED' || tone === 'red' || tone === 'error'
         ? 'danger'
-        : tone === 'acid' ? 'acid' : '';
+        : tone === 'acid' ? 'acid' : tone === 'info' ? 'info' : '';
   return <span className={`pb-badge${t ? ` pb-badge-${t}` : ''}`}>{children}</span>;
 }
 
@@ -36,7 +38,17 @@ function PageHead({ title, subtitle, actions }) {
   );
 }
 
-export function useDashboardModel({ state, me, demoMode, liveJobs, live }) {
+function TimeCell({ iso }) {
+  const t = formatOperatorTime(iso);
+  return (
+    <span className="pb-time" title={t.iso || undefined}>
+      <strong>{t.relative}</strong>
+      <em>{t.absolute}</em>
+    </span>
+  );
+}
+
+export function useDashboardModel({ state, me, demoMode, liveJobs, live, square }) {
   return useMemo(() => {
     const billing = { ...(state?.billing || {}), ...(me?.subscription || {}) };
     const jobs = liveJobs
@@ -51,8 +63,9 @@ export function useDashboardModel({ state, me, demoMode, liveJobs, live }) {
       sms: state?.sms || {},
       doctor: state?.doctor || null,
       verify: state?.verify || null,
+      square: square || me?.square || null,
     });
-  }, [state, me, demoMode, liveJobs, live]);
+  }, [state, me, demoMode, liveJobs, live, square]);
 }
 
 export function CustomerDashboardPage({
@@ -68,26 +81,38 @@ export function CustomerDashboardPage({
   setState,
   toast,
   section = 'overview',
+  square,
 }) {
-  const model = useDashboardModel({ state, me, demoMode, liveJobs, live });
+  const model = useDashboardModel({ state, me, demoMode, liveJobs, live, square });
   const [tab, setTab] = useState(section);
+  const [selectedJobId, setSelectedJobId] = useState(null);
   const plan = getCloudPlan(me?.subscription?.plan || state?.billing?.planId || state?.billing?.plan);
   const smsAllowed = planAllowsOptionalSms(plan.id);
+  const selectedJob = model.telemetry.find((job) => job.id === selectedJobId) || null;
+
+  useEffect(() => {
+    if (section && section !== tab) setTab(section);
+  }, [section]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const go = (next) => {
     setTab(next);
     navigate?.('dashboard', { tab: next === 'overview' ? null : next });
   };
 
+  const openJob = (id) => {
+    setSelectedJobId(id);
+    go('overview');
+  };
+
   return (
     <>
       <PageHead
-        title="Customer dashboard"
-        subtitle="Telemetry, capsule sizes, backup log, and utilities. Control plane stores metadata and hashes only — never keys or capsule bytes."
+        title="Dashboard"
+        subtitle="Job status, sealed sizes, and utilities. Metadata and hashes only — never keys or capsule bytes."
         actions={
           <>
             <button type="button" className="pb-btn" onClick={() => navigate('account', { tab: 'billing' })}>
-              <Icon name="card" size={14} /> Account / billing
+              <Icon name="card" size={14} /> Account
             </button>
             <button type="button" className="pb-btn pb-btn-primary" onClick={() => navigate('projects')}>
               <Icon name="plus" size={14} /> Add source
@@ -95,6 +120,14 @@ export function CustomerDashboardPage({
           </>
         }
       />
+
+      {model.demo && (
+        <div className="pb-sample-banner" role="status">
+          <span className="pb-sample-chip">SAMPLE</span>
+          <strong>Demo workspace</strong>
+          <p>This is labeled sample data, not a live customer project. The proof lamp stays red.</p>
+        </div>
+      )}
 
       <div className={`pb-callout ${model.proof.proven ? 'ok' : 'danger'}`} data-proof-tone={model.proof.tone}>
         <Icon name={model.proof.proven ? 'shield' : 'warn'} size={18} />
@@ -107,15 +140,8 @@ export function CustomerDashboardPage({
         </div>
       </div>
 
-      <div className={`pb-callout ${model.demo ? 'warn' : model.empty ? 'info' : 'ok'}`}>
-        <Icon name={model.demo ? 'spark' : 'chart'} size={16} />
-        <div>
-          <strong>{model.demo ? 'Sample UI' : model.empty ? 'No jobs yet' : model.live ? 'Live telemetry' : 'Workspace telemetry'}</strong>
-          <p>{model.labeled}</p>
-        </div>
-      </div>
-
       <AccountStrip
+        model={model}
         plan={plan}
         me={me}
         state={state}
@@ -125,7 +151,7 @@ export function CustomerDashboardPage({
         navigate={navigate}
       />
 
-      <div className="pb-tabs pb-tabs-mobile">
+      <div className="pb-tabs pb-tabs-mobile" role="tablist" aria-label="Dashboard sections">
         {[
           ['overview', 'Telemetry'],
           ['charts', 'Charts'],
@@ -133,14 +159,23 @@ export function CustomerDashboardPage({
           ['log', 'Backup log'],
           ['utilities', 'Utilities'],
         ].map(([id, label]) => (
-          <button key={id} type="button" className={tab === id ? 'is-active' : ''} onClick={() => go(id)}>{label}</button>
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            className={tab === id ? 'is-active' : ''}
+            onClick={() => go(id)}
+          >
+            {label}
+          </button>
         ))}
       </div>
 
-      {tab === 'overview' && <TelemetrySection model={model} navigate={navigate} />}
+      {tab === 'overview' && <TelemetrySection model={model} navigate={navigate} onOpenJob={openJob} />}
       {tab === 'charts' && <ChartsSection model={model} plan={plan} />}
-      {tab === 'sizes' && <SizesSection model={model} />}
-      {tab === 'log' && <BackupLogSection model={model} navigate={navigate} />}
+      {tab === 'sizes' && <SizesSection model={model} onOpenJob={openJob} />}
+      {tab === 'log' && <BackupLogSection model={model} onOpenJob={openJob} />}
       {tab === 'utilities' && (
         <UtilitiesSection
           model={model}
@@ -151,104 +186,179 @@ export function CustomerDashboardPage({
           plan={plan}
         />
       )}
+
+      {selectedJob && (
+        <JobDrawer job={selectedJob} demo={model.demo} proof={model.proof} onClose={() => setSelectedJobId(null)} />
+      )}
     </>
   );
 }
 
-function AccountStrip({ plan, me, state, startTrial, startAddon, busy, navigate }) {
+function AccountStrip({ model, plan, me, state, startTrial, startAddon, busy, navigate }) {
   const sub = me?.subscription || state?.billing || {};
   const status = sub.status || state?.billing?.status || 'none';
+  const strip = model.billingStrip;
+  const square = strip.square;
+  const next = strip.nextPlan;
   return (
-    <div className="pb-card pb-account-strip" style={{ marginBottom: 16 }}>
-      <div className="pb-grid pb-grid-3">
+    <div className="pb-card pb-account-strip">
+      <div className="pb-grid pb-grid-4 pb-account-grid">
         <div>
           <div className="pb-kpi-label">Plan</div>
-          <div className="pb-kpi-value" style={{ fontSize: 20 }}>{plan.shortLabel}</div>
+          <div className="pb-kpi-value pb-kpi-tight">{strip.planName}</div>
           <div className="pb-inline" style={{ marginTop: 8 }}>
             <Badge tone={status === 'active' || status === 'trialing' ? 'ok' : 'warn'}>{status}</Badge>
-            <Badge tone="acid">Square</Badge>
+            <Badge tone="acid">{strip.shortLabel}</Badge>
           </div>
         </div>
         <div>
-          <div className="pb-kpi-label">Transfers / {TRANSFER_WINDOW_HOURS}h</div>
-          <div className="pb-kpi-value" style={{ fontSize: 20 }}>
-            {sub.extraTransfersAddon ? ADDON_TRANSFERS_PER_24H : BASE_TRANSFERS_PER_24H}
-          </div>
-          <p className="pb-muted" style={{ margin: '8px 0 0', fontSize: 12.5 }}>
-            Extra transfers {sub.extraTransfersAddon ? 'on' : `off · ${extraTransfersAddonPriceLabel(plan.id)}`}
+          <div className="pb-kpi-label">Allowance</div>
+          <div className="pb-kpi-value pb-kpi-tight">{strip.allowanceLabel}</div>
+          <p className="pb-muted pb-strip-note">
+            {sub.extraTransfersAddon ? ADDON_TRANSFERS_PER_24H : BASE_TRANSFERS_PER_24H} transfer / {TRANSFER_WINDOW_HOURS}h
+            {sub.extraTransfersAddon ? '' : ` · extra ${extraTransfersAddonPriceLabel(plan.id)}`}
           </p>
         </div>
         <div>
-          <div className="pb-kpi-label">Billing</div>
-          <p className="pb-muted" style={{ margin: '8px 0 10px', fontSize: 12.5 }}>
-            {sub.squareSubscriptionId
-              ? `Square subscription on file. Manage the card in Square (Louis pins the customer portal).`
-              : 'No Square portal link is wired yet. Checkout starts the 7-day trial (card required).'}
-          </p>
-          <div className="pb-inline">
-            {!(me?.access?.hasAccess) && (
-              <button type="button" className="pb-btn pb-btn-primary" disabled={busy} onClick={() => startTrial?.(plan.id)}>
-                {busy ? 'Opening Square…' : `Start trial · $${plan.priceMonthlyUsd}/mo`}
-              </button>
-            )}
-            {!sub.extraTransfersAddon && (
-              <button type="button" className="pb-btn" disabled={busy} onClick={() => startAddon?.()}>
-                Extra transfers
-              </button>
-            )}
-            <button type="button" className="pb-btn pb-btn-ghost" onClick={() => navigate('account', { tab: 'billing' })}>Manage</button>
-          </div>
+          <div className="pb-kpi-label">Upgrade</div>
+          {next ? (
+            <>
+              <div className="pb-kpi-value pb-kpi-tight">{next.title}</div>
+              <p className="pb-muted pb-strip-note">${next.priceMonthlyUsd}/mo · {next.storageCapLabel}</p>
+            </>
+          ) : (
+            <p className="pb-muted pb-strip-note">Scale Escape is the top plan.</p>
+          )}
         </div>
+        <div>
+          <div className="pb-kpi-label">Square checkout</div>
+          <div className="pb-inline" style={{ marginTop: 6 }}>
+            <Badge tone={square.ready ? 'ok' : 'danger'}>{square.ready ? 'Ready' : 'Blocked'}</Badge>
+            {square.mode && <Badge tone="info">{square.mode}</Badge>}
+          </div>
+          <p className="pb-muted pb-strip-note">{square.message}</p>
+          {!square.ready && (
+            <p className="pb-mono pb-faint" style={{ margin: '6px 0 0', fontSize: 11 }}>
+              {square.missing.join(', ')}
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="pb-inline pb-account-actions">
+        {!(me?.access?.hasAccess) && (
+          <button
+            type="button"
+            className="pb-btn pb-btn-primary"
+            disabled={busy || strip.checkoutDisabled}
+            onClick={() => startTrial?.(plan.id)}
+          >
+            {busy ? 'Opening Square…' : `Start trial · $${plan.priceMonthlyUsd}/mo`}
+          </button>
+        )}
+        {next && me?.access?.hasAccess && (
+          <button
+            type="button"
+            className="pb-btn pb-btn-primary"
+            disabled={busy || strip.checkoutDisabled}
+            onClick={() => startTrial?.(next.id)}
+          >
+            Upgrade to {next.shortLabel}
+          </button>
+        )}
+        {!sub.extraTransfersAddon && (
+          <button type="button" className="pb-btn" disabled={busy || strip.checkoutDisabled} onClick={() => startAddon?.()}>
+            Extra transfers
+          </button>
+        )}
+        <button type="button" className="pb-btn pb-btn-ghost" onClick={() => navigate('account', { tab: 'billing' })}>Manage</button>
       </div>
     </div>
   );
 }
 
-function TelemetrySection({ model, navigate }) {
-  if (model.empty) {
-    return (
-      <div className="pb-empty">
-        <Icon name="chart" size={28} />
-        <h3>No telemetry yet</h3>
-        <p>When a Cloud Runner or the free CLI reports a job, you will see status, phase, timestamps, object counts, sizes, destination kind, runner region, and safe error codes — never keys or capsule bytes.</p>
-        <button type="button" className="pb-btn pb-btn-primary" onClick={() => navigate('projects')}>Connect a source</button>
-      </div>
-    );
-  }
+function TelemetrySection({ model, navigate, onOpenJob }) {
+  const strip = model.strip || {};
+  const latest = strip.latest;
   return (
     <div className="pb-stack">
-      <div className="pb-table-wrap">
-        <table className="pb-table">
-          <thead>
-            <tr>
-              <th>Job</th><th>Status</th><th>Phase</th><th>Started</th><th>Finished</th>
-              <th>Objects</th><th>Size</th><th>Dest</th><th>Region</th><th>Error</th>
-            </tr>
-          </thead>
-          <tbody>
-            {model.telemetry.map((job) => (
-              <tr key={job.id} id={`job-${job.id}`}>
-                <td>
-                  <div className="pb-cell-main">
-                    <strong>{job.type}</strong>
-                    <span className="mono">{job.jobId || job.id}</span>
-                  </div>
-                </td>
-                <td><Badge tone={job.status}>{job.status}</Badge></td>
-                <td className="mono">{job.phase || '—'}</td>
-                <td className="mono">{relativeTime(job.startedAt)}</td>
-                <td className="mono">{job.finishedAt ? relativeTime(job.finishedAt) : '—'}</td>
-                <td className="mono">{job.objectCount || '—'}</td>
-                <td className="mono">{formatBytes(job.sizeBytes)}</td>
-                <td><Badge tone="info">{job.destinationKind}</Badge></td>
-                <td className="mono">{job.region || '—'}</td>
-                <td className="mono">{job.errorCode || '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="pb-status-strip" aria-label="Telemetry status">
+        <div>
+          <div className="pb-kpi-label">Last job</div>
+          <strong>{latest ? latest.type : '—'}</strong>
+          <span>{latest ? formatOperatorTime(latest.startedAt).relative : 'No jobs'}</span>
+        </div>
+        <div>
+          <div className="pb-kpi-label">Status</div>
+          <strong>{latest ? <Badge tone={latest.status}>{latest.status}</Badge> : '—'}</strong>
+          <span>{strip.successCount || 0} ok · {strip.failCount || 0} fail</span>
+        </div>
+        <div>
+          <div className="pb-kpi-label">Last sealed</div>
+          <strong>{formatGiB(strip.lastSizeBytes)}</strong>
+          <span>{formatHumanSize(strip.lastSizeBytes)}</span>
+        </div>
+        <div>
+          <div className="pb-kpi-label">Proof</div>
+          <strong><Badge tone={strip.proofTone === 'green' ? 'ok' : 'danger'}>{strip.proofLabel || 'RED'}</Badge></strong>
+          <span>{model.proof.proven ? 'MATCH report on file' : 'Not proven'}</span>
+        </div>
+        <div>
+          <div className="pb-kpi-label">Source</div>
+          <strong>{model.demo ? 'SAMPLE' : model.live ? 'Live' : 'Workspace'}</strong>
+          <span>{model.empty ? 'Empty' : `${strip.jobCount} jobs`}</span>
+        </div>
       </div>
-      <p className="pb-faint" style={{ fontSize: 12 }}>Safe error codes only. Object names, row bodies, and sealing keys are never stored on Portabase servers.</p>
+
+      {model.empty ? (
+        <div className="pb-empty">
+          <Icon name="chart" size={28} />
+          <h3>No telemetry yet</h3>
+          <p>When a Cloud Runner or the free CLI reports a job, you will see status, phase, timestamps, object counts, sizes, destination kind, runner region, and safe error codes — never keys or capsule bytes.</p>
+          <button type="button" className="pb-btn pb-btn-primary" onClick={() => navigate('projects')}>Connect a source</button>
+        </div>
+      ) : (
+        <div className="pb-table-wrap">
+          <table className="pb-table">
+            <thead>
+              <tr>
+                <th>Job</th><th>Status</th><th>Phase</th><th>Started</th><th>Finished</th>
+                <th>Objects</th><th>Size</th><th>Dest</th><th>Region</th><th>Error</th>
+              </tr>
+            </thead>
+            <tbody>
+              {model.telemetry.map((job) => (
+                <tr
+                  key={job.id}
+                  id={`job-${job.id}`}
+                  className="row-link"
+                  tabIndex={0}
+                  onClick={() => onOpenJob(job.id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenJob(job.id); } }}
+                >
+                  <td>
+                    <div className="pb-cell-main">
+                      <strong>{job.type}</strong>
+                      <span className="mono">{job.jobId || job.id}</span>
+                    </div>
+                  </td>
+                  <td><Badge tone={job.status}>{job.status}</Badge></td>
+                  <td className="mono">{job.phase || '—'}</td>
+                  <td><TimeCell iso={job.startedAt} /></td>
+                  <td><TimeCell iso={job.finishedAt} /></td>
+                  <td className="mono">{job.objectCount || '—'}</td>
+                  <td className="mono">{formatHumanSize(job.sizeBytes)}</td>
+                  <td><Badge tone="info">{job.destinationKind}</Badge></td>
+                  <td className="mono">{job.region || '—'}</td>
+                  <td className="mono">{job.errorCode || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="pb-faint" style={{ fontSize: 12 }}>
+        Times in America/New_York. Safe error codes only. Object names, row bodies, and sealing keys are never stored on Portabase servers.
+      </p>
     </div>
   );
 }
@@ -286,38 +396,54 @@ function ChartsSection({ model, plan }) {
   return (
     <div className="pb-grid pb-grid-2">
       <div className="pb-card">
-        <div className="pb-card-head"><h3>Job success / fail</h3><span>7-day</span></div>
+        <div className="pb-card-head">
+          <h3>Job success / fail</h3>
+          <span>{mocked ? 'SAMPLE · 7-day' : '7-day'}</span>
+        </div>
         <DualBarChart rows={model.charts.series} mocked={mocked} />
       </div>
       <div className="pb-card">
-        <div className="pb-card-head"><h3>Capsule size over time</h3><span>ciphertext totals</span></div>
-        <LineChart rows={model.charts.series} valueKey="sizeBytes" label="Sealed size" format={formatBytes} mocked={mocked} />
+        <div className="pb-card-head">
+          <h3>Capsule size over time</h3>
+          <span>ciphertext totals</span>
+        </div>
+        <LineChart rows={model.charts.series} valueKey="sizeBytes" label="Sealed size" format={formatHumanSize} mocked={mocked} />
       </div>
       <div className="pb-card">
-        <div className="pb-card-head"><h3>Bytes / day vs plan</h3><span>{plan.shortLabel}</span></div>
+        <div className="pb-card-head">
+          <h3>Bytes / day vs plan</h3>
+          <span>{plan.shortLabel}</span>
+        </div>
         <BarGauge
           used={model.charts.usage.usedBytes}
           cap={model.charts.usage.capBytes}
           label={`Used vs ${plan.storageCapLabel}`}
-          usedLabel={formatBytes(model.charts.usage.usedBytes)}
+          usedLabel={formatGiB(model.charts.usage.usedBytes)}
           capLabel={model.charts.usage.capLabel}
           tone={model.charts.usage.percent > 85 ? 'warn' : 'ok'}
           mocked={mocked}
         />
-        <LineChart rows={model.charts.series} valueKey="sizeBytes" label="Bytes transferred / day" format={formatBytes} mocked={mocked} />
+        <div style={{ marginTop: 16 }}>
+          <LineChart rows={model.charts.series} valueKey="sizeBytes" label="Bytes / day" format={formatHumanSize} mocked={mocked} />
+        </div>
       </div>
       <div className="pb-card">
-        <div className="pb-card-head"><h3>Object counts</h3><span>per day / per job</span></div>
+        <div className="pb-card-head">
+          <h3>Objects per job</h3>
+          <span>per day</span>
+        </div>
         <LineChart rows={model.charts.series} valueKey="objectCount" label="Objects reported" mocked={mocked} />
         {sizeRows.length > 0 && (
-          <StackedBarChart rows={sizeRows} format={formatBytes} mocked={mocked} />
+          <div style={{ marginTop: 16 }}>
+            <StackedBarChart rows={sizeRows} format={formatHumanSize} mocked={mocked} />
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-function SizesSection({ model }) {
+function SizesSection({ model, onOpenJob }) {
   if (model.empty || !model.sizes.length) {
     return (
       <div className="pb-empty">
@@ -329,39 +455,44 @@ function SizesSection({ model }) {
   }
   return (
     <div className="pb-stack">
+      {model.demo && <p className="pb-faint" style={{ margin: 0 }}>SAMPLE sizes — not a live vault inventory.</p>}
       {model.sizes.map((row) => (
-        <div className="pb-card" key={row.jobId}>
+        <button type="button" className="pb-card pb-size-card" key={row.jobId} onClick={() => onOpenJob(row.jobId)}>
           <div className="pb-card-head">
             <h3>Capsule {row.jobId}</h3>
             <span>{row.destinationKind}</span>
           </div>
-          <div className="pb-kpi-value" style={{ fontSize: 22 }}>{formatBytes(row.totalBytes)}</div>
-          <p className="pb-muted" style={{ margin: '6px 0 12px' }}>
+          <div className="pb-size-hero">
+            <div className="pb-kpi-value">{formatGiB(row.totalBytes)}</div>
+            <span>{formatHumanSize(row.totalBytes)} sealed</span>
+          </div>
+          <p className="pb-muted" style={{ margin: '6px 0 14px' }}>
             {row.objectCount ? `${row.objectCount} objects · ` : ''}
             {row.hasBreakdown ? 'Layer breakdown from telemetry hashes/counts' : 'Total only — layer breakdown not reported'}
           </p>
-          <div className="pb-grid pb-grid-3">
+          <div className="pb-grid pb-grid-4 pb-size-layers">
             {row.layers.filter((l) => l.id !== 'other' || l.bytes).map((layer) => (
               <div key={layer.id}>
                 <div className="pb-kpi-label">{layer.label}</div>
-                <div className="pb-mono">{formatBytes(layer.bytes)}</div>
+                <div className="pb-mono">{formatGiB(layer.bytes)}</div>
+                <div className="pb-faint" style={{ fontSize: 11 }}>{formatHumanSize(layer.bytes)}</div>
                 <div className="pb-progress"><i style={{ width: `${row.totalBytes ? Math.round((layer.bytes / row.totalBytes) * 100) : 0}%` }} /></div>
               </div>
             ))}
           </div>
-        </div>
+        </button>
       ))}
     </div>
   );
 }
 
-function BackupLogSection({ model, navigate }) {
+function BackupLogSection({ model, onOpenJob }) {
   if (model.empty || !model.log.length) {
     return (
       <div className="pb-empty">
         <Icon name="clock" size={28} />
         <h3>Backup log is empty</h3>
-        <p>Capture and restore jobs will list here with status, started/finished, size, and MATCH / red lamp. The lamp stays red until a real compare is MATCH.</p>
+        <p>Capture and restore jobs will list here with status, duration, size, destination, and MATCH / red lamp. The lamp stays red until a real compare is MATCH.</p>
       </div>
     );
   }
@@ -370,25 +501,26 @@ function BackupLogSection({ model, navigate }) {
       <table className="pb-table">
         <thead>
           <tr>
-            <th>When</th><th>Type</th><th>Status</th><th>Started</th><th>Finished</th>
-            <th>Size</th><th>Lamp</th><th />
+            <th>When</th><th>Type</th><th>Status</th><th>Duration</th>
+            <th>Size</th><th>Destination</th><th>Lamp</th>
           </tr>
         </thead>
         <tbody>
           {model.log.map((row) => (
-            <tr key={row.id}>
-              <td className="mono">{relativeTime(row.startedAt)}</td>
+            <tr
+              key={row.id}
+              className="row-link"
+              tabIndex={0}
+              onClick={() => onOpenJob(row.id)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenJob(row.id); } }}
+            >
+              <td><TimeCell iso={row.startedAt} /></td>
               <td><strong>{row.type}</strong></td>
               <td><Badge tone={row.status}>{row.status}</Badge></td>
-              <td className="mono">{row.startedAt ? new Date(row.startedAt).toLocaleString() : '—'}</td>
-              <td className="mono">{row.finishedAt ? new Date(row.finishedAt).toLocaleString() : '—'}</td>
-              <td className="mono">{formatBytes(row.sizeBytes)}</td>
+              <td className="mono">{formatDuration(row.durationMs)}</td>
+              <td className="mono">{formatHumanSize(row.sizeBytes)}</td>
+              <td><Badge tone="info">{row.destinationKind}</Badge></td>
               <td><Badge tone={row.lamp.tone === 'green' ? 'ok' : 'danger'}>{row.lamp.label}</Badge></td>
-              <td>
-                <button type="button" className="pb-btn pb-btn-sm" onClick={() => navigate('dashboard', { tab: 'overview' })}>
-                  Detail
-                </button>
-              </td>
             </tr>
           ))}
         </tbody>
@@ -416,118 +548,191 @@ function UtilitiesSection({ model, state, setState, toast, smsAllowed, plan }) {
   };
 
   return (
-    <div className="pb-stack">
-      <div className="pb-grid pb-grid-2">
-        <div className="pb-card">
-          <div className="pb-card-head"><h3>Doctor preflight</h3><span>{u.doctor?.mocked ? 'sample' : 'report'}</span></div>
-          {!u.doctor ? (
-            <p className="pb-muted">No doctor report yet. Run <code className="pb-mono">portabase doctor</code> on the runner.</p>
-          ) : (
-            <>
-              <Badge tone={u.doctor.status === 'ok' ? 'ok' : 'warn'}>{u.doctor.status}</Badge>
-              <p className="pb-faint" style={{ marginTop: 8 }}>{u.doctor.checkedAt ? relativeTime(u.doctor.checkedAt) : ''}</p>
-              <ul className="pb-muted" style={{ margin: '12px 0 0', paddingLeft: 18 }}>
-                {u.doctor.checks.map((check) => (
-                  <li key={check.id}>{check.ok ? '✓' : '×'} {check.id} — {check.detail}</li>
-                ))}
-              </ul>
-            </>
-          )}
-        </div>
-        <div className="pb-card">
-          <div className="pb-card-head"><h3>Verify result</h3><span>{u.verify?.mocked ? 'sample' : 'report'}</span></div>
-          {!u.verify ? (
-            <p className="pb-muted">No verify result yet. Run <code className="pb-mono">portabase verify</code> on the machine that holds the capsule.</p>
-          ) : (
-            <>
-              <Badge tone={u.verify.status === 'verified' ? 'ok' : 'warn'}>{u.verify.status}</Badge>
-              {u.verify.capsuleHash && <p className="pb-mono pb-faint" style={{ marginTop: 10 }}>sha256 {u.verify.capsuleHash.slice(0, 12)}…</p>}
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className="pb-card">
-        <div className="pb-card-head"><h3>Engine flags used</h3><span>existing CLI only</span></div>
-        {!u.flags.length ? (
-          <p className="pb-muted">No capture flags reported. Cloud surfaces <code className="pb-mono">--exclude-binaries</code> and <code className="pb-mono">--exclude-table-list</code> when the runner used them. No new free-CLI flags.</p>
-        ) : (
-          <div className="pb-inline">
-            {u.flags.map((flag) => (
-              <Badge key={`${flag.id}-${flag.value}`} tone="info">
-                {flag.cli}{flag.value !== true ? ` ${flag.value}` : ''}{flag.surfaceOnly ? ' (reported)' : ''}
-              </Badge>
-            ))}
+    <div className="pb-util-grid">
+      <section className="pb-util-group">
+        <h2>Health</h2>
+        <div className="pb-grid pb-grid-2">
+          <div className="pb-card">
+            <div className="pb-card-head"><h3>Doctor preflight</h3><span>{u.doctor?.mocked ? 'SAMPLE' : 'report'}</span></div>
+            {!u.doctor ? (
+              <p className="pb-muted">No doctor report yet. Run <code className="pb-mono">portabase doctor</code> on the runner.</p>
+            ) : (
+              <>
+                <Badge tone={u.doctor.status === 'ok' ? 'ok' : 'warn'}>{u.doctor.status}</Badge>
+                <p className="pb-faint" style={{ marginTop: 8 }}>{u.doctor.checkedAt ? formatOperatorTime(u.doctor.checkedAt).label : ''}</p>
+                <ul className="pb-muted pb-check-list">
+                  {u.doctor.checks.map((check) => (
+                    <li key={check.id}>{check.ok ? '✓' : '×'} {check.id} — {check.detail}</li>
+                  ))}
+                </ul>
+              </>
+            )}
           </div>
-        )}
-      </div>
+          <div className="pb-card">
+            <div className="pb-card-head"><h3>Verify result</h3><span>{u.verify?.mocked ? 'SAMPLE' : 'report'}</span></div>
+            {!u.verify ? (
+              <p className="pb-muted">No verify result yet. Run <code className="pb-mono">portabase verify</code> on the machine that holds the capsule.</p>
+            ) : (
+              <>
+                <Badge tone={u.verify.status === 'verified' ? 'ok' : 'warn'}>{u.verify.status}</Badge>
+                {u.verify.capsuleHash && <p className="pb-mono pb-faint" style={{ marginTop: 10 }}>sha256 {u.verify.capsuleHash.slice(0, 12)}…</p>}
+              </>
+            )}
+          </div>
+        </div>
+      </section>
 
-      <div className="pb-card">
-        <div className="pb-card-head"><h3>Open / download capsule</h3><span>customer-owned path</span></div>
-        <p className="pb-muted" style={{ marginTop: 0 }}>
-          Portabase never holds capsule bytes. Open the destination you own.
-        </p>
-        {(u.destinations.length ? u.destinations : [{ kind: 'unknown', hint: 'Connect a destination. Vault stays yours.' }]).map((d) => (
-          <div key={d.kind} className="pb-callout info" style={{ marginTop: 10 }}>
-            <Icon name="folder" size={16} />
-            <div>
-              <strong>{d.kind}</strong>
-              <p>{d.hint}</p>
+      <section className="pb-util-group">
+        <h2>Engine</h2>
+        <div className="pb-card">
+          <div className="pb-card-head"><h3>Flags used</h3><span>existing CLI only</span></div>
+          {!u.flags.length ? (
+            <p className="pb-muted">No capture flags reported. Cloud surfaces <code className="pb-mono">--exclude-binaries</code> and <code className="pb-mono">--exclude-table-list</code> when the runner used them. No new free-CLI flags.</p>
+          ) : (
+            <div className="pb-inline">
+              {u.flags.map((flag) => (
+                <Badge key={`${flag.id}-${flag.value}`} tone="info">
+                  {flag.cli}{flag.value !== true ? ` ${flag.value}` : ''}{flag.surfaceOnly ? ' (reported)' : ''}
+                </Badge>
+              ))}
             </div>
-          </div>
-        ))}
-      </div>
+          )}
+        </div>
+      </section>
 
-      <div className="pb-card">
-        <div className="pb-card-head"><h3>Schedule</h3><span>1 transfer / {TRANSFER_WINDOW_HOURS}h included</span></div>
-        {!u.schedules.length ? (
-          <p className="pb-muted">No schedules yet. Cadence is enforced on the runner; Cloud records expected hours only.</p>
-        ) : (
-          <div className="pb-table-wrap" style={{ border: 0 }}>
-            <table className="pb-table" style={{ minWidth: 0 }}>
-              <thead><tr><th>Every</th><th>Timezone</th><th>Last</th><th>Next</th><th /></tr></thead>
-              <tbody>
-                {u.schedules.map((sch) => (
-                  <tr key={sch.id}>
-                    <td className="mono">{sch.everyHours}h</td>
-                    <td className="mono">{sch.timezone}</td>
-                    <td className="mono">{relativeTime(sch.lastRunAt)}</td>
-                    <td className="mono">{relativeTime(sch.nextRunAt)}</td>
-                    <td>
-                      <button type="button" className="pb-btn pb-btn-sm" onClick={() => toggleSchedule(sch.id)}>
-                        {sch.enabled ? 'On' : 'Off'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <section className="pb-util-group">
+        <h2>Destinations</h2>
+        <div className="pb-card">
+          <div className="pb-card-head"><h3>Open / download capsule</h3><span>customer-owned path</span></div>
+          <p className="pb-muted" style={{ marginTop: 0 }}>
+            Portabase never holds capsule bytes. Open the destination you own.
+          </p>
+          {(u.destinations.length ? u.destinations : [{ kind: 'unknown', hint: 'Connect a destination. Vault stays yours.' }]).map((d) => (
+            <div key={d.kind} className="pb-callout info" style={{ marginTop: 10 }}>
+              <Icon name="folder" size={16} />
+              <div>
+                <strong>{d.kind}</strong>
+                <p>{d.hint}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
-      <div className="pb-card">
-        <div className="pb-card-head"><h3>SMS alerts</h3><span>$17 optional · status only</span></div>
-        {!smsAllowed ? (
-          <p className="pb-muted">SMS is optional on Daily Escape ($17) and Scale ($37) — not on {plan.shortLabel}.</p>
-        ) : (
-          <>
-            <p className="pb-muted">{u.sms.note}</p>
-            <label className="pb-check">
-              <input type="checkbox" checked={!!state?.sms?.optIn || !!u.sms.optIn} onChange={(e) => toggleSms('optIn', e.target.checked)} />
-              <span>Enable SMS status alerts</span>
-            </label>
-            <label className="pb-check">
-              <input type="checkbox" checked={state?.sms?.onFailure !== false} onChange={(e) => toggleSms('onFailure', e.target.checked)} />
-              <span>Text on failure</span>
-            </label>
-            <label className="pb-check">
-              <input type="checkbox" checked={!!state?.sms?.onSuccess} onChange={(e) => toggleSms('onSuccess', e.target.checked)} />
-              <span>Text on success</span>
-            </label>
-          </>
-        )}
-      </div>
+      <section className="pb-util-group">
+        <h2>Schedules</h2>
+        <div className="pb-card">
+          <div className="pb-card-head"><h3>Cadence</h3><span>1 transfer / {TRANSFER_WINDOW_HOURS}h included</span></div>
+          {!u.schedules.length ? (
+            <p className="pb-muted">No schedules yet. Cadence is enforced on the runner; Cloud records expected hours only.</p>
+          ) : (
+            <div className="pb-table-wrap" style={{ border: 0 }}>
+              <table className="pb-table" style={{ minWidth: 0 }}>
+                <thead><tr><th>Every</th><th>Timezone</th><th>Last</th><th>Next</th><th /></tr></thead>
+                <tbody>
+                  {u.schedules.map((sch) => (
+                    <tr key={sch.id}>
+                      <td className="mono">{sch.everyHours}h</td>
+                      <td className="mono">{sch.timezone}</td>
+                      <td><TimeCell iso={sch.lastRunAt} /></td>
+                      <td><TimeCell iso={sch.nextRunAt} /></td>
+                      <td>
+                        <button type="button" className="pb-btn pb-btn-sm" onClick={() => toggleSchedule(sch.id)}>
+                          {sch.enabled ? 'On' : 'Off'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="pb-util-group">
+        <h2>SMS</h2>
+        <div className="pb-card">
+          <div className="pb-card-head"><h3>Status alerts</h3><span>$17 / $37 optional</span></div>
+          {!smsAllowed ? (
+            <p className="pb-muted">SMS is optional on Daily Escape ($17) and Scale ($37) — not on {plan.shortLabel}.</p>
+          ) : (
+            <>
+              <p className="pb-muted">{u.sms.note}</p>
+              <label className="pb-check">
+                <input type="checkbox" checked={!!state?.sms?.optIn || !!u.sms.optIn} onChange={(e) => toggleSms('optIn', e.target.checked)} />
+                <span>Enable SMS status alerts</span>
+              </label>
+              <label className="pb-check">
+                <input type="checkbox" checked={state?.sms?.onFailure !== false} onChange={(e) => toggleSms('onFailure', e.target.checked)} />
+                <span>Text on failure</span>
+              </label>
+              <label className="pb-check">
+                <input type="checkbox" checked={!!state?.sms?.onSuccess} onChange={(e) => toggleSms('onSuccess', e.target.checked)} />
+                <span>Text on success</span>
+              </label>
+            </>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function JobDrawer({ job, demo, proof, onClose }) {
+  const started = formatOperatorTime(job.startedAt);
+  const finished = formatOperatorTime(job.finishedAt);
+  const fields = [
+    ['Type', job.type],
+    ['Status', job.status],
+    ['Phase', job.phase || '—'],
+    ['Started', started.label],
+    ['Finished', finished.label],
+    ['Duration', formatDuration(job.durationMs)],
+    ['Objects', job.objectCount || '—'],
+    ['Sealed size', `${formatGiB(job.sizeBytes)} (${formatHumanSize(job.sizeBytes)})`],
+    ['Destination', job.destinationKind],
+    ['Region', job.region || '—'],
+    ['Error', job.errorCode || '—'],
+    ['Job id', job.jobId || job.id],
+    ['Capsule hash', job.capsuleHash ? `${job.capsuleHash.slice(0, 12)}…` : '—'],
+  ];
+  return (
+    <div className="pb-drawer-backdrop" onClick={onClose} role="presentation">
+      <aside
+        className="pb-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="job-drawer-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="pb-drawer-head">
+          <div>
+            <div className="pb-inline">
+              {demo && <span className="pb-sample-chip">SAMPLE</span>}
+              <Badge tone={job.status}>{job.status}</Badge>
+              <Badge tone={proof?.proven && job.capsuleHash === proof.capsuleHash ? 'ok' : 'danger'}>
+                {proof?.proven && job.capsuleHash === proof.capsuleHash ? 'MATCH' : 'Not proven'}
+              </Badge>
+            </div>
+            <h2 id="job-drawer-title">{job.type} · {job.jobId || job.id}</h2>
+          </div>
+          <button type="button" className="pb-btn pb-btn-icon" onClick={onClose} aria-label="Close job detail">
+            <Icon name="x" size={16} />
+          </button>
+        </div>
+        <dl className="pb-drawer-dl">
+          {fields.map(([k, v]) => (
+            <div key={k}>
+              <dt>{k}</dt>
+              <dd className="mono">{v}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="pb-faint" style={{ margin: '16px 0 0', fontSize: 12 }}>
+          {job.destinationHint}
+        </p>
+      </aside>
     </div>
   );
 }

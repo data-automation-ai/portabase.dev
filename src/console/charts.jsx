@@ -1,45 +1,90 @@
 import React from 'react';
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
-function maxOf(rows, keys) {
-  return Math.max(1, ...rows.flatMap((row) => keys.map((k) => Number(row[k]) || 0)));
+const C = {
+  ok: '#3dd68c',
+  danger: '#f2555a',
+  acid: '#b8f54a',
+  info: '#6aa8ff',
+  faint: '#5c6470',
+  muted: '#8b929e',
+  text: '#e8eaed',
+  grid: '#252a33',
+  panel: '#171b22',
+  border: '#343b48',
+};
+
+function hexFromCss(color, fallback) {
+  if (!color) return fallback;
+  if (color.startsWith('#')) return color;
+  if (color === 'var(--c-ok)') return C.ok;
+  if (color === 'var(--c-danger)') return C.danger;
+  if (color === 'var(--c-acid)') return C.acid;
+  if (color === 'var(--c-info)') return C.info;
+  return fallback;
 }
 
-/** Accessible grouped bar chart for success vs fail counts. */
-export function DualBarChart({ rows = [], mocked = false }) {
-  const max = maxOf(rows, ['success', 'fail']);
-  const w = 520;
-  const h = 180;
-  const pad = { l: 28, r: 8, t: 12, b: 28 };
-  const innerW = w - pad.l - pad.r;
-  const innerH = h - pad.t - pad.b;
-  const group = innerW / Math.max(rows.length, 1);
+function ChartFrame({ children, mocked, empty, emptyLabel }) {
+  if (empty) return <EmptyChart label={emptyLabel} />;
   return (
-    <div className="pb-chart">
-      <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Job success versus fail counts by day">
-        {rows.map((row, i) => {
-          const x = pad.l + i * group;
-          const sw = Math.max(4, group * 0.32);
-          const sh = (row.success / max) * innerH;
-          const fh = (row.fail / max) * innerH;
-          return (
-            <g key={row.label}>
-              <rect x={x + group * 0.18} y={pad.t + innerH - sh} width={sw} height={sh} fill="var(--c-ok)" rx="2" />
-              <rect x={x + group * 0.52} y={pad.t + innerH - fh} width={sw} height={fh} fill="var(--c-danger)" rx="2" />
-              <text x={x + group / 2} y={h - 8} textAnchor="middle" fill="var(--c-faint)" fontSize="10">{row.label}</text>
-            </g>
-          );
-        })}
-      </svg>
-      <div className="pb-chart-legend">
-        <span><i className="ok" /> Success</span>
-        <span><i className="fail" /> Fail</span>
-        {mocked && <em>Sample series — not live customer data</em>}
-      </div>
+    <div className={`pb-chart${mocked ? ' is-sample' : ''}`}>
+      {mocked && <span className="pb-sample-chip">SAMPLE</span>}
+      <div className="pb-chart-canvas">{children}</div>
     </div>
   );
 }
 
-/** Line chart for duration or encrypted-byte aggregates. */
+function DarkTooltip({ active, payload, label, formatter }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="pb-chart-tip">
+      <strong>{label}</strong>
+      {payload.map((row) => (
+        <div key={row.dataKey}>
+          <i style={{ background: row.color }} />
+          {row.name}: {formatter ? formatter(row.value, row.dataKey) : row.value}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function axisTick(value) {
+  return String(value);
+}
+
+/** Grouped bar chart for success vs fail counts. */
+export function DualBarChart({ rows = [], mocked = false }) {
+  const empty = !rows.length || rows.every((row) => !(row.success || row.fail));
+  return (
+    <ChartFrame mocked={mocked} empty={empty} emptyLabel="No success / fail counts yet.">
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart data={rows} barGap={4} barCategoryGap="28%">
+          <CartesianGrid stroke={C.grid} vertical={false} />
+          <XAxis dataKey="label" tick={{ fill: C.faint, fontSize: 11 }} axisLine={false} tickLine={false} />
+          <YAxis allowDecimals={false} tick={{ fill: C.faint, fontSize: 11 }} axisLine={false} tickLine={false} width={28} />
+          <Tooltip content={<DarkTooltip />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+          <Legend wrapperStyle={{ color: C.muted, fontSize: 12 }} />
+          <Bar dataKey="success" name="Success" fill={C.ok} radius={[3, 3, 0, 0]} maxBarSize={18} />
+          <Bar dataKey="fail" name="Fail" fill={C.danger} radius={[3, 3, 0, 0]} maxBarSize={18} />
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartFrame>
+  );
+}
+
+/** Area chart for duration or sealed-byte aggregates. */
 export function LineChart({
   rows = [],
   valueKey = 'durationMs',
@@ -47,38 +92,40 @@ export function LineChart({
   format = (n) => String(n),
   mocked = false,
 }) {
-  const max = maxOf(rows, [valueKey]);
-  const w = 520;
-  const h = 180;
-  const pad = { l: 8, r: 8, t: 16, b: 28 };
-  const innerW = w - pad.l - pad.r;
-  const innerH = h - pad.t - pad.b;
-  const pts = rows.map((row, i) => {
-    const x = pad.l + (rows.length <= 1 ? innerW / 2 : (i / (rows.length - 1)) * innerW);
-    const y = pad.t + innerH - ((Number(row[valueKey]) || 0) / max) * innerH;
-    return { x, y, row };
-  });
-  const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
-  const area = pts.length
-    ? `${d} L${pts[pts.length - 1].x},${pad.t + innerH} L${pts[0].x},${pad.t + innerH} Z`
-    : '';
+  const empty = !rows.length || rows.every((row) => !(Number(row[valueKey]) || 0));
   return (
-    <div className="pb-chart">
-      <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label={label}>
-        <path d={area} fill="rgba(184,245,74,0.12)" />
-        <path d={d} fill="none" stroke="var(--c-acid)" strokeWidth="2.2" />
-        {pts.map((p) => (
-          <circle key={p.row.label} cx={p.x} cy={p.y} r="3.2" fill="var(--c-acid)" />
-        ))}
-        {pts.map((p) => (
-          <text key={`${p.row.label}-x`} x={p.x} y={h - 8} textAnchor="middle" fill="var(--c-faint)" fontSize="10">{p.row.label}</text>
-        ))}
-      </svg>
-      <div className="pb-chart-legend">
-        <span>{label} · max {format(max)}</span>
-        {mocked && <em>Sample series — not live customer data</em>}
-      </div>
-    </div>
+    <ChartFrame mocked={mocked} empty={empty} emptyLabel={`No ${label.toLowerCase()} yet.`}>
+      <ResponsiveContainer width="100%" height={220}>
+        <AreaChart data={rows}>
+          <defs>
+            <linearGradient id={`pb-area-${valueKey}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={C.acid} stopOpacity={0.28} />
+              <stop offset="100%" stopColor={C.acid} stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid stroke={C.grid} vertical={false} />
+          <XAxis dataKey="label" tick={{ fill: C.faint, fontSize: 11 }} axisLine={false} tickLine={false} />
+          <YAxis
+            tick={{ fill: C.faint, fontSize: 11 }}
+            axisLine={false}
+            tickLine={false}
+            width={64}
+            tickFormatter={(v) => axisTick(format(v))}
+          />
+          <Tooltip content={<DarkTooltip formatter={(v) => format(v)} />} />
+          <Area
+            type="monotone"
+            dataKey={valueKey}
+            name={label}
+            stroke={C.acid}
+            strokeWidth={2}
+            fill={`url(#pb-area-${valueKey})`}
+            dot={{ r: 3, fill: C.acid, strokeWidth: 0 }}
+            activeDot={{ r: 5 }}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </ChartFrame>
   );
 }
 
@@ -93,53 +140,45 @@ export function StackedBarChart({
   mocked = false,
   emptyLabel = 'No capsule sizes yet',
 }) {
-  if (!rows.length || rows.every((row) => keys.every((k) => !(Number(row[k.id]) || 0)))) {
-    return (
-      <div className="pb-chart pb-chart-empty">
-        <p>{emptyLabel}</p>
-      </div>
-    );
-  }
-  const max = Math.max(1, ...rows.map((row) => keys.reduce((sum, k) => sum + (Number(row[k.id]) || 0), 0)));
-  const w = 520;
-  const h = 180;
-  const pad = { l: 28, r: 8, t: 12, b: 28 };
-  const innerW = w - pad.l - pad.r;
-  const innerH = h - pad.t - pad.b;
-  const group = innerW / Math.max(rows.length, 1);
+  const empty = !rows.length || rows.every((row) => keys.every((k) => !(Number(row[k.id]) || 0)));
   return (
-    <div className="pb-chart">
-      <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Capsule size by layer">
-        {rows.map((row, i) => {
-          const x = pad.l + i * group + group * 0.22;
-          const bw = Math.max(8, group * 0.56);
-          let y = pad.t + innerH;
-          return (
-            <g key={row.label}>
-              {keys.map((k) => {
-                const val = Number(row[k.id]) || 0;
-                const bh = (val / max) * innerH;
-                y -= bh;
-                return <rect key={k.id} x={x} y={y} width={bw} height={bh} fill={k.color} rx="1" />;
-              })}
-              <text x={x + bw / 2} y={h - 8} textAnchor="middle" fill="var(--c-faint)" fontSize="10">{row.label}</text>
-            </g>
-          );
-        })}
-      </svg>
-      <div className="pb-chart-legend">
-        {keys.map((k) => <span key={k.id}><i style={{ background: k.color }} /> {k.id}</span>)}
-        <span>max {format(max)}</span>
-        {mocked && <em>Sample series — not live customer data</em>}
-      </div>
-    </div>
+    <ChartFrame mocked={mocked} empty={empty} emptyLabel={emptyLabel}>
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart data={rows} barCategoryGap="32%">
+          <CartesianGrid stroke={C.grid} vertical={false} />
+          <XAxis dataKey="label" tick={{ fill: C.faint, fontSize: 11 }} axisLine={false} tickLine={false} />
+          <YAxis
+            tick={{ fill: C.faint, fontSize: 11 }}
+            axisLine={false}
+            tickLine={false}
+            width={64}
+            tickFormatter={(v) => format(v)}
+          />
+          <Tooltip content={<DarkTooltip formatter={(v) => format(v)} />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
+          {keys.map((k) => (
+            <Bar
+              key={k.id}
+              dataKey={k.id}
+              name={k.id}
+              stackId="layers"
+              fill={hexFromCss(k.color, C.acid)}
+              maxBarSize={28}
+            />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartFrame>
   );
 }
 
 export function EmptyChart({ label = 'No jobs yet' }) {
   return (
     <div className="pb-chart pb-chart-empty">
-      <p>{label}</p>
+      <div>
+        <strong>Nothing to plot</strong>
+        <p>{label}</p>
+      </div>
     </div>
   );
 }

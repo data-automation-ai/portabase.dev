@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { PROOF_GREEN, PROOF_RED } from '../src/lib/proof-status.js';
 import {
   buildBackupLog,
+  buildBillingStrip,
   buildCapsuleSizeBreakdown,
   buildDashboardCharts,
   buildDashboardModel,
@@ -39,6 +40,10 @@ test('sanitizeJobTelemetry keeps allowlisted fields and drops secrets', () => {
   assert.equal(clean.objectCount, 12);
   assert.equal(clean.passphrase, undefined);
   assert.doesNotMatch(json, /nope|avatars|secret\.jpg|passphrase/);
+  const blank = sanitizeJobTelemetry({ region: null, phase: undefined });
+  assert.equal(blank.region, null);
+  assert.equal(blank.phase, null);
+  assert.doesNotMatch(JSON.stringify(blank), /:"null"/);
 });
 
 test('empty dashboard does not invent live customer jobs', () => {
@@ -117,6 +122,31 @@ test('engine flags surface only when used — no invented CLI flags', () => {
   const used = usedEngineFlags({ excludeBinaries: true, excludeTableList: 'public.noise', forceOrphanFks: true });
   assert.deepEqual(used.map((f) => f.cli), ['--exclude-binaries', '--exclude-table-list', '--force-orphan-fks']);
   assert.equal(used.find((f) => f.id === 'forceOrphanFks').surfaceOnly, true);
+});
+
+test('backup log includes duration and dest; demo stay red', () => {
+  const jobs = sampleDashboardJobs(Date.parse('2026-09-20T12:00:00.000Z'));
+  const log = buildBackupLog(jobs, { demoMode: true });
+  assert.ok(log[0].durationMs > 0);
+  assert.ok(log[0].destinationKind);
+  assert.ok(log.every((row) => row.lamp.tone === PROOF_RED));
+});
+
+test('billing strip fail-closes without Square env and never prints secrets', () => {
+  const demo = buildBillingStrip({ demoMode: true, planId: 'cloud-17' });
+  assert.equal(demo.planName, 'Daily Escape');
+  assert.equal(demo.allowanceLabel, '10 GB');
+  assert.equal(demo.checkoutDisabled, true);
+  assert.deepEqual(demo.square.missing, ['SQUARE_ACCESS_TOKEN', 'SQUARE_LOCATION_ID']);
+  assert.equal(demo.nextPlan.id, 'cloud-37');
+  assert.doesNotMatch(JSON.stringify(demo), /sq0|EAAA/);
+
+  const ready = buildBillingStrip({
+    planId: 'cloud-7',
+    square: { ready: true, missing: [], mode: 'LIVE' },
+  });
+  assert.equal(ready.checkoutDisabled, false);
+  assert.equal(ready.nextPlan.id, 'cloud-17');
 });
 
 test('destination hints never claim Portabase holds capsule bytes', () => {

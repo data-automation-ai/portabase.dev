@@ -122,6 +122,7 @@ export function ConsoleApp() {
   const [search, setSearch] = useState('');
   const [liveJobs, setLiveJobs] = useState(null);
   const [liveDashboard, setLiveDashboard] = useState(false);
+  const [square, setSquare] = useState(null);
 
   const version = route.version;
   const meta = CLOUD_VERSIONS[version] || CLOUD_VERSIONS.supabase;
@@ -205,6 +206,7 @@ export function ConsoleApp() {
             setMe({ user: profile, access: { hasAccess: true, status: 'trialing', label: '7-day trial (demo)' }, subscription: consoleState.billing });
             setLiveJobs(null);
             setLiveDashboard(false);
+            setSquare(null);
           }
           return;
         }
@@ -212,6 +214,7 @@ export function ConsoleApp() {
           const data = await fetchMe(version);
           if (!cancelled) {
             setMe(data);
+            if (data.square) setSquare(data.square);
             if (data.subscription) {
               setStateRaw(s => {
                 const next = { ...s, billing: { ...s.billing, ...data.subscription, cloudVersion: version } };
@@ -275,6 +278,7 @@ export function ConsoleApp() {
       if (result.url) window.location.href = result.url;
       else toast(result.message || 'Add-on checkout URL missing', 'danger');
     } catch (e) {
+      if (e.data?.error === 'checkout_blocked' && e.data) setSquare(e.data);
       toast(e.message || 'Add-on checkout failed', 'danger');
     } finally {
       setBusy(false);
@@ -298,6 +302,7 @@ export function ConsoleApp() {
       if (result.url) window.location.href = result.url;
       else toast('Checkout URL missing', 'danger');
     } catch (e) {
+      if (e.data?.error === 'checkout_blocked' && e.data) setSquare(e.data);
       toast(e.message || 'Checkout failed', 'danger');
     } finally {
       setBusy(false);
@@ -364,6 +369,7 @@ export function ConsoleApp() {
     demoMode: sessionStorage.getItem('portabase.console.demo') === '1',
     liveJobs,
     live: liveDashboard,
+    square,
     resetDemo: () => {
       const next = resetConsoleState({ ...user, cloudVersion: version });
       setStateRaw(next);

@@ -7,6 +7,8 @@ import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { deriveAccess, getSubscriptionByUserId } from '../shared/subscription-store.mjs';
 import { findForbiddenField } from '../../cloud/control-plane/forbidden.mjs';
 import { buildDashboardModel, sanitizeJobTelemetry } from '../../src/lib/dashboard-view.js';
+import { inspectSquareCheckoutReady } from '../shared/square-ready.mjs';
+import { publicSquareStatus } from '../../src/lib/square-public.js';
 
 function jobsStore() {
   return getStore({ name: 'portabase-cloud-jobs', consistency: 'strong' });
@@ -46,6 +48,7 @@ export async function handler(event) {
 
   const record = (await getSubscriptionByUserId(storeKey)) || (await getSubscriptionByUserId(user.id)) || null;
   const access = deriveAccess(record);
+  const square = publicSquareStatus(inspectSquareCheckoutReady());
   const model = buildDashboardModel({
     jobs: safeJobs,
     billing: record
@@ -59,6 +62,7 @@ export async function handler(event) {
     proof: null,
     demoMode: false,
     live: safeJobs.length > 0,
+    square,
   });
 
   return jsonResponse(200, {
@@ -72,6 +76,7 @@ export async function handler(event) {
     model,
     proof: model.proof,
     access,
+    square,
     subscription: record
       ? {
         status: record.status,

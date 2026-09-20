@@ -1,6 +1,8 @@
 import { publicAuthConfigBoth, jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { deriveAccess, getSubscriptionByUserId } from '../shared/subscription-store.mjs';
 import { BASE_TRANSFERS_PER_24H, extraTransfersAddonPublic, transferWindow } from '../shared/product.mjs';
+import { inspectSquareCheckoutReady } from '../shared/square-ready.mjs';
+import { publicSquareStatus } from '../../src/lib/square-public.js';
 
 export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
@@ -47,6 +49,7 @@ export async function handler(event) {
         }
         : null,
       access,
+      square: publicSquareStatus(inspectSquareCheckoutReady()),
       product: {
         provider: 'dual',
         cloudVersion: user.cloudVersion,

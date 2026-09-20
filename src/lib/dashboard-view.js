@@ -7,6 +7,8 @@
 import { deriveProofStatus, PROOF_RED } from './proof-status.js';
 import { getCloudPlan, transferWindow, storageUsage } from './product.js';
 import { FORBIDDEN_INVENTORY_KEY } from './zero-knowledge.js';
+import { formatOperatorTimeShort, jobDurationMs } from './operator-time.js';
+import { squareBillingView } from './square-public.js';
 
 export const DASHBOARD_SOURCES = Object.freeze({
   empty: 'empty',
@@ -36,6 +38,7 @@ const ALLOWED_JOB_FIELDS = Object.freeze([
   'updatedAt',
   'objectCount',
   'sizeBytes',
+  'durationMs',
   'dbBytes',
   'storageBytes',
   'functionsBytes',
@@ -62,8 +65,9 @@ const SAFE_ERROR = /^[a-z0-9._-]{1,64}$/i;
 const DEST_KINDS = new Set(['s3', 'dropbox', 'gdrive', 'local', 'nas', 'azure-blob', 'gcs', 'rclone']);
 
 function cleanText(value, fallback = '') {
-  const text = String(value ?? fallback).slice(0, 160);
-  if (!text) return fallback;
+  if (value == null || value === '') return fallback;
+  const text = String(value).slice(0, 160);
+  if (!text || text === 'null' || text === 'undefined') return fallback;
   return FORBIDDEN_INVENTORY_KEY.test(text) ? fallback || 'redacted' : text;
 }
 
@@ -148,6 +152,7 @@ export function sanitizeJobTelemetry(job = {}) {
     finishedAt: isoOrNull(src.finishedAt || src.updatedAt),
     objectCount: positiveInt(src.objectCount),
     sizeBytes: positiveInt(src.sizeBytes),
+    durationMs: positiveInt(src.durationMs) || jobDurationMs(src.startedAt || src.createdAt, src.finishedAt || src.updatedAt),
     dbBytes: positiveInt(src.dbBytes ?? src.layerBytes?.database ?? src.layerHashes?.database?.sizeBytes),
     storageBytes: positiveInt(src.storageBytes ?? src.layerBytes?.storage ?? src.layerHashes?.storage?.sizeBytes),
     functionsBytes: positiveInt(src.functionsBytes ?? src.layerBytes?.functions ?? src.layerHashes?.functions?.sizeBytes),
@@ -248,6 +253,7 @@ export function buildBackupLog(jobs = [], { proof = null, demoMode = false } = {
         status: job.status,
         startedAt: job.startedAt,
         finishedAt: job.finishedAt,
+        durationMs: job.durationMs || jobDurationMs(job.startedAt, job.finishedAt),
         sizeBytes: job.sizeBytes,
         objectCount: job.objectCount,
         destinationKind: job.destinationKind,
@@ -277,8 +283,9 @@ export function buildDashboardCharts(jobs = [], { planId = 'cloud-17', extraTran
     const objects = dayJobs.reduce((sum, job) => sum + positiveInt(job.objectCount), 0);
     const ok = dayJobs.filter((job) => /complete|ok|success|verified|passed/i.test(job.status)).length;
     const fail = dayJobs.filter((job) => /fail|error|canceled/i.test(job.status)).length;
+    const dayStart = new Date(now - age * 86400e3);
     return {
-      label: age === 0 ? 'today' : `${age}d`,
+      label: formatOperatorTimeShort(dayStart),
       success: ok,
       fail,
       sizeBytes: bytes,
@@ -365,9 +372,57 @@ export function buildUtilitiesView({
   };
 }
 
-export function emptyDashboardModel({ planId = 'cloud-17', extraTransfersAddon = false, now = Date.now() } = {}) {
+export function buildBillingStrip({
+  billing = {},
+  square = null,
+  demoMode = false,
+  planId,
+} = {}) {
+  const plan = getCloudPlan(planId || billing.planId || billing.plan);
+  const squareView = squareBillingView({ live: square, demoMode });
+  const next = plan.id === 'cloud-7'
+    ? getCloudPlan('cloud-17')
+    : plan.id === 'cloud-17'
+      ? getCloudPlan('cloud-37')
+      : null;
+  return {
+    planId: plan.id,
+    planName: plan.title,
+    shortLabel: plan.shortLabel,
+    allowanceLabel: plan.storageCapLabel,
+    allowanceBytes: plan.storageCapBytes,
+    priceMonthlyUsd: plan.priceMonthlyUsd,
+    extraTransfersAddon: Boolean(billing.extraTransfersAddon),
+    status: billing.status || 'none',
+    square: squareView,
+    checkoutDisabled: squareView.failClosed,
+    upgradeAvailable: Boolean(next),
+    nextPlan: next,
+  };
+}
+
+export function buildTelemetryStrip(jobs = [], proof = null) {
+  const list = [...jobs].sort((a, b) => Date.parse(b.startedAt || 0) - Date.parse(a.startedAt || 0));
+  const latest = list[0] || null;
+  const done = list.filter((job) => /complete|ok|success|verified|passed/i.test(job.status)).length;
+  const fail = list.filter((job) => /fail|error|canceled/i.test(job.status)).length;
+  const lastSize = list.find((job) => job.sizeBytes > 0)?.sizeBytes || 0;
+  return {
+    latest,
+    jobCount: list.length,
+    successCount: done,
+    failCount: fail,
+    lastSizeBytes: lastSize,
+    lastErrorCode: latest?.errorCode || null,
+    proofTone: proof?.tone || PROOF_RED,
+    proofLabel: proof?.proven ? 'MATCH' : 'RED',
+  };
+}
+
+export function emptyDashboardModel({ planId = 'cloud-17', extraTransfersAddon = false, now = Date.now(), square = null, demoMode = false } = {}) {
   const plan = getCloudPlan(planId);
   const charts = buildDashboardCharts([], { planId: plan.id, extraTransfersAddon, now });
+  const proof = deriveProofStatus({ report: null, demoMode: false });
   return {
     source: DASHBOARD_SOURCES.empty,
     labeled: 'No jobs yet — empty customer workspace. This is not live telemetry.',
@@ -375,11 +430,13 @@ export function emptyDashboardModel({ planId = 'cloud-17', extraTransfersAddon =
     demo: false,
     jobs: [],
     telemetry: [],
+    strip: buildTelemetryStrip([], proof),
     charts,
     sizes: [],
     log: [],
     utilities: buildUtilitiesView({ planId: plan.id, sms: { optIn: false, onFailure: true, onSuccess: false } }),
-    proof: deriveProofStatus({ report: null, demoMode: false }),
+    proof,
+    billingStrip: buildBillingStrip({ billing: { planId: plan.id, extraTransfersAddon }, square, demoMode }),
     empty: true,
   };
 }
@@ -455,7 +512,10 @@ export function jobsFromConsoleState(state = {}) {
     status: capsule.status,
     phase: capsule.status === 'FAILED' ? 'failed' : 'sealed',
     startedAt: capsule.createdAt,
-    finishedAt: capsule.createdAt,
+    finishedAt: capsule.durationMs && capsule.createdAt
+      ? new Date(Date.parse(capsule.createdAt) + Number(capsule.durationMs)).toISOString()
+      : capsule.createdAt,
+    durationMs: capsule.durationMs,
     sizeBytes: capsule.sizeBytes,
     objectCount: capsule.objectCount,
     destinationKind: capsule.destinationKind,
@@ -490,18 +550,21 @@ export function buildDashboardModel({
   doctor = null,
   verify = null,
   now = Date.now(),
+  square = null,
 } = {}) {
   const planId = billing.planId || billing.plan || 'cloud-17';
   const extraTransfersAddon = Boolean(billing.extraTransfersAddon);
   if (demoMode) {
     const sample = (jobs && jobs.length ? jobs : sampleDashboardJobs(now)).map(sanitizeJobTelemetry);
+    const proofStatus = deriveProofStatus({ report: proof, demoMode: true });
     return {
       source: DASHBOARD_SOURCES.demo,
-      labeled: 'Sample UI — not live customer data. Demo gauges cannot turn the proof lamp green.',
+      labeled: 'SAMPLE UI — not live customer data. Demo gauges cannot turn the proof lamp green.',
       live: false,
       demo: true,
       jobs: sample,
       telemetry: sample,
+      strip: buildTelemetryStrip(sample, proofStatus),
       charts: buildDashboardCharts(sample, { planId, extraTransfersAddon, now }),
       sizes: sample.filter((job) => job.type === 'backup' || job.sizeBytes).map(buildCapsuleSizeBreakdown),
       log: buildBackupLog(sample, { proof: null, demoMode: true }),
@@ -521,20 +584,24 @@ export function buildDashboardModel({
         sms: { ...sms, optIn: sms.optIn === true },
         planId,
       }),
-      proof: deriveProofStatus({ report: proof, demoMode: true }),
+      proof: proofStatus,
+      billingStrip: buildBillingStrip({ billing, square, demoMode: true, planId }),
       empty: false,
     };
   }
 
   const list = Array.isArray(jobs) ? jobs.map(sanitizeJobTelemetry) : [];
   if (!list.length) {
+    const empty = emptyDashboardModel({ planId, extraTransfersAddon, now, square, demoMode: false });
     return {
-      ...emptyDashboardModel({ planId, extraTransfersAddon, now }),
+      ...empty,
       utilities: buildUtilitiesView({ schedules, sms, planId, doctor, verify }),
       proof: deriveProofStatus({ report: proof, demoMode: false }),
+      billingStrip: buildBillingStrip({ billing, square, demoMode: false, planId }),
     };
   }
 
+  const proofStatus = deriveProofStatus({ report: proof, demoMode: false });
   return {
     source: live ? DASHBOARD_SOURCES.live : DASHBOARD_SOURCES.empty,
     labeled: live ? 'Live control-plane telemetry (metadata + hashes only).' : 'Workspace jobs (metadata only).',
@@ -542,11 +609,13 @@ export function buildDashboardModel({
     demo: false,
     jobs: list,
     telemetry: list,
+    strip: buildTelemetryStrip(list, proofStatus),
     charts: buildDashboardCharts(list, { planId, extraTransfersAddon, now }),
     sizes: list.filter((job) => job.sizeBytes || job.dbBytes || job.storageBytes || job.functionsBytes).map(buildCapsuleSizeBreakdown),
     log: buildBackupLog(list, { proof, demoMode: false }),
     utilities: buildUtilitiesView({ jobs: list, doctor, verify, schedules, sms, planId }),
-    proof: deriveProofStatus({ report: proof, demoMode: false }),
+    proof: proofStatus,
+    billingStrip: buildBillingStrip({ billing, square, demoMode: false, planId }),
     empty: false,
   };
 }
