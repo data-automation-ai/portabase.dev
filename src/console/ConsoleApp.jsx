@@ -3,10 +3,11 @@ import './console.css';
 import { Icon } from './icons.jsx';
 import {
   loadConsoleState, saveConsoleState, resetConsoleState, updateConsoleState,
+  emptyWorkspace, loadLiveConsoleState, saveLiveConsoleState,
 } from './data/store.js';
 import { CLOUD_VERSIONS, normalizeCloudVersion, getStoredCloudVersion, setStoredCloudVersion, isSupabaseOnlyLaunch } from '../lib/cloud-versions.js';
 import { clearSession, loadSession, sessionCloudVersion, sessionUser } from '../lib/session.js';
-import { ensureSessionForVersion, fetchMe, startTrialCheckout, startAddonCheckout, confirmCheckout } from '../lib/cloud-api.js';
+import { ensureSessionForVersion, fetchMe, fetchDashboard, startTrialCheckout, startAddonCheckout, confirmCheckout } from '../lib/cloud-api.js';
 import { getCloudPlan } from '../lib/product.js';
 import * as supabaseAuth from '../lib/supabase-auth.js';
 import * as awsAuth from '../lib/cognito.js';
@@ -17,10 +18,12 @@ import {
 import { TelemetryPage } from './telemetry-page.jsx';
 import { OpenCapsulePage } from './open-capsule.jsx';
 import { SupabaseViewerPage } from './supabase-viewer.jsx';
+import { CustomerDashboardPage } from './customer-dashboard.jsx';
 
 /** Portabase-native IA — recovery ops only (not a Supabase Studio clone). */
 const NAV = [
-  { id: 'home', label: 'Home', icon: 'home' },
+  { id: 'dashboard', label: 'Dashboard', icon: 'home' },
+  { id: 'home', label: 'Ops home', icon: 'activity' },
   { id: 'projects', label: 'Sources', icon: 'folder' },
   { id: 'supabase-viewer', label: 'Live Supabase', icon: 'table' },
   { id: 'backups', label: 'Capsules', icon: 'capsule' },
@@ -53,7 +56,12 @@ const ALIASES = {
   team: 'account',
   billing: 'account',
   settings: 'account',
-  onboarding: 'home',
+  onboarding: 'dashboard',
+  dashboard: 'dashboard',
+  log: 'dashboard',
+  'backup-log': 'dashboard',
+  utilities: 'dashboard',
+  charts: 'dashboard',
 };
 
 function parseRoute() {
@@ -62,9 +70,12 @@ function parseRoute() {
   const parts = path.split('/').filter(Boolean);
   let page = 'home';
   let id = null;
-  if (parts[0] === 'app') {
+  if (parts[0] === 'dashboard') {
+    page = 'dashboard';
+  } else if (parts[0] === 'app') {
     if (parts[1] === 'projects' && parts[2]) { page = 'project'; id = parts[2]; }
     else if (parts[1]) page = parts[1];
+    else page = 'dashboard';
   } else if (parts[0] === 'tools' && parts[1] === 'supabase-viewer') {
     page = 'supabase-viewer';
   }
@@ -83,13 +94,15 @@ function parseRoute() {
     attempt: params.get('attempt'),
     addon: params.get('addon'),
     accountTab: params.get('tab') || null,
+    dashboardTab: params.get('section') || params.get('tab') || null,
   };
 }
 
 function buildPath(page, { id, version, tab } = {}) {
   const v = version || getStoredCloudVersion();
-  let path = '/app';
-  if (page === 'home') path = '/app';
+  let path = '/dashboard';
+  if (page === 'dashboard') path = '/dashboard';
+  else if (page === 'home') path = '/app/home';
   else if (page === 'project' && id) path = `/app/projects/${id}`;
   else path = `/app/${page}`;
   const q = new URLSearchParams({ version: v });
@@ -107,6 +120,8 @@ export function ConsoleApp() {
   const [sideOpen, setSideOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
   const [search, setSearch] = useState('');
+  const [liveJobs, setLiveJobs] = useState(null);
+  const [liveDashboard, setLiveDashboard] = useState(false);
 
   const version = route.version;
   const meta = CLOUD_VERSIONS[version] || CLOUD_VERSIONS.supabase;
@@ -119,11 +134,14 @@ export function ConsoleApp() {
   }, []);
 
   const setState = useCallback((mutator) => {
+    const demo = sessionStorage.getItem('portabase.console.demo') === '1'
+      || new URLSearchParams(window.location.search).get('demo') === '1';
     setStateRaw(current => {
-      const base = current || loadConsoleState(user);
+      const base = current || (demo ? loadConsoleState(user) : loadLiveConsoleState(user));
       const draft = structuredClone(base);
       const next = typeof mutator === 'function' ? mutator(draft) : mutator;
-      saveConsoleState(next);
+      if (demo) saveConsoleState(next);
+      else saveLiveConsoleState(next);
       return next;
     });
   }, [user]);
@@ -175,13 +193,19 @@ export function ConsoleApp() {
           window.history.replaceState({}, '', buildPath(route.page === 'overview' ? 'overview' : route.page, { id: route.id, version }));
         }
         const profile = session.user || sessionUser(session) || { id: 'demo-user', email: 'demo@portabase.dev', name: 'Demo operator' };
-        const consoleState = loadConsoleState({ ...profile, cloudVersion: version });
+        const consoleState = demoMode
+          ? loadConsoleState({ ...profile, cloudVersion: version })
+          : loadLiveConsoleState({ ...profile, cloudVersion: version });
         if (!cancelled) {
           setStateRaw(consoleState);
           setReady(true);
         }
         if (demoMode) {
-          if (!cancelled) setMe({ user: profile, access: { hasAccess: true, status: 'trialing', label: '7-day trial (demo)' }, subscription: consoleState.billing });
+          if (!cancelled) {
+            setMe({ user: profile, access: { hasAccess: true, status: 'trialing', label: '7-day trial (demo)' }, subscription: consoleState.billing });
+            setLiveJobs(null);
+            setLiveDashboard(false);
+          }
           return;
         }
         try {
@@ -191,7 +215,7 @@ export function ConsoleApp() {
             if (data.subscription) {
               setStateRaw(s => {
                 const next = { ...s, billing: { ...s.billing, ...data.subscription, cloudVersion: version } };
-                saveConsoleState(next);
+                saveLiveConsoleState(next);
                 return next;
               });
             }
@@ -199,7 +223,32 @@ export function ConsoleApp() {
         } catch (err) {
           if (err.status === 401) {
             clearSession();
-            window.location.replace(`/login?version=${version}&next=/app`);
+            window.location.replace(`/login?version=${version}&next=/dashboard`);
+          }
+        }
+        try {
+          const dash = await fetchDashboard(version);
+          if (!cancelled) {
+            setLiveJobs(Array.isArray(dash.jobs) ? dash.jobs : []);
+            setLiveDashboard(Boolean(dash.live));
+            if (dash.proof) {
+              setStateRaw(s => {
+                const next = { ...s, proofReport: dash.proof.proven ? dash.proof : s.proofReport, jobs: dash.jobs || [] };
+                saveLiveConsoleState(next);
+                return next;
+              });
+            } else {
+              setStateRaw(s => {
+                const next = { ...s, jobs: dash.jobs || [] };
+                saveLiveConsoleState(next);
+                return next;
+              });
+            }
+          }
+        } catch {
+          if (!cancelled) {
+            setLiveJobs([]);
+            setLiveDashboard(false);
           }
         }
       } catch (e) {
@@ -313,6 +362,8 @@ export function ConsoleApp() {
     startTrial,
     startAddon,
     demoMode: sessionStorage.getItem('portabase.console.demo') === '1',
+    liveJobs,
+    live: liveDashboard,
     resetDemo: () => {
       const next = resetConsoleState({ ...user, cloudVersion: version });
       setStateRaw(next);
@@ -332,7 +383,8 @@ export function ConsoleApp() {
     case 'alerts': body = <AlertsHubPage {...pageProps} />; break;
     case 'restore': body = <RestoresPage {...pageProps} />; break;
     case 'account': body = <AccountHubPage {...pageProps} tab={route.accountTab} />; break;
-    default: body = <OverviewPage {...pageProps} />;
+    case 'dashboard': body = <CustomerDashboardPage {...pageProps} section={route.dashboardTab === 'billing' ? 'overview' : (route.dashboardTab || 'overview')} />; break;
+    default: body = <CustomerDashboardPage {...pageProps} section="overview" />;
   }
 
   const crumb = route.page === 'project'

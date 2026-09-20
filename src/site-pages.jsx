@@ -253,7 +253,7 @@ portabase verify --capsule ./portabase-capsules/NAME --decrypt
               </p>
             </div>
             <div className="security-standalone-actions">
-              <a className="button button-primary" href="/login?mode=signup&next=/app">Sign in / start trial <Arrow /></a>
+              <a className="button button-primary" href="/login?mode=signup&next=/dashboard">Sign in / start trial <Arrow /></a>
               <a className="button button-ghost" href="/security">Security &amp; zero knowledge <Arrow /></a>
               <a className="button button-ghost" href="/legal">Legal · not affiliated <Arrow /></a>
             </div>

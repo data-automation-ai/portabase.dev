@@ -76,6 +76,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/cloud/dashboard"
+  to = "/.netlify/functions/cloud-dashboard"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

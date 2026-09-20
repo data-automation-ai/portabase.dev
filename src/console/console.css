@@ -444,6 +444,17 @@
   font-style: normal; font: 600 10px var(--mono); letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--c-faint);
 }
+.pb-chart-empty {
+  min-height: 140px; display: grid; place-items: center;
+  border: 1px dashed var(--c-border-strong); border-radius: 8px;
+  color: var(--c-muted); font-size: 13px; text-align: center; padding: 24px;
+}
+.pb-account-strip .pb-kpi-value { margin-top: 6px; }
+@media (max-width: 640px) {
+  .pb-tabs-mobile { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .pb-account-strip .pb-grid-3 { grid-template-columns: 1fr; }
+  .pb-table { min-width: 520px; }
+}
 
 /* Open-capsule wizard */
 .pb-wizard {

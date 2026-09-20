@@ -57,3 +57,7 @@ export function fetchRunners(version) {
 export function provisionRunner(version, body = {}) {
   return api('/api/cloud/runners', { method: 'POST', body: { action: 'provision', ...body }, version });
 }
+
+export function fetchDashboard(version) {
+  return api('/api/cloud/dashboard', { version });
+}

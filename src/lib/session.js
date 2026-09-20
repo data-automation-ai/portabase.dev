@@ -118,3 +118,7 @@ export function sessionCloudVersion(session = loadSession()) {
   if (!session) return null;
   return normalizeCloudVersion(session.cloudVersion || session.provider);
 }
+
+export function isSignedIn(session = loadSession()) {
+  return Boolean(sessionAccessToken(session) && sessionUser(session));
+}

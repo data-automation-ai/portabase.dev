@@ -12,7 +12,7 @@ import {
 } from './lib/cloud-versions.js';
 import * as supabaseAuth from './lib/supabase-auth.js';
 import * as awsAuth from './lib/cognito.js';
-import { sessionCloudVersion } from './lib/session.js';
+import { sessionCloudVersion, sessionUser, isSignedIn } from './lib/session.js';
 import { ensureSessionForVersion } from './lib/cloud-api.js';
 import { ConsoleApp } from './console/ConsoleApp.jsx';
 
@@ -164,7 +164,7 @@ export function LoginPage() {
   const fromUrl = versionFromSearch(window.location.search);
   const [version, setVersion] = useState(fromUrl || getStoredCloudVersion());
   const initialMode = params.get('mode') === 'signup' ? 'signup' : params.get('mode') === 'forgot' ? 'forgot' : 'signin';
-  const next = params.get('next') || '/app';
+  const next = params.get('next') || '/dashboard';
   const [mode, setMode] = useState(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -193,10 +193,11 @@ export function LoginPage() {
     setStoredCloudVersion(version);
     ensureSessionForVersion(version).then(s => {
       if (s && sessionCloudVersion(s) === version) {
-        window.location.replace(`/app?version=${version}`);
+        const dest = next.startsWith('/') ? next : '/dashboard';
+        window.location.replace(dest.includes('version=') ? dest : `${dest}${dest.includes('?') ? '&' : '?'}version=${version}`);
       }
     }).catch(() => {});
-  }, [version]);
+  }, [version, next]);
 
   const go = async (fn) => {
     setBusy(true);
@@ -213,8 +214,37 @@ export function LoginPage() {
   };
 
   const afterLogin = () => {
-    window.location.assign(`/app?version=${version}`);
+    const dest = next.startsWith('/') ? next : '/dashboard';
+    window.location.assign(dest.includes('version=') ? dest : `${dest}${dest.includes('?') ? '&' : '?'}version=${version}`);
   };
+
+  const signedInUser = sessionUser();
+  if (isSignedIn()) {
+    return (
+      <AuthShell
+        version={version}
+        title="You're signed in"
+        lead="Continue to your customer dashboard, or sign out on this device."
+      >
+        <div className="auth-signed-in">
+          <div className="auth-signed-in-avatar">{(signedInUser?.email || 'U').slice(0, 1).toUpperCase()}</div>
+          <strong>{signedInUser?.name || signedInUser?.email || 'Operator'}</strong>
+          <span>{signedInUser?.email}</span>
+          <a className="button button-primary" href={`/dashboard?version=${version}`}>Open dashboard</a>
+          <button
+            type="button"
+            className="auth-text-btn"
+            onClick={async () => {
+              await supabaseAuth.signOut();
+              window.location.reload();
+            }}
+          >
+            Sign out
+          </button>
+        </div>
+      </AuthShell>
+    );
+  }
 
   const minPassword = version === 'aws' ? 12 : 8;
 
@@ -233,12 +263,12 @@ export function LoginPage() {
 
       <GoogleButton
         version={version}
-        next="/app"
+        next={next}
         label={mode === 'signup' ? 'Sign up with Google' : 'Continue with Google'}
       />
       <GitHubButton
         version={version}
-        next="/app"
+        next={next}
         label={mode === 'signup' ? 'Sign up with GitHub' : 'Continue with GitHub'}
       />
       <div className="auth-divider"><span>or email</span></div>
@@ -395,7 +425,7 @@ export function LoginPage() {
       {error && <p className="auth-error">{error}</p>}
       <p className="auth-legal">
         Launch scope: <strong>Supabase projects only</strong> (database, Auth, Storage, Edge Functions).
-        Identity: hosted Supabase Auth (email + Google). Trial requires a card and becomes {productConfig.priceRangeLabel}/mo after {productConfig.trialDays} days unless canceled.
+        Identity: hosted Supabase Auth (email, magic link, Google, GitHub). Trial requires a card and becomes {productConfig.priceRangeLabel}/mo after {productConfig.trialDays} days unless canceled.
         Portabase is provably zero-knowledge of customer encryption keys and capsule contents.
         {AWS_CLOUD_VERSION_ENABLED ? '' : ' AWS Cognito Cloud is not offered yet.'}
       </p>
@@ -414,7 +444,7 @@ export function AuthCallbackPage() {
     let version = versionFromSearch(window.location.search)
       || sessionStorage.getItem('portabase.auth.version')
       || getStoredCloudVersion();
-    let next = sessionStorage.getItem('portabase.auth.next') || `/app?version=${version}`;
+      let next = sessionStorage.getItem('portabase.auth.next') || `/dashboard?version=${version}`;
 
     if (state.includes('version:aws')) version = 'aws';
     if (state.includes('version:supabase')) version = 'supabase';
@@ -436,7 +466,7 @@ export function AuthCallbackPage() {
         .then(() => {
           sessionStorage.removeItem('portabase.auth.next');
           sessionStorage.removeItem('portabase.auth.version');
-          const dest = next.includes('version=') ? next : (next.startsWith('/app') ? `/app?version=${version}` : next);
+          const dest = next.includes('version=') ? next : (next.startsWith('/app') || next.startsWith('/dashboard') ? `${next}${next.includes('?') ? '&' : '?'}version=${version}` : next);
           window.location.replace(dest);
         })
         .catch(e => setError(version === 'aws' ? awsAuth.describeCognitoError(e) : supabaseAuth.describeAuthError(e)));

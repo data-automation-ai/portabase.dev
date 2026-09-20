@@ -7,7 +7,7 @@ import { closureReasons, closureCases } from './data/closure-cases.js';
 import { AppPage, AuthCallbackPage, LoginPage } from './auth-pages.jsx';
 import { BackendPage } from './backend-page.jsx';
 import { DocsPage, InstallCta, LegalPage } from './site-pages.jsx';
-import { loadSession } from './lib/session.js';
+import { isSignedIn, loadSession, sessionUser } from './lib/session.js';
 import { CLOUD_PLANS, extraTransfersAddonPriceLabel, planPriceRangeLabel } from './lib/product.js';
 
 const Arrow = () => <span aria-hidden="true">↗</span>;
@@ -153,14 +153,24 @@ function Logo({ href = '/' }) {
 
 function Header() {
   const [open, setOpen] = useState(false);
+  const [user, setUser] = useState(() => sessionUser(loadSession()));
+  useEffect(() => {
+    const sync = () => setUser(isSignedIn() ? sessionUser(loadSession()) : null);
+    window.addEventListener('portabase-auth', sync);
+    sync();
+    return () => window.removeEventListener('portabase-auth', sync);
+  }, []);
   return <header className="site-header">
     <div className="shell nav-wrap">
       <Logo href="/#top" />
       <button className="menu" onClick={() => setOpen(!open)} aria-label="Toggle navigation">{open ? 'Close' : 'Menu'}</button>
       <nav className={open ? 'nav open' : 'nav'}>
-        <a href="/#what-is-this">What is this?</a><a href="/#never-hold-keys">Keys</a><a href="/#cli-vs-cloud">CLI vs Cloud</a><a href="/#why-now">Why now</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">The escape plan</a><a href="/backend">Backend</a><a href="/docs">Docs</a><a href="/security">Security</a><a href="/cloud">Cloud · $7 / $17</a><a href="/login">Sign in</a>
+        <a href="/#what-is-this">What is this?</a><a href="/#never-hold-keys">Keys</a><a href="/#cli-vs-cloud">CLI vs Cloud</a><a href="/#why-now">Why now</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">The escape plan</a><a href="/backend">Backend</a><a href="/docs">Docs</a><a href="/security">Security</a><a href="/cloud">Cloud · $7 / $17</a>
+        <a href={user ? '/dashboard' : '/login'}>{user ? 'Dashboard' : 'Sign in'}</a>
       </nav>
-      <a className="button button-small desktop-cta" href="/login?next=/app">Start free trial <Arrow /></a>
+      <a className="button button-small desktop-cta" href={user ? '/dashboard' : '/login?next=/dashboard'}>
+        {user ? 'Open dashboard' : 'Start free trial'} <Arrow />
+      </a>
     </div>
   </header>;
 }
@@ -1198,7 +1208,7 @@ function PublicDeal() {
 }
 
 function CloudPage() {
-  const signedIn = Boolean(loadSession()?.idToken);
+  const signedIn = isSignedIn();
 
   useEffect(() => {
     document.title = 'Portabase Cloud — Open source vs hosted · 7-day trial';
@@ -1218,10 +1228,10 @@ function CloudPage() {
           <a href="#keys">Key storage</a>
           <a href="/backend">Backend</a>
           <a href="#subscribe">Pricing</a>
-          <a href={signedIn ? '/app' : '/login'}>{signedIn ? 'Console' : 'Sign in'}</a>
+          <a href={signedIn ? '/dashboard' : '/login'}>{signedIn ? 'Dashboard' : 'Sign in'}</a>
         </nav>
-        <a className="button button-small desktop-cta" href={signedIn ? '/app' : '/login?mode=signup&next=/app'}>
-          {signedIn ? 'Open console' : 'Start 7-day trial'} <Arrow />
+        <a className="button button-small desktop-cta" href={signedIn ? '/dashboard' : '/login?mode=signup&next=/dashboard'}>
+          {signedIn ? 'Open dashboard' : 'Start 7-day trial'} <Arrow />
         </a>
       </div>
     </header>
@@ -1233,8 +1243,8 @@ function CloudPage() {
           <h1>GitHub is the Escape hatch.<br />This site is the Escape console.</h1>
           <p className="cloud-hero-lead"><strong>USP: Escape.</strong> Supabase only. Open-source engine does full recovery — including <strong>Storage object bytes and Edge Functions</strong> that platform DB backups leave behind. <strong>This website</strong> is the Cloud GUI, easier configuration, and telemetry so the Escape is operable — not a forgotten script.</p>
           <div className="cloud-hero-actions">
-            <a className="button button-primary" href={signedIn ? '/app' : '/login?mode=signup&next=/app'}>Start 7-day free trial <Arrow /></a>
-            <a className="button button-ghost" href="/app?demo=1">Open full console (demo) <Arrow /></a>
+            <a className="button button-primary" href={signedIn ? '/dashboard' : '/login?mode=signup&next=/dashboard'}>Start 7-day free trial <Arrow /></a>
+            <a className="button button-ghost" href="/dashboard?demo=1">Open dashboard (demo) <Arrow /></a>
             <a className="button button-ghost" href="#subscribe">See trial → subscription <Arrow /></a>
             <a className="button button-ghost" href="/backend">Backend · capsules &amp; workers <Arrow /></a>
             <a className="button button-ghost" href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">GitHub · open source <Arrow /></a>
@@ -2028,7 +2038,7 @@ function App() {
   if (path === '/thanks' || path === '/buy') return <LegacyPurchaseNotice />;
   if (path === '/login' || path === '/signup') return <LoginPage />;
   if (path === '/auth/callback') return <AuthCallbackPage />;
-  if (path === '/app' || path === '/console' || path.startsWith('/app/') || path === '/tools/supabase-viewer') return <AppPage />;
+  if (path === '/app' || path === '/console' || path === '/dashboard' || path.startsWith('/app/') || path.startsWith('/dashboard/') || path === '/tools/supabase-viewer') return <AppPage />;
   if (path === '/cloud' || path === '/pricing') return <CloudPage />;
   if (path === '/security' || path === '/trust') return <SecurityPage />;
   if (path === '/backend') return <BackendPage Logo={Logo} Arrow={Arrow} Footer={Footer} />;

@@ -221,7 +221,7 @@ export function OverviewPage({ state, navigate, toast, me, startAddon, busy, dem
         </div>
         <div className="pb-card">
           <div className="pb-kpi-label">Freshest RPO</div>
-          <div className="pb-kpi-value">{Math.min(...state.projects.map(p => p.rpoHours || 999)).toFixed(1)}<span style={{ fontSize: 14, color: 'var(--c-faint)' }}>h</span></div>
+          <div className="pb-kpi-value">{state.projects.length ? Math.min(...state.projects.map(p => p.rpoHours || 999)).toFixed(1) : '—'}{state.projects.length ? <span style={{ fontSize: 14, color: 'var(--c-faint)' }}>h</span> : null}</div>
           <div className="pb-kpi-meta">Age of newest good capsule</div>
         </div>
       </div>

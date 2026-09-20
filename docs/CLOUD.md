@@ -48,9 +48,11 @@ Honest limit: Cloud isolation is **designed**, not claimed proven-green. Checks 
 | Webhook / confirm-checkout activate a paid plan on `/api/cloud/me` | End-to-end paid subscriber on portabase.dev |
 | Runner sketch: sleeping container + free-engine argv + seal-to-runner | Production ECS/Fargate isolation audit |
 | Control plane store: hosted Supabase primary + one persistent SQLite replica | Live outage drill |
-| Dashboard lamp stays **red** unless a real dry-run/compare is MATCH | A green lamp on demo data (forbidden) |
+| Dashboard view-model + `/api/cloud/dashboard` + empty/demo labels | Live job ingest on portabase.dev |
+| Dashboard lamp stays **red** unless a real dry-run/compare is MATCH | A green lamp on demo or empty data (forbidden) |
 | Telemetry allowlist + SMS status-only builder | Twilio delivery in production |
 | GitHub / Google / email / magic-link sign-in wiring | Provider enablement in Supabase Auth (Louis) |
+| SMS toggle UI (status-only) | Twilio send path + Square customer portal |
 
 ## Square LIVE vs TEST
 
@@ -67,7 +69,27 @@ Catalog pins: `SQUARE_CLOUD_PLAN_VARIATION_ID_7`, `SQUARE_CLOUD_PLAN_VARIATION_I
 
 ## Auth
 
-Supabase Auth: **email**, **magic link**, **Google**, **GitHub**. Enable each provider on the hosted Auth project (not `ekklokrukxmqlahtonnc` as a write dest). Redirect: `https://portabase.dev/auth/callback`.
+Supabase Auth: **email**, **magic link**, **Google**, **GitHub**. Enable each provider on the hosted Auth project (not `ekklokrukxmqlahtonnc` as a write dest). Redirect: `https://portabase.dev/auth/callback`. After sign-in the SPA goes to **`/dashboard`**.
+
+Site chrome shows **Sign in** vs **Dashboard** from the local session (Supabase access token). `/login` redirects an already-signed-in user to the dashboard.
+
+## Customer dashboard
+
+Route: **`/dashboard`** (also `/app` lands here). Demo: **`/dashboard?demo=1`** — labeled **sample UI**, never live customer data.
+
+| Section | What it shows |
+| --- | --- |
+| **Telemetry** | Job status, phase, started/finished, object counts, sizes, destination kind, runner region, safe error codes |
+| **Charts** | Capsule size over time, success/fail, bytes / day vs plan cap, object counts. Empty charts when no jobs |
+| **Capsule sizes** | Per job: total + DB / Storage / Functions when hashes/counts exist |
+| **Backup log** | Chronological capture/restore with status, times, size, MATCH / red lamp, detail links |
+| **Utilities** | Doctor preflight, verify result, `--exclude-binaries` / `--exclude-table-list` (and `--force-orphan-fks` only if the runner reported it), customer-owned destination hints, schedule toggles, SMS opt-in on $17 / $37 |
+
+View-model: `src/lib/dashboard-view.js`. API: `GET /api/cloud/dashboard` (Bearer). Empty signed-in workspaces do **not** seed fake jobs.
+
+**Proof lamp:** stays **RED** until a real dry-run/compare from the CLI or Cloud Runner is MATCH. Demo / empty / mocked reports cannot turn it green.
+
+Account strip: plan ($7 / $17 / $37), Extra transfers, Square checkout. Customer portal URL is **not** wired until Louis pins it.
 
 ## Control-plane store
 
@@ -83,4 +105,7 @@ Hosted Supabase is primary. One persistent on-disk SQLite file is the replica / 
 | Square | `netlify/shared/square-cloud.mjs`, `square-ready.mjs` |
 | Runners API | `netlify/functions/cloud-runners.mjs` |
 | Proof lamp | `src/lib/proof-status.js` |
+| Dashboard view-model | `src/lib/dashboard-view.js` |
+| Customer dashboard UI | `src/console/customer-dashboard.jsx` · `/dashboard` |
+| Dashboard API | `netlify/functions/cloud-dashboard.mjs` |
 | SMS allowlist | `src/lib/sms-safe.js` |

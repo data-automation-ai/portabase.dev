@@ -128,7 +128,7 @@ export async function signUpWithEmail({ email, password, name }) {
   };
 }
 
-export async function signInWithMagicLink({ email, next = '/app' } = {}) {
+export async function signInWithMagicLink({ email, next = '/dashboard' } = {}) {
   const supabase = await getSupabase();
   sessionStorage.setItem('portabase.auth.next', next);
   sessionStorage.setItem('portabase.auth.version', 'supabase');
@@ -152,7 +152,7 @@ export async function signInWithEmail({ email, password }) {
   return persistFromSupabaseSession(data.session);
 }
 
-export async function signInWithGoogle({ next = '/app' } = {}) {
+export async function signInWithGoogle({ next = '/dashboard' } = {}) {
   const supabase = await getSupabase();
   sessionStorage.setItem('portabase.auth.next', next);
   sessionStorage.setItem('portabase.auth.version', 'supabase');
@@ -168,7 +168,7 @@ export async function signInWithGoogle({ next = '/app' } = {}) {
   return data;
 }
 
-export async function signInWithGitHub({ next = '/app' } = {}) {
+export async function signInWithGitHub({ next = '/dashboard' } = {}) {
   const supabase = await getSupabase();
   sessionStorage.setItem('portabase.auth.next', next);
   sessionStorage.setItem('portabase.auth.version', 'supabase');

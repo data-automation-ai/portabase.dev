@@ -33,7 +33,7 @@ export function DualBarChart({ rows = [], mocked = false }) {
       <div className="pb-chart-legend">
         <span><i className="ok" /> Success</span>
         <span><i className="fail" /> Fail</span>
-        {mocked && <em>Demo health series</em>}
+        {mocked && <em>Sample series — not live customer data</em>}
       </div>
     </div>
   );
@@ -76,8 +76,70 @@ export function LineChart({
       </svg>
       <div className="pb-chart-legend">
         <span>{label} · max {format(max)}</span>
-        {mocked && <em>Demo health series</em>}
+        {mocked && <em>Sample series — not live customer data</em>}
       </div>
+    </div>
+  );
+}
+
+export function StackedBarChart({
+  rows = [],
+  keys = [
+    { id: 'database', color: 'var(--c-info)' },
+    { id: 'storage', color: 'var(--c-acid)' },
+    { id: 'functions', color: 'var(--c-ok)' },
+  ],
+  format = (n) => String(n),
+  mocked = false,
+  emptyLabel = 'No capsule sizes yet',
+}) {
+  if (!rows.length || rows.every((row) => keys.every((k) => !(Number(row[k.id]) || 0)))) {
+    return (
+      <div className="pb-chart pb-chart-empty">
+        <p>{emptyLabel}</p>
+      </div>
+    );
+  }
+  const max = Math.max(1, ...rows.map((row) => keys.reduce((sum, k) => sum + (Number(row[k.id]) || 0), 0)));
+  const w = 520;
+  const h = 180;
+  const pad = { l: 28, r: 8, t: 12, b: 28 };
+  const innerW = w - pad.l - pad.r;
+  const innerH = h - pad.t - pad.b;
+  const group = innerW / Math.max(rows.length, 1);
+  return (
+    <div className="pb-chart">
+      <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Capsule size by layer">
+        {rows.map((row, i) => {
+          const x = pad.l + i * group + group * 0.22;
+          const bw = Math.max(8, group * 0.56);
+          let y = pad.t + innerH;
+          return (
+            <g key={row.label}>
+              {keys.map((k) => {
+                const val = Number(row[k.id]) || 0;
+                const bh = (val / max) * innerH;
+                y -= bh;
+                return <rect key={k.id} x={x} y={y} width={bw} height={bh} fill={k.color} rx="1" />;
+              })}
+              <text x={x + bw / 2} y={h - 8} textAnchor="middle" fill="var(--c-faint)" fontSize="10">{row.label}</text>
+            </g>
+          );
+        })}
+      </svg>
+      <div className="pb-chart-legend">
+        {keys.map((k) => <span key={k.id}><i style={{ background: k.color }} /> {k.id}</span>)}
+        <span>max {format(max)}</span>
+        {mocked && <em>Sample series — not live customer data</em>}
+      </div>
+    </div>
+  );
+}
+
+export function EmptyChart({ label = 'No jobs yet' }) {
+  return (
+    <div className="pb-chart pb-chart-empty">
+      <p>{label}</p>
     </div>
   );
 }

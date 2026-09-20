@@ -5,6 +5,7 @@
  */
 
 const KEY = 'portabase.console.v2';
+const LIVE_KEY = 'portabase.console.live.v1';
 
 function uid(prefix = 'id') {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
@@ -218,8 +219,9 @@ export function seedWorkspace(user = {}) {
       { id: uid('run'), name: 'managed-billing', isolation: 'L1', status: 'stopped', projectId: projectB, ecsService: null, lastError: 'Scaled to zero · resume from console', tailscale: false, updatedAt: daysAgo(3) },
     ],
     events,
+    jobs: [],
     proofReport: null,
-    demoMode: false,
+    demoMode: true,
     billing: {
       status: 'trialing',
       trialEndsAt: new Date(Date.now() + 5 * 86400e3).toISOString(),
@@ -300,6 +302,128 @@ export function seedWorkspace(user = {}) {
       steps: { workspace: true, project: true, agent: false, destination: true, schedule: true, alert: false, drill: false },
     },
   };
+}
+
+export function emptyWorkspace(user = {}) {
+  return {
+    version: 2,
+    workspace: {
+      id: 'ws_empty',
+      name: user.email?.split('@')[1]?.split('.')[0]
+        ? `${user.email.split('@')[1].split('.')[0]} recovery`
+        : 'Your recovery workspace',
+      slug: 'workspace',
+      plan: 'cloud-17',
+      cloudVersion: user.cloudVersion || 'supabase',
+      createdAt: new Date().toISOString(),
+    },
+    profile: {
+      id: user.id || 'user_local',
+      email: user.email || '',
+      name: user.name || 'Operator',
+      role: 'owner',
+    },
+    members: user.email
+      ? [{ id: user.id || 'user_local', email: user.email, name: user.name || 'Operator', role: 'owner', lastActiveAt: new Date().toISOString() }]
+      : [],
+    projects: [],
+    agents: [],
+    destinations: [],
+    capsules: [],
+    schedules: [],
+    restores: [],
+    alertChannels: [],
+    sms: {
+      onFailure: true,
+      onSuccess: false,
+      quietHoursEnabled: false,
+      quietStart: '22:00',
+      quietEnd: '07:00',
+      timezone: 'UTC',
+      optIn: false,
+      numbers: [],
+      recent: [],
+    },
+    alertPolicies: [],
+    runners: [],
+    events: [],
+    jobs: [],
+    proofReport: null,
+    demoMode: false,
+    billing: {
+      status: 'none',
+      trialEndsAt: null,
+      priceMonthlyCents: 1700,
+      listPriceMonthlyCents: 3700,
+      plan: 'cloud-17',
+      planId: 'cloud-17',
+      paymentMethod: null,
+      cloudVersion: user.cloudVersion || 'supabase',
+      storageCapGb: 10,
+      includedCyclesPerDay: 1,
+      transfersPer24h: 1,
+      extraTransfersAddon: false,
+      cyclesUsedLast24h: 0,
+    },
+    settings: {
+      telemetryOptIn: true,
+      retainEventsDays: 90,
+      requireVerifyGreen: true,
+      timezone: 'UTC',
+      notifyOnSuccess: false,
+    },
+    auditTrail: {
+      enabled: false,
+      livePollSeconds: 20,
+      region: 'us-east-1',
+      roleArn: '',
+      externalId: '',
+      vaultPrefixHint: '',
+      connected: false,
+      lastPolledAt: null,
+      mode: 'live',
+    },
+    cloudWatchLive: {
+      enabled: false,
+      livePollSeconds: 8,
+      region: 'us-east-1',
+      secretId: '',
+      secretLabel: '',
+      workspaceId: null,
+      lastPolledAt: null,
+      mode: 'live',
+    },
+    secrets: [],
+    onboarding: {
+      completed: false,
+      steps: { workspace: true, project: false, agent: false, destination: false, schedule: false, alert: false, drill: false },
+    },
+  };
+}
+
+export function loadLiveConsoleState(user) {
+  try {
+    const raw = localStorage.getItem(LIVE_KEY);
+    if (raw) {
+      const data = JSON.parse(raw);
+      if (data?.workspace && data.demoMode !== true) {
+        if (user?.email) data.profile = { ...data.profile, email: user.email, name: user.name || data.profile?.name, id: user.id || data.profile?.id };
+        if (user?.cloudVersion) {
+          data.workspace.cloudVersion = user.cloudVersion;
+          data.billing = { ...data.billing, cloudVersion: user.cloudVersion };
+        }
+        return data;
+      }
+    }
+  } catch {
+    /* empty */
+  }
+  return emptyWorkspace(user || {});
+}
+
+export function saveLiveConsoleState(state) {
+  localStorage.setItem(LIVE_KEY, JSON.stringify({ ...state, demoMode: false }));
+  window.dispatchEvent(new CustomEvent('portabase-console', { detail: state }));
 }
 
 export function loadConsoleState(user) {
