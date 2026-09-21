@@ -14,11 +14,12 @@ import * as awsAuth from './lib/cognito.js';
 import { sessionUser, isSignedIn } from './lib/session.js';
 import { ensureSessionForVersion } from './lib/cloud-api.js';
 import { ConsoleApp } from './console/ConsoleApp.jsx';
+import { KEYS_COPY } from './data/never-hold-keys.js';
 
 const Arrow = () => <span aria-hidden="true">↗</span>;
 
 function Logo({ href = '/' }) {
-  return <a className="logo" href={href}><span className="logo-mark" aria-hidden="true"><i /><i /><i /></span><b>Portabase</b></a>;
+  return <a className="logo" href={href} aria-label="Portabase home"><span className="logo-mark" aria-hidden="true"><i /><i /><i /></span><span>porta<b>base</b></span></a>;
 }
 
 function VersionPicker({ version, onChange }) {
@@ -80,10 +81,28 @@ function AuthShell({ children, title, lead, version, cardLabel }) {
             <ul className="auth-bullets">
               <li><span aria-hidden="true">1</span> Sign in with email, Google, or GitHub</li>
               <li><span aria-hidden="true">2</span> 7-day trial · card required · then {productConfig.priceRangeLabel}/mo</li>
-              <li><span aria-hidden="true">3</span> You own the capsule vault. We never hold keys.</li>
+              <li><span aria-hidden="true">3</span> You own the capsule vault. Keys are never posted to Portabase servers.</li>
             </ul>
+            <div className="auth-keys-note">
+              <span>KEYS NEVER POSTED HERE</span>
+              <b>{KEYS_COPY.loginTitle}</b>
+              <p>{KEYS_COPY.loginBody}</p>
+              <ol className="auth-keys-steps">
+                {KEYS_COPY.paths.map((path) => (
+                  <li key={path.step}><strong>{path.title}</strong> {path.body}</li>
+                ))}
+              </ol>
+              <p className="auth-keys-honest">{KEYS_COPY.honest}</p>
+            </div>
           </div>
-          <div className="auth-card" id="auth-card" aria-label={cardLabel || title}>{children}</div>
+          <div className="auth-card" id="auth-card" aria-label={cardLabel || title}>
+            <div className="auth-keys-note auth-keys-note-card">
+              <span>KEYS NEVER POSTED HERE</span>
+              <b>{KEYS_COPY.loginTitle}</b>
+              <p>{KEYS_COPY.loginBody}</p>
+            </div>
+            {children}
+          </div>
         </div>
       </main>
     </div>
@@ -276,7 +295,7 @@ export function LoginPage() {
     <AuthShell
       version={version}
       title={mode === 'signup' ? 'Create your Cloud account' : mode === 'forgot' ? 'Reset password' : 'Sign in to Cloud'}
-      lead="Email, magic link, Google, or GitHub. Then $7 / $17 / $37 via Square. You bring capsule storage. We never learn your passphrase."
+      lead="Email, magic link, Google, or GitHub. Cloud Free 100 MB, then $7 or $17 via Square. You bring capsule storage. Keys are never posted to Portabase servers."
       cardLabel={mode === 'signup' ? 'Create account' : mode === 'forgot' ? 'Reset password' : 'Sign in'}
     >
       <VersionPicker version={version} onChange={selectVersion} />
@@ -460,7 +479,7 @@ export function LoginPage() {
       <p className="auth-legal">
         Launch scope: <strong>Supabase projects only</strong> (database, Auth, Storage, Edge Functions).
         Identity: hosted Supabase Auth (email, magic link, Google, GitHub). Trial requires a card and becomes {productConfig.priceRangeLabel}/mo after {productConfig.trialDays} days unless canceled.
-        Portabase is provably zero-knowledge of customer encryption keys and capsule contents.
+        Keys are never posted to Portabase servers. Telemetry is status and hashes only — designed and tested in this repo, not a third-party audit.
         {AWS_CLOUD_VERSION_ENABLED ? '' : ' AWS Cognito Cloud is not offered yet.'}
       </p>
     </AuthShell>

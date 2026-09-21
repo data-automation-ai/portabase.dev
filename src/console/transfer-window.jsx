@@ -46,7 +46,7 @@ export function TransferWindowPanel({
         {' · '}
         {tw.extraTransfersAddon
           ? `Extra transfers add-on on (up to ${ADDON_TRANSFERS_PER_24H}).`
-          : `Included with $7 / $17 / $37: ${BASE_TRANSFERS_PER_24H} / ${TRANSFER_WINDOW_HOURS}h.`}
+          : `$7 includes 1 / ${TRANSFER_WINDOW_HOURS}h. $17 includes 3 / day.`}
         {' '}
         {tw.remaining === 0 ? 'No slots left in this window.' : `${tw.remaining} remaining.`}
       </p>

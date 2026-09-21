@@ -53,6 +53,8 @@ const ALIASES = {
   'supabase-viewer': 'supabase-viewer',
   studio: 'supabase-viewer',
   runners: 'agents',
+  seal: 'agents',
+  'seal-keys': 'agents',
   team: 'account',
   billing: 'account',
   settings: 'account',
@@ -62,6 +64,8 @@ const ALIASES = {
   'backup-log': 'dashboard',
   utilities: 'dashboard',
   charts: 'dashboard',
+  sizer: 'dashboard',
+  'table-sizer': 'dashboard',
 };
 
 function parseRoute() {
@@ -98,6 +102,11 @@ function parseRoute() {
   };
 }
 
+function isDemoMode() {
+  return new URLSearchParams(window.location.search).get('demo') === '1'
+    || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('portabase.console.demo') === '1');
+}
+
 function buildPath(page, { id, version, tab } = {}) {
   const v = version || getStoredCloudVersion();
   let path = '/dashboard';
@@ -107,6 +116,7 @@ function buildPath(page, { id, version, tab } = {}) {
   else path = `/app/${page}`;
   const q = new URLSearchParams({ version: v });
   if (tab) q.set('tab', tab);
+  if (isDemoMode()) q.set('demo', '1');
   return `${path}?${q}`;
 }
 
@@ -385,7 +395,7 @@ export function ConsoleApp() {
     case 'telemetry': body = <TelemetryPage {...pageProps} />; break;
     case 'inspect': body = <OpenCapsulePage {...pageProps} />; break;
     case 'supabase-viewer': body = <SupabaseViewerPage {...pageProps} />; break;
-    case 'agents': body = <AgentsHubPage {...pageProps} />; break;
+    case 'agents': body = <AgentsHubPage {...pageProps} tab={route.dashboardTab === 'seal' ? 'seal' : undefined} />; break;
     case 'alerts': body = <AlertsHubPage {...pageProps} />; break;
     case 'restore': body = <RestoresPage {...pageProps} />; break;
     case 'account': body = <AccountHubPage {...pageProps} tab={route.accountTab} />; break;

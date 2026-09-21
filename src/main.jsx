@@ -3,12 +3,16 @@ import { createRoot } from 'react-dom/client';
 import './styles.css';
 import { nightmares as stories } from './data/nightmares.js';
 import { diagrams, modelLayers, trustBoundary } from './data/diagrams.js';
+import { HOMEPAGE_FAQ } from './data/faq.js';
+import { KEYS_COPY } from './data/never-hold-keys.js';
+import { KeysFlow, KeysHonest, KeysPathCards } from './components/keys-flow.jsx';
 import { closureReasons, closureCases } from './data/closure-cases.js';
 import { AppPage, AuthCallbackPage, LoginPage } from './auth-pages.jsx';
 import { BackendPage } from './backend-page.jsx';
 import { DocsPage, InstallCta, LegalPage } from './site-pages.jsx';
 import { isSignedIn, loadSession, sessionUser } from './lib/session.js';
-import { CLOUD_PLANS, extraTransfersAddonPriceLabel, planPriceRangeLabel } from './lib/product.js';
+import { CLOUD_FREE, planPriceRangeLabel, publicCloudPlans } from './lib/product.js';
+import { isCloudConsolePath, isDocsPath } from './lib/site-links.js';
 
 const Arrow = () => <span aria-hidden="true">↗</span>;
 
@@ -165,7 +169,14 @@ function Header() {
       <Logo href="/#top" />
       <button className="menu" onClick={() => setOpen(!open)} aria-label="Toggle navigation">{open ? 'Close' : 'Menu'}</button>
       <nav className={open ? 'nav open' : 'nav'}>
-        <a href="/#what-is-this">What is this?</a><a href="/#never-hold-keys">Keys</a><a href="/#cli-vs-cloud">CLI vs Cloud</a><a href="/#why-now">Why now</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">The escape plan</a><a href="/backend">Backend</a><a href="/docs">Docs</a><a href="/security">Security</a><a href="/cloud">Cloud · $7 / $17</a>
+        <a href="/#escape">Escape</a>
+        <a href="/#never-hold-keys">Keys</a>
+        <a href="/#cli-vs-cloud">CLI vs Cloud</a>
+        <a href="/#faq">FAQ</a>
+        <a href="/#stories">Incidents</a>
+        <a href="/docs">Docs</a>
+        <a href="/security">Security</a>
+        <a href="/cloud">Pricing</a>
         <a href={user ? '/dashboard' : '/login'}>{user ? 'Dashboard' : 'Sign in'}</a>
       </nav>
       <a className="button button-small desktop-cta" href={user ? '/dashboard' : '/login?next=/dashboard'}>
@@ -195,7 +206,7 @@ function Hero() {
           <a className="button button-primary" href="#escape">Build your Escape <Arrow /></a>
           <a className="text-link" href="#stories">See what lockout looks like <span>↓</span></a>
         </div>
-        <div className="hero-proof"><span>USP · Escape</span><span>Supabase only</span><span>OSS free · Cloud = GUI &amp; telemetry</span></div>
+        <div className="hero-proof"><span>USP · Escape</span><span>Supabase only</span><span>Open source free · Cloud = GUI &amp; telemetry</span></div>
         </div>
       </div>
       {/* Bridge: headline → ban dialog (same placement as design example) */}
@@ -234,7 +245,7 @@ function HeroConcept() {
         <div className="hero-concept-label"><span>WHEN SUPABASE IS LOCKED</span><b>Your pre-incident capsule still exists</b></div>
         <img src="/images/supabase-vt1.png" alt="Conceptual scene: locked Supabase project while Portabase evacuates encrypted recovery streams to independent destinations and a new project" width="1920" height="1080" />
         <figcaption>
-          <span>OSS engine · customer destinations · restore without the original account</span>
+          <span>Open-source engine · customer destinations · restore without the original account</span>
           <small>Conceptual illustration · not a live dashboard</small>
         </figcaption>
       </figure>
@@ -245,35 +256,34 @@ function HeroConcept() {
 function NeverHoldKeys() {
   return <section className="section never-hold-keys" id="never-hold-keys">
     <div className="shell">
-      <div className="section-kicker green">KEY CUSTODY</div>
+      <div className="section-kicker green">{KEYS_COPY.kicker}</div>
       <div className="split-heading">
-        <h2>We never see your private keys.</h2>
-        <p>Supabase is an excellent product. Portabase does not replace it. It keeps a copy you can still reach if that one account is locked.</p>
+        <h2>{KEYS_COPY.headline}</h2>
+        <p>{KEYS_COPY.lead}</p>
       </div>
-      <div className="keys-path-grid">
-        <article>
-          <small>FREE OPEN-SOURCE CLI</small>
-          <b>Keys stay on your machine.</b>
-          <p>You run the engine locally or on a VM you control. Service-role keys, database URLs, and the capsule passphrase never leave that box. There is no Portabase account required.</p>
-        </article>
-        <article>
-          <small>PORTABASE CLOUD</small>
-          <b>The browser seals keys to your runner.</b>
-          <p>You enter keys in the browser form. They are sealed to your Cloud Runner. This site is supposed to receive job status and hashes only — not the keys, not the capsule bytes.</p>
-        </article>
+      <KeysPathCards />
+      <KeysFlow />
+      <KeysHonest />
+    </div>
+  </section>;
+}
+
+function Faq() {
+  return <section className="section faq" id="faq">
+    <div className="shell">
+      <div className="section-kicker green">Q&amp;A</div>
+      <div className="split-heading">
+        <h2>Straight answers.</h2>
+        <p>Supabase is the product you build on. Portabase is the escape hatch. No invented stats. No fake proven-green.</p>
       </div>
-      <p className="keys-honest">
-        <strong>Honest limit:</strong> the Cloud path above is the intended design, shown in the diagram.
-        It is not a completed, independently proven isolation guarantee. Do not treat Cloud key-sealing as proven-green.
-        If you need zero Portabase key path, use the free open-source CLI on infrastructure only you operate.
-      </p>
-      <figure className="keys-diagram">
-        <img src="/never-hold-keys-diagram.png" alt="Your keys never reach Portabase" width="1280" height="720" />
-        <figcaption>
-          <span>Customer browser → your Cloud Runner. Portabase site: status and hashes only.</span>
-          <small>Product design · not a completed isolation audit</small>
-        </figcaption>
-      </figure>
+      <div className="faq-list">
+        {HOMEPAGE_FAQ.map((item, i) => (
+          <details key={item.q} className="faq-item" open={i === 0}>
+            <summary>{item.q}</summary>
+            <p>{item.a}</p>
+          </details>
+        ))}
+      </div>
     </div>
   </section>;
 }
@@ -285,11 +295,12 @@ function CliVsCloud() {
     ['Destinations', 'S3, Dropbox, local, NAS — or a free Supabase project if the capsule fits.', 'S3 or Dropbox. Guided setup.'],
     ['Doctor', 'You run portabase doctor.', 'Same check, invoked for you.'],
     ['Managed service', 'No. You operate it.', 'Yes.'],
-    ['Scheduled backups', 'You add cron or Task Scheduler.', 'Yes.'],
+    ['Scheduled service', 'You add cron or Task Scheduler.', 'The free plan has no scheduled service. Paid $7 / $17 include schedules.'],
+    ['Table + bucket sizer', 'Doctor / size inventory + --exclude-table-list.', 'Dashboard include/exclude before a job. Loud NOT COVERED if omitted.'],
     ['Targeted restores', 'You run restore / replay.', 'Yes. Console-guided.'],
     ['Telemetry reports', 'Local status only.', 'Yes. Status and hashes.'],
-    ['SMS status alerts', 'No.', '$17 optional. Status only. No keys.'],
-    ['Price', 'Free', '$7 / $17'],
+    ['SMS status alerts', 'No.', 'Optional on $17. Status only. No keys.'],
+    ['Price', 'Free', 'Cloud Free 100 MB · $7 / $17'],
   ];
   return <section className="section cli-vs-cloud" id="cli-vs-cloud">
     <div className="shell">
@@ -439,7 +450,7 @@ function WhatIsThis() {
       <div className="diagram-grid">
         {diagrams.map(diagram => (
           <figure className="diagram-card" key={diagram.src}>
-            <div className={`diagram-layer-tag layer-${diagram.layer}`}>{diagram.layer === 'community' ? 'OSS' : diagram.layer === 'cloud' ? 'CLOUD' : 'OSS + CLOUD'}</div>
+            <div className={`diagram-layer-tag layer-${diagram.layer}`}>{diagram.layer === 'community' ? 'OPEN SOURCE' : diagram.layer === 'cloud' ? 'CLOUD' : 'OPEN SOURCE + CLOUD'}</div>
             <img loading="lazy" src={diagram.src} alt={diagram.title} />
             <figcaption><b>{diagram.title}</b><span>{diagram.body}</span></figcaption>
           </figure>
@@ -774,8 +785,8 @@ function Escape() {
       </div>
       <div className="architecture architecture-open-core">
         <div className="arch-node source"><small>SOURCE</small><b>Supabase</b><span>Database · Auth · Storage · Functions</span></div>
-        <div className="arch-flow"><span>OSS runner</span><i>→</i></div>
-        <div className="arch-node vault"><small>COMMUNITY · FREE</small><b>Encrypt on your box</b><span>Capsule → Drive · Dropbox · NAS · your S3</span><div className="shield">OSS</div></div>
+        <div className="arch-flow"><span>Open-source runner</span><i>→</i></div>
+        <div className="arch-node vault"><small>COMMUNITY · FREE</small><b>Encrypt on your box</b><span>Capsule → Drive · Dropbox · NAS · your S3</span><div className="shield">CLI</div></div>
         <div className="arch-flow"><span>restore</span><i>→</i></div>
         <div className="arch-node recovery"><small>TARGET</small><b>New Supabase</b><span>New account · New project · Guarded restore</span></div>
       </div>
@@ -1014,7 +1025,7 @@ function HowItWorksDiagrams() {
           <div className="sideband-row">
             <div className="flow-node accent">
               <small>YOUR RUNNER</small>
-              <strong>Same OSS engine</strong>
+              <strong>Same open-source engine</strong>
               <span>Backup still local-first</span>
             </div>
             <div className="flow-arrow dashed" aria-hidden="true"><i /><em>opt-in health only</em></div>
@@ -1140,7 +1151,7 @@ function CloudTeaser() {
       <div>
         <div className="section-kicker green">USP · ESCAPE OPS</div>
         <h2>Open source is the Escape.<br />Cloud keeps the Escape running.</h2>
-        <p><strong>Supabase only.</strong> GitHub = free Escape engine. <strong>This site</strong> = hosted <strong>GUI</strong>, guided configuration, <strong>telemetry</strong>, SMS on success/failure — so the Escape is not a forgotten cron job. <strong>7-day free trial</strong> then <strong>$7 / $17 / $37</strong> (1 / 10 / 100 GB) · <strong>1 transfer / 24h</strong> included · Extra transfers <strong>+$3 / +$5 / +$5</strong> for up to 3 / 24h · ≤12 agents. You provide capsule storage. Zero knowledge of your encryption keys.</p>
+        <p><strong>Supabase only.</strong> GitHub = free Escape engine. <strong>This site</strong> = hosted <strong>GUI</strong>, guided configuration, <strong>telemetry</strong>, and optional SMS on $17 — so the Escape is not a forgotten cron job. <strong>Cloud Free</strong> is 100 MB, manual only. Paid: <strong>$7</strong> (one database, 10 GB, 1 capsule / 24h) or <strong>$17</strong> (unlimited databases, 25 GB, 3 capsules / day). You provide capsule storage. Zero knowledge of your encryption keys.</p>
         <div className="cloud-teaser-actions">
           <a className="button button-primary" href="/login?mode=signup&next=/app">Start free trial <Arrow /></a>
           <a className="button button-ghost" href="/backend">Backend · how it talks <Arrow /></a>
@@ -1149,7 +1160,7 @@ function CloudTeaser() {
       </div>
       <div className="cloud-teaser-price">
         <span>GUI · CONFIG · TELEMETRY · SMS</span>
-        <b>$7–37<small>/mo</small></b>
+        <b>$7–17<small>/mo</small></b>
         <em>Card required · auto-converts</em>
         <p>After 7-day free trial</p>
       </div>
@@ -1166,7 +1177,7 @@ function PublicDeal() {
         <h2>Keep Supabase.<br /><em>Own the Escape.</em></h2>
         <p><strong>USP:</strong> Portabase is your <strong>Supabase Escape</strong> — open source, Supabase-only. Encrypted capsule you control (database, Auth, <strong>Storage objects</strong>, <strong>Edge Functions</strong>) so lockout is not the end. This website is Cloud convenience: <strong>GUI, easier configuration, and telemetry</strong> — so the Escape stays real day to day, not a dusty script.</p>
       </div>
-      <div className="gap-callout" style={{ marginTop: 28, marginBottom: 8, padding: '22px 24px', border: '1px solid rgba(201,255,74,.35)', background: 'rgba(201,255,74,.05)' }}>
+      <div className="gap-callout" style={{ marginTop: 28, marginBottom: 8, padding: '22px 24px', border: '1px solid rgba(76,141,255,.35)', background: 'rgba(76,141,255,.05)' }}>
         <div className="section-kicker green" style={{ marginBottom: 10 }}>SUPABASE PLATFORM BACKUPS · THE GAP</div>
         <h3 style={{ margin: '0 0 12px', fontSize: 22, letterSpacing: '-.03em' }}>Their backup is not a full product escape hatch.</h3>
         <p style={{ margin: 0, color: '#b4b4ae', fontSize: 15, lineHeight: 1.65, maxWidth: 820 }}>
@@ -1226,6 +1237,7 @@ function CloudPage() {
           <a href="#closures">Why accounts close</a>
           <a href="#compare">Compare</a>
           <a href="#keys">Key storage</a>
+          <a href="/docs">Docs</a>
           <a href="/backend">Backend</a>
           <a href="#subscribe">Pricing</a>
           <a href={signedIn ? '/dashboard' : '/login'}>{signedIn ? 'Dashboard' : 'Sign in'}</a>
@@ -1265,7 +1277,7 @@ function CloudPage() {
                 <tr>
                   <th>Capability</th>
                   <th>GitHub / self-host<br /><span>Apache-2.0 · free</span></th>
-                  <th>Portabase Cloud<br /><span>$7 · 1 GB · $17 · 10 GB · $37 · 100 GB</span></th>
+                  <th>Portabase Cloud<br /><span>Free 100 MB · $7 · 10 GB · $17 · 25 GB</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -1279,8 +1291,10 @@ function CloudPage() {
                 <tr><td>Read every line that encrypts your capsule</td><td className="yes">Yes · public GitHub</td><td className="yes">Same public code</td></tr>
                 <tr><td>Hosted GUI / ease of configuration</td><td className="no">CLI / self-host config</td><td className="yes">Yes · this website</td></tr>
                 <tr><td>Telemetry &amp; fleet / job status</td><td className="no">Local status only</td><td className="yes">Yes</td></tr>
-                <tr><td>Capsule transfers / 24h</td><td className="yes">Unlimited (you run it)</td><td className="yes">1 included · add-on up to 3</td></tr>
-                <tr><td>SMS on success &amp; failure · multi-person alerts</td><td className="no">DIY webhooks only</td><td className="yes">Yes</td></tr>
+                <tr><td>Scheduled service</td><td className="yes">Your cron / Task Scheduler</td><td className="mid">The free plan has no scheduled service. Paid $7 / $17 include schedules.</td></tr>
+                <tr><td>Capsule transfers / 24h</td><td className="yes">Unlimited (you run it)</td><td className="yes">Cloud Free · manual · $7 · 1 / 24h · $17 · 3 / day</td></tr>
+                <tr><td>Table + bucket sizer</td><td className="yes">Doctor inventory + existing exclude flags</td><td className="yes">Include/exclude before a job · loud NOT COVERED</td></tr>
+                <tr><td>SMS on success &amp; failure · multi-person alerts</td><td className="no">DIY webhooks only</td><td className="yes">Optional on $17 · status only</td></tr>
                 <tr><td>Advanced reports &amp; RPO / miss dashboards</td><td className="no">No</td><td className="yes">Yes</td></tr>
                 <tr><td>Portabase account required</td><td className="no">No</td><td className="mid">Yes · for Cloud only</td></tr>
               </tbody>
@@ -1292,13 +1306,19 @@ function CloudPage() {
 
       <section className="section cloud-keys" id="keys">
         <div className="shell">
-          <div className="section-kicker green">KEY STORAGE · HOSTED CLOUD</div>
-          <h2>How your keys are protected on Cloud.</h2>
-          <p className="cloud-section-lead">
+          <div className="section-kicker green">{KEYS_COPY.kicker}</div>
+          <div className="split-heading">
+            <h2>{KEYS_COPY.headline}</h2>
+            <p>{KEYS_COPY.lead}</p>
+          </div>
+          <KeysPathCards />
+          <KeysFlow />
+          <KeysHonest />
+          <p className="cloud-section-lead" style={{ marginTop: 36 }}>
             Using Portabase Cloud does not make us your Supabase landlord or the permanent home of your recovery files.
             Capsules are sealed with <strong>AES-256-GCM</strong> and written to <strong>storage you own</strong>.
             Full deep-dive (every secret type, standalone vs Cloud, checklists):{' '}
-            <a href="/security#keys-protected" style={{ color: 'var(--acid)', fontWeight: 700 }}>Security · how your keys are protected <span aria-hidden="true">↗</span></a>.
+            <a href="/security#keys-protected" style={{ color: 'var(--accent)', fontWeight: 600 }}>Security · how your keys are protected <span aria-hidden="true">↗</span></a>.
           </p>
           <div className="key-grid">
             <article>
@@ -1377,17 +1397,39 @@ function CloudPage() {
       <section className="section pricing" id="subscribe">
         <div className="shell">
           <div className="price-copy" style={{ maxWidth: 760, marginBottom: 28 }}>
-            <div className="section-kicker green">SUPABASE · SQUARE · THREE PLANS · BYO STORAGE</div>
-            <h2>Seven free days.<br />Then $7, $17, or $37/mo.</h2>
-            <p><strong>Launch: Supabase only.</strong> Protect database, Auth, Storage, and Edge Functions. <strong>Payment: Square</strong> (card on file). Cloud is ops only — <strong>you provide capsule storage</strong>. Portabase never hosts recovery bytes and is <strong>provably zero-knowledge of your encryption keys</strong>.</p>
+            <div className="section-kicker green">SUPABASE · CLOUD FREE · SQUARE · BYO STORAGE</div>
+            <h2>Cloud Free 100 MB, then $7 or $17/mo.</h2>
+            <p><strong>Launch: Supabase only.</strong> Protect database, Auth, Storage, and Edge Functions. <strong>Cloud Free</strong> is 100 MB — dashboard and manual runs, <strong>no scheduled service</strong>. Paid: <strong>$7</strong> one database ≤10 GB, 1 capsule / 24h · <strong>$17</strong> unlimited databases ≤25 GB, 3 capsules / day. Use the table sizer to include or exclude tables and Storage buckets so the capsule fits. Paid plans are <strong>Square</strong> (card on file) after a 7-day trial. Cloud is ops only — <strong>you provide capsule storage</strong>. Portabase never hosts recovery bytes. The paid service is <strong>designed to be blind to your keys</strong> — checks in this repo, not a third-party audit.</p>
             <div className="subscribe-case">
               <article><small>01 · SUPABASE FIRST</small><b>Built for Supabase projects.</b><p>Sign in with Supabase Auth (email, magic link, or Google). Capture DB, Auth inventory, Storage objects, Edge Functions.</p></article>
-              <article><small>02 · STORAGE CAPS</small><b>$7 · 1 GB · $17 · 10 GB · $37 · 100 GB.</b><p>Each plan includes <strong>1 capsule transfer / 24 hours</strong>. Extra transfers add-on (up to 3 / 24h): <strong>+$3/mo</strong> on Starter, <strong>+$5/mo</strong> on Daily and Scale. Optional SMS status on $17 / $37 (never keys or capsule bytes). Up to 12 agents.</p></article>
+              <article><small>02 · PLAN CAPS</small><b>Free 100 MB · $7 · 10 GB · $17 · 25 GB.</b><p>$7 is one database, 1 capsule / 24h. $17 is unlimited databases, 3 capsules / day. Optional SMS status on $17 (never keys or capsule bytes). Size the include list so the capsule fits.</p></article>
               <article><small>03 · BYO CAPSULE STORAGE</small><b>You supply the vault.</b><p>S3, Dropbox, Drive, rclone, NAS, or Local Starter (≤100 MB). Capsules never live on Portabase. Keys stay on your runner or this browser’s local inject — never our database.</p></article>
             </div>
           </div>
-          <div className="plan-grid">
-            {Object.values(CLOUD_PLANS).map((plan) => (
+          <div className="plan-grid plan-grid-3">
+            <article className="price-card plan-card plan-card-free" key={CLOUD_FREE.id}>
+              <div className="price-ribbon price-ribbon-free">NO SCHEDULE</div>
+              <div className="price-top">
+                <span>{CLOUD_FREE.title.toUpperCase()}</span>
+                <div className="price-stack">
+                  <b>$0<span className="per">/mo</span></b>
+                  <small className="list-price">1 project · up to {CLOUD_FREE.storageCapLabel}</small>
+                </div>
+                <p>{CLOUD_FREE.summary} Capsules still land in <strong>your</strong> storage. Keys stay sealed to your runner or stay local on the free CLI.</p>
+              </div>
+              <ul>
+                <li><span>✓</span> 1 Supabase project</li>
+                <li><span>✓</span> Up to {CLOUD_FREE.storageCapLabel} metered usage</li>
+                <li><span>✓</span> Dashboard · manual runs</li>
+                <li><span>✓</span> <strong>No scheduled service</strong></li>
+                <li><span>✓</span> Table + bucket sizer to fit 100 MB</li>
+                <li><span>✓</span> You provide the vault · zero knowledge of keys</li>
+              </ul>
+              <a className="button button-ghost purchase" href={signedIn ? '/dashboard' : '/login?mode=signup&next=/dashboard'}>
+                {signedIn ? 'Open dashboard' : 'Start Cloud Free'} <Arrow />
+              </a>
+            </article>
+            {publicCloudPlans().map((plan) => (
               <article className={`price-card plan-card${plan.id === 'cloud-17' ? ' is-featured' : ''}`} key={plan.id}>
                 {plan.id === 'cloud-17' && <div className="price-ribbon">MOST TEAMS</div>}
                 <div className="price-top">
@@ -1396,16 +1438,16 @@ function CloudPage() {
                     <b>${plan.priceMonthlyUsd}<span className="per">/mo</span></b>
                     <small className="list-price">up to {plan.storageCapLabel} · Square</small>
                   </div>
-                  <p>{plan.cadenceLabel}. <strong>1 capsule transfer / 24h</strong> included. Ops console and telemetry. Capsules encrypt on your runner and land in <strong>your</strong> storage.</p>
+                  <p>{plan.cadenceLabel}. Ops console, table sizer, and telemetry. Capsules encrypt on your runner and land in <strong>your</strong> storage.</p>
                 </div>
                 <ul>
+                  <li><span>✓</span> {plan.databasesLabel}</li>
                   <li><span>✓</span> Up to {plan.storageCapLabel} metered usage</li>
-                  <li><span>✓</span> 1 capsule transfer / 24 hours</li>
-                  <li><span>✓</span> Extra transfers (3 / 24h) · +{extraTransfersAddonPriceLabel(plan.id)}</li>
-                  <li><span>✓</span> 7-day trial · card on file</li>
-                  <li><span>✓</span> SMS success &amp; failure · ≤12 agents</li>
-                  <li><span>✓</span> You provide the vault</li>
-                  <li><span>✓</span> Zero knowledge of keys</li>
+                  <li><span>✓</span> {plan.transfersPer24h} capsule{plan.transfersPer24h === 1 ? '' : 's'} / 24h</li>
+                  <li><span>✓</span> Scheduled service · 7-day trial</li>
+                  <li><span>✓</span> {plan.smsOptional ? 'Optional SMS status — never keys' : 'SMS is on $17, not this plan'}</li>
+                  <li><span>✓</span> Table + bucket sizer</li>
+                  <li><span>✓</span> You provide the vault · zero knowledge of keys</li>
                 </ul>
                 <a className="button button-primary purchase" href={signedIn ? `/app/account?tab=billing` : `/login?mode=signup&next=${encodeURIComponent('/app/account?tab=billing')}`}>
                   {signedIn ? `Start ${plan.title}` : 'Sign in · pick this plan'} <Arrow />
@@ -1413,7 +1455,7 @@ function CloudPage() {
               </article>
             ))}
           </div>
-          <p className="checkout-hint" style={{ marginTop: 12 }}>Need more than one transfer a day? Extra transfers add-on: <strong>up to 3 / 24h</strong> — <strong>+$3/mo</strong> on $7, <strong>+$5/mo</strong> on $17 and $37. Square catalog IDs are pinned by Louis.</p>
+          <p className="checkout-hint" style={{ marginTop: 12 }}>$17 already includes 3 capsules / day. Use the dashboard table sizer to keep the capsule inside 100 MB / 10 GB / 25 GB. Square catalog IDs are pinned by Louis.</p>
           <p className="checkout-hint" style={{ marginTop: 18 }}>Already have an account? <a href="/login">Sign in</a> · Independent product, not affiliated with Supabase, Inc.</p>
         </div>
       </section>
@@ -1423,11 +1465,11 @@ function CloudPage() {
 }
 
 function LegacyPurchaseNotice() {
-  return <div className="thanks"><div className="thanks-card"><Logo href="/" /><div className="section-kicker green">MODEL UPDATE</div><h1>Portabase is open core + Cloud subscription.</h1><p>There is no $147 software unlock. The recovery engine is free on GitHub. Portabase Cloud is $7 / $17 / $37 per month (1 / 10 / 100 GB) — console, telemetry, and alert chains. We do not host your capsules or learn your keys.</p><a className="button button-primary" href="/cloud">Open source vs Cloud <Arrow /></a><a className="button button-ghost" href="mailto:escape@portabase.dev?subject=Legacy Portabase purchase">Legacy purchase help <Arrow /></a></div></div>;
+  return <div className="thanks"><div className="thanks-card"><Logo href="/" /><div className="section-kicker green">MODEL UPDATE</div><h1>Portabase is open core + Cloud subscription.</h1><p>There is no $147 software unlock. The recovery engine is free on GitHub. Portabase Cloud is Cloud Free 100 MB, then $7 or $17 per month (10 GB / 25 GB) — console, table sizer, telemetry, and alert chains. We do not host your capsules or learn your keys.</p><a className="button button-primary" href="/cloud">Open source vs Cloud <Arrow /></a><a className="button button-ghost" href="mailto:escape@portabase.dev?subject=Legacy Portabase purchase">Legacy purchase help <Arrow /></a></div></div>;
 }
 
 function Footer() {
-  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#reality">The reality</a><a href="/#closures">Account closures</a><a href="/#stories">Real incidents</a><a href="/#escape">Escape plan</a><a href="/#audit">Risk check</a><a href="/backend">Backend</a><a href="/docs">Docs</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · {planPriceRangeLabel()}</a><a href="/legal">Legal</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/DataAutomation-ai/portabase-CLI" target="_blank" rel="noreferrer">GitHub · portabase-CLI</a><span>Independent product.<br />Not affiliated with Supabase, Inc.</span><span>Apache-2.0 open core. Cloud is ops subscription — provably zero-knowledge of keys, never custody of capsule contents. $7 · 1 GB · $17 · 10 GB · $37 · 100 GB.</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your vault. Your way out.</span></div></footer>;
+  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#never-hold-keys">Keys</a><a href="/#faq">FAQ</a><a href="/#reality">The reality</a><a href="/#stories">Real incidents</a><a href="/#escape">Escape plan</a><a href="/#audit">Risk check</a><a href="/docs">Docs</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · {planPriceRangeLabel()}</a><a href="/legal">Legal</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/DataAutomation-ai/portabase-CLI" target="_blank" rel="noreferrer">GitHub · portabase-CLI</a><span>Independent product.<br />Not affiliated with Supabase, Inc.</span><span>Apache-2.0 open core. Cloud is ops subscription — designed so we never hold keys, never custody of capsule contents. Cloud Free 100 MB · $7 · 10 GB · $17 · 25 GB.</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your vault. Your way out.</span></div></footer>;
 }
 
 /**
@@ -1474,7 +1516,7 @@ function SecurityPage() {
               <span>Optional: job logs</span>
             </div>
             <div className="security-honest-banner" role="note">
-              <strong>Provably zero-knowledge of capsule contents and sealing keys:</strong> this website and Cloud APIs cannot see object names, row contents, or passphrases.
+              <strong>Designed so Cloud is blind to capsule contents and sealing keys:</strong> this website and Cloud APIs cannot see object names, row contents, or passphrases.
               Customer-side key injection (browser-local or CLI) never uploads the secret.
               On optional <em>managed</em> Cloud runners, a job must still use crypto for the run — if a job key is held, it is
               <strong> least-privilege and brief</strong>. There is still a residual possibility we can see or use that material during the window.
@@ -1608,7 +1650,7 @@ function SecurityPage() {
                 <ul>
                   <li>We do <strong>not</strong> store capsule ciphertext as the permanent recovery vault in our control-plane database.</li>
                   <li>We do <strong>not</strong> put your passphrase in marketing analytics, SMS bodies, or “share with support” by default.</li>
-                  <li>We do <strong>not</strong> offer a server-side decrypt or object-name inventory API. The control plane is <strong>provably zero-knowledge</strong> of capsule contents. Managed runners may still use job crypto during a run — that residual path is documented; it is not a peek API.</li>
+                  <li>We do <strong>not</strong> offer a server-side decrypt or object-name inventory API. The control plane is designed to receive <strong>status and hashes only</strong>. Managed runners may still use job crypto during a run — that residual path is documented; it is not a peek API. Designed and tested in this repo — not a third-party proven-green audit.</li>
                   <li>We do <strong>not</strong> require you to give us keys to use the open-source Escape engine at all.</li>
                 </ul>
               </article>
@@ -1984,7 +2026,7 @@ function SecurityPage() {
                     <td>Maximum robustness</td>
                   </tr>
                   <tr>
-                    <td>Standalone OSS</td>
+                    <td>Standalone open source</td>
                     <td>You entirely</td>
                     <td>Zero Portabase compute</td>
                   </tr>
@@ -2030,19 +2072,21 @@ function SecurityPage() {
 
 function HomePage() {
   useEffect(() => { document.title = 'Portabase — Your Supabase Escape'; }, []);
-  return <><Header /><main><Hero /><HeroConcept /><NeverHoldKeys /><CliVsCloud /><WhatIsThis /><WhyNow /><Reality /><ClosureRisk /><Stories /><Escape /><InstallCta Arrow={Arrow} /><Audit /><Cutover /><PublicDeal /><CloudTeaser /></main><Footer /></>;
+  return <><Header /><main><Hero /><HeroConcept /><NeverHoldKeys /><Faq /><CliVsCloud /><WhatIsThis /><WhyNow /><Reality /><ClosureRisk /><Stories /><Escape /><InstallCta Arrow={Arrow} /><Audit /><Cutover /><PublicDeal /><CloudTeaser /></main><Footer /></>;
 }
 
 function App() {
   const path = window.location.pathname.replace(/\/$/, '') || '/';
+  const loc = `${window.location.pathname}${window.location.search}`;
   if (path === '/thanks' || path === '/buy') return <LegacyPurchaseNotice />;
   if (path === '/login' || path === '/signup') return <LoginPage />;
   if (path === '/auth/callback') return <AuthCallbackPage />;
-  if (path === '/app' || path === '/console' || path === '/dashboard' || path.startsWith('/app/') || path.startsWith('/dashboard/') || path === '/tools/supabase-viewer') return <AppPage />;
+  /* pathname + search so /dashboard?demo=1 never falls through to HomePage */
+  if (isCloudConsolePath(path) || isCloudConsolePath(loc)) return <AppPage />;
   if (path === '/cloud' || path === '/pricing') return <CloudPage />;
   if (path === '/security' || path === '/trust') return <SecurityPage />;
   if (path === '/backend') return <BackendPage Logo={Logo} Arrow={Arrow} Footer={Footer} />;
-  if (path === '/docs') return <DocsPage Logo={Logo} Arrow={Arrow} Footer={Footer} />;
+  if (isDocsPath(path) || path === '/docs') return <DocsPage Logo={Logo} Arrow={Arrow} Footer={Footer} />;
   if (path === '/legal' || path === '/disclaimer') return <LegalPage Logo={Logo} Arrow={Arrow} Footer={Footer} />;
   return <HomePage />;
 }

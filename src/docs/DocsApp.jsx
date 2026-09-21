@@ -1,0 +1,377 @@
+import React, { useEffect, useState } from 'react';
+import './docs.css';
+import { CLI_INSTALL, CLOUD_FREE, CLOUD_PLANS, planPriceRangeLabel } from '../lib/product.js';
+import { DOCS_NAV, DOCS_TITLES, QUICKSTART_COMMANDS, resolveDocsSlug } from '../data/docs-site.js';
+import {
+  destinationsGuide,
+  exportManifest,
+  fillMissing,
+  installCopy,
+  liveSupabaseViewer,
+  openCapsule,
+  reportDrift,
+  restoreOrder,
+  telemetryUi,
+} from '../data/docs.js';
+
+function Code({ children }) {
+  return <pre className="docs-code" tabIndex={0}><code>{children}</code></pre>;
+}
+
+function Pager({ prev, next }) {
+  return (
+    <div className="docs-pager">
+      {prev ? <a href={prev.href}><span>Previous</span>{prev.title}</a> : <span />}
+      {next ? <a href={next.href} style={{ textAlign: 'right' }}><span>Next</span>{next.title}</a> : <span />}
+    </div>
+  );
+}
+
+function Introduction() {
+  return (
+    <>
+      <p className="docs-lead">
+        <strong>Supabase is an excellent product.</strong> Portabase is the Escape hatch —
+        an open-source, customer-owned encrypted capsule you can still reach if the dashboard is locked.
+        Platform backups cover the database volume. They do not take Storage object bytes, and they still sit behind the same account door.
+      </p>
+      <h2>What an escape package is</h2>
+      <p>
+        An escape package is a customer-owned encrypted capsule of <strong>database, Auth, Storage object bytes, and Edge Functions</strong>.
+        It is not an official Supabase backup. Official backups remain valuable — they are not a way out if the account door does not open.
+      </p>
+      <h2>Free CLI vs Cloud</h2>
+      <p>
+        The engine is free and open source. You run it. Cloud is optional convenience: GUI, guided setup, telemetry,
+        and (on paid plans) schedules. Same capsule engine either way. You bring the vault.
+      </p>
+      <div className="docs-table-wrap">
+        <table className="docs-table">
+          <thead>
+            <tr><th>Layer</th><th>Free open-source CLI</th><th>Portabase Cloud</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Who runs capture</td><td>You, on a machine you control</td><td>Your Cloud Runner</td></tr>
+            <tr><td>Keys</td><td>Stay on that machine</td><td>Browser seals keys to the runner only</td></tr>
+            <tr><td>Control plane</td><td>None</td><td>Status and hashes — never keys or capsule bytes</td></tr>
+            <tr><td>Scheduled service</td><td>Your cron</td><td>The free plan has no scheduled service. Paid $7 / $17 include schedules.</td></tr>
+            <tr><td>Price</td><td>Free</td><td>Cloud Free, then {planPriceRangeLabel()}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h2>Never-hold-keys / paid service blindness</h2>
+      <p>
+        On the free CLI, service-role keys, database URLs, and the capsule passphrase never leave your box.
+        On Cloud, the browser seals keys to <em>your</em> runner for that job. This website and Cloud APIs are allowed
+        job <strong>status and hashes</strong> only.
+      </p>
+      <div className="docs-callout honest">
+        <strong>Honest limit.</strong> This is the designed path, with checks in this repo.
+        It is not a third-party audited, proven-green isolation guarantee.
+        If you need zero Portabase key path, use the free CLI on infrastructure only you operate.
+      </div>
+      <p>
+        Independent product — not affiliated with Supabase, Inc.
+        Source: <a href="/docs/threat-model">threat model</a>, <a href="https://github.com/DataAutomation-ai/portabase-CLI" target="_blank" rel="noreferrer">portabase-CLI</a>.
+      </p>
+    </>
+  );
+}
+
+function Quickstart() {
+  return (
+    <>
+      <p className="docs-lead">
+        Install the free open-source CLI, capture a capsule, verify it, restore only into a <strong>new blank</strong> Supabase project.
+        Commands below match <code>docs/FREE-CLI.md</code>, the repo README, and <code>docs/REPLAY.md</code>.
+      </p>
+      <h2>Install</h2>
+      <Code>{QUICKSTART_COMMANDS.install}</Code>
+      <p>
+        Package: <a href={CLI_INSTALL.npmUrl} target="_blank" rel="noreferrer">{CLI_INSTALL.npmCommand}</a>.
+        Source: <a href={CLI_INSTALL.githubCli} target="_blank" rel="noreferrer">DataAutomation-ai/portabase-CLI</a>.
+        No Portabase account is required.
+      </p>
+      <h2>Capture → verify → restore</h2>
+      <Code>{QUICKSTART_COMMANDS.capture}</Code>
+      <p>
+        Set <code>PORTABASE_ENCRYPTION_PASSPHRASE</code> on the machine you run (≥16 characters).
+        Never paste it into this website. Restore <code>--execute</code> requires <code>--confirm-target</code> matching the new project ref.
+      </p>
+      <h2>Replay (proof on a new account)</h2>
+      <p>Replay writes only into a new blank project — never the source.</p>
+      <Code>{QUICKSTART_COMMANDS.replay}</Code>
+      <h2>Optional</h2>
+      <p>Limited sample from the README:</p>
+      <Code>{QUICKSTART_COMMANDS.trial}</Code>
+      <p>Existing size-fit flags only (<code>docs/CLOUD.md</code>) — no invented flags:</p>
+      <Code>{QUICKSTART_COMMANDS.exclude}</Code>
+      <p>From a clone of this repo you can use the local binary instead of the global install:</p>
+      <Code>{QUICKSTART_COMMANDS.repoLocal}</Code>
+      <div className="docs-callout danger">
+        <strong>Proof lamp.</strong> A MATCH is a real dry-run or compare from this CLI or a Cloud Runner.
+        Demo data and empty workspaces cannot turn the lamp green.
+      </div>
+    </>
+  );
+}
+
+function CloudDocs() {
+  const paid = Object.values(CLOUD_PLANS).map((p) => p.shortLabel).join(' · ');
+  return (
+    <>
+      <p className="docs-lead">
+        Cloud is not a second engine. The free CLI already captures, verifies, and restores.
+        Cloud layers a dashboard, key-seal to your runner, and — on paid plans only — scheduled service.
+        Source: <code>docs/CLOUD.md</code>, <code>docs/BILLING.md</code>.
+      </p>
+      <h2>Sign up</h2>
+      <p>
+        Sign in with hosted <strong>Supabase Auth</strong> — email, magic link, Google, or GitHub.
+        After sign-in the SPA goes to <code>/dashboard</code>. Demo UI: <a href="/dashboard?demo=1">/dashboard?demo=1</a> (sample, not a live project).
+      </p>
+      <h2>Seal keys to the runner</h2>
+      <p>
+        You type secrets in the browser form. They are sealed to <em>your</em> Cloud Runner for that job.
+        <code>POST /api/cloud/runners</code> and the rest of <code>/api/cloud/*</code> reject secret-shaped bodies.
+        There is no SSH or get-key path from the control plane into a runner.
+      </p>
+      <Code>{`Browser  --seals keys-->  customer Cloud Runner
+                              │
+                              ├─ runs free engine
+                              └─ one-way telemetry (status / hashes / sizes)
+                                      │
+                                      ▼
+                         Portabase control plane
+                         (lifecycle + job metadata only)`}</Code>
+      <h2>Dashboard</h2>
+      <p>
+        Route <code>/dashboard</code> (also <code>/app</code>). The proof lamp stays <strong>RED</strong> until a real dry-run or compare reports MATCH.
+        Empty signed-in workspaces do not seed fake jobs.
+      </p>
+      <h2>Table + bucket sizer</h2>
+      <p>
+        Before a Cloud job, the dashboard sizer shows per-table sizes and per-bucket sizes / object counts from the free engine
+        doctor / size inventory. You selectively <strong>include or exclude</strong> tables and Storage buckets so the capsule fits
+        Cloud Free 100 MB, $7 10 GB, or $17 25 GB. Anything omitted is called out as <strong>NOT COVERED</strong>.
+        Table omit uses existing <code>--exclude-table-list</code>. No new CLI capture flags.
+        The control plane stores the include list, size estimates, and job metadata / hashes — never keys or row bodies.
+      </p>
+      <h2>Cloud Free vs paid schedules</h2>
+      <div className="docs-table-wrap">
+        <table className="docs-table">
+          <thead>
+            <tr><th></th><th>Cloud Free</th><th>Paid ({paid})</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Price</td><td>$0 · no card</td><td>Square after a 7-day trial (card on file)</td></tr>
+            <tr><td>Projects</td><td>1</td><td>Plan caps, up to 12 agents</td></tr>
+            <tr><td>Capsule usage Cloud may meter</td><td>Up to {CLOUD_FREE.storageCapLabel}</td><td>$7 · 10 GB · $17 · 25 GB</td></tr>
+            <tr><td>Databases</td><td>1 project</td><td>$7 one database · $17 unlimited</td></tr>
+            <tr><td>Capsules</td><td>Manual only</td><td>$7 · 1 / 24h · $17 · 3 / day</td></tr>
+            <tr><td>Scheduled service</td><td><strong>The free plan has no scheduled service</strong></td><td>Yes · managed schedules</td></tr>
+            <tr><td>SMS status</td><td>No</td><td>Optional on $17 — status only</td></tr>
+            <tr><td>Table + bucket sizer</td><td>Yes · fit 100 MB</td><td>Yes · include/exclude before a job</td></tr>
+            <tr><td>Vault</td><td>Customer-owned</td><td>Customer-owned</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div className="docs-callout honest">
+        <strong>Designed offer.</strong> Cloud Free is 100 MB, dashboard and manual runs — <strong>no scheduled service</strong>.
+        Live entitlement enforcement of that cap is not a completed production proof. Paid schedules are the {planPriceRangeLabel()} Square plans.
+      </div>
+    </>
+  );
+}
+
+function ThreatModel() {
+  return (
+    <>
+      <p className="docs-lead">
+        Never-hold-keys is the product law. The control plane is blind to keys, passphrase, and capsule bytes.
+        Source: <code>docs/CLOUD.md</code>, <code>docs/KEY-PROTECTION.md</code>, <code>docs/ZERO-KNOWLEDGE.md</code>.
+      </p>
+      <h2>Who may hold what</h2>
+      <div className="docs-table-wrap">
+        <table className="docs-table">
+          <thead>
+            <tr><th>Party</th><th>May hold</th><th>Must not hold</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Customer browser</td><td>Source keys, passphrase, destination credentials (briefly, in-tab)</td><td>—</td></tr>
+            <tr><td>Cloud Runner</td><td>Sealed keys for the job window; ephemeral spool</td><td>Long-term capsule vault</td></tr>
+            <tr><td>Portabase control plane</td><td>Status, phase, timestamps, sizes, hashes, destination kind</td><td>Keys, passphrase, capsule bytes, row bodies, function source</td></tr>
+            <tr><td>SMS (optional on $17)</td><td>Status string + job id</td><td>Keys, capsule bytes, customer data</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h2>Crypto (open source)</h2>
+      <p>
+        Capsules use readable code in <code>utility/capsule-crypto.mjs</code>: scrypt + AES-256-GCM.
+        Passphrase ≥ 16 characters. There is no Cloud function that accepts a passphrase or returns plaintext.
+      </p>
+      <div className="docs-callout honest">
+        <strong>Not proven-green.</strong> Cloud isolation is designed, with allowlist checks in this repo.
+        It is not a completed isolation audit. Standalone CLI on your infrastructure is the only posture with no Portabase process in the crypto path.
+      </div>
+    </>
+  );
+}
+
+function ProvenVsNot() {
+  return (
+    <>
+      <p className="docs-lead">
+        What this repo actually proves, and what it does not. Copied from <code>docs/CLOUD.md</code>.
+        No invented stats. No fake MATCH green.
+      </p>
+      <div className="docs-table-wrap">
+        <table className="docs-table">
+          <thead>
+            <tr><th>Proven in repo (unit / wiring)</th><th>Not proven</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Product constants Cloud Free 100 MB · $7 / 10 GB · $17 / 25 GB</td><td>Live Square catalog IDs until Louis pins them</td></tr>
+            <tr><td>Cloud Free designed as 100 MB, no scheduled service</td><td>Live entitlement enforcement of Cloud Free caps</td></tr>
+            <tr><td>Table + bucket sizer include list (metadata + estimates only)</td><td>Live runner inventory ingest on portabase.dev</td></tr>
+            <tr><td>Checkout fails closed with exact env var names when Square is missing</td><td>Live charge in production</td></tr>
+            <tr><td>Dashboard lamp stays red unless a real dry-run/compare is MATCH</td><td>A green lamp on demo or empty data (forbidden)</td></tr>
+            <tr><td>Runner sketch: sleeping container + free-engine argv + seal-to-runner</td><td>Production ECS/Fargate isolation audit</td></tr>
+            <tr><td>Telemetry allowlist + SMS status-only builder</td><td>Twilio delivery in production</td></tr>
+            <tr><td>Control plane store: hosted Supabase primary + one SQLite replica</td><td>Live outage drill</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div className="docs-callout danger">
+        <strong>Proof lamp.</strong> Stays RED until a real MATCH. Demo / empty / mocked reports cannot turn it green.
+      </div>
+    </>
+  );
+}
+
+function CliReference({ Arrow }) {
+  return (
+    <>
+      <p className="docs-lead">
+        Fill-missing, restore order, drift, destinations, and related CLI surfaces already documented on this site.
+        Cloud remains optional telemetry. Independent product — not affiliated with Supabase, Inc.
+      </p>
+      <h2 id="install">Install</h2>
+      <Code>{installCopy.command}</Code>
+      <ol>
+        {installCopy.steps.map((step) => <li key={step}>{step}</li>)}
+      </ol>
+      <h2 id="fill-missing">{fillMissing.title}</h2>
+      <p>{fillMissing.summary}</p>
+      <ul>{fillMissing.points.map((item) => <li key={item}>{item}</li>)}</ul>
+      <Code>{`portabase restore --fill-missing --writers 1
+# default --writers is 1
+# not incremental sync — absent-only Storage/DB fill`}</Code>
+      <h2 id="restore-order">Restore order</h2>
+      <p>Replay into a <strong>new blank</strong> Supabase project. Never the source.</p>
+      <ol>
+        {restoreOrder.map((step) => <li key={step.id}><strong>{step.title}.</strong> {step.body}</li>)}
+      </ol>
+      <h2 id="export-manifest">{exportManifest.title}</h2>
+      <p>{exportManifest.summary}</p>
+      <h2 id="report-drift">{reportDrift.title}</h2>
+      <p>{reportDrift.summary}</p>
+      <h2 id="telemetry">{telemetryUi.title}</h2>
+      <p>{telemetryUi.summary}</p>
+      <h2 id="open-capsule">{openCapsule.title}</h2>
+      <p>{openCapsule.summary}</p>
+      <h2 id="live-supabase">{liveSupabaseViewer.title}</h2>
+      <p>{liveSupabaseViewer.summary}</p>
+      <h2 id="destinations">Destinations</h2>
+      <ul>
+        {destinationsGuide.map((d) => <li key={d.id}><strong>{d.title}.</strong> {d.body}</li>)}
+      </ul>
+      <p>
+        <a href="/security">Security &amp; trust {Arrow ? <Arrow /> : '↗'}</a>
+        {' · '}
+        <a href="/cloud">Cloud pricing</a>
+      </p>
+    </>
+  );
+}
+
+const PAGES = {
+  introduction: Introduction,
+  quickstart: Quickstart,
+  cloud: CloudDocs,
+  'threat-model': ThreatModel,
+  proven: ProvenVsNot,
+  cli: CliReference,
+};
+
+const FLAT_NAV = DOCS_NAV.flatMap((group) => group.items);
+
+export function DocsApp({ Logo, Arrow }) {
+  const [menu, setMenu] = useState(false);
+  const slug = resolveDocsSlug(window.location.pathname, window.location.hash);
+  const Page = PAGES[slug] || Introduction;
+  const idx = FLAT_NAV.findIndex((item) => item.slug === slug);
+  const prev = idx > 0 ? FLAT_NAV[idx - 1] : null;
+  const next = idx >= 0 && idx < FLAT_NAV.length - 1 ? FLAT_NAV[idx + 1] : null;
+
+  useEffect(() => {
+    document.title = `Portabase — ${DOCS_TITLES[slug] || 'Docs'}`;
+    const id = window.location.hash.replace(/^#/, '');
+    if (id) requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' }));
+    else window.scrollTo(0, 0);
+  }, [slug]);
+
+  return (
+    <div className="docs-app">
+      <header className="docs-top">
+        <div className="docs-top-inner">
+          <div className="docs-brand">
+            <Logo href="/" />
+            <span className="docs-brand-kicker">Docs</span>
+          </div>
+          <button type="button" className="docs-menu" onClick={() => setMenu((o) => !o)} aria-label="Toggle navigation">
+            {menu ? 'Close' : 'Menu'}
+          </button>
+          <nav className={menu ? 'docs-top-nav is-open' : 'docs-top-nav'} aria-label="Docs site">
+            <a href="/docs/introduction" className="is-here">Docs</a>
+            <a href="/docs/quickstart">Quickstart</a>
+            <a href="/cloud">Pricing</a>
+            <a href="/security">Security</a>
+            <a href="/login">Sign in</a>
+            <a className="button button-small" href="/login?next=/dashboard">Start free trial {Arrow ? <Arrow /> : '↗'}</a>
+          </nav>
+        </div>
+      </header>
+      <div className="docs-body">
+        <aside className="docs-side" aria-label="Docs sections">
+          {DOCS_NAV.map((group) => (
+            <div className="docs-nav-group" key={group.label}>
+              <b>{group.label}</b>
+              {group.items.map((item) => (
+                <a key={item.slug} href={item.href} className={item.slug === slug ? 'is-active' : ''}>{item.title}</a>
+              ))}
+            </div>
+          ))}
+        </aside>
+        <article className="docs-article">
+          <p className="docs-crumb">Docs · {DOCS_TITLES[slug]}</p>
+          <h1>{DOCS_TITLES[slug]}</h1>
+          <Page Arrow={Arrow} />
+          <Pager prev={prev} next={next} />
+        </article>
+      </div>
+      <footer className="docs-foot">
+        <div className="docs-foot-inner">
+          <span>Open source engine · Cloud optional · Not affiliated with Supabase, Inc.</span>
+          <span>
+            <a href="https://github.com/DataAutomation-ai/portabase-CLI" target="_blank" rel="noreferrer">GitHub</a>
+            {' · '}
+            <a href="/#faq">FAQ</a>
+            {' · '}
+            <a href="/legal">Legal</a>
+          </span>
+        </div>
+      </footer>
+    </div>
+  );
+}

@@ -10,13 +10,12 @@
 | --- | --- |
 | **Platform** | **Supabase** projects (DB · Auth · Storage · Functions) |
 | **Gateway** | **Square** (Checkout + Subscriptions) |
-| **Starter Escape** | **$7.00 / month** · **up to 1 GB** |
-| **Daily Escape** | **$17.00 / month** · **up to 10 GB** |
-| **Scale Escape** | **$37.00 / month** · **up to 100 GB** |
-| **Included transfers** | **1 capsule backup / transfer per 24 hours** on every base plan |
-| **Extra transfers add-on** | **Up to 3 / 24h** · **+$3/mo** on $7 · **+$5/mo** on $17 and $37. Square catalog IDs: `SQUARE_EXTRA_TRANSFERS_ADDON_VARIATION_ID_7` / `_17` / `_37`. |
+| **Cloud Free** | **$0** · **100 MB** · dashboard + manual runs · **The free plan has no scheduled service**. Not a Square catalog plan. |
+| **Starter Escape** | **$7.00 / month** · **one database** · **up to 10 GB** · **1 capsule / 24h** |
+| **Daily Escape** | **$17.00 / month** · **unlimited databases** · **up to 25 GB** · **3 capsules / day** |
+| **Scale Escape** | Hidden legacy **$37** · not offered on new checkouts |
 | **Agents** | **Up to 12** telemetry runners per workspace |
-| **SMS** | Optional on **$17 / $37** (Twilio). Status only — never keys, capsule bytes, or customer data. Not on $7. |
+| **SMS** | Optional on **$17** (Twilio). Status only — never keys, capsule bytes, or customer data. Not on Cloud Free or $7. |
 | **Trial** | 7 free days · **card required** · auto-converts |
 
 Plan caps meter **capsule usage Cloud is allowed to see** (ciphertext size reported by the runner). The vault is still customer BYO. Portabase does not host recovery bytes.
@@ -25,11 +24,12 @@ Plan caps meter **capsule usage Cloud is allowed to see** (ciphertext size repor
 
 | Plan id | Monthly | Cap | Transfers / 24h |
 | --- | --- | --- | --- |
-| `cloud-7` | $7 | 1 GB | 1 |
-| `cloud-17` | $17 | 10 GB | 1 |
-| `cloud-37` | $37 | 100 GB | 1 |
+| `cloud-free` | $0 | 100 MB | manual only |
+| `cloud-7` | $7 | 10 GB | 1 |
+| `cloud-17` | $17 | 25 GB | 3 |
+| `cloud-37` | $37 (hidden) | 100 GB | 3 |
 
-Legacy `cloud-27` aliases to `cloud-37`. Scale no longer includes 3 transfers — that is the Extra transfers add-on.
+Legacy `cloud-27` aliases to `cloud-17`. $17 already includes 3 capsules / day. Extra transfers add-on is legacy.
 
 ### Extra transfers add-on
 

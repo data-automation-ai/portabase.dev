@@ -367,7 +367,7 @@ export function BackendPage({ Logo, Arrow, Footer }) {
                   <li>capsuleId · status · timing · error class</li>
                   <li>Worker heartbeat / online</li>
                   <li>SMS / email / Slack — no capsule bytes</li>
-                  <li>Plan usage vs 1 / 10 / 100 GB cap</li>
+                  <li>Plan usage vs 100 MB / 10 GB / 25 GB cap</li>
                 </ul>
               </div>
             </figure>
@@ -462,7 +462,7 @@ export function BackendPage({ Logo, Arrow, Footer }) {
             <h2>See the trust dial, or run the engine yourself.</h2>
             <p>
               Backend describes the wires. Security explains residual key visibility on managed jobs.
-              Cloud is the optional GUI, telemetry, and SMS product — $7 / $17 / $37 per month (1 / 10 / 100 GB), BYO storage.
+              Cloud is the optional GUI, telemetry, and SMS product — Cloud Free 100 MB, then $7 or $17 per month (10 GB / 25 GB), BYO storage.
             </p>
             <div className="security-cta-actions">
               <a className="button button-primary" href="/security">Open Security <Arrow /></a>

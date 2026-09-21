@@ -118,10 +118,11 @@ export function KeyInjectModal({ capsule, onClose, toast }) {
       <div className="pb-callout danger">
         <Icon name="shield" size={16} />
         <div>
-          <strong>Zero knowledge — this form never talks to Portabase Cloud</strong>
+          <strong>Browser seals to your runner — never posted to Portabase servers</strong>
           <p>
             The passphrase seals the capsule on <em>your</em> browser or runner.
             We do not upload it, store it, or learn it. Cloud may later see a boolean “key present” from your agent — never the secret.
+            Designed and tested in this repo — not a third-party proven-green audit.
           </p>
         </div>
       </div>
@@ -235,7 +236,7 @@ export function CapsuleManagePage({ state, setState, toast, navigate, embedded, 
       <div className="pb-callout info">
         <Icon name="capsule" size={16} />
         <div>
-          <strong>Provably zero-knowledge — management only</strong>
+          <strong>Management only — Cloud is blind to keys and capsule bytes</strong>
           <p>
             Register, schedule, verify, retain, choose a destination type, and inject the seal key on your side.
             Single cryptographic entry: your secret only — Portabase never holds a second key.

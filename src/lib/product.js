@@ -2,19 +2,16 @@
  * Portabase Cloud commercial product constants (browser-safe).
  *
  * Launch target: Supabase projects only (DB, Auth, Storage, Edge Functions).
- * Payment: Square · three storage-cap plans:
- *   $7/mo  — up to 1 GB
- *   $17/mo — up to 10 GB
- *   $37/mo — up to 100 GB
+ * Payment: Square · public paid plans:
+ *   Cloud Free — 100 MB, manual only (no scheduled service)
+ *   $7/mo  — one database, up to 10 GB, 1 capsule / 24h
+ *   $17/mo — unlimited databases, up to 25 GB, 3 capsules / day
+ * Hidden legacy `cloud-37` stays in the table for compile / existing Square pins only.
  * Capsule vault: ALWAYS customer-provided — never hosted by Portabase Cloud.
  * Encryption passphrases: customer-side only. Cloud is provably zero-knowledge of keys and capsule contents.
  *
  * Unit of work = an "escape" (capture → encrypt capsule → verify destination).
  * Avoid "backup" in customer-facing copy.
- *
- * Rate limit (Louis): every Square base plan includes **1 transfer / 24h**.
- * Optional add-on raises the rolling window to **3 transfers / 24h**.
- * Add-on prices: $3/mo on $7, $5/mo on $17 and $37. Square catalog IDs still pinned by Louis.
  */
 
 export const LAUNCH_PLATFORM = 'supabase';
@@ -35,21 +32,28 @@ export const CLI_INSTALL = Object.freeze({
 /** @typedef {'cloud-7' | 'cloud-17' | 'cloud-37'} CloudPlanId */
 
 const GB = 1024 * 1024 * 1024;
+const MB = 1024 * 1024;
 
-/** Fixed commercial plans (storage-cap based; no à-la-carte extras). */
+/** Fixed commercial plans. Public cards: Free + $7 + $17. `cloud-37` is hidden/legacy. */
 export const CLOUD_PLANS = Object.freeze({
   'cloud-7': Object.freeze({
     id: 'cloud-7',
     priceMonthlyUsd: 7,
     priceMonthlyCents: 700,
-    storageCapGb: 1,
-    storageCapBytes: 1 * GB,
-    storageCapLabel: '1 GB',
+    storageCapGb: 10,
+    storageCapBytes: 10 * GB,
+    storageCapLabel: '10 GB',
+    databases: 1,
+    databasesUnlimited: false,
+    databasesLabel: 'one database',
+    transfersPer24h: 1,
     escapesPerDay: 1,
     cyclesPerDay: 1,
+    scheduled: true,
+    customerFacing: true,
     title: 'Starter Escape',
-    cadenceLabel: 'up to 1 GB of capsule usage',
-    shortLabel: '$7/mo · up to 1 GB',
+    cadenceLabel: 'one database · up to 10 GB · 1 capsule / 24h',
+    shortLabel: '$7/mo · 1 DB · 10 GB',
     squareEnvKey: 'SQUARE_CLOUD_PLAN_VARIATION_ID_7',
     smsOptional: false,
   }),
@@ -57,14 +61,20 @@ export const CLOUD_PLANS = Object.freeze({
     id: 'cloud-17',
     priceMonthlyUsd: 17,
     priceMonthlyCents: 1700,
-    storageCapGb: 10,
-    storageCapBytes: 10 * GB,
-    storageCapLabel: '10 GB',
-    escapesPerDay: 1,
-    cyclesPerDay: 1,
+    storageCapGb: 25,
+    storageCapBytes: 25 * GB,
+    storageCapLabel: '25 GB',
+    databases: null,
+    databasesUnlimited: true,
+    databasesLabel: 'unlimited databases',
+    transfersPer24h: 3,
+    escapesPerDay: 3,
+    cyclesPerDay: 3,
+    scheduled: true,
+    customerFacing: true,
     title: 'Daily Escape',
-    cadenceLabel: 'up to 10 GB of capsule usage',
-    shortLabel: '$17/mo · up to 10 GB',
+    cadenceLabel: 'unlimited databases · up to 25 GB · 3 capsules / day',
+    shortLabel: '$17/mo · unlimited DB · 25 GB',
     squareEnvKey: 'SQUARE_CLOUD_PLAN_VARIATION_ID',
     smsOptional: true,
   }),
@@ -75,31 +85,62 @@ export const CLOUD_PLANS = Object.freeze({
     storageCapGb: 100,
     storageCapBytes: 100 * GB,
     storageCapLabel: '100 GB',
-    escapesPerDay: 1,
-    cyclesPerDay: 1,
+    databases: null,
+    databasesUnlimited: true,
+    databasesLabel: 'unlimited databases',
+    transfersPer24h: 3,
+    escapesPerDay: 3,
+    cyclesPerDay: 3,
+    scheduled: true,
+    customerFacing: false,
     title: 'Scale Escape',
-    cadenceLabel: 'up to 100 GB of capsule usage',
-    shortLabel: '$37/mo · up to 100 GB',
+    cadenceLabel: 'legacy hidden plan · not offered on new checkouts',
+    shortLabel: '$37/mo · legacy',
     squareEnvKey: 'SQUARE_CLOUD_PLAN_VARIATION_ID_37',
     smsOptional: true,
   }),
 });
 
+/**
+ * Cloud Free — not a Square catalog plan.
+ * 100 MB, dashboard + manual runs. No scheduled service.
+ */
+export const CLOUD_FREE = Object.freeze({
+  id: 'cloud-free',
+  priceMonthlyUsd: 0,
+  priceMonthlyCents: 0,
+  title: 'Cloud Free',
+  projects: 1,
+  storageCapMb: 100,
+  storageCapGb: 100 / 1024,
+  storageCapBytes: 100 * MB,
+  storageCapLabel: '100 MB',
+  scheduled: false,
+  smsOptional: false,
+  transfersPer24h: 0,
+  shortLabel: 'Free · 100 MB · manual only',
+  summary: '100 MB. Dashboard and manual runs. No scheduled service.',
+});
+
+export function publicCloudPlans() {
+  return Object.values(CLOUD_PLANS).filter((plan) => plan.customerFacing !== false);
+}
+
 export const CLOUD_DEFAULT_PLAN_ID = 'cloud-17';
 export const CLOUD_PLAN_ID = CLOUD_DEFAULT_PLAN_ID;
 
-/** Legacy Triple Escape ($27) maps to Scale ($37 / 100 GB). */
+/** Legacy Triple Escape ($27) maps to the current top public plan. */
 export const LEGACY_PLAN_ALIASES = Object.freeze({
-  'cloud-27': 'cloud-37',
+  'cloud-27': 'cloud-17',
   'cloud-intro-17': 'cloud-17',
 });
 
 /** @deprecated use CLOUD_PLANS — kept for older imports */
 export const CLOUD_PRICE_MONTHLY_USD = CLOUD_PLANS['cloud-17'].priceMonthlyUsd;
 export const CLOUD_PRICE_MONTHLY_CENTS = CLOUD_PLANS['cloud-17'].priceMonthlyCents;
-export const CLOUD_LIST_PRICE_MONTHLY_USD = CLOUD_PLANS['cloud-37'].priceMonthlyUsd;
-export const CLOUD_LIST_PRICE_MONTHLY_CENTS = CLOUD_PLANS['cloud-37'].priceMonthlyCents;
-/** Included on every $7 / $17 / $37 Square plan. */
+export const CLOUD_LIST_PRICE_MONTHLY_USD = CLOUD_PLANS['cloud-17'].priceMonthlyUsd;
+export const CLOUD_LIST_PRICE_MONTHLY_CENTS = CLOUD_PLANS['cloud-17'].priceMonthlyCents;
+/** $7 included allowance. $17 includes 3 / day (see plan.transfersPer24h). */
 export const BASE_TRANSFERS_PER_24H = 1;
 export const CLOUD_INCLUDED_CYCLES_PER_DAY = BASE_TRANSFERS_PER_24H;
 export const TRANSFER_WINDOW_HOURS = 24;
@@ -225,8 +266,18 @@ export const LOCAL_STARTER = {
 };
 
 export function getCloudPlan(planId = CLOUD_DEFAULT_PLAN_ID) {
+  if (planId === 'cloud-free' || planId === CLOUD_FREE.id) return CLOUD_FREE;
   const aliased = LEGACY_PLAN_ALIASES[planId] || planId;
   return CLOUD_PLANS[aliased] || CLOUD_PLANS[CLOUD_DEFAULT_PLAN_ID];
+}
+
+/** Meter cap for Cloud Free or a Square plan. */
+export function resolveMeterPlan(planId = CLOUD_DEFAULT_PLAN_ID) {
+  return getCloudPlan(planId);
+}
+
+export function publicPlanCards() {
+  return [CLOUD_FREE, ...publicCloudPlans()];
 }
 
 export function priceLabel(cents) {
@@ -235,14 +286,27 @@ export function priceLabel(cents) {
 }
 
 export function planPriceRangeLabel() {
-  return '$7 / $17 / $37';
+  return '$7 / $17';
 }
 
-/** Resolve plan from id or legacy extraCycles (1–2 extras ≈ scale plan). */
+export function planTransfersPer24h(planId = CLOUD_DEFAULT_PLAN_ID, { extraTransfersAddon } = {}) {
+  const plan = getCloudPlan(planId);
+  const included = Math.max(0, Number(plan.transfersPer24h || plan.escapesPerDay || BASE_TRANSFERS_PER_24H) || 0);
+  if (extraTransfersAddon) return Math.max(included, ADDON_TRANSFERS_PER_24H);
+  return included;
+}
+
+export function planAllowanceCopy(planId = CLOUD_DEFAULT_PLAN_ID) {
+  const plan = getCloudPlan(planId);
+  if (plan.id === 'cloud-free') return `${plan.storageCapLabel} · manual only · no scheduled service`;
+  return `${plan.storageCapLabel} · ${plan.databasesLabel} · ${plan.transfersPer24h} capsule${plan.transfersPer24h === 1 ? '' : 's'} / 24h`;
+}
+
+/** Resolve plan from id or legacy extraCycles (extras ≈ Daily $17). */
 export function resolvePlan({ planId, extraCycles } = {}) {
   if (planId && (CLOUD_PLANS[planId] || LEGACY_PLAN_ALIASES[planId])) return getCloudPlan(planId);
   const extra = Math.max(0, Number(extraCycles) || 0);
-  if (extra >= 2) return CLOUD_PLANS['cloud-37'];
+  if (extra >= 2) return CLOUD_PLANS['cloud-17'];
   return CLOUD_PLANS[CLOUD_DEFAULT_PLAN_ID];
 }
 
@@ -264,7 +328,7 @@ export function cyclesPerDay(extraCycles = 0, extraTransfersAddon = false) {
 
 /**
  * Rolling 24h transfer window for Square Cloud.
- * Base plans: 1. Extra-transfers add-on: 3.
+ * $7 includes 1. $17 includes 3. Extra-transfers add-on (legacy) raises a 1-slot plan to 3.
  */
 export function transferWindow({
   usedLast24h = 0,
@@ -274,9 +338,10 @@ export function transferWindow({
 } = {}) {
   const used = Math.max(0, Math.floor(Number(usedLast24h) || 0));
   const addon = Boolean(extraTransfersAddon);
-  const allowance = addon ? ADDON_TRANSFERS_PER_24H : BASE_TRANSFERS_PER_24H;
-  const remaining = Math.max(0, allowance - used);
   const plan = getCloudPlan(planId);
+  const included = planTransfersPer24h(plan.id);
+  const allowance = planTransfersPer24h(plan.id, { extraTransfersAddon: addon });
+  const remaining = Math.max(0, allowance - used);
   const addonMeta = extraTransfersAddonForPlan(plan.id);
   return {
     used,
@@ -285,7 +350,7 @@ export function transferWindow({
     atLimit: used >= allowance,
     extraTransfersAddon: addon,
     windowHours: TRANSFER_WINDOW_HOURS,
-    included: BASE_TRANSFERS_PER_24H,
+    included,
     addonAllowance: ADDON_TRANSFERS_PER_24H,
     addonId: EXTRA_TRANSFERS_ADDON_ID,
     addonTitle: EXTRA_TRANSFERS_ADDON_TITLE,
@@ -312,8 +377,9 @@ export function countTransfersLast24h(items, { now = Date.now(), getTime } = {})
 }
 
 /** Minimum schedule interval that stays inside the 24h allowance. */
-export function minScheduleHours({ extraTransfersAddon } = {}) {
-  return extraTransfersAddon ? Math.ceil(TRANSFER_WINDOW_HOURS / ADDON_TRANSFERS_PER_24H) : TRANSFER_WINDOW_HOURS;
+export function minScheduleHours({ extraTransfersAddon, planId = CLOUD_DEFAULT_PLAN_ID } = {}) {
+  const n = Math.max(1, planTransfersPer24h(planId, { extraTransfersAddon }));
+  return Math.ceil(TRANSFER_WINDOW_HOURS / n);
 }
 
 export function extraTransfersAddonPublic(planId = CLOUD_DEFAULT_PLAN_ID) {
@@ -337,7 +403,7 @@ export function extraTransfersAddonPublic(planId = CLOUD_DEFAULT_PLAN_ID) {
     }])),
     squareEnvKey: meta.squareEnvKey,
     squareCatalogPlaceholder: SQUARE_EXTRA_TRANSFERS_ADDON_VARIATION_ID_PLACEHOLDER,
-    note: 'Louis: +$3/mo on $7, +$5/mo on $17 and $37. Pin Square catalog IDs per plan.',
+    note: 'Legacy Extra transfers add-on. $17 already includes 3 capsules / day. Hidden from public cards.',
   };
 }
 
@@ -372,11 +438,10 @@ export function whatCloudIncludes(planIdOrExtra = CLOUD_DEFAULT_PLAN_ID) {
     'Supabase project recovery ops (launch scope)',
     'Hosted ops console (status, alerts, replay, CloudWatch/CloudTrail live)',
     `${plan.cadenceLabel} (plan cap — vault is still yours)`,
-    `1 capsule transfer / ${TRANSFER_WINDOW_HOURS} hours included`,
-    `Optional Extra transfers add-on: up to ${ADDON_TRANSFERS_PER_24H} / ${TRANSFER_WINDOW_HOURS}h · ${extraTransfersAddonPriceLabel(plan.id)}`,
+    `${plan.transfersPer24h} capsule transfer${plan.transfersPer24h === 1 ? '' : 's'} / ${TRANSFER_WINDOW_HOURS} hours included`,
     plan.smsOptional
-      ? 'Optional SMS status on $17+ (Twilio) — status only; never keys, capsule bytes, or customer data'
-      : 'SMS status is optional on $17 / $37 — not included on $7',
+      ? 'Optional SMS status on $17 (Twilio) — status only; never keys, capsule bytes, or customer data'
+      : 'SMS status is optional on $17 — not included on $7 or Cloud Free',
     `Up to ${CLOUD_MAX_AGENTS} agents (telemetry runners)`,
     'Opt-in agent health metadata only',
     'Multi-person alert chains (SMS / email / Slack)',
@@ -397,12 +462,12 @@ export function agentSlotsUsed(count) {
 export function whatCloudDoesNotInclude() {
   return [
     'Capsule storage (you bring S3, Drive, Dropbox, NAS, Local Starter, etc.)',
-    'Encryption passphrases or Supabase service keys — provably zero-knowledge of customer keys',
+    'Encryption passphrases or Supabase service keys — designed so Cloud never holds customer keys',
     'Capsule ciphertext (never lands in Portabase Cloud)',
     'Managed object store billed by Portabase',
-    'Unlimited vault size (choose $7 · 1 GB, $17 · 10 GB, or $37 · 100 GB)',
-    'More than 1 transfer / 24h unless the Extra transfers add-on is active',
-    'Capsule plaintext, object names, or sealing keys (provably zero-knowledge)',
+    'Unlimited vault size (choose Cloud Free 100 MB, $7 · 10 GB, or $17 · 25 GB)',
+    'Scheduled service on Cloud Free (manual runs only)',
+    'Capsule plaintext, object names, or sealing keys (control plane: status and hashes only)',
   ];
 }
 
@@ -425,9 +490,10 @@ export function publicPlansPayload() {
     priceMonthlyCents: plan.priceMonthlyCents,
     storageCapGb: plan.storageCapGb,
     storageCapLabel: plan.storageCapLabel,
-    escapesPerDay: BASE_TRANSFERS_PER_24H,
-    cyclesPerDay: BASE_TRANSFERS_PER_24H,
-    transfersPer24h: BASE_TRANSFERS_PER_24H,
+    escapesPerDay: plan.escapesPerDay,
+    cyclesPerDay: plan.cyclesPerDay,
+    transfersPer24h: plan.transfersPer24h,
+    customerFacing: plan.customerFacing !== false,
     title: plan.title,
     cadenceLabel: plan.cadenceLabel,
     shortLabel: plan.shortLabel,

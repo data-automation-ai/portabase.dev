@@ -66,6 +66,10 @@ test('demo dashboard is labeled sample UI and cannot go green', () => {
   assert.equal(model.proof.tone, PROOF_RED);
   assert.match(model.labeled, /Sample UI/i);
   assert.ok(model.log.every((row) => row.lamp.tone === PROOF_RED));
+  assert.ok(model.inventory.tables.length > 0);
+  assert.ok(model.inventory.buckets.length > 0);
+  assert.equal(model.inventory.mocked, true);
+  assert.match(model.inventory.labeled, /SAMPLE/);
 });
 
 test('capsule size breakdown uses layer hashes/counts when present', () => {
@@ -113,7 +117,7 @@ test('charts produce honest empty series and plan allowance', () => {
   assert.equal(empty.empty, true);
   assert.equal(empty.series.length, 7);
   assert.ok(empty.series.every((row) => row.success === 0 && row.sizeBytes === 0));
-  assert.equal(empty.usage.capGb, 1);
+  assert.equal(empty.usage.capGb, 10);
   assert.equal(empty.transferWindow.allowance, 1);
 });
 
@@ -135,10 +139,10 @@ test('backup log includes duration and dest; demo stay red', () => {
 test('billing strip fail-closes without Square env and never prints secrets', () => {
   const demo = buildBillingStrip({ demoMode: true, planId: 'cloud-17' });
   assert.equal(demo.planName, 'Daily Escape');
-  assert.equal(demo.allowanceLabel, '10 GB');
+  assert.match(demo.allowanceLabel, /25 GB/);
   assert.equal(demo.checkoutDisabled, true);
   assert.deepEqual(demo.square.missing, ['SQUARE_ACCESS_TOKEN', 'SQUARE_LOCATION_ID']);
-  assert.equal(demo.nextPlan.id, 'cloud-37');
+  assert.equal(demo.nextPlan, null);
   assert.doesNotMatch(JSON.stringify(demo), /sq0|EAAA/);
 
   const ready = buildBillingStrip({

@@ -12,8 +12,10 @@ import {
 } from '../lib/product.js';
 import { planAllowsOptionalSms } from '../lib/sms-safe.js';
 import { buildDashboardModel, jobsFromConsoleState } from '../lib/dashboard-view.js';
+import { KEYS_COPY } from '../data/never-hold-keys.js';
 import { formatGiB, formatHumanSize } from '../lib/human-size.js';
 import { formatOperatorTime } from '../lib/operator-time.js';
+import { JobSetupWizard, TableSizer } from './table-sizer.jsx';
 
 function Badge({ tone, children }) {
   const t = tone === 'ok' || tone === 'COMPLETE' || tone === 'green' || tone === 'MATCH'
@@ -86,6 +88,10 @@ export function CustomerDashboardPage({
   const model = useDashboardModel({ state, me, demoMode, liveJobs, live, square });
   const [tab, setTab] = useState(section);
   const [selectedJobId, setSelectedJobId] = useState(null);
+  const [wizard, setWizard] = useState(false);
+  const [sizerPlan, setSizerPlan] = useState(me?.subscription?.plan || state?.billing?.planId || 'cloud-free');
+  const [sizerSelection, setSizerSelection] = useState(state?.jobInclude || {});
+  const [excludeBinaries, setExcludeBinaries] = useState(Boolean(state?.jobInclude?.excludeBinaries));
   const plan = getCloudPlan(me?.subscription?.plan || state?.billing?.planId || state?.billing?.plan);
   const smsAllowed = planAllowsOptionalSms(plan.id);
   const selectedJob = model.telemetry.find((job) => job.id === selectedJobId) || null;
@@ -108,14 +114,17 @@ export function CustomerDashboardPage({
     <>
       <PageHead
         title="Dashboard"
-        subtitle="Job status, sealed sizes, and utilities. Metadata and hashes only — never keys or capsule bytes."
+        subtitle="Job status, table sizer, sealed sizes, and utilities. Include list and hashes only — never keys or row bodies."
         actions={
           <>
             <button type="button" className="pb-btn" onClick={() => navigate('account', { tab: 'billing' })}>
               <Icon name="card" size={14} /> Account
             </button>
-            <button type="button" className="pb-btn pb-btn-primary" onClick={() => navigate('projects')}>
+            <button type="button" className="pb-btn" onClick={() => navigate('projects')}>
               <Icon name="plus" size={14} /> Add source
+            </button>
+            <button type="button" className="pb-btn pb-btn-primary" onClick={() => { setTab('sizer'); setWizard(true); }}>
+              <Icon name="table" size={14} /> New job · sizer
             </button>
           </>
         }
@@ -140,6 +149,19 @@ export function CustomerDashboardPage({
         </div>
       </div>
 
+      <div className="pb-keys-strip" role="note">
+        <Icon name="key" size={18} />
+        <div>
+          <span>CONTROL PLANE · BLIND</span>
+          <strong>{KEYS_COPY.dashTitle}</strong>
+          <p>{KEYS_COPY.dashBody}</p>
+          <p className="pb-keys-honest">{KEYS_COPY.honest}</p>
+          <button type="button" className="pb-text-link" onClick={() => navigate?.('agents', { tab: 'seal' })}>
+            Seal keys to runner
+          </button>
+        </div>
+      </div>
+
       <AccountStrip
         model={model}
         plan={plan}
@@ -155,6 +177,7 @@ export function CustomerDashboardPage({
         {[
           ['overview', 'Telemetry'],
           ['charts', 'Charts'],
+          ['sizer', 'Table sizer'],
           ['sizes', 'Capsule sizes'],
           ['log', 'Backup log'],
           ['utilities', 'Utilities'],
@@ -174,6 +197,18 @@ export function CustomerDashboardPage({
 
       {tab === 'overview' && <TelemetrySection model={model} navigate={navigate} onOpenJob={openJob} />}
       {tab === 'charts' && <ChartsSection model={model} plan={plan} />}
+      {tab === 'sizer' && (
+        <TableSizer
+          inventory={model.inventory}
+          planId={sizerPlan}
+          onPlanId={setSizerPlan}
+          selection={sizerSelection}
+          onSelection={setSizerSelection}
+          excludeBinaries={excludeBinaries}
+          onExcludeBinaries={setExcludeBinaries}
+          demo={model.demo}
+        />
+      )}
       {tab === 'sizes' && <SizesSection model={model} onOpenJob={openJob} />}
       {tab === 'log' && <BackupLogSection model={model} onOpenJob={openJob} />}
       {tab === 'utilities' && (
@@ -189,6 +224,36 @@ export function CustomerDashboardPage({
 
       {selectedJob && (
         <JobDrawer job={selectedJob} demo={model.demo} proof={model.proof} onClose={() => setSelectedJobId(null)} />
+      )}
+      {wizard && (
+        <JobSetupWizard
+          inventory={model.inventory}
+          demo={model.demo}
+          planId={sizerPlan}
+          onClose={() => setWizard(false)}
+          toast={toast}
+          onConfirm={(spec) => {
+            setSizerSelection({
+              includeTables: spec.includeTables,
+              excludeTables: spec.excludeTables,
+              includeBuckets: spec.includeBuckets,
+              excludeBuckets: spec.excludeBuckets,
+            });
+            setExcludeBinaries(spec.excludeBinaries);
+            setState?.((s) => {
+              s.jobInclude = {
+                includeTables: spec.includeTables,
+                excludeTables: spec.excludeTables,
+                includeBuckets: spec.includeBuckets,
+                excludeBuckets: spec.excludeBuckets,
+                estimatedBytes: spec.estimatedBytes,
+                planId: spec.planId,
+                excludeBinaries: spec.excludeBinaries,
+              };
+              return s;
+            });
+          }}
+        />
       )}
     </>
   );
@@ -227,7 +292,7 @@ function AccountStrip({ model, plan, me, state, startTrial, startAddon, busy, na
               <p className="pb-muted pb-strip-note">${next.priceMonthlyUsd}/mo · {next.storageCapLabel}</p>
             </>
           ) : (
-            <p className="pb-muted pb-strip-note">Scale Escape is the top plan.</p>
+            <p className="pb-muted pb-strip-note">Daily Escape is the top public plan.</p>
           )}
         </div>
         <div>
@@ -653,9 +718,9 @@ function UtilitiesSection({ model, state, setState, toast, smsAllowed, plan }) {
       <section className="pb-util-group">
         <h2>SMS</h2>
         <div className="pb-card">
-          <div className="pb-card-head"><h3>Status alerts</h3><span>$17 / $37 optional</span></div>
+          <div className="pb-card-head"><h3>Status alerts</h3><span>$17 optional</span></div>
           {!smsAllowed ? (
-            <p className="pb-muted">SMS is optional on Daily Escape ($17) and Scale ($37) — not on {plan.shortLabel}.</p>
+            <p className="pb-muted">SMS is optional on Daily Escape ($17) — not on Cloud Free or $7.</p>
           ) : (
             <>
               <p className="pb-muted">{u.sms.note}</p>

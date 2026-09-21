@@ -15,6 +15,29 @@ Say **open source**, not OSS.
 
 Most Supabase users can stay on the free path. Cloud is convenience: GUI, schedule, telemetry, SMS.
 
+## Cloud Free vs paid schedules
+
+**Cloud Free** (designed offer, not a Square catalog plan). The free plan has no scheduled service.
+
+| | |
+| --- | --- |
+| Price | $0 · no card |
+| Projects | **1** |
+| Metered capsule usage | **≤ 100 MB** |
+| Dashboard + manual runs | Yes |
+| **Scheduled service** | **The free plan has no scheduled service** |
+| SMS | No |
+
+Paid Square plans ($7 / $17) add schedules and higher caps. **$7** is one database, up to 10 GB, 1 capsule / 24h. **$17** is unlimited databases, up to 25 GB, 3 capsules / day. Optional SMS on $17. Hidden legacy `cloud-37` is not offered on new checkouts. Live entitlement enforcement of the Cloud Free 100 MB cap is **not** a completed production proof.
+
+## Table + bucket sizer
+
+The Cloud dashboard / job setup wizard shows per-table sizes and per-bucket sizes / object counts from the free engine **doctor / size inventory** (already produced by `portabase doctor` and capture). You selectively **include or exclude** tables and Storage buckets so the capsule fits Cloud Free 100 MB / $7 10 GB / $17 25 GB.
+
+- Table omit uses existing `--exclude-table-list`. `--exclude-binaries` remains available. **No new CLI capture flags.**
+- Omitted tables and buckets are called out as **NOT COVERED**.
+- Control plane may store the include list, size estimates, and job metadata / hashes. Keys stay sealed to the runner. Never row bodies.
+
 ## Never-hold-keys threat model
 
 ```text
@@ -34,6 +57,7 @@ Browser  --seals keys-->  customer Cloud Runner (container)
 | **Cloud Runner** | Sealed keys for the job window; ephemeral spool | Long-term capsule vault |
 | **Portabase control plane** | Runner id, job id, status, phase, timestamps, counts, sizes, capsule/layer **hashes**, destination **kind**, safe error, daily meter bytes | Keys, passphrase, capsule bytes, row bodies, function source |
 | **SMS (optional on $17)** | Status string + job id | Keys, capsule bytes, customer data |
+| **Table sizer** | Include list + size estimates | Keys, row bodies, object names |
 
 The browser seals keys **to the runner**. `POST /api/cloud/runners` and the rest of `/api/cloud/*` reject secret-shaped bodies. There is **no** SSH or get-key path into a runner from the control plane.
 
@@ -43,7 +67,9 @@ Honest limit: Cloud isolation is **designed**, not claimed proven-green. Checks 
 
 | Proven in repo (unit / wiring) | Not proven |
 | --- | --- |
-| Product constants $7 / 1 GB · $17 / 10 GB · $37 / 100 GB | Live Square catalog IDs until Louis pins them |
+| Product constants Cloud Free 100 MB · $7 / 10 GB · $17 / 25 GB | Live Square catalog IDs until Louis pins them |
+| Cloud Free designed as 100 MB, no scheduled service | Live entitlement enforcement of Cloud Free caps |
+| Table + bucket sizer include list (unit) | Live runner inventory ingest on portabase.dev |
 | Checkout fails closed with **exact env var names** when Square is missing | Live charge in production |
 | Webhook / confirm-checkout activate a paid plan on `/api/cloud/me` | End-to-end paid subscriber on portabase.dev |
 | Runner sketch: sleeping container + free-engine argv + seal-to-runner | Production ECS/Fargate isolation audit |
@@ -81,15 +107,16 @@ Route: **`/dashboard`** (also `/app` lands here). Demo: **`/dashboard?demo=1`** 
 | --- | --- |
 | **Telemetry** | Job status, phase, started/finished, object counts, sizes, destination kind, runner region, safe error codes |
 | **Charts** | Capsule size over time, success/fail, bytes / day vs plan cap, object counts. Empty charts when no jobs |
+| **Table sizer** | Per-table and per-bucket sizes from doctor / size inventory. Selective include. Loud NOT COVERED when omitted |
 | **Capsule sizes** | Per job: total + DB / Storage / Functions when hashes/counts exist |
 | **Backup log** | Chronological capture/restore with status, times, size, MATCH / red lamp, detail links |
-| **Utilities** | Doctor preflight, verify result, `--exclude-binaries` / `--exclude-table-list` (and `--force-orphan-fks` only if the runner reported it), customer-owned destination hints, schedule toggles, SMS opt-in on $17 / $37 |
+| **Utilities** | Doctor preflight, verify result, `--exclude-binaries` / `--exclude-table-list` (and `--force-orphan-fks` only if the runner reported it), customer-owned destination hints, schedule toggles, SMS opt-in on $17 |
 
 View-model: `src/lib/dashboard-view.js`. API: `GET /api/cloud/dashboard` (Bearer). Empty signed-in workspaces do **not** seed fake jobs.
 
 **Proof lamp:** stays **RED** until a real dry-run/compare from the CLI or Cloud Runner is MATCH. Demo / empty / mocked reports cannot turn it green.
 
-Account strip: plan ($7 / $17 / $37), Extra transfers, Square checkout. Customer portal URL is **not** wired until Louis pins it.
+Account strip: Cloud Free 100 MB / $7 10 GB / $17 25 GB. Customer portal URL is **not** wired until Louis pins it.
 
 ## Control-plane store
 

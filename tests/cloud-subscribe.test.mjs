@@ -23,21 +23,21 @@ test('subscription payment link is $0 trial with plan variation id', () => {
   assert.equal(CLOUD_PAYMENT_GATEWAY, 'square');
   assert.match(body.description, /\$17\/mo|17\/mo/i);
   assert.match(body.payment_note, /byo_storage=true/);
-  assert.match(body.payment_note, /10 GB/);
+  assert.match(body.payment_note, /25 GB/);
   assert.match(body.quick_pay.name, /BYO storage|12 agents/i);
   assert.equal(STORAGE_POLICY.includedInCloud, false);
   assert.equal(STORAGE_POLICY.owner, 'customer');
   assert.equal(CLOUD_MAX_AGENTS, 12);
 });
 
-test('Scale Escape plan is $37 with 100 GB cap', () => {
+test('Scale Escape plan is hidden legacy $37 with 100 GB cap', () => {
   const plan = getCloudPlan('cloud-37');
   assert.equal(plan.priceMonthlyCents, 3700);
   assert.equal(plan.storageCapGb, 100);
-  assert.equal(CLOUD_PLANS['cloud-7'].storageCapGb, 1);
-  assert.equal(CLOUD_PLANS['cloud-17'].storageCapGb, 10);
-  assert.match(plan.cadenceLabel, /100 GB/i);
-  assert.equal(plan.cyclesPerDay, BASE_TRANSFERS_PER_24H);
+  assert.equal(plan.customerFacing, false);
+  assert.equal(CLOUD_PLANS['cloud-7'].storageCapGb, 10);
+  assert.equal(CLOUD_PLANS['cloud-17'].storageCapGb, 25);
+  assert.match(plan.cadenceLabel, /legacy hidden/i);
   const body = buildSubscriptionPaymentLinkRequest({
     locationId: 'LOC',
     planVariationId: 'VAR37',
@@ -69,8 +69,8 @@ test('Extra transfers add-on payment link is a Square checkout stub', () => {
   assert.equal(ADDON_TRANSFERS_PER_24H, 3);
 });
 
-test('legacy $27 Triple maps to Scale $37', () => {
-  assert.equal(getCloudPlan('cloud-27').id, 'cloud-37');
+test('legacy $27 Triple maps to Daily $17', () => {
+  assert.equal(getCloudPlan('cloud-27').id, 'cloud-17');
 });
 
 test('trial end is seven days after start', () => {

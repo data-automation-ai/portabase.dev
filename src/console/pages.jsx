@@ -12,10 +12,10 @@ import {
   CLOUD_DEFAULT_PLAN_ID,
   TRANSFER_WINDOW_HOURS,
   agentSlotsUsed,
-  extraTransfersAddonPriceLabel,
   getCloudPlan,
   minScheduleHours,
   planPriceRangeLabel,
+  publicCloudPlans,
   storageUsage,
 } from '../lib/product.js';
 import { BarGauge, RingGauge, StatusPip } from './gauges.jsx';
@@ -23,6 +23,8 @@ import { CapsuleManagePage } from './capsule-manage.jsx';
 import { TransferWindowPanel } from './transfer-window.jsx';
 import { looksLikeStorageObjectPath } from '../lib/zero-knowledge.js';
 import { proofFromConsoleState } from '../lib/proof-status.js';
+import { SealKeysPanel } from './seal-keys.jsx';
+import { KEYS_COPY } from '../data/never-hold-keys.js';
 
 function Badge({ tone, children }) {
   const t = tone === 'ok' || tone === 'online' || tone === 'healthy' || tone === 'COMPLETE' || tone === 'running' || tone === 'completed' || tone === 'active' || tone === 'trialing'
@@ -101,7 +103,7 @@ export function OverviewPage({ state, navigate, toast, me, startAddon, busy, dem
     <>
       <PageHead
         title="Recovery status"
-        subtitle="Capsule health, rescue readiness, and worker signals. Provably zero-knowledge: Cloud cannot see object names or sealing keys."
+        subtitle="Capsule health, rescue readiness, and worker signals. Telemetry is status and hashes only — no keys, no capsule bytes."
         actions={
           <>
             <button type="button" className="pb-btn" onClick={() => navigate('telemetry')}><Icon name="chart" size={14} /> Telemetry graphs</button>
@@ -299,16 +301,24 @@ export function BackupsHubPage(props) {
 }
 
 export function AgentsHubPage(props) {
-  const [tab, setTab] = useState('agents');
+  const [tab, setTab] = useState(props.tab === 'seal' ? 'seal' : 'agents');
   const used = props.state?.agents?.length || 0;
   return (
     <>
-      <PageHead title="Agents" subtitle={`Customer-run boxes that report health. Cloud plan: up to ${CLOUD_MAX_AGENTS} agents (${used} in use). Optional managed runners for hosted compute.`} />
+      <PageHead
+        title="Agents"
+        subtitle={tab === 'seal'
+          ? KEYS_COPY.sealTitle
+          : `Customer-run boxes that report health. Cloud plan: up to ${CLOUD_MAX_AGENTS} agents (${used} in use). Optional managed runners for hosted compute.`}
+      />
       <div className="pb-tabs">
         <button type="button" className={tab === 'agents' ? 'is-active' : ''} onClick={() => setTab('agents')}>Your agents</button>
+        <button type="button" className={tab === 'seal' ? 'is-active' : ''} onClick={() => setTab('seal')}>Seal keys</button>
         <button type="button" className={tab === 'runners' ? 'is-active' : ''} onClick={() => setTab('runners')}>Managed runners</button>
       </div>
-      {tab === 'agents' ? <AgentsPage {...props} embedded /> : <RunnersPage {...props} embedded />}
+      {tab === 'seal'
+        ? <SealKeysPanel demo={props.demoMode} toast={props.toast} />
+        : tab === 'agents' ? <AgentsPage {...props} embedded /> : <RunnersPage {...props} embedded />}
     </>
   );
 }
@@ -1446,7 +1456,7 @@ export function RunnersPage({ state, setState, toast, embedded }) {
   if (embedded) return grid;
   return (
     <>
-      <PageHead title="Managed runners" subtitle="Optional hosted compute. Default is your agent." />
+      <PageHead title="Managed runners" subtitle="Optional hosted compute. Default is your agent. Keys still seal to the runner — this site stays blind." />
       {grid}
     </>
   );
@@ -1527,16 +1537,15 @@ export function BillingPage({ state, me, startTrial, startAddon, busy, setState,
         <div>
           <strong>You provide capsule storage</strong>
           <p>
-            Square plans: <strong>$7/mo · 1 GB</strong>, <strong>$17/mo · 10 GB</strong>, <strong>$37/mo · 100 GB</strong>.
-            Each includes <strong>{BASE_TRANSFERS_PER_24H} capsule transfer / {TRANSFER_WINDOW_HOURS}h</strong>.
-            Optional Extra transfers add-on: up to {ADDON_TRANSFERS_PER_24H} / {TRANSFER_WINDOW_HOURS}h · $3/mo on Starter, $5/mo on Daily / Scale.
+            Public plans: <strong>Cloud Free 100 MB</strong> (manual only), <strong>$7/mo · one DB · 10 GB · 1 capsule / 24h</strong>, <strong>$17/mo · unlimited DBs · 25 GB · 3 capsules / day</strong>.
+            Use the table sizer to include or exclude tables and Storage buckets so the capsule fits.
             Capsules land in <em>your</em> S3, Dropbox, NAS, or Local Starter folder.
-            Portabase is provably zero-knowledge of encryption keys and capsule contents.
+            The paid service is designed to be blind to encryption keys and capsule contents — status and hashes only.
           </p>
         </div>
       </div>
       <div className="pb-grid pb-grid-2" style={{ marginBottom: 14 }}>
-        {Object.values(CLOUD_PLANS).map(p => (
+        {publicCloudPlans().map(p => (
           <button
             type="button"
             key={p.id}
@@ -1544,14 +1553,14 @@ export function BillingPage({ state, me, startTrial, startAddon, busy, setState,
             style={{
               textAlign: 'left',
               cursor: 'pointer',
-              borderColor: plan.id === p.id ? 'var(--acid, #c9ff4a)' : undefined,
-              boxShadow: plan.id === p.id ? '0 0 0 1px rgba(201,255,74,.45)' : undefined,
+              borderColor: plan.id === p.id ? 'var(--c-acid, #0e7c74)' : undefined,
+              boxShadow: plan.id === p.id ? '0 0 0 1px rgba(14,124,116,.45)' : undefined,
             }}
             onClick={() => selectPlan(p.id)}
           >
             <div className="pb-kpi-label">{p.title}</div>
             <div className="pb-kpi-value" style={{ fontSize: 28 }}>${p.priceMonthlyUsd}<span style={{ fontSize: 14 }}>/mo</span></div>
-            <div className="pb-kpi-meta">{p.cadenceLabel} · {p.storageCapLabel} · {BASE_TRANSFERS_PER_24H} transfer / {TRANSFER_WINDOW_HOURS}h · add-on +{extraTransfersAddonPriceLabel(p.id)}</div>
+            <div className="pb-kpi-meta">{p.cadenceLabel}</div>
             {plan.id === p.id && <Badge tone="acid">Selected</Badge>}
           </button>
         ))}
@@ -1590,8 +1599,8 @@ export function BillingPage({ state, me, startTrial, startAddon, busy, setState,
           <TransferWindowPanel state={state} me={me} onUpgrade={startAddon} busy={busy} compact />
           <ul className="pb-muted" style={{ margin: '14px 0 0', paddingLeft: 18, lineHeight: 1.55, fontSize: 13 }}>
             <li>Console · SMS success/failure · ≤{CLOUD_MAX_AGENTS} agents</li>
-            <li>$7 · 1 GB · $17 · 10 GB · $37 · 100 GB</li>
-            <li>{BASE_TRANSFERS_PER_24H} transfer / {TRANSFER_WINDOW_HOURS}h included · add-on up to {ADDON_TRANSFERS_PER_24H}</li>
+            <li>Cloud Free 100 MB · $7 · 10 GB · 1 / 24h · $17 · 25 GB · 3 / day</li>
+            <li>Table sizer include/exclude before a job · loud NOT COVERED when omitted</li>
             <li>Not capsule storage (you provide)</li>
             <li>Zero knowledge of encryption keys, object names, or capsule plaintext</li>
           </ul>
@@ -1607,7 +1616,7 @@ export function BillingPage({ state, me, startTrial, startAddon, busy, setState,
     </>
   );
   if (embedded) return body;
-  return (<><PageHead title="Plan" subtitle={`Square · ${planPriceRangeLabel()} · 1 / 10 / 100 GB · ${BASE_TRANSFERS_PER_24H} transfer / ${TRANSFER_WINDOW_HOURS}h included.`} />{body}</>);
+  return (<><PageHead title="Plan" subtitle={`Square · ${planPriceRangeLabel()} · Cloud Free 100 MB · $7 10 GB 1/24h · $17 25 GB 3/day.`} />{body}</>);
 }
 
 export function SettingsPage({ state, setState, toast, resetDemo, embedded }) {
@@ -1885,7 +1894,7 @@ export function CloudWatchLivePage({ state, setState, toast, embedded }) {
           lineHeight: 1.55,
           maxHeight: 420,
           overflow: 'auto',
-          background: '#0a0c0f',
+          background: 'var(--c-bg)',
           padding: '14px 16px',
         }}
         >

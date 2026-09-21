@@ -19,6 +19,28 @@ export const SITE_LINKS = Object.freeze({
   githubOrg: CLI_INSTALL.githubOrg,
 });
 
+/** Cloud console routes — including /dashboard?demo=1 (query is ignored here). */
+export function isCloudConsolePath(pathname = '') {
+  const path = String(pathname || '').split('?')[0].replace(/\/$/, '') || '/';
+  return path === '/app'
+    || path === '/console'
+    || path === '/dashboard'
+    || path.startsWith('/app/')
+    || path.startsWith('/dashboard/')
+    || path === '/tools/supabase-viewer';
+}
+
+export function isDemoConsoleSearch(search = '') {
+  const raw = String(search || '');
+  const q = raw.startsWith('?') ? raw.slice(1) : raw;
+  return new URLSearchParams(q).get('demo') === '1';
+}
+
+export function isDocsPath(pathname = '') {
+  const path = String(pathname || '').split('?')[0].replace(/\/$/, '') || '/';
+  return path === '/docs' || path.startsWith('/docs/');
+}
+
 export const DOCS_HASHES = Object.freeze({
   install: 'install',
   capsules: 'capsules',

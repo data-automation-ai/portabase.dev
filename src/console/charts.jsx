@@ -13,16 +13,16 @@ import {
 } from 'recharts';
 
 const C = {
-  ok: '#3dd68c',
-  danger: '#f2555a',
-  acid: '#b8f54a',
-  info: '#6aa8ff',
-  faint: '#5c6470',
-  muted: '#8b929e',
-  text: '#e8eaed',
-  grid: '#252a33',
-  panel: '#171b22',
-  border: '#343b48',
+  ok: '#0f9f6e',
+  danger: '#dc3d3d',
+  acid: '#0e7c74',
+  info: '#0e7c74',
+  faint: '#6b7c76',
+  muted: '#4b5c57',
+  text: '#12241f',
+  grid: '#d7e3df',
+  panel: '#eef4f2',
+  border: '#b7c9c3',
 };
 
 function hexFromCss(color, fallback) {

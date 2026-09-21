@@ -5,10 +5,11 @@
  */
 
 import { deriveProofStatus, PROOF_RED } from './proof-status.js';
-import { getCloudPlan, transferWindow, storageUsage } from './product.js';
+import { getCloudPlan, planAllowanceCopy, transferWindow, storageUsage } from './product.js';
 import { FORBIDDEN_INVENTORY_KEY } from './zero-knowledge.js';
 import { formatOperatorTimeShort, jobDurationMs } from './operator-time.js';
 import { squareBillingView } from './square-public.js';
+import { normalizeSizeInventory, sampleSizeInventory } from './table-sizer.js';
 
 export const DASHBOARD_SOURCES = Object.freeze({
   empty: 'empty',
@@ -366,8 +367,8 @@ export function buildUtilitiesView({
       optIn: sms.optIn === true || sms.onFailure === true || sms.onSuccess === true,
       onFailure: sms.onFailure !== false,
       onSuccess: sms.onSuccess === true,
-      planAllows: planId === 'cloud-17' || planId === 'cloud-37',
-      note: 'Optional on $17 / $37. Status only — never keys, passphrase, capsule bytes, or customer row data.',
+      planAllows: getCloudPlan(planId).smsOptional === true,
+      note: 'Optional on $17. Status only — never keys, passphrase, capsule bytes, or customer row data.',
     },
   };
 }
@@ -380,16 +381,12 @@ export function buildBillingStrip({
 } = {}) {
   const plan = getCloudPlan(planId || billing.planId || billing.plan);
   const squareView = squareBillingView({ live: square, demoMode });
-  const next = plan.id === 'cloud-7'
-    ? getCloudPlan('cloud-17')
-    : plan.id === 'cloud-17'
-      ? getCloudPlan('cloud-37')
-      : null;
+  const next = plan.id === 'cloud-7' || plan.id === 'cloud-free' ? getCloudPlan('cloud-17') : null;
   return {
     planId: plan.id,
     planName: plan.title,
     shortLabel: plan.shortLabel,
-    allowanceLabel: plan.storageCapLabel,
+    allowanceLabel: planAllowanceCopy(plan.id),
     allowanceBytes: plan.storageCapBytes,
     priceMonthlyUsd: plan.priceMonthlyUsd,
     extraTransfersAddon: Boolean(billing.extraTransfersAddon),
@@ -434,6 +431,7 @@ export function emptyDashboardModel({ planId = 'cloud-17', extraTransfersAddon =
     charts,
     sizes: [],
     log: [],
+    inventory: normalizeSizeInventory({}),
     utilities: buildUtilitiesView({ planId: plan.id, sms: { optIn: false, onFailure: true, onSuccess: false } }),
     proof,
     billingStrip: buildBillingStrip({ billing: { planId: plan.id, extraTransfersAddon }, square, demoMode }),
@@ -568,6 +566,7 @@ export function buildDashboardModel({
       charts: buildDashboardCharts(sample, { planId, extraTransfersAddon, now }),
       sizes: sample.filter((job) => job.type === 'backup' || job.sizeBytes).map(buildCapsuleSizeBreakdown),
       log: buildBackupLog(sample, { proof: null, demoMode: true }),
+      inventory: sampleSizeInventory(),
       utilities: buildUtilitiesView({
         jobs: sample,
         doctor: doctor || {
@@ -613,6 +612,7 @@ export function buildDashboardModel({
     charts: buildDashboardCharts(list, { planId, extraTransfersAddon, now }),
     sizes: list.filter((job) => job.sizeBytes || job.dbBytes || job.storageBytes || job.functionsBytes).map(buildCapsuleSizeBreakdown),
     log: buildBackupLog(list, { proof, demoMode: false }),
+    inventory: normalizeSizeInventory(doctor || {}),
     utilities: buildUtilitiesView({ jobs: list, doctor, verify, schedules, sms, planId }),
     proof: proofStatus,
     billingStrip: buildBillingStrip({ billing, square, demoMode: false, planId }),
