@@ -16,11 +16,13 @@ test('projects one-way telemetry and drops secret-shaped payload keys', () => {
     runnerId: 'run_1',
     region: 'us-east-1',
     passphrase: 'nope',
-    payload: { passphrase: 'nope', objectCount: 12 },
+    payload: { passphrase: 'nope', objectCount: 12, AWS_SECRET_ACCESS_KEY: 'wJalr', secrets_bundle: '{}' },
   });
   assert.equal(out.jobId, 'job_1');
   assert.equal(out.destinationKind, 's3');
   assert.equal(out.passphrase, undefined);
   assert.equal(out.payload.passphrase, undefined);
+  assert.equal(out.payload.AWS_SECRET_ACCESS_KEY, undefined);
+  assert.equal(out.payload.secrets_bundle, undefined);
   assert.equal(out.payload.objectCount, 12);
 });

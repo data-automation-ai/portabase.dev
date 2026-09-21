@@ -33,7 +33,7 @@ export function assertRunnerSealUrl(sealUrl) {
   return sealUrl;
 }
 
-export function buildSealedEnvelope({ ciphertext, alg = 'AES-256-GCM', runnerId } = {}) {
+export function buildSealedEnvelope({ ciphertext, alg = 'AES-256-GCM', runnerId, purpose = 'supabase-runner' } = {}) {
   if (!ciphertext) {
     const err = new Error('ciphertext required');
     err.code = 'invalid_seal';
@@ -43,8 +43,36 @@ export function buildSealedEnvelope({ ciphertext, alg = 'AES-256-GCM', runnerId 
     alg,
     ciphertext,
     runnerId: runnerId || null,
+    purpose,
     sealedAt: new Date().toISOString(),
   };
+}
+
+/** Sibling of the Supabase seal: AWS keys sealed to the customer runner only. */
+export function buildAwsSealedEnvelope({ ciphertext, runnerId } = {}) {
+  return {
+    ...buildSealedEnvelope({ ciphertext, runnerId, purpose: 'aws-runner-credentials' }),
+    note: 'AWS credentials sealed to the customer runner only. Portabase control plane never stores them.',
+  };
+}
+
+export function assertNoPlaintextAwsKeys(payload = {}) {
+  const forbidden = [
+    'awsAccessKeyId',
+    'awsSecretAccessKey',
+    'AWS_ACCESS_KEY_ID',
+    'AWS_SECRET_ACCESS_KEY',
+    'sessionToken',
+    'SecretAccessKey',
+  ];
+  for (const key of forbidden) {
+    if (payload[key]) {
+      const err = new Error('Plaintext AWS keys cannot be posted to Portabase. Seal them to the runner.');
+      err.code = 'plaintext_aws_refused';
+      throw err;
+    }
+  }
+  return true;
 }
 
 /** Fetch wrapper that refuses to POST seals at the control plane. */

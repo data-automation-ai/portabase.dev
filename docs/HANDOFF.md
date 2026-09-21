@@ -62,9 +62,9 @@ Do **not** thrash C: for multi‑GB Storage capture. Disk is tight; user rejects
 | --- | --- |
 | Gateway | **Square** |
 | Base | **$17/mo** |
-| Included | **1 capsule backup / transfer per 24 hours** on every Square base plan |
-| Extra transfers add-on | **Up to 3 / 24h** · **+$3/mo** on $7 · **+$5/mo** on $17 / $37 |
-| Plans | **$7 / 1 GB** · **$17 / 10 GB** · **$37 / 100 GB** |
+| Cloud Free | **100 MB** · dashboard + **manual only** (no scheduled service) |
+| Included | **$7** = 1 capsule / 24h · **$17** = 3 capsules / day |
+| Plans | **$7 / one DB / 10 GB** · **$17 / unlimited DBs / 25 GB** · `$37` hidden legacy |
 | Agents | Up to **12** |
 | SMS | Optional on **$17 / $37** (Twilio). Status only — never keys, capsule bytes, or customer data. |
 | Trial | 7 days, **card required**, auto-convert |
@@ -142,7 +142,7 @@ Engine already supports `aws`, dropbox/gdrive via rclone, `local`. **OAuth Dropb
 
 Public page: **`/security`** (alias `/trust`). Spec: `docs/SECURITY-TRUST.md`.
 
-**Up front:** On managed Cloud, a runner must use crypto for the job window → **possibility Portabase can see or use key material**. Customer KMS / CloudTrail / CloudWatch **reduce** that; they do **not** claim zero. Zero vendor key path → **standalone OSS only**.
+**Up front:** On managed Cloud, a runner must use crypto for the job window → **possibility Portabase can see or use key material**. Customer KMS / CloudTrail / CloudWatch **reduce** that; they do **not** claim zero. Zero vendor key path → **standalone open source only**.
 
 Trust dial: Trust Portabase · mix controls · max (KMS+Trail+CW) · standalone.
 
@@ -309,7 +309,8 @@ Open `/app?demo=1`.
 3. **`docs/PRODUCT_SPEC.md`** · **`docs/LAUNCH-SCOPE.md`** · **`docs/OPEN_CORE.md`**  
 4. **`docs/SECURITY-TRUST.md`** · **`docs/BILLING.md`** · **`docs/REPLAY.md`**  
 5. **`docs/CLOUD_CONSOLE.md`** · **`docs/CLOUD_INFRASTRUCTURE.md`** · **`docs/AUTH_AND_TRIAL.md`**  
-6. **`docs/ESSENTIALS_RUNBOOK.md`** (CLI operator path)
+6. **`docs/ESSENTIALS_RUNBOOK.md`** (CLI operator path)  
+7. **`docs/AWS_CAPSULE.md`** · **`docs/AWS_INVENTORY.md`** · **`docs/AWS_RUN_PLAN.md`** · **`docs/AWS_RUNNER_AUTH.md`** (AWS escape scaffold — not proven; binaries = most recent backups; runner-local AWS creds; `aws plan` is dry-run)
 
 ---
 

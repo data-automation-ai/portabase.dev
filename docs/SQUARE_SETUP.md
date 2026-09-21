@@ -1,6 +1,6 @@
 # Square Checkout setup
 
-**Commercial product today:** Portabase Cloud — **$7 / $17 / $37 per month** (1 / 10 / 100 GB) after a 7-day trial (Square subscription checkout via `cloud-subscribe` / catalog plan variation). Each base plan includes **1 capsule transfer / 24h**. Optional Extra transfers add-on (up to **3 / 24h**) is **+$3/mo** on $7 and **+$5/mo** on $17 / $37. Pin `SQUARE_EXTRA_TRANSFERS_ADDON_VARIATION_ID_7` / `_17` / `_37`. Card required. Customer provides capsule storage. Cloud has zero knowledge of encryption keys.
+**Commercial product today:** Portabase Cloud — **Cloud Free 100 MB (manual)**, then Square **$7/mo** (one database · ≤10 GB · 1 capsule / 24h) or **$17/mo** (unlimited databases · ≤25 GB · 3 capsules / day) after a 7-day trial (`cloud-subscribe`). Hidden legacy `$37` is not offered on new checkouts. Card required. Customer provides capsule storage. Cloud has zero knowledge of encryption keys.
 
 **Retired:** `$147` one-time “Essentials” software license.  
 `POST /api/square/checkout` now returns **HTTP 410** with pointers to open source + Cloud. Do not create payment links for that SKU.
@@ -16,9 +16,9 @@ Legacy `GET /api/square/order` and `POST /api/license/claim` remain only for cus
 | `SQUARE_WEBHOOK_SIGNATURE_KEY` | `square.webhook_signature_key` | No |
 | `SQUARE_ENVIRONMENT` or `SQUARE_ENV` | not secret; `production` or `sandbox` | No |
 | `PORTABASE_SITE_URL` | not secret; `https://portabase.dev` | No |
-| `SQUARE_CLOUD_PLAN_VARIATION_ID_7` | optional pin · $7 / 1 GB | No |
-| `SQUARE_CLOUD_PLAN_VARIATION_ID` | optional pin · $17 / 10 GB | No |
-| `SQUARE_CLOUD_PLAN_VARIATION_ID_37` | optional pin · $37 / 100 GB | No |
+| `SQUARE_CLOUD_PLAN_VARIATION_ID_7` | optional pin · $7 / 10 GB / 1 DB | No |
+| `SQUARE_CLOUD_PLAN_VARIATION_ID` | optional pin · $17 / 25 GB / unlimited DBs | No |
+| `SQUARE_CLOUD_PLAN_VARIATION_ID_37` | optional pin · hidden legacy $37 | No |
 | `SQUARE_EXTRA_TRANSFERS_ADDON_VARIATION_ID_7` | optional pin · Extra transfers on $7 (+$3/mo) | No |
 | `SQUARE_EXTRA_TRANSFERS_ADDON_VARIATION_ID_17` | optional pin · Extra transfers on $17 (+$5/mo) | No |
 | `SQUARE_EXTRA_TRANSFERS_ADDON_VARIATION_ID_37` | optional pin · Extra transfers on $37 (+$5/mo) | No |

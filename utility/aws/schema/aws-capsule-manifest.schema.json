@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://portabase.dev/schema/aws-capsule-manifest-1.0.0.json",
+  "title": "Portabase AWS Capsule Manifest",
+  "description": "Runtime source of truth is utility/aws/schema.mjs. This file is the published JSON Schema copy for inventory schema version 1.0.0 / capsule format 2.0.0.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "capsuleFormatVersion",
+    "inventorySchemaVersion",
+    "profile",
+    "createdAt",
+    "account",
+    "regions",
+    "scripted",
+    "binaryReferences",
+    "measurement",
+    "coverage",
+    "secretsPolicy"
+  ],
+  "properties": {
+    "kind": { "const": "portabase-aws-capsule" },
+    "capsuleFormatVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "inventorySchemaVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "profile": { "type": "string", "enum": ["exclude-binaries"] },
+    "createdAt": { "type": "string" },
+    "portabaseVersion": { "type": "string" },
+    "account": {
+      "type": "object",
+      "required": ["accountId"],
+      "additionalProperties": false,
+      "properties": {
+        "accountId": { "type": "string", "pattern": "^[0-9]{12}$" },
+        "aliases": { "type": "array", "items": { "type": "string" } },
+        "partition": { "type": "string", "enum": ["aws", "aws-us-gov", "aws-cn"] }
+      }
+    },
+    "regions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 2 }
+    },
+    "scripted": { "type": "object" },
+    "binaryReferences": { "type": "object" },
+    "measurement": {
+      "type": "object",
+      "required": ["scriptedEstimateBytes", "binaryFootprintGiB"],
+      "properties": {
+        "scriptedEstimateBytes": { "type": "number", "minimum": 0 },
+        "binaryFootprintGiB": { "type": "number", "minimum": 0 },
+        "resourceCount": { "type": "number", "minimum": 0 },
+        "costSignals": { "type": "object" }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "required": ["proven", "restoreDrill", "match", "binariesInCapsule"],
+      "properties": {
+        "proven": { "const": false },
+        "restoreDrill": { "type": "string" },
+        "match": { "const": false },
+        "binariesInCapsule": { "type": "boolean" },
+        "scriptedComplete": { "type": "boolean" },
+        "note": { "type": "string" }
+      }
+    },
+    "secretsPolicy": {
+      "type": "object",
+      "required": [
+        "credentialsPacked",
+        "secretValuesPacked",
+        "secureStringValuesPacked",
+        "privateKeysPacked"
+      ],
+      "properties": {
+        "credentialsPacked": { "const": false },
+        "secretValuesPacked": { "const": false },
+        "secureStringValuesPacked": { "const": false },
+        "privateKeysPacked": { "const": false }
+      }
+    },
+    "findings": { "type": "array" }
+  }
+}

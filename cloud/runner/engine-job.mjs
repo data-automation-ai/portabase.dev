@@ -54,6 +54,25 @@ export function buildFreeEngineArgv({
   return argv;
 }
 
+/** AWS capsule commands on the same runner. Not new Supabase capture flags. */
+export const AWS_ENGINE_COMMANDS = Object.freeze(['inventory', 'doctor', 'plan']);
+
+export function buildAwsEngineArgv({
+  subcommand = 'plan',
+  fixture = '',
+  requireAws = true,
+} = {}) {
+  if (!AWS_ENGINE_COMMANDS.includes(subcommand)) {
+    const err = new Error(`Unknown aws engine command: ${subcommand}`);
+    err.code = 'unknown_aws_engine_command';
+    throw err;
+  }
+  const argv = ['node', FREE_ENGINE_ENTRY, 'aws', subcommand];
+  if (fixture) argv.push('--fixture', String(fixture));
+  if (requireAws) argv.push('--require-aws');
+  return argv;
+}
+
 export function describeEngineJob(spec = {}) {
   const argv = buildFreeEngineArgv(spec);
   return {

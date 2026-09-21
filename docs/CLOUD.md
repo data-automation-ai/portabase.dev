@@ -36,6 +36,7 @@ The Cloud dashboard / job setup wizard shows per-table sizes and per-bucket size
 
 - Table omit uses existing `--exclude-table-list`. `--exclude-binaries` remains available. **No new CLI capture flags.**
 - Omitted tables and buckets are called out as **NOT COVERED**.
+- The sizer recommends the smallest public cap that fits (Cloud Free 100 MB / $7 10 GB / $17 25 GB) and can omit largest items to fit the selected plan. Unmeasured sizes stay loud — Cloud does not invent bytes.
 - Control plane may store the include list, size estimates, and job metadata / hashes. Keys stay sealed to the runner. Never row bodies.
 
 ## Never-hold-keys threat model
@@ -59,7 +60,9 @@ Browser  --seals keys-->  customer Cloud Runner (container)
 | **SMS (optional on $17)** | Status string + job id | Keys, capsule bytes, customer data |
 | **Table sizer** | Include list + size estimates | Keys, row bodies, object names |
 
-The browser seals keys **to the runner**. `POST /api/cloud/runners` and the rest of `/api/cloud/*` reject secret-shaped bodies. There is **no** SSH or get-key path into a runner from the control plane.
+The browser seals keys **to the runner**. That includes **AWS credentials** for the AWS capsule runner (sibling of the Supabase seal — `buildAwsSealedEnvelope`). `POST /api/cloud/runners` and the rest of `/api/cloud/*` reject secret-shaped bodies (service-role, passphrase, `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`, session tokens, `secrets-bundle`). There is **no** SSH or get-key path into a runner from the control plane.
+
+AWS jobs on a Cloud / Combo runner use the **standard AWS credential chain on that runner** (preferred: instance role). Portabase never stores AWS keys. See [AWS_RUNNER_AUTH.md](./AWS_RUNNER_AUTH.md).
 
 Honest limit: Cloud isolation is **designed**, not claimed proven-green. Checks in this repo cover allowlists and unit behavior. They are not a completed isolation audit. If you need zero Portabase key path, run the free CLI on infrastructure only you operate.
 

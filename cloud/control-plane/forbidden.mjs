@@ -30,7 +30,7 @@ const ALLOWED_FIELDS = Object.freeze({
   capsule_hashes: Object.freeze(['id', 'hash', 'algorithm', 'created_at']),
 });
 
-const FORBIDDEN_KEY_RE = /^(service[_-]?role|sb[_-]?secret|passphrase|private[_-]?key|password|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|encryption[_-]?key|capsule[_-]?bytes|capsule[_-]?ciphertext|ciphertext|bytes|dump|object[_-]?bytes|pbase|postgres[_-]?url|database[_-]?url|db[_-]?url|card[_-]?number|pan|cvv|cvc|payment[_-]?token)$/i;
+const FORBIDDEN_KEY_RE = /^(service[_-]?role|sb[_-]?secret|passphrase|private[_-]?key|password|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|encryption[_-]?key|capsule[_-]?bytes|capsule[_-]?ciphertext|ciphertext|bytes|dump|object[_-]?bytes|pbase|postgres[_-]?url|database[_-]?url|db[_-]?url|card[_-]?number|pan|cvv|cvc|payment[_-]?token|aws[_-]?secret[_-]?access[_-]?key|aws[_-]?access[_-]?key[_-]?id|aws[_-]?session[_-]?token|session[_-]?token|secrets[_-]?bundle)$/i;
 
 const FORBIDDEN_VALUE_RE = [
   /service[_-]?role/i,

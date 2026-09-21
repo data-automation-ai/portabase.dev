@@ -309,3 +309,70 @@ export function meterPlanCards() {
     { id: 'cloud-17', title: 'Daily Escape', capLabel: '25 GB', cadence: 'unlimited databases · 3 capsules / day' },
   ];
 }
+
+const PLAN_ORDER = ['cloud-free', 'cloud-7', 'cloud-17'];
+
+/** Smallest public cap that fits `bytes`. Over 25 GB returns cloud-17 still-over. */
+export function recommendPlan(bytes) {
+  const used = Math.max(0, Number(bytes) || 0);
+  for (const id of PLAN_ORDER) {
+    const fit = planFit(used, id);
+    if (fit.fits) {
+      return { ...fit, recommended: true, stillOver: false };
+    }
+  }
+  const last = planFit(used, 'cloud-17');
+  return { ...last, recommended: true, stillOver: true };
+}
+
+export function unmeasuredItems(inventory) {
+  const inv = inventory?.tables ? inventory : normalizeSizeInventory(inventory);
+  const tables = (inv.tables || []).filter((row) => !row.sizeBytes);
+  const buckets = (inv.buckets || []).filter((row) => !row.sizeBytes);
+  return {
+    tables,
+    buckets,
+    count: tables.length + buckets.length,
+    loud: tables.length + buckets.length > 0,
+    headline: tables.length + buckets.length
+      ? `UNMEASURED · ${tables.length + buckets.length} table/bucket size${tables.length + buckets.length === 1 ? '' : 's'} missing from doctor inventory`
+      : 'Every inventoried table and bucket has a size estimate',
+  };
+}
+
+/**
+ * Omit largest included items until the remaining estimate fits the plan.
+ * Prefers omitting Storage buckets, then tables. Never invents sizes.
+ */
+export function suggestExcludesToFit(inventory, planId = 'cloud-free') {
+  const inv = inventory?.tables ? inventory : normalizeSizeInventory(inventory);
+  const plan = getCloudPlan(planId) || CLOUD_FREE;
+  const cap = Number(plan.storageCapBytes) || 0;
+  const ranked = [
+    ...inv.buckets.map((row) => ({ kind: 'bucket', key: row.key, sizeBytes: row.sizeBytes || 0 })),
+    ...inv.tables.map((row) => ({ kind: 'table', key: row.key, sizeBytes: row.sizeBytes || 0 })),
+  ].sort((a, b) => b.sizeBytes - a.sizeBytes);
+
+  const excludeTables = [];
+  const excludeBuckets = [];
+  let used = inv.totalBytes;
+  for (const item of ranked) {
+    if (used <= cap) break;
+    if (!item.sizeBytes) continue;
+    if (item.kind === 'bucket') excludeBuckets.push(item.key);
+    else excludeTables.push(item.key);
+    used -= item.sizeBytes;
+  }
+  const selection = { excludeTables, excludeBuckets };
+  const summary = summarizeSelection(inv, selection);
+  const fit = planFit(summary.includedBytes, planId);
+  return {
+    selection,
+    summary,
+    fit,
+    suggested: excludeTables.length + excludeBuckets.length > 0,
+    note: fit.fits
+      ? `Omit ${excludeTables.length + excludeBuckets.length} largest item(s) to fit ${plan.storageCapLabel}.`
+      : `Even after omitting measured items, estimate is still over ${plan.storageCapLabel}.`,
+  };
+}

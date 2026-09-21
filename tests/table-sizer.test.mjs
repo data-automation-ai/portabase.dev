@@ -7,8 +7,11 @@ import {
   excludeTableListFlag,
   normalizeSizeInventory,
   planFit,
+  recommendPlan,
   sampleSizeInventory,
+  suggestExcludesToFit,
   summarizeSelection,
+  unmeasuredItems,
 } from '../src/lib/table-sizer.js';
 import { CLOUD_FREE } from '../src/lib/product.js';
 
@@ -109,4 +112,36 @@ test('sizer UI stamps NOT COVERED on omitted rows and the loud banner', () => {
   assert.match(ui, /pb-sizer-omit-tag/);
   assert.match(ui, /NOT COVERED/);
   assert.match(ui, /summarizeSelection\(inv, selection\)/);
+  assert.match(ui, /recommendPlan/);
+  assert.match(ui, /Fit this plan/);
+});
+
+test('recommendPlan picks Free 100 MB / $7 10 GB / $17 25 GB', () => {
+  const mb = 1024 * 1024;
+  const gb = 1024 * mb;
+  assert.equal(recommendPlan(40 * mb).planId, 'cloud-free');
+  assert.equal(recommendPlan(2 * gb).planId, 'cloud-7');
+  assert.equal(recommendPlan(12 * gb).planId, 'cloud-17');
+  assert.equal(recommendPlan(30 * gb).stillOver, true);
+});
+
+test('suggestExcludesToFit omits the largest bucket so Cloud Free fits', () => {
+  const sample = sampleSizeInventory();
+  const suggestion = suggestExcludesToFit(sample, 'cloud-free');
+  assert.equal(suggestion.suggested, true);
+  assert.ok(suggestion.selection.excludeBuckets.includes('media'));
+  assert.equal(suggestion.fit.fits, true);
+  assert.match(suggestion.note, /100 MB/);
+});
+
+test('unmeasured items are loud and do not invent bytes', () => {
+  const inv = normalizeSizeInventory({
+    tables: [{ schema: 'public', name: 'ghost', rows: 12 }],
+    buckets: [{ id: 'mystery' }],
+  });
+  const missing = unmeasuredItems(inv);
+  assert.equal(missing.loud, true);
+  assert.equal(missing.count, 2);
+  assert.match(missing.headline, /UNMEASURED/);
+  assert.equal(inv.totalBytes, 0);
 });

@@ -60,6 +60,7 @@ import {
 } from './portabase-core.mjs';
 import { resolveEdition } from './license.mjs';
 import { emitTelemetry } from './telemetry.mjs';
+import { runAwsCli } from './aws/cli.mjs';
 
 export {
   providerCommand,
@@ -1849,6 +1850,9 @@ Commands:
                       Same guards as restore --execute; clearer validation report.
   export-manifest     Name-only inventory (layers, tables, buckets, checksums — no secrets)
   capsule-unload      List unloadable layer names for a runner (still ciphertext)
+  aws inventory       Scripted vs binary AWS inventory from --fixture <json> (read-only)
+  aws doctor          will-copy / will-warn / will-fail (never claims proven; no snapshots)
+  aws plan            Dry-run runbook: inventory → doctor → latest backup → export → seal
 
 Optional Cloud:
   Set cloud.enabled=true and PORTABASE_CLOUD_URL / PORTABASE_CLOUD_TOKEN
@@ -1958,6 +1962,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     else if (command === 'probe') await probe();
     else if (command === 'export-manifest') await exportManifest();
     else if (command === 'capsule-unload') await capsuleUnload();
+    else if (command === 'aws') {
+      const awsResult = await runAwsCli(argv.slice(1));
+      if (awsResult?.exitCode) process.exitCode = awsResult.exitCode;
+    }
     else help();
   } catch (error) {
     console.error(`\nPortabase failed: ${error.message}`);

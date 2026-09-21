@@ -6,7 +6,7 @@
 | --- | --- |
 | **Identity** | Hosted Supabase Auth (email + Google PKCE) |
 | **Product** | Supabase projects (DB · Auth · Storage · Edge Functions) |
-| **Trial** | 7 days · **card required** · auto-converts to **$7 / $17 / $37** (1 / 10 / 100 GB, Square) |
+| **Trial** | 7 days · **card required** · auto-converts to **$7** (one DB · 10 GB · 1/24h) or **$17** (unlimited DBs · 25 GB · 3/day) |
 | **Agents** | Up to 12 |
 | **Storage** | Customer BYO capsules — Portabase never hosts recovery bytes |
 
@@ -37,7 +37,7 @@ Subscriptions are namespaced as `{version}:{userId}` (always `supabase:…` at l
 ## Trial → subscription
 
 1. Signed-in user opens console (`/app`)
-2. `POST /api/cloud/subscribe` creates Square payment link (trial phase $0 × 7 days → chosen $7 / $17 / $37 plan)
+2. `POST /api/cloud/subscribe` creates Square payment link (trial phase $0 × 7 days → chosen $7 or $17 plan)
 3. Redirect back `/app?checkout=complete`
 4. `POST /api/cloud/confirm-checkout` + Square webhooks update subscription state
 5. After trial, Square charges the card on file

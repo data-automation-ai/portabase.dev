@@ -6,8 +6,11 @@ import {
   controlPlaneJobSpec,
   meterPlanCards,
   planFit,
+  recommendPlan,
   sampleSizeInventory,
+  suggestExcludesToFit,
   summarizeSelection,
+  unmeasuredItems,
 } from '../lib/table-sizer.js';
 
 function Bar({ ratio, over }) {
@@ -53,6 +56,8 @@ export function TableSizer({
   const applied = useMemo(() => applySelection(inv, selection), [inv, selection]);
   const summary = useMemo(() => summarizeSelection(inv, selection), [inv, selection]);
   const fit = planFit(summary.includedBytes, planId);
+  const recommended = useMemo(() => recommendPlan(summary.includedBytes), [summary.includedBytes]);
+  const unmeasured = useMemo(() => unmeasuredItems(inv), [inv]);
   const spec = useMemo(
     () => controlPlaneJobSpec({ inventory: inv, selection, planId, excludeBinaries }),
     [inv, selection, planId, excludeBinaries],
@@ -140,11 +145,37 @@ export function TableSizer({
             Selected estimate {formatHumanSize(fit.usedBytes)} of {fit.capLabel}
             {fit.overCap ? ` · over by ${formatHumanSize(fit.overByBytes)}` : ` · ${formatHumanSize(fit.remainingBytes)} remaining`}.
             Exclude tables or buckets so the capsule fits Cloud Free 100 MB, $7 10 GB, or $17 25 GB.
+            Smallest public cap that fits this selection: <strong>{recommended.shortLabel}</strong>
+            {recommended.stillOver ? ' (still over $17 25 GB)' : ''}.
           </p>
         </div>
         <div className="pb-sizer-fit-num pb-mono">{fit.percent}%</div>
       </div>
       <Bar ratio={fit.ratio} over={fit.overCap} />
+      {fit.overCap && (
+        <div className="pb-inline">
+          <button
+            type="button"
+            className="pb-btn pb-btn-sm"
+            onClick={() => {
+              const suggestion = suggestExcludesToFit(inv, planId);
+              onSelection?.({ ...selection, ...suggestion.selection });
+            }}
+          >
+            Fit this plan (omit largest)
+          </button>
+        </div>
+      )}
+
+      {unmeasured.loud && (
+        <div className="pb-callout warn" role="status">
+          <Icon name="warn" size={16} />
+          <div>
+            <strong>{unmeasured.headline}</strong>
+            <p>Unmeasured items stay in the include list but cannot prove they fit. Run <code className="pb-mono">portabase doctor</code> on the runner for sizes. Cloud does not invent bytes.</p>
+          </div>
+        </div>
+      )}
 
       {summary.notCoverage.loud && (
         <div className="pb-callout danger pb-sizer-loud" role="alert">
@@ -171,7 +202,7 @@ export function TableSizer({
             <button type="button" className="pb-btn pb-btn-sm" onClick={() => setAll('tables', false)}>Exclude all</button>
           </div>
           <div className="pb-sizer-list">
-            {applied.tables.map((row) => (
+            {[...applied.tables].sort((a, b) => (b.sizeBytes || 0) - (a.sizeBytes || 0)).map((row) => (
               <RowToggle
                 key={row.key}
                 checked={row.included}
@@ -198,7 +229,7 @@ export function TableSizer({
             <button type="button" className="pb-btn pb-btn-sm" onClick={() => setAll('buckets', false)}>Exclude all</button>
           </div>
           <div className="pb-sizer-list">
-            {applied.buckets.map((row) => (
+            {[...applied.buckets].sort((a, b) => (b.sizeBytes || 0) - (a.sizeBytes || 0)).map((row) => (
               <RowToggle
                 key={row.key}
                 checked={row.included}

@@ -32,7 +32,7 @@ export const ALLOWED_TELEMETRY_FIELDS = Object.freeze([
   'payload',
 ]);
 
-const FORBIDDEN_PAYLOAD_KEYS = /^(passphrase|password|service[_-]?role|sb[_-]?secret|private[_-]?key|capsule[_-]?bytes|ciphertext|row[_-]?body|function[_-]?source|source[_-]?code|dump)$/i;
+const FORBIDDEN_PAYLOAD_KEYS = /^(passphrase|password|service[_-]?role|sb[_-]?secret|private[_-]?key|capsule[_-]?bytes|ciphertext|row[_-]?body|function[_-]?source|source[_-]?code|dump|aws[_-]?secret[_-]?access[_-]?key|aws[_-]?access[_-]?key[_-]?id|session[_-]?token|secrets[_-]?bundle|secret[_-]?string)$/i;
 
 export function projectAllowedTelemetry(event = {}) {
   const out = {};

@@ -78,11 +78,11 @@ Live: **https://portabase.dev**
 | Rule | Value |
 | --- | --- |
 | Payment | Square |
-| Starter Escape | **$7/mo** · up to **1 GB** |
-| Daily Escape | **$17/mo** · up to **10 GB** |
-| Scale Escape | **$37/mo** · up to **100 GB** |
-| Included | Console, telemetry, SMS, ≤12 agents, **1 transfer / 24h** |
-| Extra transfers add-on | Up to **3 / 24h** · **+$3/mo** on $7 · **+$5/mo** on $17 / $37 |
+| Cloud Free | **$0** · **100 MB** · manual only (no scheduled service) |
+| Starter Escape | **$7/mo** · **one database** · **≤10 GB** · **1 / 24h** |
+| Daily Escape | **$17/mo** · **unlimited databases** · **≤25 GB** · **3 / day** |
+| Scale Escape | Hidden legacy **$37** — not offered on new checkouts |
+| Included | Console, telemetry, table/bucket sizer, ≤12 agents |
 | Agents | Up to **12** |
 | SMS | Optional on **$17 / $37** — status only |
 | Trial | 7 days, card required |
@@ -228,7 +228,9 @@ npm run portabase -- doctor
 | `docs/LAUNCH-SCOPE.md` | Supabase-only, Cloud vs standalone staging |
 | `docs/OPEN_CORE.md` | Open core vs paid |
 | `docs/SECURITY-TRUST.md` | Keys, KMS, Trail, CW, honesty |
-| `docs/BILLING.md` | $7 / $17 / $37, transfers, SMS |
+| `docs/BILLING.md` | Cloud Free 100 MB / $7 10 GB 1/24h / $17 25 GB 3/day |
+| `docs/AWS_CAPSULE.md` | AWS Capsule V2 (read-only; most-recent backups; runner-local AWS; `aws plan` dry-run; not proven) |
+| `docs/AWS_INVENTORY.md` | AWS resource classes + binary decision tree |
 | `docs/CLOUD.md` | How Cloud layers on the free CLI |
 | `docs/CLOUD_CONTROL_PLANE_STORE.md` | Supabase primary + SQLite replica |
 | `docs/REPLAY.md` | Proof restore to new project |

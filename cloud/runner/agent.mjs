@@ -73,8 +73,19 @@ export function acceptBrowserSeal(runner, { sealedEnvelope } = {}, now = () => n
     err.code = 'seal_required';
     throw err;
   }
-  if (sealedEnvelope.plaintext || sealedEnvelope.passphrase || sealedEnvelope.serviceRole) {
-    const err = new Error('Seal must be ciphertext to the runner — plaintext keys refused on this hop');
+  const plaintextAws = [
+    'plaintext',
+    'passphrase',
+    'serviceRole',
+    'awsAccessKeyId',
+    'awsSecretAccessKey',
+    'AWS_ACCESS_KEY_ID',
+    'AWS_SECRET_ACCESS_KEY',
+    'sessionToken',
+    'SecretAccessKey',
+  ].some((key) => sealedEnvelope[key]);
+  if (plaintextAws) {
+    const err = new Error('Seal must be ciphertext to the runner — plaintext keys (including AWS) refused on this hop');
     err.code = 'plaintext_seal_refused';
     throw err;
   }

@@ -42,8 +42,18 @@ export function assertControlPlaneRunnerBody(body) {
     err.status = 400;
     throw err;
   }
-  if (body.ciphertext || body.sealedEnvelope || body.keys || body.ssh || body.privateKey) {
-    const err = new Error('Sealed keys go to the runner, never the Portabase control plane');
+  if (
+    body.ciphertext
+    || body.sealedEnvelope
+    || body.keys
+    || body.ssh
+    || body.privateKey
+    || body.awsAccessKeyId
+    || body.AWS_ACCESS_KEY_ID
+    || body.AWS_SECRET_ACCESS_KEY
+    || body.awsSecretAccessKey
+  ) {
+    const err = new Error('Sealed keys (including AWS) go to the runner, never the Portabase control plane');
     err.code = 'keys_must_seal_to_runner';
     err.status = 400;
     throw err;

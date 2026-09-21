@@ -9,7 +9,7 @@ import {
   startTransfer,
 } from '../cloud/runner/agent.mjs';
 import { assertControlPlaneRunnerBody, provisionSleepingRunner } from '../netlify/shared/runner-plane.mjs';
-import { assertRunnerSealUrl, buildSealedEnvelope, isControlPlaneUrl } from '../src/lib/runner-seal.js';
+import { assertRunnerSealUrl, buildAwsSealedEnvelope, buildSealedEnvelope, isControlPlaneUrl } from '../src/lib/runner-seal.js';
 
 test('sleeping runner is empty until a sealed transfer starts', () => {
   const runner = createSleepingRunner({ subscriberId: 'user_1', region: 'us-east-1' });
@@ -51,6 +51,10 @@ test('control plane refuses get-key, SSH, and secret-shaped bodies', () => {
     () => assertControlPlaneRunnerBody({ action: 'provision', keys: { dest: 's3' } }),
     { code: 'keys_must_seal_to_runner' },
   );
+  assert.throws(
+    () => assertControlPlaneRunnerBody({ action: 'provision', AWS_ACCESS_KEY_ID: 'AKIATEST' }),
+    (err) => err.code === 'forbidden_secret_shape' || err.code === 'keys_must_seal_to_runner',
+  );
   const publicRunner = provisionSleepingRunner({ subscriberId: 'user_1' });
   assert.equal(publicRunner.sealedKeysPresent, false);
   assert.equal(publicRunner.status, 'sleeping');
@@ -63,6 +67,8 @@ test('browser seal targets the runner, never /api/cloud', () => {
   assert.equal(url.includes('/api/cloud'), false);
   const envelope = buildSealedEnvelope({ ciphertext: 'sealed', runnerId: 'run_1' });
   assert.equal(envelope.alg, 'AES-256-GCM');
+  const awsEnvelope = buildAwsSealedEnvelope({ ciphertext: 'sealed-aws', runnerId: 'run_1' });
+  assert.equal(awsEnvelope.purpose, 'aws-runner-credentials');
 });
 
 test('transfer starts only after seal; sleep discards keys', () => {

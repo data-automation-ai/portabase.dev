@@ -14,7 +14,7 @@ Use this when deploying the marketing + Cloud SPA to Netlify.
 8. **export-manifest / capsule-unload** — names only, no secrets.
 9. **`--report-drift`** — opt-in MD5 / row-count / RBAC.
 10. **Security refresh** — Cloud never stores capsules or passphrases; least-privilege if a job key is held briefly.
-11. **Pricing** — Square **$7 / 1 GB**, **$17 / 10 GB**, **$37 / 100 GB**. Each includes **1 transfer / 24h**. Extra transfers add-on: up to **3 / 24h** — **+$3/mo** on $7, **+$5/mo** on $17 / $37.
+11. **Pricing** — **Cloud Free 100 MB (manual)**. Square **$7** one DB ≤10 GB 1/24h · **$17** unlimited DBs ≤25 GB 3/day. Hidden legacy `$37`. Table/bucket sizer include/exclude.
 12. **Download/run paths** — Local Starter vs S3/Dropbox/Drive/rclone; staging/disk warning.
 13. **Console IA** — capsule management (not content browser), key injection (customer-side), gauges, **Telemetry graphs**, **Open capsule** wizard, worker health.
 14. **Auth/trial funnel** — email + Google + magic link → trial → connect project → first capsule proof; no hosted-vault promise.
@@ -32,7 +32,7 @@ Key injection uses Web Crypto in the browser and/or `PORTABASE_ENCRYPTION_PASSPH
 
 ## Transfer rate limits (Louis)
 
-Every Square base plan ($7 / $17 / $37) includes **one (1) capsule backup / transfer per rolling 24 hours**. Optional Extra transfers add-on raises the allowance to **three (3) / 24h** for **+$3/mo** on Starter and **+$5/mo** on Daily / Scale. Dashboard shows used / allowance and an upgrade CTA. Jobs API enforces the window on `type=backup`.
+**$7** includes **one (1) capsule / rolling 24 hours**. **$17** includes **three (3) / day**. Cloud Free is **manual only**. Dashboard shows used / allowance. Jobs API enforces the window on `type=backup`.
 
 ## Live Supabase viewer (Louis)
 
@@ -76,5 +76,5 @@ Forbidden from the site / Cloud control plane: Storage object names/paths, table
 ## Louis still needs to provide
 
 - Google OAuth client ID + secret in the Supabase Auth provider (placeholders only in repo).
-- Square catalog variation IDs for $7 / $17 / $37 and Extra transfers add-on (`SQUARE_EXTRA_TRANSFERS_ADDON_VARIATION_ID_7` / `_17` / `_37`).
+- Square catalog variation IDs for $7 / $17 (and hidden legacy $37 if still pinned).
 - Confirm npm `portabase` publish matches [DataAutomation-ai/portabase-CLI](https://github.com/DataAutomation-ai/portabase-CLI).
