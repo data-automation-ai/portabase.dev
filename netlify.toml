@@ -66,6 +66,16 @@
   status = 200
 
 [[redirects]]
+  from = "/api/cloud/supabase"
+  to = "/.netlify/functions/cloud-supabase"
+  status = 200
+
+[[redirects]]
+  from = "/api/cloud/selection"
+  to = "/.netlify/functions/cloud-selection"
+  status = 200
+
+[[redirects]]
   from = "/api/cloud/runners"
   to = "/.netlify/functions/cloud-runners"
   status = 200

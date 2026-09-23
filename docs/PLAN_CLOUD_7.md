@@ -68,3 +68,4 @@ Supabase OAuth app; server-side token custody. Customers run the generated comma
 ## Progress log (append)
 
 - 2026-09-23: plan written; code map complete (sizer UI + pure functions exist; no live inventory, no saved selection, no engine flags, runner idle).
+- 2026-09-23: netlify.toml redirects for /api/cloud/supabase and /api/cloud/selection added; S1–S5 workers launched in parallel on disjoint paths.
