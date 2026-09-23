@@ -295,6 +295,9 @@ export const DATA_SCHEMA_EXCLUDES = Object.freeze([
   '_analytics', '_realtime', '_supavisor',
 ]);
 
+/** Individual platform tables excluded from data.sql even though their schema's data is kept. */
+export const DATA_TABLE_EXCLUDES = Object.freeze(['auth.schema_migrations', 'storage.migrations', 'supabase_functions.migrations']);
+
 export function providerCommand(config, capsuleDir) {
   const provider = config.provider || {};
   const prefix = String(provider.prefix || '').replace(/^\/+|\/+$/g, '');

@@ -35,6 +35,8 @@ import {
   recoveryEvidenceStatus,
   safeObjectPath,
   DATA_SCHEMA_EXCLUDES,
+  DATA_TABLE_EXCLUDES,
+  PLATFORM_SCHEMA_EXCLUDES,
   generateFunctionRedeployScripts,
   PINNED_SUPABASE_CLI,
   schemaExcludePattern,
@@ -590,7 +592,7 @@ async function captureDatabaseNative(dbUrl, dbDir, limits = null) {
     await transformSql(rawSchema, join(dbDir, 'schema.sql'), cleanSchemaLine);
     if (!limits?.databaseSchemaOnly) {
       progress({ phase: 'database', item: 'table rows' });
-      await runDumpToFile(pgDump, ['--data-only', '--quote-all-identifiers', '--role', 'postgres', '--exclude-schema', DATA_EXCLUDES, '--exclude-table', 'auth.schema_migrations', '--exclude-table', 'storage.migrations', '--exclude-table', 'supabase_functions.migrations', '--schema', '*'], rawData, { env });
+      await runDumpToFile(pgDump, ['--data-only', '--quote-all-identifiers', '--role', 'postgres', '--exclude-schema', DATA_EXCLUDES, ...DATA_TABLE_EXCLUDES.flatMap(table => ['--exclude-table', table]), '--schema', '*'], rawData, { env });
       await transformSql(rawData, join(dbDir, 'data.sql'), line => /^\\(un)?restrict /.test(line) ? `-- ${line}` : line, 'SET session_replication_role = replica;\n', 'RESET ALL;\n');
     }
   } finally {
@@ -1754,6 +1756,105 @@ async function plan() {
   console.log('Credentials and encryption keys remain local. No Portabase API or telemetry endpoint is contacted.');
 }
 
+const UI_DATABASE_SQL = `SELECT json_build_object(
+  'databaseBytes', pg_database_size(current_database()),
+  'serverVersion', current_setting('server_version'),
+  'tables', (SELECT COALESCE(json_agg(json_build_object(
+      'schema', n.nspname, 'name', c.relname,
+      'rows', GREATEST(c.reltuples, 0)::bigint, 'analyzed', c.reltuples >= 0,
+      'bytes', pg_total_relation_size(c.oid), 'tableBytes', pg_relation_size(c.oid), 'indexBytes', pg_indexes_size(c.oid),
+      'rls', c.relrowsecurity) ORDER BY pg_total_relation_size(c.oid) DESC), '[]'::json)
+    FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relkind IN ('r','p') AND n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'),
+  'extensions', (SELECT COALESCE(json_agg(json_build_object('name', extname, 'version', extversion) ORDER BY extname), '[]'::json) FROM pg_catalog.pg_extension),
+  'authUsers', (SELECT count(*) FROM auth.users),
+  'policies', (SELECT count(*) FROM pg_catalog.pg_policies WHERE ${APPLICATION_SCHEMA_SQL}),
+  'views', (SELECT count(*) FROM pg_catalog.pg_views WHERE ${APPLICATION_SCHEMA_SQL})
+)::text;`;
+
+/** Read-only snapshot for `portabase ui`: names, counts and sizes — never credential values. */
+export async function collectUiSnapshot(config, trial) {
+  const layer = async (fn) => {
+    try { return { ok: true, data: await fn() }; } catch (error) { return { ok: false, error: error.message }; }
+  };
+  const passphraseEnv = config.encryption?.passphraseEnv || 'PORTABASE_ENCRYPTION_PASSPHRASE';
+  const readiness = {
+    env: {
+      SUPABASE_DB_URL: Boolean(process.env.SUPABASE_DB_URL),
+      SUPABASE_URL: Boolean(process.env.SUPABASE_URL),
+      SUPABASE_SERVICE_ROLE_KEY: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+      SUPABASE_ACCESS_TOKEN: Boolean(process.env.SUPABASE_ACCESS_TOKEN),
+      passphrase: (process.env[passphraseEnv] || '').length >= 16,
+      passphraseEnv,
+    },
+    tools: Object.fromEntries(['pg_dump', 'pg_dumpall', 'psql', 'supabase', 'tar'].map(name => [name, Boolean(resolveTool(name))])),
+  };
+  const [database, storage, functions] = await Promise.all([
+    layer(async () => {
+      if (!process.env.SUPABASE_DB_URL) throw new Error('SUPABASE_DB_URL is not set.');
+      return JSON.parse(psqlValue(process.env.SUPABASE_DB_URL, UI_DATABASE_SQL));
+    }),
+    layer(async () => {
+      const buckets = await (await checkedSourceFetch('/storage/v1/bucket')).json();
+      const rows = await mapPool(buckets, 8, async (bucket) => {
+        const objects = await listBucketObjects(bucket.id);
+        return {
+          id: bucket.id,
+          public: Boolean(bucket.public),
+          fileSizeLimit: bucket.file_size_limit ?? null,
+          objectCount: objects.length,
+          totalBytes: objects.reduce((total, object) => total + (Number(object.metadata?.size) || 0), 0),
+        };
+      });
+      return { buckets: rows, objectCount: rows.reduce((t, b) => t + b.objectCount, 0), totalBytes: rows.reduce((t, b) => t + b.totalBytes, 0) };
+    }),
+    layer(async () => {
+      const list = await managementApiJson(`/v1/projects/${config.projectRef}/functions`);
+      return (Array.isArray(list) ? list : list?.functions || []).map(fn => ({
+        slug: fn.slug, name: fn.name, status: fn.status, version: fn.version, verifyJwt: fn.verify_jwt !== false, updatedAt: fn.updated_at ?? null,
+      }));
+    }),
+  ]);
+  const { buildChecklist, classifyTable, schemaMatches } = await import('./ui/checklist.mjs');
+  if (database.ok) {
+    for (const table of database.data.tables) {
+      const verdict = classifyTable(table.schema, table.name, { trial });
+      table.platform = schemaMatches(table.schema, PLATFORM_SCHEMA_EXCLUDES);
+      table.capsule = verdict.structure.keep && verdict.rows.keep ? 'structure + rows'
+        : verdict.structure.keep ? 'structure' : verdict.rows.keep ? 'rows' : 'recreated';
+    }
+  }
+  return {
+    generatedAt: new Date().toISOString(),
+    portabaseVersion: VERSION,
+    project: { ref: config.projectRef, destination: config.provider.type, capture: config.capture || {}, edition: trial ? 'trial' : 'community' },
+    readiness,
+    database,
+    storage,
+    functions,
+    checklist: buildChecklist({ config, trial, readiness, database, storage, functions }),
+  };
+}
+
+function openInBrowser(url) {
+  const [cmd, args] = process.platform === 'win32' ? ['rundll32', ['url.dll,FileProtocolHandler', url]]
+    : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
+  try { spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true }).unref(); } catch { /* URL is printed anyway */ }
+}
+
+async function ui() {
+  const { config } = await loadConfig();
+  const trial = hasFlag('trial');
+  const { startUiServer } = await import('./ui/server.mjs');
+  const port = Number(flag('port', 0));
+  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('--port must be 0-65535.');
+  const session = await startUiServer({ port, collect: () => collectUiSnapshot(config, trial) });
+  console.log(`Portabase UI (read-only) for ${config.projectRef}\n\n  ${session.url}\n\nListening on ${session.address.address}:${session.address.port} only. The page can reach this process and nothing else.\nThe #t= part is a one-launch session token; it never leaves your machine. Ctrl+C to stop.`);
+  if (!hasFlag('no-open')) openInBrowser(session.url);
+  await new Promise(resolveStop => process.once('SIGINT', resolveStop));
+  await session.close();
+}
+
 async function probeToken() {
   const token = process.env.SUPABASE_ACCESS_TOKEN;
   if (!token) return { ok: false, detail: 'SUPABASE_ACCESS_TOKEN is not set.' };
@@ -1832,6 +1933,8 @@ Commands:
   init                Create a non-secret configuration
   doctor              Test tools, credentials, destination, and live authorization
   plan                Show the capture and destination plan
+  ui                  Local read-only GUI: inventory, sizes, capsule checklist
+                      (127.0.0.1 only; --port N, --no-open, --trial)
   backup              Capture, encrypt, transfer, and verify a capsule
                       Default: full community capture (no license)
                       Add --trial for a deliberately limited demo sample
@@ -1951,6 +2054,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     if (command === 'init') await init();
     else if (command === 'doctor') await doctor();
     else if (command === 'plan') await plan();
+    else if (command === 'ui') await ui();
     else if (command === 'backup') await backup();
     else if (command === 'verify') await verify();
     else if (command === 'status') await status();

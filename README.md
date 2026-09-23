@@ -33,6 +33,7 @@ npm run dev
 npm run portabase -- init
 npm run portabase -- doctor
 npm run portabase -- plan
+npm run portabase -- ui              # local read-only GUI: inventory, sizes, capsule checklist
 npm run portabase -- backup
 npm run portabase -- backup --trial   # optional limited demo sample
 npm run portabase -- verify --capsule .\portabase-capsules\CAPSULE_NAME
