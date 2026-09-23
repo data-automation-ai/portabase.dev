@@ -274,7 +274,7 @@ export function ConnectSupabaseFlow({ demo = false, plan, toast }) {
               checked={incrementalBinary}
               onChange={(e) => setIncrementalBinary(e.target.checked)}
             />
-            <span>Incremental binary — reuse unchanged binary files already on the worker. Changed files are still fetched.</span>
+            <span>Differential binary — whole files only. A newer date stamp takes the entire file. An equal or older stamp keeps the copy already on the worker.</span>
           </label>
           <p className="pb-mono pb-sizer-flag" style={{ wordBreak: 'break-word' }}>{cliCommand}</p>
           <div className="pb-inline">

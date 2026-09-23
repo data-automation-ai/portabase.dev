@@ -750,6 +750,7 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
     downloaded: 0,
     incrementalBinary: hasFlag('incremental-binary') || config.capture?.incrementalBinary === true,
     incrementalReused: 0,
+    incrementalDifferential: 0,
     concurrency,
   };
   const inventory = { bucketCount: buckets.length, objectCount: 0, totalBytes: 0, buckets: [] };
@@ -895,7 +896,13 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
       prior,
       bytesAlreadyLocal: fromCache || skipped,
     });
-    if (!decision.fetch) skipped = true;
+    if (decision.reason === 'binary-differential') {
+      // Newer date stamp: discard any cached older copy and take the whole file.
+      skipped = false;
+      fromCache = false;
+    } else if (!decision.fetch) {
+      skipped = true;
+    }
     if (!skipped && !fromCache) {
       const objectPath = object.fullName.split('/').map(encodeURIComponent).join('/');
       let response = await sourceFetch(`/storage/v1/object/authenticated/${encodeURIComponent(bucket.id)}/${objectPath}`);
@@ -952,6 +959,7 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
         cacheHit: fromCache,
         downloaded: !skipped && !fromCache,
         incremental: decision.reason,
+        wholeFile: decision.wholeFile === true,
       },
     };
   });
@@ -976,6 +984,7 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
     else if (result.entry.resumed) manifest.skippedUnchanged += 1;
     else if (result.entry.downloaded) manifest.downloaded += 1;
     if (result.entry.incremental === 'binary-unchanged') manifest.incrementalReused += 1;
+    if (result.entry.incremental === 'binary-differential') manifest.incrementalDifferential += 1;
     manifest.objectCount += 1;
     manifest.totalBytes += result.entry.size;
   }
@@ -2694,10 +2703,10 @@ Commands:
                         Skip these Storage buckets entirely
                         Config: capture.excludeBuckets (array)
                       --incremental-binary
-                        Reuse unchanged binary Storage objects already on this
-                        runner (same size + etag or updatedAt). Other objects
-                        are still fetched. A missing local copy is fetched so
-                        the capsule stays restorable.
+                        Whole files only, never a partial file. A binary whose
+                        date stamp is greater than the prior copy is differential
+                        and the entire file is fetched. An equal or older stamp
+                        reuses the local whole file. Etag does not decide this.
                         Config: capture.incrementalBinary (boolean)
                         Cloud: POST /api/cloud/jobs { incrementalBinary: true }
                       Local Starter: add --allow-large-local to bypass ${LOCAL_STARTER_MAX_LABEL} cap

@@ -190,24 +190,32 @@ export function isBinaryStorageObject({ name = '', contentType = '' } = {}) {
   return BINARY_EXT.test(String(name || ''));
 }
 
+/** Milliseconds from an ISO date stamp or a numeric timestamp. Unparseable values are null. */
+export function fileDateStamp(value) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 /**
- * Same size, then etag when both sides have one.
- * updatedAt is the fallback only when an etag is missing. Size alone is not enough.
+ * Differential means the file's date stamp is strictly greater than the prior file.
+ * No prior stamp, or a stamp that cannot be read, is treated as differential:
+ * the whole file is taken rather than guessing from size or etag.
  */
-export function storageIdentityMatches(listing, prior) {
-  if (!listing || !prior) return false;
-  if (Number(listing.size) !== Number(prior.size)) return false;
-  if (listing.etag && prior.etag) return listing.etag === prior.etag;
-  if (listing.updatedAt && prior.updatedAt) return listing.updatedAt === prior.updatedAt;
-  return false;
+export function isDifferentialFile(listing, prior) {
+  if (!prior) return true;
+  const current = fileDateStamp(listing?.updatedAt);
+  const previous = fileDateStamp(prior?.updatedAt);
+  if (current == null || previous == null) return true;
+  return current > previous;
 }
 
 /**
  * `--incremental-binary` / API `incrementalBinary: true`.
- * Unchanged binary objects are not fetched again when their bytes are already
- * on this runner (cache or the file written earlier in this capture).
- * A cache miss still fetches — an incremental capsule must stay restorable.
- * Non-binaries and changed or new binaries always fetch.
+ * Whole files only. A newer date stamp is differential and the entire file is fetched.
+ * An equal or older stamp reuses the local whole file. Etag and size do not override the stamp.
+ * A missing local copy is still fetched in full so the capsule stays restorable.
  */
 export function shouldFetchStorageObject({
   incrementalBinary = false,
@@ -217,11 +225,12 @@ export function shouldFetchStorageObject({
   prior = null,
   bytesAlreadyLocal = false,
 } = {}) {
-  if (!incrementalBinary) return { fetch: true, reason: 'incremental-off' };
-  if (!isBinaryStorageObject({ name, contentType })) return { fetch: true, reason: 'not-binary' };
-  if (!storageIdentityMatches(listing, prior)) return { fetch: true, reason: 'binary-changed' };
-  if (bytesAlreadyLocal) return { fetch: false, reason: 'binary-unchanged' };
-  return { fetch: true, reason: 'binary-unchanged-cache-miss' };
+  const wholeFile = true;
+  if (!incrementalBinary) return { fetch: true, reason: 'incremental-off', wholeFile };
+  if (!isBinaryStorageObject({ name, contentType })) return { fetch: true, reason: 'not-binary', wholeFile };
+  if (isDifferentialFile(listing, prior)) return { fetch: true, reason: 'binary-differential', wholeFile };
+  if (bytesAlreadyLocal) return { fetch: false, reason: 'binary-unchanged', wholeFile };
+  return { fetch: true, reason: 'binary-unchanged-cache-miss', wholeFile };
 }
 
 /**
