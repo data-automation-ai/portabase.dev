@@ -51,9 +51,9 @@ Supabase OAuth app; server-side token custody. Customers run the generated comma
 
 - [ ] **S1 Engine flags** (Sonnet). Paths: `utility/portabase.mjs`, `utility/portabase-core.mjs`, new `tests/selection-flags.test.mjs`.
   Done when `npm test` passes and new tests prove the pg_dump argv and bucket filter.
-- [ ] **S2 `cloud-supabase` function** (Sonnet). Paths: `netlify/functions/cloud-supabase.mjs`, `netlify/shared/supabase-mgmt.mjs`, `netlify.toml` redirect, tests.
+- [x] **S2 `cloud-supabase` function** (Sonnet). Paths: `netlify/functions/cloud-supabase.mjs`, `netlify/shared/supabase-mgmt.mjs`, `netlify.toml` redirect, tests.
   Done when unit tests with a mocked `fetch` prove the projects/inventory mapping and that the token never appears in logs or responses.
-- [ ] **S3 `cloud-selection` function** (Sonnet). Paths: `netlify/functions/cloud-selection.mjs`, `netlify/shared/selection-store.mjs`, `netlify.toml`, tests.
+- [x] **S3 `cloud-selection` function** (Sonnet). Paths: `netlify/functions/cloud-selection.mjs`, `netlify/shared/selection-store.mjs`, `netlify.toml`, tests.
   Done when tests prove the validation (over cap, 2 projects on cloud-7, secret body → 400).
 - [ ] **S4 Dashboard UI** (Sonnet). Paths: `src/lib/cloud-api.js`, `src/console/connect-supabase.jsx` (new), `src/console/customer-dashboard.jsx`, `src/console/table-sizer.jsx`.
   Flow: token field (link to `https://supabase.com/dashboard/account/tokens`) → project list → inventory → TableSizer (real data) → Save → show the command:
