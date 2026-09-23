@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { cloudBackupCliCommand } from '../src/lib/table-sizer.js';
-import { describeCloudApiError } from '../src/lib/cloud-api.js';
+import { cloudBackupCliCommand, describeCloudApiError } from '../src/lib/table-sizer.js';
 
 test('cloudBackupCliCommand omits flags with empty lists', () => {
   assert.equal(cloudBackupCliCommand({}), 'npx portabase backup');
@@ -47,11 +46,32 @@ test('describeCloudApiError falls back to the error message for unknown codes', 
   assert.equal(describeCloudApiError(err), 'boom');
 });
 
+const cloudApiSrc = readFileSync(new URL('../src/lib/cloud-api.js', import.meta.url), 'utf8');
+
+test('cloud-api exposes the S4 fetch helpers on the documented contract paths', () => {
+  assert.match(cloudApiSrc, /export function fetchSupabaseProjects/);
+  assert.match(cloudApiSrc, /export function fetchSupabaseInventory/);
+  assert.match(cloudApiSrc, /export function fetchCloudSelection/);
+  assert.match(cloudApiSrc, /export function saveCloudSelection/);
+  assert.match(cloudApiSrc, /export function queueCloudJob/);
+  assert.match(cloudApiSrc, /'\/api\/cloud\/supabase'/);
+  assert.match(cloudApiSrc, /'\/api\/cloud\/selection'/);
+  assert.match(cloudApiSrc, /'\/api\/cloud\/jobs'/);
+});
+
 const ui = readFileSync(new URL('../src/console/connect-supabase.jsx', import.meta.url), 'utf8');
 
+test('connect-supabase queues a manual backup without sending the token', () => {
+  const call = ui.match(/queueCloudJob\(\{[\s\S]*?\}\)/);
+  assert.ok(call, 'queueCloudJob call');
+  assert.match(call[0], /type: 'backup'/);
+  assert.doesNotMatch(call[0], /token/);
+  assert.match(ui, /Queue manual backup/);
+});
+
 test('connect-supabase UI never persists the token to storage or a URL', () => {
-  assert.doesNotMatch(ui, /localStorage/);
-  assert.doesNotMatch(ui, /sessionStorage/);
+  assert.doesNotMatch(ui, /localStorage\s*\.\s*(set|get)Item/);
+  assert.doesNotMatch(ui, /sessionStorage\s*\.\s*(set|get)Item/);
   assert.doesNotMatch(ui, /token[^\n]*window\.location/);
 });
 

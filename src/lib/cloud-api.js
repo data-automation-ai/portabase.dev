@@ -66,21 +66,6 @@ export function requestSelfRefund(version) {
   return api('/api/cloud/self-refund', { method: 'POST', body: {}, version });
 }
 
-/**
- * Plain-language message for a cloud-api error, keyed off the safe error
- * code the function returns (never the raw token or a stack trace).
- */
-export function describeCloudApiError(err) {
-  const code = err?.data?.error || err?.code || '';
-  const status = err?.status;
-  if (code === 'token_rejected') return "That token didn't work — make sure you copied all of it.";
-  if (code === 'rate_limited') return 'Supabase is rate-limiting this token right now. Wait a minute and try again.';
-  if (code === 'project_not_found') return 'That project could not be found — it may have been deleted, or the token cannot see it.';
-  if (status === 401 || code === 'unauthorized') return 'Your session expired — sign in again.';
-  if (!status) return 'Network error — check your connection and try again.';
-  return err?.message || 'Something went wrong. Try again.';
-}
-
 /** List the caller's Supabase projects for a pasted Personal Access Token. Token is sent in-request only. */
 export function fetchSupabaseProjects(token, version) {
   return api('/api/cloud/supabase', { method: 'POST', body: { action: 'projects', token }, version });
@@ -99,4 +84,16 @@ export function fetchCloudSelection(version) {
 /** Save the capsule selection (tables/buckets to include, estimate, plan). */
 export function saveCloudSelection(selection, version) {
   return api('/api/cloud/selection', { method: 'PUT', body: selection, version });
+}
+
+/**
+ * Queue a manual backup/verify/replay intent. The body is labels only —
+ * project ref, destination kind, exclude lists. The worker pulls it.
+ */
+export function queueCloudJob(body, version) {
+  return api('/api/cloud/jobs', { method: 'POST', body, version });
+}
+
+export function fetchCloudJobs(version) {
+  return api('/api/cloud/jobs', { version });
 }

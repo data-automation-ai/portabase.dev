@@ -3,15 +3,16 @@ import { Icon } from './icons.jsx';
 import { formatHumanSize } from '../lib/human-size.js';
 import {
   cloudBackupCliCommand,
+  describeCloudApiError,
   normalizeSizeInventory,
   sampleSizeInventory,
   summarizeSelection,
 } from '../lib/table-sizer.js';
 import {
-  describeCloudApiError,
   fetchCloudSelection,
   fetchSupabaseInventory,
   fetchSupabaseProjects,
+  queueCloudJob,
   saveCloudSelection,
 } from '../lib/cloud-api.js';
 import { TableSizer } from './table-sizer.jsx';
@@ -83,7 +84,8 @@ export function ConnectSupabaseFlow({ demo = false, plan, toast }) {
   const [excludeBinaries, setExcludeBinaries] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [saved, setSaved] = useState(null); // { projectName, estimateBytes, capBytes, projectRef }
+  const [saved, setSaved] = useState(null);
+  const [queuedJob, setQueuedJob] = useState(null); // { projectName, estimateBytes, capBytes, projectRef }
   const [savedLoading, setSavedLoading] = useState(!demo);
   const tokenRef = useRef('');
   tokenRef.current = token;
@@ -162,8 +164,8 @@ export function ConnectSupabaseFlow({ demo = false, plan, toast }) {
   const summary = inventory ? summarizeSelection(inventory, selection) : null;
   const overCap = Boolean(summary && capBytes && summary.includedBytes > capBytes);
   const cliCommand = cloudBackupCliCommand({
-    excludeTables: summary?.omittedTables?.map((row) => row.key) || [],
-    excludeBuckets: summary?.omittedBuckets?.map((row) => row.key) || [],
+    excludeTables: summary?.omittedTables?.map((row) => row.key) || saved?.excludeTables || [],
+    excludeBuckets: summary?.omittedBuckets?.map((row) => row.key) || saved?.excludeBuckets || [],
   });
 
   const save = async () => {
@@ -183,6 +185,7 @@ export function ConnectSupabaseFlow({ demo = false, plan, toast }) {
     };
     try {
       if (demo) {
+        setQueuedJob(null);
         setSaved(payload);
         toast?.('Saved (demo — not sent to the server)', 'ok');
       } else {
@@ -191,6 +194,27 @@ export function ConnectSupabaseFlow({ demo = false, plan, toast }) {
         toast?.('Selection saved', 'ok');
       }
       setStep('saved');
+    } catch (err) {
+      setError(describeCloudApiError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const queueManual = async () => {
+    if (!saved?.projectRef || demo) return;
+    setError('');
+    setLoading(true);
+    try {
+      const data = await queueCloudJob({
+        type: 'backup',
+        projectRef: saved.projectRef,
+        excludeTables: saved.excludeTables || [],
+        excludeBuckets: saved.excludeBuckets || [],
+        note: 'manual',
+      });
+      setQueuedJob(data?.job || null);
+      toast?.('Manual backup queued. Start your worker to run it.', 'ok');
     } catch (err) {
       setError(describeCloudApiError(err));
     } finally {
@@ -235,7 +259,35 @@ export function ConnectSupabaseFlow({ demo = false, plan, toast }) {
             Saved selection: <strong>{saved.projectName || saved.projectRef}</strong>,{' '}
             {formatHumanSize(saved.estimateBytes)} of {formatHumanSize(saved.capBytes || capBytes) || capLabel}.
           </p>
-          <button type="button" className="pb-btn pb-btn-primary" onClick={startOver}>Edit</button>
+          <p className="pb-muted">
+            Queue a manual backup, then run the worker on a machine that already has this project's
+            config and passphrase. The job carries the project ref and what to skip — not your keys,
+            and not the capsule. The capsule lands in the vault that worker is already configured to use.
+            This page does not start a Portabase server, and Cloud Free has no schedule.
+          </p>
+          <p className="pb-mono pb-sizer-flag" style={{ wordBreak: 'break-word' }}>{cliCommand}</p>
+          <div className="pb-inline">
+            <button type="button" className="pb-btn pb-btn-sm" onClick={() => copyText(cliCommand, toast)}>
+              <Icon name="copy" size={14} /> Copy CLI
+            </button>
+            <button
+              type="button"
+              className="pb-btn pb-btn-primary"
+              disabled={loading || demo}
+              onClick={queueManual}
+            >
+              {loading ? 'Queuing…' : 'Queue manual backup'}
+            </button>
+            <button type="button" className="pb-btn" onClick={startOver}>Edit</button>
+          </div>
+          {queuedJob && (
+            <p role="status">
+              Queued <span className="pb-mono">{queuedJob.id}</span> · {queuedJob.status}.
+              On the worker: <span className="pb-mono">node cloud/runner/worker.mjs</span> with{' '}
+              <span className="pb-mono">PORTABASE_CLOUD_URL</span> and{' '}
+              <span className="pb-mono">PORTABASE_CLOUD_TOKEN</span> set in that environment.
+            </p>
+          )}
         </div>
       </div>
     );

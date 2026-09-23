@@ -249,6 +249,23 @@ export function planFit(estimatedBytes, planId = 'cloud-free') {
 }
 
 /**
+ * Plain-language message for a `/api/cloud/*` error, keyed off the safe error
+ * code the function returns (never the raw token or a stack trace). Kept as a
+ * pure function (no fetch/session import) so it stays unit-testable in plain Node.
+ */
+export function describeCloudApiError(err) {
+  const code = err?.data?.error || err?.code || '';
+  const status = err?.status;
+  if (code === 'transfer_rate_limited') return err?.data?.message || 'That plan has used its manual capsule for the last 24 hours.';
+  if (code === 'token_rejected') return "That token didn't work — make sure you copied all of it.";
+  if (code === 'rate_limited') return 'Supabase is rate-limiting this token right now. Wait a minute and try again.';
+  if (code === 'project_not_found') return 'That project could not be found — it may have been deleted, or the token cannot see it.';
+  if (status === 401 || code === 'unauthorized') return 'Your session expired — sign in again.';
+  if (!status) return 'Network error — check your connection and try again.';
+  return err?.message || 'Something went wrong. Try again.';
+}
+
+/**
  * Cloud-7 connect flow: the exact CLI command that reproduces a saved selection.
  * Omits a flag entirely when its list is empty.
  */

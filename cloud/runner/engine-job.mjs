@@ -14,10 +14,12 @@ export const FREE_ENGINE_COMMANDS = Object.freeze([
   'status',
 ]);
 
-/** Existing capture/restore flags only. */
+/** Flags the free CLI already accepts. No new capture behavior. */
 export const EXISTING_ENGINE_FLAGS = Object.freeze({
   excludeBinaries: '--exclude-binaries',
   excludeTableList: '--exclude-table-list',
+  excludeTableData: '--exclude-table-data',
+  excludeBuckets: '--exclude-buckets',
   trial: '--trial',
   decrypt: '--decrypt',
   confirmTarget: '--confirm-target',
@@ -27,6 +29,8 @@ export function buildFreeEngineArgv({
   command = 'doctor',
   excludeBinaries = false,
   excludeTableList = '',
+  excludeTableData = '',
+  excludeBuckets = '',
   trial = false,
   decrypt = false,
   confirmTarget = '',
@@ -42,6 +46,12 @@ export function buildFreeEngineArgv({
   if (excludeBinaries && cmd === 'backup') argv.push(EXISTING_ENGINE_FLAGS.excludeBinaries);
   if (excludeTableList && (cmd === 'backup' || cmd === 'doctor')) {
     argv.push(EXISTING_ENGINE_FLAGS.excludeTableList, String(excludeTableList));
+  }
+  if (excludeTableData && (cmd === 'backup' || cmd === 'doctor')) {
+    argv.push(EXISTING_ENGINE_FLAGS.excludeTableData, String(excludeTableData));
+  }
+  if (excludeBuckets && (cmd === 'backup' || cmd === 'doctor')) {
+    argv.push(EXISTING_ENGINE_FLAGS.excludeBuckets, String(excludeBuckets));
   }
   if (trial && cmd === 'backup') argv.push(EXISTING_ENGINE_FLAGS.trial);
   if (decrypt && cmd === 'verify') argv.push(EXISTING_ENGINE_FLAGS.decrypt);
