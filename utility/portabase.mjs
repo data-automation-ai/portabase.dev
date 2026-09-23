@@ -37,6 +37,11 @@ import {
   DATA_SCHEMA_EXCLUDES,
   DATA_TABLE_EXCLUDES,
   PLATFORM_SCHEMA_EXCLUDES,
+  parseSelectionList,
+  validateExcludeTableData,
+  validateExcludeBuckets,
+  buildExcludeTableDataArgs,
+  filterExcludedBuckets,
   generateFunctionRedeployScripts,
   PINNED_SUPABASE_CLI,
   schemaExcludePattern,
@@ -102,6 +107,13 @@ function flag(name, fallback) {
 
 function hasFlag(name) {
   return argv.includes(`--${name}`);
+}
+
+/** `--<name> a,b` (CLI) wins over `config.capture.<configKey>` (array) when both are given. */
+function resolveSelectionOption(name, configValue) {
+  const raw = flag(name);
+  if (raw != null) return parseSelectionList(raw);
+  return parseSelectionList(configValue);
 }
 
 function progress(event) {
@@ -342,13 +354,13 @@ async function touchAgentRegistry(config, event = {}) {
   } catch { /* non-fatal */ }
 }
 
-async function captureDatabase(rawDir, limits = null) {
+async function captureDatabase(rawDir, limits = null, excludeTables = []) {
   const dbUrl = process.env.SUPABASE_DB_URL;
   if (!dbUrl) throw new Error('SUPABASE_DB_URL is missing.');
   const dbDir = join(rawDir, 'database');
   await mkdir(dbDir, { recursive: true });
   if (resolveTool('pg_dump') && resolveTool('pg_dumpall')) {
-    return captureDatabaseNative(dbUrl, dbDir, limits);
+    return captureDatabaseNative(dbUrl, dbDir, limits, excludeTables);
   }
   const supabase = resolveTool('supabase');
   if (!supabase) throw new Error('Install PostgreSQL client tools or the Supabase CLI for database capture.');
@@ -356,7 +368,7 @@ async function captureDatabase(rawDir, limits = null) {
   const common = ['db', 'dump', '--db-url', dbUrl];
   await run(supabase, [...common, '--file', join(dbDir, 'roles.sql'), '--role-only']);
   await run(supabase, [...common, '--file', join(dbDir, 'schema.sql')]);
-  if (!limits?.databaseSchemaOnly) await run(supabase, [...common, '--file', join(dbDir, 'data.sql'), '--use-copy', '--data-only']);
+  if (!limits?.databaseSchemaOnly) await run(supabase, [...common, '--file', join(dbDir, 'data.sql'), '--use-copy', '--data-only', ...buildExcludeTableDataArgs(excludeTables)]);
   const files = limits?.databaseSchemaOnly ? ['roles.sql', 'schema.sql'] : ['roles.sql', 'schema.sql', 'data.sql'];
   const inventory = resolveTool('psql') ? await captureDatabaseInventory(dbUrl, join(dbDir, 'database-inventory.json'), { estimateRows: Boolean(limits) }) : null;
   const schemaOnly = Boolean(limits?.databaseSchemaOnly);
@@ -620,7 +632,7 @@ function cleanRoleLine(line) {
   return line.startsWith('-- ') ? null : line;
 }
 
-async function captureDatabaseNative(dbUrl, dbDir, limits = null) {
+async function captureDatabaseNative(dbUrl, dbDir, limits = null, excludeTables = []) {
   const env = postgresEnvironment(dbUrl);
   const pgDump = resolveTool('pg_dump');
   const pgDumpAll = resolveTool('pg_dumpall');
@@ -637,7 +649,7 @@ async function captureDatabaseNative(dbUrl, dbDir, limits = null) {
     await transformSql(rawSchema, join(dbDir, 'schema.sql'), cleanSchemaLine);
     if (!limits?.databaseSchemaOnly) {
       progress({ phase: 'database', item: 'table rows' });
-      await runDumpToFile(pgDump, ['--data-only', '--quote-all-identifiers', '--role', 'postgres', '--exclude-schema', DATA_EXCLUDES, ...DATA_TABLE_EXCLUDES.flatMap(table => ['--exclude-table', table]), '--schema', '*'], rawData, { env });
+      await runDumpToFile(pgDump, ['--data-only', '--quote-all-identifiers', '--role', 'postgres', '--exclude-schema', DATA_EXCLUDES, ...DATA_TABLE_EXCLUDES.flatMap(table => ['--exclude-table', table]), ...buildExcludeTableDataArgs(excludeTables), '--schema', '*'], rawData, { env });
       await transformSql(rawData, join(dbDir, 'data.sql'), line => /^\\(un)?restrict /.test(line) ? `-- ${line}` : line, 'SET session_replication_role = replica;\n', 'RESET ALL;\n');
     }
   } finally {
@@ -715,12 +727,16 @@ async function loadPriorStorageIndex(config) {
   }
 }
 
-async function captureStorage(rawDir, limits = null, config = {}) {
+async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets = []) {
   const storageDir = join(rawDir, 'storage');
   const cacheRoot = resolve(config.backupDirectory || './portabase-capsules', '.storage-object-cache');
   await mkdir(storageDir, { recursive: true });
   await mkdir(cacheRoot, { recursive: true });
-  const buckets = await (await checkedSourceFetch('/storage/v1/bucket')).json();
+  const allBuckets = await (await checkedSourceFetch('/storage/v1/bucket')).json();
+  const buckets = filterExcludedBuckets(allBuckets, excludeBuckets);
+  if (excludeBuckets.length) {
+    console.log(`Storage selection: excluding ${excludeBuckets.length} bucket(s) → ${excludeBuckets.join(', ')}`);
+  }
   const concurrency = resolveStorageConcurrency(config);
   const manifest = {
     capturedAt: new Date().toISOString(),
@@ -1417,6 +1433,12 @@ async function backup() {
     : firstPerBucket
       ? FIRST_PER_BUCKET_STORAGE
       : null;
+  const excludeTables = validateExcludeTableData(
+    resolveSelectionOption('exclude-table-data', config.capture?.excludeTableData),
+  );
+  const excludeBuckets = validateExcludeBuckets(
+    resolveSelectionOption('exclude-buckets', config.capture?.excludeBuckets),
+  );
   const passphraseEnv = config.encryption?.passphraseEnv || 'PORTABASE_ENCRYPTION_PASSPHRASE';
   const passphrase = process.env[passphraseEnv];
   if (!passphrase || passphrase.length < 16) throw new Error(`${passphraseEnv} must contain at least 16 characters.`);
@@ -1446,11 +1468,12 @@ async function backup() {
     status: 'RUNNING',
     contents: {},
     errors: [],
+    selection: { excludeTables, excludeBuckets },
   };
   try {
     for (const [name, enabled, capture] of [
-      ['database', config.capture?.database !== false, () => captureDatabase(rawDir, limits)],
-      ['storage', config.capture?.storage !== false, () => captureStorage(rawDir, limits, config)],
+      ['database', config.capture?.database !== false, () => captureDatabase(rawDir, limits, excludeTables)],
+      ['storage', config.capture?.storage !== false, () => captureStorage(rawDir, limits, config, excludeBuckets)],
       ['functions', config.capture?.functions !== false, () => captureFunctions(config, rawDir, limits)],
       ['auth', config.capture?.auth !== false, () => captureAuth(config, rawDir)],
     ]) {
@@ -1527,6 +1550,7 @@ async function backup() {
       status: manifest.status,
       contents: manifest.contents,
       errors: manifest.errors,
+      selection: manifest.selection,
       encryption,
       durationMs: Date.now() - startedAt,
     };
@@ -2649,6 +2673,12 @@ Commands:
                       Add --trial for a deliberately limited demo sample
                       Add --storage-first-per-bucket for full DB/Functions/Auth
                         but only the first Storage object in each bucket
+                      --exclude-table-data schema.t1,schema.t2
+                        Skip row data for these tables (schema DDL still dumped)
+                        Config: capture.excludeTableData (array)
+                      --exclude-buckets b1,b2
+                        Skip these Storage buckets entirely
+                        Config: capture.excludeBuckets (array)
                       Local Starter: add --allow-large-local to bypass ${LOCAL_STARTER_MAX_LABEL} cap
   verify              Verify checksums; add --decrypt for authenticated decryption
                       --report-drift   opt-in MD5 / row-count / RBAC drift report

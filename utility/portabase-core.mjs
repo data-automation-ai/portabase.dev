@@ -392,6 +392,56 @@ export const DATA_SCHEMA_EXCLUDES = Object.freeze([
 /** Individual platform tables excluded from data.sql even though their schema's data is kept. */
 export const DATA_TABLE_EXCLUDES = Object.freeze(['auth.schema_migrations', 'storage.migrations', 'supabase_functions.migrations']);
 
+/**
+ * Selection (Cloud $7): customer-chosen tables/buckets to skip. Table entries must be exactly
+ * `schema.table` (quoted-safe identifiers only) so they can never inject extra pg_dump argv or SQL.
+ */
+export const EXCLUDE_TABLE_DATA_PATTERN = /^[A-Za-z_][A-Za-z0-9_$]*\.[A-Za-z_][A-Za-z0-9_$]*$/;
+export const EXCLUDE_BUCKET_ID_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
+
+/** Parses a CSV flag value (or passes through an array/config list) into trimmed, non-empty entries. */
+export function parseSelectionList(value) {
+  if (value == null) return [];
+  if (Array.isArray(value)) return value.map(entry => String(entry).trim()).filter(Boolean);
+  return String(value).split(',').map(entry => entry.trim()).filter(Boolean);
+}
+
+/** Validates `--exclude-table-data` / `capture.excludeTableData` entries. Throws on any invalid entry. */
+export function validateExcludeTableData(value) {
+  const entries = parseSelectionList(value);
+  const invalid = entries.filter(entry => !EXCLUDE_TABLE_DATA_PATTERN.test(entry));
+  if (invalid.length) {
+    throw new Error(
+      `--exclude-table-data entries must look like schema.table (letters, digits, _, $; no quotes or punctuation): ${invalid.join(', ')}`,
+    );
+  }
+  return entries;
+}
+
+/** Validates `--exclude-buckets` / `capture.excludeBuckets` entries. Throws on any invalid entry. */
+export function validateExcludeBuckets(value) {
+  const entries = parseSelectionList(value);
+  const invalid = entries.filter(entry => !EXCLUDE_BUCKET_ID_PATTERN.test(entry));
+  if (invalid.length) {
+    throw new Error(
+      `--exclude-buckets entries must be 1-100 chars of letters, digits, '.', '_', '-': ${invalid.join(', ')}`,
+    );
+  }
+  return entries;
+}
+
+/** Builds the pg_dump argv fragment that skips row data (but not DDL) for the given schema.table entries. */
+export function buildExcludeTableDataArgs(excludeTables = []) {
+  return excludeTables.map(table => `--exclude-table-data=${table}`);
+}
+
+/** Filters a Storage bucket list (each needing an `id`) down to the ones NOT in excludeBucketIds. */
+export function filterExcludedBuckets(buckets = [], excludeBucketIds = []) {
+  if (!excludeBucketIds.length) return buckets;
+  const excluded = new Set(excludeBucketIds);
+  return buckets.filter(bucket => !excluded.has(bucket?.id));
+}
+
 export function providerCommand(config, capsuleDir) {
   const provider = config.provider || {};
   const prefix = String(provider.prefix || '').replace(/^\/+|\/+$/g, '');
