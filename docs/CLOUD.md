@@ -9,7 +9,7 @@ Say **open source**, not OSS.
 | Free CLI | Cloud adds |
 | --- | --- |
 | `portabase doctor` / `backup` / `verify` / `restore` / `replay` | Same commands, invoked on a managed runner |
-| `--exclude-binaries`, `--exclude-table-list` (existing flags only) | Same flags — **no new free-CLI capture features** |
+| `--exclude-binaries` (referenced, not implemented in `utility/portabase.mjs`) | New flags: `--exclude-table-data` / `--exclude-buckets`. Brings selection to the free CLI. |
 | Encrypted capsule to S3 / Dropbox / local | Guided destinations; vault still customer-owned |
 | You run it on a machine you control | Per-subscriber **sleeping container** until a transfer starts |
 
@@ -34,7 +34,7 @@ Paid Square plans ($7 / $17) add schedules and higher caps. **$7** is one databa
 
 The Cloud dashboard / job setup wizard shows per-table sizes and per-bucket sizes / object counts from the free engine **doctor / size inventory** (already produced by `portabase doctor` and capture). You selectively **include or exclude** tables and Storage buckets so the capsule fits Cloud Free 100 MB / $7 10 GB / $17 25 GB.
 
-- Table omit uses existing `--exclude-table-list`. `--exclude-binaries` remains available. **No new CLI capture flags.**
+- Table and bucket omit maps to new engine flags: `--exclude-table-data schema.table,...` (keeps table structure, skips rows) and `--exclude-buckets id,...`. Selection exports as an exact command/config.
 - Omitted tables and buckets are called out as **NOT COVERED**.
 - The sizer recommends the smallest public cap that fits (Cloud Free 100 MB / $7 10 GB / $17 25 GB) and can omit largest items to fit the selected plan. Unmeasured sizes stay loud — Cloud does not invent bytes.
 - Control plane may store the include list, size estimates, and job metadata / hashes. Keys stay sealed to the runner. Never row bodies.
@@ -82,6 +82,8 @@ Honest limit: Cloud isolation is **designed**, not claimed proven-green. Checks 
 | Telemetry allowlist + SMS status-only builder | Twilio delivery in production |
 | GitHub / Google / email / magic-link sign-in wiring | Provider enablement in Supabase Auth (Louis) |
 | SMS toggle UI (status-only) | Twilio send path + Square customer portal |
+| Live table/bucket inventory via Supabase PAT (in-request, not stored) (implemented) | Live probe with real PAT |
+| Managed runner executes saved selection on schedule (scaffolded) | Poll→spawn loop implementation |
 
 ## Square LIVE vs TEST
 
@@ -113,7 +115,7 @@ Route: **`/dashboard`** (also `/app` lands here). Demo: **`/dashboard?demo=1`** 
 | **Table sizer** | Per-table and per-bucket sizes from doctor / size inventory. Selective include. Loud NOT COVERED when omitted |
 | **Capsule sizes** | Per job: total + DB / Storage / Functions when hashes/counts exist |
 | **Backup log** | Chronological capture/restore with status, times, size, MATCH / red lamp, detail links |
-| **Utilities** | Doctor preflight, verify result, `--exclude-binaries` / `--exclude-table-list` (and `--force-orphan-fks` only if the runner reported it), customer-owned destination hints, schedule toggles, SMS opt-in on $17 |
+| **Utilities** | Doctor preflight, verify result, `--exclude-binaries` / `--exclude-table-data` / `--exclude-buckets` (and `--force-orphan-fks` only if the runner reported it), customer-owned destination hints, schedule toggles, SMS opt-in on $17 |
 
 View-model: `src/lib/dashboard-view.js`. API: `GET /api/cloud/dashboard` (Bearer). Empty signed-in workspaces do **not** seed fake jobs.
 

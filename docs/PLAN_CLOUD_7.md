@@ -59,7 +59,7 @@ Supabase OAuth app; server-side token custody. Customers run the generated comma
   Flow: token field (link to `https://supabase.com/dashboard/account/tokens`) → project list → inventory → TableSizer (real data) → Save → show the command:
   `portabase backup --exclude-table-data … --exclude-buckets …`. Token held in React state only.
   Done when `npm run build` passes and `?demo=1` renders the flow.
-- [ ] **S5 Docs/status** (Haiku). Fix `docs/CLOUD.md:35` (the claimed `--exclude-table-list` flag). Add `PROJECT_STATUS.md` rows for each capability with its honest state.
+- [x] **S5 Docs/status** (Haiku). Fix `docs/CLOUD.md:35` (the claimed `--exclude-table-list` flag). Add `PROJECT_STATUS.md` rows for each capability with its honest state.
 - [ ] **S6 Break it** (Sonnet). Adversarial review of S1–S4: token leakage, cap bypass, SQL injection via ref/bucket names, a backup that silently includes excluded data.
   Fix confirmed findings.
 - [ ] **S7 Verify + integrate.** `npm test`, `npm run build`, then a live probe of the functions (`netlify dev` or a deploy preview) with a real PAT if available.
