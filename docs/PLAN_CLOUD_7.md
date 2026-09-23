@@ -49,7 +49,7 @@ Supabase OAuth app; server-side token custody. Customers run the generated comma
 
 ## Steps
 
-- [ ] **S1 Engine flags** (Sonnet). Paths: `utility/portabase.mjs`, `utility/portabase-core.mjs`, new `tests/selection-flags.test.mjs`.
+- [x] **S1 Engine flags** (Sonnet). Paths: `utility/portabase.mjs`, `utility/portabase-core.mjs`, new `tests/selection-flags.test.mjs`.
   Done when `npm test` passes and new tests prove the pg_dump argv and bucket filter.
 - [x] **S2 `cloud-supabase` function** (Sonnet). Paths: `netlify/functions/cloud-supabase.mjs`, `netlify/shared/supabase-mgmt.mjs`, `netlify.toml` redirect, tests.
   Done when unit tests with a mocked `fetch` prove the projects/inventory mapping and that the token never appears in logs or responses.
@@ -69,3 +69,4 @@ Supabase OAuth app; server-side token custody. Customers run the generated comma
 
 - 2026-09-23: plan written; code map complete (sizer UI + pure functions exist; no live inventory, no saved selection, no engine flags, runner idle).
 - 2026-09-23: netlify.toml redirects for /api/cloud/supabase and /api/cloud/selection added; S1–S5 workers launched in parallel on disjoint paths.
+- 2026-09-23: S1, S2, S3, S5 committed (219291c, 330a1eb, 8b18f50). S4 WIP checkpoint d0735b5 (unverified). Session interrupted; see docs/HANDOFF_CLOUD_7.md. Next: finish S4, then S6, S7.
