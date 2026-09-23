@@ -179,6 +179,51 @@ export function shouldSkipStorageDownload(localStat, listingIdentity, previousRe
   return false;
 }
 
+const BINARY_MIME = /^(image|audio|video|font)\//i;
+const BINARY_MIME_EXACT = /^application\/(octet-stream|pdf|zip|gzip|wasm|x-tar|x-|vnd\.)/i;
+const BINARY_EXT = /\.(bin|jpg|jpeg|png|gif|webp|avif|mp4|mov|webm|mp3|wav|zip|gz|tgz|pdf|wasm|woff2?|ttf|otf|ico|dmg|exe|iso)$/i;
+
+/** Storage object whose body is a binary blob rather than text, SQL, or JSON. */
+export function isBinaryStorageObject({ name = '', contentType = '' } = {}) {
+  const type = String(contentType || '').split(';')[0].trim().toLowerCase();
+  if (type && (BINARY_MIME.test(type) || BINARY_MIME_EXACT.test(type))) return true;
+  return BINARY_EXT.test(String(name || ''));
+}
+
+/**
+ * Same size, then etag when both sides have one.
+ * updatedAt is the fallback only when an etag is missing. Size alone is not enough.
+ */
+export function storageIdentityMatches(listing, prior) {
+  if (!listing || !prior) return false;
+  if (Number(listing.size) !== Number(prior.size)) return false;
+  if (listing.etag && prior.etag) return listing.etag === prior.etag;
+  if (listing.updatedAt && prior.updatedAt) return listing.updatedAt === prior.updatedAt;
+  return false;
+}
+
+/**
+ * `--incremental-binary` / API `incrementalBinary: true`.
+ * Unchanged binary objects are not fetched again when their bytes are already
+ * on this runner (cache or the file written earlier in this capture).
+ * A cache miss still fetches — an incremental capsule must stay restorable.
+ * Non-binaries and changed or new binaries always fetch.
+ */
+export function shouldFetchStorageObject({
+  incrementalBinary = false,
+  name = '',
+  contentType = '',
+  listing = null,
+  prior = null,
+  bytesAlreadyLocal = false,
+} = {}) {
+  if (!incrementalBinary) return { fetch: true, reason: 'incremental-off' };
+  if (!isBinaryStorageObject({ name, contentType })) return { fetch: true, reason: 'not-binary' };
+  if (!storageIdentityMatches(listing, prior)) return { fetch: true, reason: 'binary-changed' };
+  if (bytesAlreadyLocal) return { fetch: false, reason: 'binary-unchanged' };
+  return { fetch: true, reason: 'binary-unchanged-cache-miss' };
+}
+
 /**
  * Generate human redeploy scripts for Edge Functions (ported from supabase-backup patterns).
  * @param {Array<{ name: string, verifyJwt?: boolean }>} functions

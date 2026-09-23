@@ -23,4 +23,5 @@ Status vocabulary: scaffolded / implemented / deployed / verified / complete. No
 | Engine honors selection (--exclude-table-data / --exclude-buckets) | implemented, unit-tested | utility/portabase.mjs, tests/selection-flags.test.mjs | real backup against a test project |
 | Managed runner runs saved selection on schedule (1/24h) | scaffolded | cloud/runner/boot.mjs still idles. No scheduler. | Not this slice. Paid schedule is still unbuilt. |
 | Manual backup intent + customer worker pull | implemented, not live-verified | netlify/functions/cloud-jobs.mjs claim/finish; cloud/runner/worker.mjs; Connect Supabase "Queue manual backup" | Deploy this branch, sign in, queue one job, run the worker against a real project |
+| Incremental binary option | implemented, not live-verified | POST /api/cloud/jobs `incrementalBinary: true` → worker `--incremental-binary`. Unchanged local binaries are not fetched again; a cache miss still fetches. | A second backup of a project that already has binary objects on the worker |
 | Deployed to production (deploy-live) | NOT deployed | branch agent-checkpoints/grok/site-objective is local until pushed | user push + merge approval |

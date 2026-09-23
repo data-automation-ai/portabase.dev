@@ -15,6 +15,12 @@ test('a queued backup becomes the free-engine argv and nothing else', () => {
     '--exclude-buckets', 'avatars',
   ]);
   assert.equal(JSON.stringify(argv).includes('postgres'), false);
+  const incremental = engineArgvForJob({
+    type: 'backup',
+    payload: { projectRef: REF, excludeTables: [], excludeBuckets: [], incrementalBinary: true },
+  });
+  assert.ok(incremental.includes('--incremental-binary'));
+  assert.equal(engineArgvForJob({ type: 'backup', payload: { incrementalBinary: false } }).includes('--incremental-binary'), false);
 });
 
 test('pullOnce claims, runs, and finishes without putting the token in the body', async () => {

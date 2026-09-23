@@ -46,6 +46,7 @@ import {
   PINNED_SUPABASE_CLI,
   schemaExcludePattern,
   shouldSkipStorageDownload,
+  shouldFetchStorageObject,
   storageCacheKey,
   storageObjectIdentity,
   supabaseHeaders,
@@ -747,6 +748,8 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
     skippedUnchanged: 0,
     cacheHits: 0,
     downloaded: 0,
+    incrementalBinary: hasFlag('incremental-binary') || config.capture?.incrementalBinary === true,
+    incrementalReused: 0,
     concurrency,
   };
   const inventory = { bucketCount: buckets.length, objectCount: 0, totalBytes: 0, buckets: [] };
@@ -884,6 +887,15 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
         }
       } catch { /* re-download */ }
     }
+    const decision = shouldFetchStorageObject({
+      incrementalBinary: manifest.incrementalBinary,
+      name: object.fullName,
+      contentType: identity.contentType,
+      listing: identity,
+      prior,
+      bytesAlreadyLocal: fromCache || skipped,
+    });
+    if (!decision.fetch) skipped = true;
     if (!skipped && !fromCache) {
       const objectPath = object.fullName.split('/').map(encodeURIComponent).join('/');
       let response = await sourceFetch(`/storage/v1/object/authenticated/${encodeURIComponent(bucket.id)}/${objectPath}`);
@@ -939,6 +951,7 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
         resumed: skipped || fromCache,
         cacheHit: fromCache,
         downloaded: !skipped && !fromCache,
+        incremental: decision.reason,
       },
     };
   });
@@ -962,6 +975,7 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
     if (result.entry.cacheHit) manifest.cacheHits += 1;
     else if (result.entry.resumed) manifest.skippedUnchanged += 1;
     else if (result.entry.downloaded) manifest.downloaded += 1;
+    if (result.entry.incremental === 'binary-unchanged') manifest.incrementalReused += 1;
     manifest.objectCount += 1;
     manifest.totalBytes += result.entry.size;
   }
@@ -2679,6 +2693,13 @@ Commands:
                       --exclude-buckets b1,b2
                         Skip these Storage buckets entirely
                         Config: capture.excludeBuckets (array)
+                      --incremental-binary
+                        Reuse unchanged binary Storage objects already on this
+                        runner (same size + etag or updatedAt). Other objects
+                        are still fetched. A missing local copy is fetched so
+                        the capsule stays restorable.
+                        Config: capture.incrementalBinary (boolean)
+                        Cloud: POST /api/cloud/jobs { incrementalBinary: true }
                       Local Starter: add --allow-large-local to bypass ${LOCAL_STARTER_MAX_LABEL} cap
   verify              Verify checksums; add --decrypt for authenticated decryption
                       --report-drift   opt-in MD5 / row-count / RBAC drift report

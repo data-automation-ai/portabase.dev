@@ -22,6 +22,7 @@ export function engineArgvForJob(job) {
     command,
     excludeTableData: (payload.excludeTables || []).join(','),
     excludeBuckets: (payload.excludeBuckets || []).join(','),
+    incrementalBinary: payload.incrementalBinary === true,
     confirmTarget: payload.targetRef || '',
   });
 }

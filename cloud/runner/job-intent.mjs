@@ -84,6 +84,17 @@ export function parseJobRequest(body) {
   }
   if (type === 'replay' && !targetRef) return { ok: false, error: 'missing_target_ref', field: 'targetRef' };
 
+  let incrementalBinary = false;
+  if (body.incrementalBinary != null && body.incrementalBinary !== false) {
+    if (body.incrementalBinary !== true) {
+      return { ok: false, error: 'invalid_incremental_binary', field: 'incrementalBinary' };
+    }
+    if (type !== 'backup') {
+      return { ok: false, error: 'incremental_binary_backup_only', field: 'incrementalBinary' };
+    }
+    incrementalBinary = true;
+  }
+
   return {
     ok: true,
     action: 'queue',
@@ -97,6 +108,7 @@ export function parseJobRequest(body) {
       capsuleId: body.capsuleId ? String(body.capsuleId).slice(0, 120) : null,
       note: body.note ? String(body.note).slice(0, 200) : null,
       manual: true,
+      incrementalBinary,
     },
   };
 }

@@ -269,12 +269,13 @@ export function describeCloudApiError(err) {
  * Cloud-7 connect flow: the exact CLI command that reproduces a saved selection.
  * Omits a flag entirely when its list is empty.
  */
-export function cloudBackupCliCommand({ excludeTables = [], excludeBuckets = [] } = {}) {
+export function cloudBackupCliCommand({ excludeTables = [], excludeBuckets = [], incrementalBinary = false } = {}) {
   const tables = (excludeTables || []).map((row) => (typeof row === 'string' ? row : row.key)).map(cleanName).filter(Boolean);
   const buckets = (excludeBuckets || []).map((row) => (typeof row === 'string' ? row : row.key)).map(cleanName).filter(Boolean);
   const parts = ['npx portabase backup'];
   if (tables.length) parts.push(`--exclude-table-data ${tables.join(',')}`);
   if (buckets.length) parts.push(`--exclude-buckets ${buckets.join(',')}`);
+  if (incrementalBinary) parts.push('--incremental-binary');
   return parts.join(' ');
 }
 

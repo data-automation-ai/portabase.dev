@@ -163,9 +163,11 @@ export function ConnectSupabaseFlow({ demo = false, plan, toast }) {
 
   const summary = inventory ? summarizeSelection(inventory, selection) : null;
   const overCap = Boolean(summary && capBytes && summary.includedBytes > capBytes);
+  const [incrementalBinary, setIncrementalBinary] = useState(false);
   const cliCommand = cloudBackupCliCommand({
     excludeTables: summary?.omittedTables?.map((row) => row.key) || saved?.excludeTables || [],
     excludeBuckets: summary?.omittedBuckets?.map((row) => row.key) || saved?.excludeBuckets || [],
+    incrementalBinary,
   });
 
   const save = async () => {
@@ -211,6 +213,7 @@ export function ConnectSupabaseFlow({ demo = false, plan, toast }) {
         projectRef: saved.projectRef,
         excludeTables: saved.excludeTables || [],
         excludeBuckets: saved.excludeBuckets || [],
+        incrementalBinary,
         note: 'manual',
       });
       setQueuedJob(data?.job || null);
@@ -265,6 +268,14 @@ export function ConnectSupabaseFlow({ demo = false, plan, toast }) {
             and not the capsule. The capsule lands in the vault that worker is already configured to use.
             This page does not start a Portabase server, and Cloud Free has no schedule.
           </p>
+          <label className="pb-check">
+            <input
+              type="checkbox"
+              checked={incrementalBinary}
+              onChange={(e) => setIncrementalBinary(e.target.checked)}
+            />
+            <span>Incremental binary — reuse unchanged binary files already on the worker. Changed files are still fetched.</span>
+          </label>
           <p className="pb-mono pb-sizer-flag" style={{ wordBreak: 'break-word' }}>{cliCommand}</p>
           <div className="pb-inline">
             <button type="button" className="pb-btn pb-btn-sm" onClick={() => copyText(cliCommand, toast)}>

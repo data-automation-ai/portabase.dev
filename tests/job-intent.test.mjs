@@ -16,7 +16,12 @@ test('backup intent keeps labels and refuses secrets', () => {
   });
   assert.equal(ok.ok, true);
   assert.equal(ok.payload.projectRef, REF);
+  assert.equal(ok.payload.incrementalBinary, false);
   assert.deepEqual(ok.payload.excludeTables, ['public.logs']);
+  const incremental = parseJobRequest({ type: 'backup', projectRef: REF, incrementalBinary: true });
+  assert.equal(incremental.payload.incrementalBinary, true);
+  assert.equal(parseJobRequest({ type: 'backup', projectRef: REF, incrementalBinary: 'yes' }).error, 'invalid_incremental_binary');
+  assert.equal(parseJobRequest({ type: 'verify', incrementalBinary: true }).error, 'incremental_binary_backup_only');
   assert.equal(parseJobRequest({ type: 'backup' }).error, 'missing_project_ref');
   assert.equal(parseJobRequest({
     type: 'backup',

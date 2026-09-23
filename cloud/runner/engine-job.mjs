@@ -20,6 +20,7 @@ export const EXISTING_ENGINE_FLAGS = Object.freeze({
   excludeTableList: '--exclude-table-list',
   excludeTableData: '--exclude-table-data',
   excludeBuckets: '--exclude-buckets',
+  incrementalBinary: '--incremental-binary',
   trial: '--trial',
   decrypt: '--decrypt',
   confirmTarget: '--confirm-target',
@@ -31,6 +32,7 @@ export function buildFreeEngineArgv({
   excludeTableList = '',
   excludeTableData = '',
   excludeBuckets = '',
+  incrementalBinary = false,
   trial = false,
   decrypt = false,
   confirmTarget = '',
@@ -53,6 +55,7 @@ export function buildFreeEngineArgv({
   if (excludeBuckets && (cmd === 'backup' || cmd === 'doctor')) {
     argv.push(EXISTING_ENGINE_FLAGS.excludeBuckets, String(excludeBuckets));
   }
+  if (incrementalBinary && cmd === 'backup') argv.push(EXISTING_ENGINE_FLAGS.incrementalBinary);
   if (trial && cmd === 'backup') argv.push(EXISTING_ENGINE_FLAGS.trial);
   if (decrypt && cmd === 'verify') argv.push(EXISTING_ENGINE_FLAGS.decrypt);
   if (confirmTarget && cmd === 'replay') {
