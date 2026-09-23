@@ -248,6 +248,19 @@ export function planFit(estimatedBytes, planId = 'cloud-free') {
   };
 }
 
+/**
+ * Cloud-7 connect flow: the exact CLI command that reproduces a saved selection.
+ * Omits a flag entirely when its list is empty.
+ */
+export function cloudBackupCliCommand({ excludeTables = [], excludeBuckets = [] } = {}) {
+  const tables = (excludeTables || []).map((row) => (typeof row === 'string' ? row : row.key)).map(cleanName).filter(Boolean);
+  const buckets = (excludeBuckets || []).map((row) => (typeof row === 'string' ? row : row.key)).map(cleanName).filter(Boolean);
+  const parts = ['npx portabase backup'];
+  if (tables.length) parts.push(`--exclude-table-data ${tables.join(',')}`);
+  if (buckets.length) parts.push(`--exclude-buckets ${buckets.join(',')}`);
+  return parts.join(' ');
+}
+
 /** Existing CLI flag only — comma-separated schema.table list. */
 export function excludeTableListFlag(omittedTables = []) {
   const names = omittedTables

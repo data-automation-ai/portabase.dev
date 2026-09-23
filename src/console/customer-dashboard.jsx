@@ -16,6 +16,7 @@ import { KEYS_COPY } from '../data/never-hold-keys.js';
 import { formatGiB, formatHumanSize } from '../lib/human-size.js';
 import { formatOperatorTime } from '../lib/operator-time.js';
 import { JobSetupWizard, TableSizer } from './table-sizer.jsx';
+import { ConnectSupabaseFlow } from './connect-supabase.jsx';
 
 function Badge({ tone, children }) {
   const t = tone === 'ok' || tone === 'COMPLETE' || tone === 'green' || tone === 'MATCH'
@@ -198,16 +199,28 @@ export function CustomerDashboardPage({
       {tab === 'overview' && <TelemetrySection model={model} navigate={navigate} onOpenJob={openJob} />}
       {tab === 'charts' && <ChartsSection model={model} plan={plan} />}
       {tab === 'sizer' && (
-        <TableSizer
-          inventory={model.inventory}
-          planId={sizerPlan}
-          onPlanId={setSizerPlan}
-          selection={sizerSelection}
-          onSelection={setSizerSelection}
-          excludeBinaries={excludeBinaries}
-          onExcludeBinaries={setExcludeBinaries}
-          demo={model.demo}
-        />
+        <div className="pb-stack">
+          <ConnectSupabaseFlow demo={model.demo} plan={plan} toast={toast} />
+          <details className="pb-card">
+            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
+              Advanced: sizer from the free-engine doctor report
+            </summary>
+            <p className="pb-muted">
+              Prefer a live Supabase measurement above. This view uses whatever size inventory
+              already exists in this workspace (doctor / capture report).
+            </p>
+            <TableSizer
+              inventory={model.inventory}
+              planId={sizerPlan}
+              onPlanId={setSizerPlan}
+              selection={sizerSelection}
+              onSelection={setSizerSelection}
+              excludeBinaries={excludeBinaries}
+              onExcludeBinaries={setExcludeBinaries}
+              demo={model.demo}
+            />
+          </details>
+        </div>
       )}
       {tab === 'sizes' && <SizesSection model={model} onOpenJob={openJob} />}
       {tab === 'log' && <BackupLogSection model={model} onOpenJob={openJob} />}

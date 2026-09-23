@@ -65,3 +65,38 @@ export function fetchDashboard(version) {
 export function requestSelfRefund(version) {
   return api('/api/cloud/self-refund', { method: 'POST', body: {}, version });
 }
+
+/**
+ * Plain-language message for a cloud-api error, keyed off the safe error
+ * code the function returns (never the raw token or a stack trace).
+ */
+export function describeCloudApiError(err) {
+  const code = err?.data?.error || err?.code || '';
+  const status = err?.status;
+  if (code === 'token_rejected') return "That token didn't work — make sure you copied all of it.";
+  if (code === 'rate_limited') return 'Supabase is rate-limiting this token right now. Wait a minute and try again.';
+  if (code === 'project_not_found') return 'That project could not be found — it may have been deleted, or the token cannot see it.';
+  if (status === 401 || code === 'unauthorized') return 'Your session expired — sign in again.';
+  if (!status) return 'Network error — check your connection and try again.';
+  return err?.message || 'Something went wrong. Try again.';
+}
+
+/** List the caller's Supabase projects for a pasted Personal Access Token. Token is sent in-request only. */
+export function fetchSupabaseProjects(token, version) {
+  return api('/api/cloud/supabase', { method: 'POST', body: { action: 'projects', token }, version });
+}
+
+/** Measure tables + Storage buckets for one Supabase project ref. Token is sent in-request only. */
+export function fetchSupabaseInventory(token, ref, version) {
+  return api('/api/cloud/supabase', { method: 'POST', body: { action: 'inventory', token, ref }, version });
+}
+
+/** Saved cloud-7 selection, or `{ selection: null }` when nothing is saved yet. */
+export function fetchCloudSelection(version) {
+  return api('/api/cloud/selection', { version });
+}
+
+/** Save the capsule selection (tables/buckets to include, estimate, plan). */
+export function saveCloudSelection(selection, version) {
+  return api('/api/cloud/selection', { method: 'PUT', body: selection, version });
+}
