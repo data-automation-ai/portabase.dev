@@ -1,0 +1,29 @@
+{
+  "version": 3,
+  "projectRef": "kiuwcdpjsdotkoojbkoi",
+  "backupDirectory": "./portabase-capsules/whitepaper-smoke",
+  "statusDirectory": "./portabase-status/whitepaper-smoke",
+  "provider": {
+    "type": "local",
+    "mode": "local-starter",
+    "path": "./portabase-capsules/whitepaper-smoke/vault",
+    "maxBytes": 104857600,
+    "allowLargeLocal": true
+  },
+  "capture": {
+    "database": true,
+    "storage": true,
+    "functions": true,
+    "storageConcurrency": 8
+  },
+  "encryption": {
+    "passphraseEnv": "PORTABASE_ENCRYPTION_PASSPHRASE"
+  },
+  "retention": {
+    "keepLast": 5,
+    "pruneAfterBackup": false
+  },
+  "cloud": {
+    "enabled": false
+  }
+}

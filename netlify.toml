@@ -56,6 +56,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/cloud/self-refund"
+  to = "/.netlify/functions/cloud-self-refund"
+  status = 200
+
+[[redirects]]
   from = "/api/cloud/jobs"
   to = "/.netlify/functions/cloud-jobs"
   status = 200

@@ -61,3 +61,7 @@ export function provisionRunner(version, body = {}) {
 export function fetchDashboard(version) {
   return api('/api/cloud/dashboard', { version });
 }
+
+export function requestSelfRefund(version) {
+  return api('/api/cloud/self-refund', { method: 'POST', body: {}, version });
+}

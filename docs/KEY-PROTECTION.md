@@ -53,3 +53,54 @@ node -e "import { capsuleCryptoPublicDescription } from './utility/capsule-crypt
 | Portabase Cloud managed runner | Same **open-source** encrypt/decrypt; runner must hold material for the job window |
 
 If zero Portabase key path is required: use standalone only.
+
+---
+
+## Supabase source credentials (separate from capsule passphrase)
+
+Customers often say “keys” when they mean the **Supabase service-role / secret key**, DB URL, or Management API token.
+Those open the **live** project for capture/restore. They are **not** the AES passphrase and alone cannot open a sealed `.pbase`.
+
+### Storage
+
+| Path | Where Supabase credentials live |
+| --- | --- |
+| Standalone | Env / OS secret store on **customer** runner only |
+| Cloud managed | Workspace-scoped secrets path for the job; encrypted at rest; not plaintext in marketing/analytics |
+| Cloud + customer KMS | Material unwrap under a CMK the customer owns; revocable grant to runner role |
+
+**Never stored as:** plaintext in SMS/email/telemetry, browser localStorage as long-term vault, default “share with support” payloads, or as Portabase’s only recovery copy.
+
+### Runtime fortifications
+
+1. Injected for the **job window** on the managed runner — not painted into every console screen  
+2. Ephemeral staging disk; durable artifact = sealed capsule in **customer** vault  
+3. Separation of duties: source keys ≠ passphrase ≠ vault IAM ≠ console login ≠ SMS route  
+4. Guarded restore targets a **new/blank** project by design  
+5. Agent/API tokens are hashed/scoped — not a substitute for the Supabase service-role  
+
+### Logging (always on for managed jobs)
+
+| Event | Customer-visible later | Secret body in log? |
+| --- | --- | --- |
+| Job start/finish/fail | Timestamps, status, error **class** | No — redacted / rejected |
+| Layer completion | DB / Auth / Storage / Functions outcome | No |
+| Credential attach/rotate/remove | Who + when (workspace audit) | Event only |
+| Supabase auth failure during job | Failure class | No |
+| CloudWatch-style job tail | Scoped stream in console | Redaction of secret-shaped fields |
+| Telemetry health | Status / RPO / missed window | Denylist rejects secret-shaped fields |
+| Customer CloudTrail (optional) | `kms:*`, vault `s3:PutObject` in **their** AWS | Customer-owned retention |
+
+Telemetry denylist implementation: `utility/telemetry.mjs`. CloudWatch redaction: `netlify/functions/cloud-cloudwatch-live.mjs`.
+
+### Alerting
+
+- Job failed (including credential-looking failures) → SMS / email / webhook  
+- Missed escape window / silence → multi-person chain  
+- Verify / integrity failure → escalate; partial stays partial  
+- Audit of who changed Supabase bindings  
+- Optional: customer AWS alarms on unexpected KMS/vault principals  
+
+### Hard requirement: zero Portabase custody of Supabase keys
+
+Run **standalone OSS only**. Cloud is optional ops, not a gate on Escape.

@@ -80,11 +80,25 @@ export async function handler(event) {
         console.log(`square_fulfillment=payment_confirmed order=${payment.order_id || 'unknown'}`);
         const userId = await getUserIdBySquareOrder(payment.order_id);
         if (userId) {
+          const amount = Number(payment.amount_money?.amount) || 0;
+          const existing = (await getSubscriptionByUserId(userId)) || {};
           await markTrialing({
             userId,
             squareOrderId: payment.order_id,
             squareCustomerId: payment.customer_id,
           });
+          if (amount > 0) {
+            await saveSubscription({
+              ...existing,
+              userId,
+              status: existing.status === 'checkout_pending' ? 'trialing' : (existing.status || 'active'),
+              lastPaymentId: payment.id,
+              lastPaymentAmountCents: amount,
+              firstPaidAt: existing.firstPaidAt || new Date().toISOString(),
+              squareOrderId: payment.order_id || existing.squareOrderId,
+              squareCustomerId: payment.customer_id || existing.squareCustomerId,
+            });
+          }
         }
       }
     }
@@ -130,6 +144,7 @@ export async function handler(event) {
         await markActive(userId, {
           squareSubscriptionId: subscriptionId,
           lastInvoiceId: invoice.id || null,
+          firstPaidAt: new Date().toISOString(),
           currentPeriodEnd: invoice.period_end || null,
         });
         console.log(`square_invoice_paid user=${userId} invoice=${invoice.id || 'unknown'}`);

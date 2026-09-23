@@ -47,7 +47,69 @@ Cloud stores only refs, capsule id, and step status — never target service key
 
 | Action | Meaning |
 | --- | --- |
-| `verify --decrypt` | Crypto OK; no new project |
-| `restore` dry-run | Plan only |
+| `verify` | Outer file checksums only |
+| `verify --decrypt` | Crypto OK (auth tag); no unpack / layer inventory |
+| **`simulate`** | **Offline:** decrypt + unpack + match layers to manifest · **no Supabase target** |
+| `restore` dry-run | Plan only (still needs passphrase; no writes) |
+| `replay --preflight` | Live blank-target check; no writes |
 | **`replay`** | Full path into a **new blank** project |
 | Cutover | Your DNS/app switch — separate deliberate step after a green replay |
+
+## Size-bounded full-path capture (`--storage-first-per-bucket`)
+
+When you want **full** database, Auth, and Edge Functions but Storage would blow a multi‑GB budget:
+
+```bash
+portabase backup --storage-first-per-bucket
+# or in config: "capture": { "storageSample": "first-per-bucket" }
+```
+
+| Layer | Captured |
+| --- | --- |
+| Database | **Full** (schema + data) |
+| Auth | **Full** (as always captured) |
+| Edge Functions | **All** function source |
+| Storage | **Every bucket**, but only the **first object** in each (empty buckets still listed) |
+
+Source inventory (all object counts/bytes) is still recorded in the capsule for honesty. Capsule status is COMPLETE for layers, with `storage.limited` + limitation text.
+
+Use this for under‑5 GB path proof; full object inventory still requires a normal `backup` without the flag.
+
+## Storage name+size fingerprint (inventory snapshot)
+
+At **backup start**, after listing every Storage object (even if only a sample is downloaded):
+
+1. Build lines `bucket/objectPath\treportedSizeBytes` (size from listing metadata)  
+2. Sort lines  
+3. Concatenate with newlines  
+4. **MD5** (and SHA-256) → `sourceNamesFingerprintMd5`  
+5. Same method for objects **actually in the capsule** → `capsuleNamesFingerprintMd5`
+
+After restore:
+
+- Recompute fingerprint of restored name+size → must match **capsule** fingerprint  
+- Optional live target list → can match **source** fingerprint only after a **full** Storage restore  
+
+Renames **or** size drift both change the hash. This does **not** replace per-object SHA-256 of downloaded bytes; it proves the **inventory snapshot** (path + reported size) without reading every byte.
+
+## Offline simulate (no destination)
+
+When you have a capsule but **no blank Supabase project yet**, prove integrity locally:
+
+```bash
+export PORTABASE_ENCRYPTION_PASSPHRASE='…'
+portabase simulate --capsule ./portabase-capsules/<id>
+# or
+node utility/portabase.mjs simulate --capsule ./portabase-capsules/<id>
+```
+
+What it checks:
+
+1. Outer `checksums.sha256`  
+2. AES-256-GCM decrypt of `capsule.pbase`  
+3. Unpack of compressed archive  
+4. Outer `capsule.json` vs inner `manifest.json` (id, project ref, status)  
+5. Each layer (database / storage / functions / auth): complete flag + expected files / object hashes  
+6. Warns on TRIAL / PARTIAL and source-inventory vs in-capsule Storage size  
+
+What it does **not** do: create a project, run `psql`, upload Storage, or deploy Functions. Those need **`replay`** against a blank target.

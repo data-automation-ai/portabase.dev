@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream, existsSync } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { basename, join, normalize, relative, sep } from 'node:path';
+import { createInterface } from 'node:readline/promises';
 import { createGzip } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 
@@ -30,11 +31,29 @@ export {
   requirePassphrase,
 };
 
+/** Mutate a CLI argv slice so hasFlag-style readers see `--name`. */
+export function enableCliFlag(argvList, name) {
+  const token = `--${name}`;
+  if (!Array.isArray(argvList)) throw new Error('enableCliFlag requires an argv array');
+  if (!argvList.includes(token)) argvList.push(token);
+  return argvList;
+}
+
 export const TRIAL_LIMITS = Object.freeze({
   databaseSchemaOnly: true,
   maxStorageBuckets: 2,
   maxStorageObjects: 5,
   maxFunctions: 2,
+});
+
+/**
+ * Full DB / Functions / Auth; Storage = first object only in every bucket.
+ * Keeps multi-bucket path validated while staying under multi‑GB budgets.
+ */
+export const FIRST_PER_BUCKET_STORAGE = Object.freeze({
+  databaseSchemaOnly: false,
+  firstObjectPerBucket: true,
+  maxFunctions: null,
 });
 
 export function editionFor({ trialFlag = false, environment = process.env.PORTABASE_EDITION } = {}) {
@@ -48,6 +67,81 @@ export function safeObjectPath(value) {
     throw new Error(`Unsafe object path: ${value}`);
   }
   return cleaned.split(/[\\/]/).join(sep);
+}
+
+/**
+ * Stable inventory fingerprint: concatenate sorted lines, hash.
+ * Used as a snapshot at capture start (full source listing) and again on destination after restore.
+ * Each line is `bucket/path\treportedSize` so renames OR size drift both change the fingerprint
+ * without downloading every object byte.
+ *
+ * @param {string[]} keys  e.g. ["bucket/path/to/file.png\t1234", ...] or plain paths (size treated as 0)
+ * @param {'md5'|'sha256'} algo
+ * @returns {{ algo: string, count: number, fingerprint: string, method: string }}
+ */
+export function fingerprintSortedKeys(keys = [], algo = 'md5') {
+  const list = (Array.isArray(keys) ? keys : [])
+    .map(k => String(k || '').replaceAll('\\', '/').replace(/^\/+/, '').trim())
+    .filter(Boolean)
+    .map(k => {
+      // Normalize: path\tsize  (accept path|size or path only)
+      if (k.includes('\t')) {
+        const [path, size] = k.split('\t');
+        return `${path.trim()}\t${Number(size) || 0}`;
+      }
+      if (k.includes('|') && /\|-?\d+$/.test(k)) {
+        const i = k.lastIndexOf('|');
+        return `${k.slice(0, i).trim()}\t${Number(k.slice(i + 1)) || 0}`;
+      }
+      return `${k}\t0`;
+    })
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const payload = list.join('\n');
+  const hashAlgo = algo === 'sha256' ? 'sha256' : 'md5';
+  const fingerprint = createHash(hashAlgo).update(payload, 'utf8').digest('hex');
+  return {
+    method: 'sorted-name-size-concat',
+    algo: hashAlgo,
+    count: list.length,
+    fingerprint,
+  };
+}
+
+/** One inventory line: bucket/path + reported listing size (bytes). */
+export function storageInventoryLine(bucketId, objectPath, sizeBytes = 0) {
+  const path = `${bucketId}/${String(objectPath || '').replaceAll('\\', '/')}`.replace(/^\/+/, '');
+  return `${path}\t${Number(sizeBytes) || 0}`;
+}
+
+/**
+ * Build storage inventory lines from bucket/object structures.
+ * Accepts storage-manifest buckets (objects with name + size) or listing shapes.
+ */
+export function storageObjectKeysFromBuckets(buckets = []) {
+  const keys = [];
+  for (const bucket of buckets || []) {
+    const bid = bucket.id || bucket.name;
+    if (!bid) continue;
+    const objects = bucket.objects || [];
+    for (const object of objects) {
+      const name = object.fullName || object.name || object.path;
+      if (!name) continue;
+      const size = Number(
+        object.size
+        ?? object.metadata?.size
+        ?? object.metadata?.contentLength
+        ?? 0,
+      ) || 0;
+      keys.push(storageInventoryLine(bid, name, size));
+    }
+  }
+  return keys;
+}
+
+/** Compare two fingerprint records from fingerprintSortedKeys. */
+export function fingerprintsMatch(a, b) {
+  if (!a?.fingerprint || !b?.fingerprint) return false;
+  return a.algo === b.algo && a.fingerprint === b.fingerprint && Number(a.count) === Number(b.count);
 }
 
 /** Normalize Storage list entry metadata (from supabase-backup DR sync patterns). */
@@ -397,9 +491,14 @@ export function localStarterPolicyNote() {
     + 'Not a substitute for off-machine storage for production Escape.';
 }
 
-export function validateRestoreTarget(sourceRef, targetRef, confirmation, targetUrl = '') {
+export function validateRestoreTarget(sourceRef, targetRef, confirmation, targetUrl = '', opts = {}) {
   if (!targetRef) throw new Error('PORTABASE_TARGET_PROJECT_REF is required.');
-  if (sourceRef === targetRef) throw new Error('Restore refused: target project is the source project.');
+  if (sourceRef === targetRef && !opts.allowSourceTarget) {
+    throw new Error(
+      'Restore refused: target project is the source project. '
+      + 'For a disposable drill only, pass --allow-source-target.',
+    );
+  }
   if (confirmation !== targetRef) {
     throw new Error('Restore refused: --confirm-target must exactly match the new target project ref.');
   }
@@ -412,10 +511,14 @@ export function validateRestoreTarget(sourceRef, targetRef, confirmation, target
   return true;
 }
 
-export function validateBlankRestoreInventory(inventory) {
+export function validateBlankRestoreInventory(inventory, opts = {}) {
   const occupied = Object.entries(inventory || {}).filter(([, count]) => Number(count) > 0);
-  if (occupied.length) {
-    throw new Error(`Restore refused: target is not blank (${occupied.map(([name, count]) => `${name}=${count}`).join(', ')}). Create a fresh project or explicitly clear the disposable target outside Portabase.`);
+  if (occupied.length && !opts.allowOccupied) {
+    throw new Error(
+      `Restore refused: target is not blank (${occupied.map(([name, count]) => `${name}=${count}`).join(', ')}). `
+      + 'Create a fresh project, clear the disposable target outside Portabase, '
+      + 'or pass --allow-occupied-target for an explicit dirty-target drill.',
+    );
   }
   return inventory;
 }
@@ -456,13 +559,17 @@ export function compareDatabaseInventories(expected = {}, actual = {}) {
   };
 }
 
-export function recoveryEvidenceStatus({ mode, captureStatus, database, storage, functions, error } = {}) {
+export function recoveryEvidenceStatus({ mode, captureStatus, database, storage, functions, error, restorePlan } = {}) {
   if (error) return 'FAILED';
   if (mode === 'plan') return 'PLAN_ONLY';
   if (mode === 'preflight') return 'PREFLIGHT_PASSED';
   const verified = Boolean(database?.verified) && Boolean(storage?.verified) && Boolean(functions?.verified);
   if (!verified) return 'FAILED';
   if (mode === 'limited-drill') return 'LIMITED_DRILL_PASSED';
+  // A restore plan deliberately restores a selected subset; its own verified layers already
+  // confirm that subset round-tripped correctly, independent of whether the SOURCE capsule
+  // captured 100% of the project (PARTIAL/sampled capsules are expected inputs for this path).
+  if (restorePlan) return 'SELECTIVE_RESTORE_VERIFIED';
   return captureStatus === 'COMPLETE' ? 'RECOVERY_DATA_PATH_VERIFIED' : 'FAILED';
 }
 
@@ -642,4 +749,225 @@ export async function packDirectoryTarGz(sourceDir, archivePath) {
   gzip.end();
   await done;
   return { fileCount: files.length, archivePath };
+}
+
+/**
+ * Classify a capsule's Edge Function entries against the directories actually present.
+ *
+ * A "ghost" function is one Supabase still lists but 404s when fetched (a stale list entry).
+ * Capture records it as captureVia:'skipped-missing' with no files and continues, so its
+ * absent directory is expected and must NOT be reported as a lost source. Any other absent
+ * directory is a genuine gap and must still fail verification.
+ *
+ * @param {Array<{name: string, captureVia?: string}>} entries functions-manifest entries
+ * @param {(name: string) => boolean} hasDir  returns true if that function's dir exists
+ */
+export function classifyFunctionDirs(entries = [], hasDir = () => false) {
+  const missing = [];
+  const skipped = [];
+  for (const entry of entries) {
+    if (hasDir(entry.name)) continue;
+    if (entry.captureVia === 'skipped-missing') skipped.push(entry.name);
+    else missing.push(entry.name);
+  }
+  return { missing, skipped, present: entries.length - missing.length - skipped.length, total: entries.length };
+}
+
+/**
+ * Restore plans select a subset of a capsule (tables, storage objects, functions) to write
+ * into a target project, capped by a byte budget. The capsule itself is always captured in
+ * full — plans only constrain what gets RESTORED, e.g. to fit a free-tier Supabase project
+ * under 500 MB for test/validation restores.
+ */
+export const RESTORE_PLAN_FORMAT_VERSION = 1;
+export const DEFAULT_RESTORE_PLAN_MAX_BYTES = 500 * 1024 * 1024;
+
+/** Matches native pg_dump COPY headers: COPY "schema"."table" ("col", ...) FROM stdin; */
+const COPY_HEADER_RE = /^COPY "([^"]+)"\."([^"]+)" \(/;
+
+/**
+ * Stream a pg_dump --data-only file and measure each table's COPY block size in bytes
+ * (header line + data rows + terminator, as they will appear in a filtered dump).
+ * Tables with no COPY block (empty tables) are not included — callers should default them to 0.
+ *
+ * @param {string} dataSqlPath
+ * @returns {Promise<Array<{schema: string, table: string, bytes: number}>>}
+ */
+export async function measureDataSqlTables(dataSqlPath) {
+  const sizes = new Map();
+  let current = null;
+  let bytes = 0;
+  const input = createReadStream(dataSqlPath);
+  const lines = createInterface({ input, crlfDelay: Infinity });
+  for await (const line of lines) {
+    const lineBytes = Buffer.byteLength(line, 'utf8') + 1;
+    if (current) {
+      bytes += lineBytes;
+      if (line === '\\.') {
+        const key = `${current.schema}.${current.table}`;
+        sizes.set(key, (sizes.get(key) || 0) + bytes);
+        current = null;
+        bytes = 0;
+      }
+      continue;
+    }
+    const header = COPY_HEADER_RE.exec(line);
+    if (header) {
+      current = { schema: header[1], table: header[2] };
+      bytes = lineBytes;
+    }
+  }
+  return [...sizes.entries()].map(([key, value]) => {
+    const dot = key.indexOf('.');
+    return { schema: key.slice(0, dot), table: key.slice(dot + 1), bytes: value };
+  });
+}
+
+/**
+ * Filter a pg_dump --data-only file down to only the selected schema.table COPY blocks,
+ * streaming to avoid loading multi-GB dumps into memory. Non-COPY lines (comments, SET
+ * statements, sequence setval calls) are preserved as-is — they are cheap and harmless
+ * against empty/absent tables.
+ *
+ * @param {string} sourcePath
+ * @param {string} targetPath
+ * @param {Set<string>} selectedKeys  Set of "schema.table" strings to keep
+ */
+export async function filterDataSqlByTables(sourcePath, targetPath, selectedKeys) {
+  const writer = createWriteStream(targetPath, { flags: 'wx' });
+  let skipping = false;
+  try {
+    const input = createReadStream(sourcePath);
+    const lines = createInterface({ input, crlfDelay: Infinity });
+    for await (const line of lines) {
+      if (skipping) {
+        if (line === '\\.') skipping = false;
+        continue;
+      }
+      const header = COPY_HEADER_RE.exec(line);
+      if (header) {
+        const key = `${header[1]}.${header[2]}`;
+        if (!selectedKeys.has(key)) { skipping = true; continue; }
+      }
+      if (!writer.write(`${line}\n`)) {
+        await new Promise(resolveDrain => writer.once('drain', resolveDrain));
+      }
+    }
+    await new Promise((resolveWrite, reject) => {
+      writer.once('error', reject);
+      writer.end(resolveWrite);
+    });
+  } catch (error) {
+    writer.destroy();
+    throw error;
+  }
+}
+
+/**
+ * Build a restore plan candidate from an opened capsule's manifest + storage-manifest,
+ * listing every selectable table/bucket/function with its byte size and a `selected` flag
+ * (all true by default — callers/UIs flip individual entries off to fit a budget).
+ *
+ * @param {object} opts
+ * @param {object} opts.manifest        capsule manifest.json
+ * @param {string} opts.capsuleId       capsule id (metadata.id) this plan is bound to
+ * @param {Array}  opts.tableSizes      output of measureDataSqlTables (may be empty if no data.sql)
+ * @param {object} opts.storageManifest storage/storage-manifest.json contents (or null)
+ * @param {number} opts.maxBytes
+ */
+export function buildRestorePlan({ manifest, capsuleId, tableSizes = [], storageManifest = null, maxBytes = DEFAULT_RESTORE_PLAN_MAX_BYTES }) {
+  const tables = tableSizes.map(t => ({
+    schema: t.schema, table: t.table, bytes: t.bytes, selected: true,
+  }));
+  const buckets = (storageManifest?.buckets || []).map(bucket => ({
+    id: bucket.id,
+    objectCount: (bucket.objects || []).length,
+    bytes: (bucket.objects || []).reduce((sum, o) => sum + (Number(o.size) || 0), 0),
+    selected: true,
+  }));
+  const functionNames = manifest?.contents?.functions?.names || [];
+  const functions = functionNames.map(name => ({ name, selected: true }));
+  return {
+    formatVersion: RESTORE_PLAN_FORMAT_VERSION,
+    capsuleId,
+    projectRef: manifest?.projectRef || null,
+    maxBytes,
+    createdAt: new Date().toISOString(),
+    tables,
+    buckets,
+    functions,
+  };
+}
+
+/** Sum of bytes for currently-selected entries in a restore plan. */
+export function restorePlanSelectedBytes(plan) {
+  const tableBytes = (plan.tables || []).filter(t => t.selected).reduce((sum, t) => sum + (Number(t.bytes) || 0), 0);
+  const bucketBytes = (plan.buckets || []).filter(b => b.selected).reduce((sum, b) => sum + (Number(b.bytes) || 0), 0);
+  return tableBytes + bucketBytes;
+}
+
+/**
+ * Validate a restore plan against the capsule being restored and its own byte budget.
+ * Throws with a specific, actionable message rather than returning booleans — plan misuse
+ * (wrong capsule, stale plan, over budget) must hard-stop before any target write.
+ */
+export function validateRestorePlan(plan, { capsuleId, maxBytesOverride } = {}) {
+  if (!plan || typeof plan !== 'object') throw new Error('Restore plan is not a valid JSON object.');
+  if (plan.formatVersion !== RESTORE_PLAN_FORMAT_VERSION) {
+    throw new Error(`Restore plan formatVersion ${plan.formatVersion} is not supported (expected ${RESTORE_PLAN_FORMAT_VERSION}).`);
+  }
+  if (!plan.capsuleId) throw new Error('Restore plan is missing capsuleId.');
+  if (capsuleId && plan.capsuleId !== capsuleId) {
+    throw new Error(`Restore plan was generated for capsule "${plan.capsuleId}" but this capsule is "${capsuleId}". Generate a new plan with "portabase restore-plan" for this capsule.`);
+  }
+  const maxBytes = Number(maxBytesOverride ?? plan.maxBytes ?? DEFAULT_RESTORE_PLAN_MAX_BYTES);
+  if (!Number.isFinite(maxBytes) || maxBytes <= 0) throw new Error('Restore plan maxBytes must be a positive number.');
+  const selectedBytes = restorePlanSelectedBytes(plan);
+  if (selectedBytes > maxBytes) {
+    const items = [
+      ...(plan.tables || []).filter(t => t.selected).map(t => `table ${t.schema}.${t.table} (${formatBytes(t.bytes)})`),
+      ...(plan.buckets || []).filter(b => b.selected).map(b => `bucket ${b.id} (${formatBytes(b.bytes)})`),
+    ].sort((a, b) => b.length - a.length);
+    throw new Error(
+      `Restore plan selects ${formatBytes(selectedBytes)}, over the ${formatBytes(maxBytes)} budget. `
+      + `Deselect items in the plan file and try again. Selected: ${items.join(', ') || 'none'}.`,
+    );
+  }
+  return { selectedBytes, maxBytes };
+}
+
+/** Selected schema.table keys from a validated plan, as a Set for filterDataSqlByTables. */
+export function restorePlanSelectedTableKeys(plan) {
+  return new Set((plan.tables || []).filter(t => t.selected).map(t => `${t.schema}.${t.table}`));
+}
+
+/** Filter a storage-manifest.json's buckets/objects to only what the plan selected. */
+export function filterStorageManifestByPlan(storageManifest, plan) {
+  if (!storageManifest) return storageManifest;
+  const selectedBucketIds = new Set((plan.buckets || []).filter(b => b.selected).map(b => b.id));
+  const buckets = (storageManifest.buckets || []).filter(b => selectedBucketIds.has(b.id));
+  return { ...storageManifest, buckets, objectCount: buckets.reduce((sum, b) => sum + (b.objects || []).length, 0) };
+}
+
+/** Selected function names from a validated plan. */
+export function restorePlanSelectedFunctionNames(plan) {
+  return new Set((plan.functions || []).filter(f => f.selected).map(f => f.name));
+}
+
+/**
+ * Adjust a captured database-inventory.json (the "expected" side of a restore comparison) so
+ * that tables NOT selected by the plan are expected at 0 rows — matching a filtered data.sql.
+ * `auth.users` is handled specially: it is a platform-schema table (outside
+ * database-inventory.json's application-table list) tracked instead as the `authUsers` metric,
+ * but its COPY block still lives in data.sql and can be deselected like any other table.
+ */
+export function applyRestorePlanToExpectedInventory(expected, plan) {
+  const selectedTables = restorePlanSelectedTableKeys(plan);
+  return {
+    ...expected,
+    tables: (expected.tables || []).map(table => (
+      selectedTables.has(`${table.schema || 'public'}.${table.name || table.table}`) ? table : { ...table, rows: 0 }
+    )),
+    authUsers: selectedTables.has('auth.users') ? expected.authUsers : 0,
+  };
 }

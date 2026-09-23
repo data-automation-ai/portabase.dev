@@ -1,0 +1,39 @@
+name: Bug
+description: Something in the Community engine or docs is wrong
+title: '[bug] '
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do **not** paste `service_role` keys, DB URLs, or passphrases.
+        Security issues → escape@portabase.dev ([SECURITY.md](https://github.com/data-automation-ai/portabase.dev/blob/main/SECURITY.md)).
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - Community CLI / engine
+        - Desktop (Windows)
+        - Docs / README
+        - Marketing site
+        - Portabase Cloud
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Command, expected, actual. Redact secrets.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: package.json version or git SHA
+  - type: input
+    id: os
+    attributes:
+      label: OS / Node
+      placeholder: Windows 11 · Node 22

@@ -47,7 +47,12 @@ import {
   mapPool,
   resolveStorageConcurrency,
   TRIAL_LIMITS,
+  FIRST_PER_BUCKET_STORAGE,
   trialProtectionLedger,
+  fingerprintSortedKeys,
+  storageObjectKeysFromBuckets,
+  storageInventoryLine,
+  fingerprintsMatch,
   validateBlankRestoreInventory,
   validateDrillCapsule,
   validateRestoreTarget,
@@ -59,6 +64,18 @@ import {
   directoryByteSize,
   assertLocalStarterSize,
   localStarterPolicyNote,
+  DEFAULT_RESTORE_PLAN_MAX_BYTES,
+  classifyFunctionDirs,
+  measureDataSqlTables,
+  filterDataSqlByTables,
+  buildRestorePlan,
+  restorePlanSelectedBytes,
+  validateRestorePlan,
+  restorePlanSelectedTableKeys,
+  filterStorageManifestByPlan,
+  restorePlanSelectedFunctionNames,
+  applyRestorePlanToExpectedInventory,
+  enableCliFlag,
 } from './portabase-core.mjs';
 import { resolveEdition } from './license.mjs';
 import { emitTelemetry } from './telemetry.mjs';
@@ -342,14 +359,23 @@ async function captureDatabase(rawDir, limits = null) {
   if (!limits?.databaseSchemaOnly) await run(supabase, [...common, '--file', join(dbDir, 'data.sql'), '--use-copy', '--data-only']);
   const files = limits?.databaseSchemaOnly ? ['roles.sql', 'schema.sql'] : ['roles.sql', 'schema.sql', 'data.sql'];
   const inventory = resolveTool('psql') ? await captureDatabaseInventory(dbUrl, join(dbDir, 'database-inventory.json'), { estimateRows: Boolean(limits) }) : null;
+  const schemaOnly = Boolean(limits?.databaseSchemaOnly);
+  const summary = inventorySummary(inventory);
+  const inventoryFingerprint = databaseInventoryFingerprint(inventory);
+  if (inventoryFingerprint) {
+    console.log(
+      `Database inventory fingerprint (MD5): ${inventoryFingerprint.fingerprint} · count=${inventoryFingerprint.count}`,
+    );
+  }
   return {
     complete: Boolean(inventory),
     reason: inventory ? null : 'Database dump captured, but psql was unavailable for exact recovery inventory.',
-    limited: Boolean(limits),
-    limitation: limits ? 'schema only; table rows are not included' : null,
+    limited: schemaOnly,
+    limitation: schemaOnly ? 'schema only; table rows are not included' : null,
     files,
     inventory: Boolean(inventory),
-    summary: inventorySummary(inventory),
+    summary,
+    inventoryFingerprintMd5: inventoryFingerprint,
   };
 }
 
@@ -364,6 +390,18 @@ function inventorySummary(inventory) {
     databaseFunctions: Number(inventory.databaseFunctions) || 0,
     triggers: Number(inventory.triggers) || 0,
   };
+}
+
+/** Non-storage fingerprint: schema.table + reported row count (order-independent). */
+function databaseInventoryFingerprint(inventory) {
+  if (!inventory?.tables?.length) return null;
+  const lines = inventory.tables.map((table) => {
+    const schema = table.schema || 'public';
+    const name = table.name || table.table || '';
+    const rows = Number(table.rows) || 0;
+    return `${schema}.${name}\t${rows}`;
+  });
+  return fingerprintSortedKeys(lines, 'md5');
 }
 
 function postgresEnvironment(dbUrl) {
@@ -396,9 +434,15 @@ function psqlValue(dbUrl, sql) {
 }
 
 function estimateApplicationTables(dbUrl) {
-  const tablesJson = psqlValue(dbUrl, `SELECT COALESCE(json_agg(json_build_object('schema', schemaname, 'name', tablename, 'rows', GREATEST(c.reltuples, 0)::bigint) ORDER BY schemaname, tablename), '[]'::json)::text FROM pg_catalog.pg_tables t JOIN pg_catalog.pg_namespace n ON n.nspname = t.schemaname JOIN pg_catalog.pg_class c ON c.relnamespace = n.oid AND c.relname = t.tablename AND c.relkind IN ('r','p') WHERE ${APPLICATION_SCHEMA_SQL};`);
+  // `bytes` is pg_total_relation_size (heap + indexes + TOAST) — the only honest basis for a
+  // progress meter. Row counts alone mislead badly: one 142 MB table and 400 empty ones would
+  // render as "400/588 done" while almost no data has actually moved.
+  const tablesJson = psqlValue(dbUrl, `SELECT COALESCE(json_agg(json_build_object('schema', schemaname, 'name', tablename, 'rows', GREATEST(c.reltuples, 0)::bigint, 'bytes', pg_total_relation_size(c.oid)::bigint) ORDER BY schemaname, tablename), '[]'::json)::text FROM pg_catalog.pg_tables t JOIN pg_catalog.pg_namespace n ON n.nspname = t.schemaname JOIN pg_catalog.pg_class c ON c.relnamespace = n.oid AND c.relname = t.tablename AND c.relkind IN ('r','p') WHERE ${APPLICATION_SCHEMA_SQL};`);
   const tables = JSON.parse(tablesJson || '[]');
-  for (const table of tables) table.rows = Number(table.rows) || 0;
+  for (const table of tables) {
+    table.rows = Number(table.rows) || 0;
+    table.bytes = Number(table.bytes) || 0;
+  }
   return tables;
 }
 
@@ -410,7 +454,8 @@ function announceApplicationTables(dbUrl) {
       phase: 'database-manifest',
       count: tables.length,
       totalRows: tables.reduce((total, table) => total + table.rows, 0),
-      tables: tables.slice(0, 120).map(table => ({ item: `${table.schema}.${table.name}`, rows: table.rows })),
+      totalBytes: tables.reduce((total, table) => total + table.bytes, 0),
+      tables: tables.slice(0, 120).map(table => ({ item: `${table.schema}.${table.name}`, rows: table.rows, bytes: table.bytes })),
     });
   } catch { /* the animation manifest is optional; capture proceeds regardless */ }
 }
@@ -607,15 +652,24 @@ async function captureDatabaseNative(dbUrl, dbDir, limits = null) {
     ...(!limits?.databaseSchemaOnly ? ['data.sql'] : []),
     ...(inventory ? ['database-inventory.json'] : []),
   ];
+  const schemaOnly = Boolean(limits?.databaseSchemaOnly);
+  const summary = inventorySummary(inventory);
+  const inventoryFingerprint = databaseInventoryFingerprint(inventory);
+  if (inventoryFingerprint) {
+    console.log(
+      `Database inventory fingerprint (MD5): ${inventoryFingerprint.fingerprint} · count=${inventoryFingerprint.count}`,
+    );
+  }
   return {
     complete: Boolean(inventory),
     reason: inventory ? null : 'Database dump captured, but psql was unavailable for exact recovery inventory.',
-    limited: Boolean(limits),
-    limitation: limits ? 'schema only; table rows are not included' : null,
+    limited: schemaOnly,
+    limitation: schemaOnly ? 'schema only; table rows are not included' : null,
     engine: 'native-postgresql-client',
     files,
     inventory: Boolean(inventory),
-    summary: inventorySummary(inventory),
+    summary,
+    inventoryFingerprintMd5: inventoryFingerprint,
   };
 }
 
@@ -691,23 +745,72 @@ async function captureStorage(rawDir, limits = null, config = {}) {
     const bytes = objects.reduce((total, object) => total + (Number(object.metadata?.size) || 0), 0);
     return { bucketId: bucket.id, objects, bytes };
   });
+  const sourceObjectKeys = [];
   for (const row of listResults) {
     listedObjects.set(row.bucketId, row.objects);
     inventory.buckets.push({ id: row.bucketId, objectCount: row.objects.length, totalBytes: row.bytes });
     inventory.objectCount += row.objects.length;
     inventory.totalBytes += row.bytes;
+    for (const object of row.objects) {
+      const name = object.fullName || object.name;
+      if (!name) continue;
+      const size = Number(object.metadata?.size ?? object.metadata?.contentLength ?? object.size ?? 0) || 0;
+      sourceObjectKeys.push(storageInventoryLine(row.bucketId, name, size));
+    }
   }
-  console.log(`Storage inventory: ${inventory.bucketCount} buckets · ${inventory.objectCount} objects · ${formatBytes(inventory.totalBytes)} · concurrency=${concurrency}`);
+  // Snapshot at list-time: name+reported-size inventory fingerprint (not full object bytes).
+  inventory.namesFingerprintMd5 = fingerprintSortedKeys(sourceObjectKeys, 'md5');
+  inventory.namesFingerprintSha256 = fingerprintSortedKeys(sourceObjectKeys, 'sha256');
+  console.log(
+    `Storage inventory: ${inventory.bucketCount} buckets · ${inventory.objectCount} objects · ${formatBytes(inventory.totalBytes)} · concurrency=${concurrency}`,
+  );
+  console.log(
+    `Storage name+size snapshot (MD5): ${inventory.namesFingerprintMd5.fingerprint} · count=${inventory.namesFingerprintMd5.count}`,
+  );
 
-  const selectedBuckets = limits ? buckets.slice(0, limits.maxStorageBuckets) : buckets;
+  // firstObjectPerBucket: every bucket, one object each (empty buckets kept in manifest with 0 objects).
+  // trial: cap buckets + total objects.
+  // default: all buckets, all objects.
+  const selectedBuckets = limits?.firstObjectPerBucket
+    ? buckets
+    : limits?.maxStorageBuckets
+      ? buckets.slice(0, limits.maxStorageBuckets)
+      : buckets;
   // Flatten work queue so concurrency is global (not stuck on one huge bucket).
   const jobs = [];
-  for (const bucket of selectedBuckets) {
-    for (const object of listedObjects.get(bucket.id) || []) {
-      if (limits && jobs.length >= limits.maxStorageObjects) break;
-      jobs.push({ bucket, object });
+  if (limits?.firstObjectPerBucket) {
+    for (const bucket of selectedBuckets) {
+      const objects = listedObjects.get(bucket.id) || [];
+      if (objects.length > 0) jobs.push({ bucket, object: objects[0] });
     }
-    if (limits && jobs.length >= limits.maxStorageObjects) break;
+    console.log(
+      `Storage sample: first object per bucket → ${jobs.length} download(s) `
+      + `(of ${inventory.objectCount} source objects across ${inventory.bucketCount} buckets)`,
+    );
+  } else {
+    for (const bucket of selectedBuckets) {
+      for (const object of listedObjects.get(bucket.id) || []) {
+        if (limits?.maxStorageObjects != null && jobs.length >= limits.maxStorageObjects) break;
+        jobs.push({ bucket, object });
+      }
+      if (limits?.maxStorageObjects != null && jobs.length >= limits.maxStorageObjects) break;
+    }
+  }
+
+  // Scaled sample fingerprint: first object per bucket from the listing (expected capsule set).
+  // Full source fingerprint stays above; these two intentionally differ under first-per-bucket.
+  const sampleExpectedKeys = jobs.map(({ bucket, object }) => {
+    const name = object.fullName || object.name;
+    const size = Number(object.metadata?.size ?? object.metadata?.contentLength ?? object.size ?? 0) || 0;
+    return storageInventoryLine(bucket.id, name, size);
+  });
+  const sampleExpectedFingerprintMd5 = fingerprintSortedKeys(sampleExpectedKeys, 'md5');
+  const sampleExpectedFingerprintSha256 = fingerprintSortedKeys(sampleExpectedKeys, 'sha256');
+  if (limits?.firstObjectPerBucket) {
+    console.log(
+      `Storage sample-expected name+size (MD5): ${sampleExpectedFingerprintMd5.fingerprint} · count=${sampleExpectedFingerprintMd5.count} `
+      + `(full source count=${inventory.namesFingerprintMd5.count} — fingerprints differ by design)`,
+    );
   }
 
   let completed = 0;
@@ -853,13 +956,44 @@ async function captureStorage(rawDir, limits = null, config = {}) {
 
   // W8: reconcile — drop prior keys no longer present (stale index entries)
   manifest.reconciledDropped = [...priorIndex.keys()].filter(k => !seenKeys.has(k)).length;
+  // Capsule-side fingerprint: only objects actually written into this capsule
+  const capsuleObjectKeys = storageObjectKeysFromBuckets(manifest.buckets);
+  manifest.capsuleNamesFingerprintMd5 = fingerprintSortedKeys(capsuleObjectKeys, 'md5');
+  manifest.capsuleNamesFingerprintSha256 = fingerprintSortedKeys(capsuleObjectKeys, 'sha256');
+  // Source-side fingerprint: full listing snapshot from backup start (may be larger when sampling)
+  manifest.sourceNamesFingerprintMd5 = inventory.namesFingerprintMd5;
+  manifest.sourceNamesFingerprintSha256 = inventory.namesFingerprintSha256;
+  // Scaled expected sample (first-per-bucket plan at list time) — should match capsule when downloads succeed
+  manifest.sampleExpectedNamesFingerprintMd5 = sampleExpectedFingerprintMd5;
+  manifest.sampleExpectedNamesFingerprintSha256 = sampleExpectedFingerprintSha256;
+  manifest.sampleMatchesCapsule = fingerprintsMatch(
+    sampleExpectedFingerprintMd5,
+    manifest.capsuleNamesFingerprintMd5,
+  );
   manifest.sourceInventory = inventory;
   const manifestPath = join(storageDir, 'storage-manifest.json');
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  let limitation = null;
+  if (limits?.firstObjectPerBucket) {
+    limitation = `first object per bucket (${manifest.objectCount} of ${inventory.objectCount} source objects; ${inventory.bucketCount} buckets)`;
+  } else if (limits) {
+    limitation = `first ${limits.maxStorageObjects} objects across ${limits.maxStorageBuckets} buckets`;
+  }
+  console.log(
+    `Storage capsule name+size (MD5): ${manifest.capsuleNamesFingerprintMd5.fingerprint} · count=${manifest.capsuleNamesFingerprintMd5.count}`
+    + (limits?.firstObjectPerBucket
+      ? ` · sample-expected MD5=${sampleExpectedFingerprintMd5.fingerprint}`
+        + ` match=${manifest.sampleMatchesCapsule}`
+        + ` · full-source MD5=${manifest.sourceNamesFingerprintMd5.fingerprint}`
+        + ` (count=${manifest.sourceNamesFingerprintMd5.count}, not expected to match sample)`
+      : limits
+        ? ` · source inventory MD5=${manifest.sourceNamesFingerprintMd5.fingerprint} (count=${manifest.sourceNamesFingerprintMd5.count})`
+        : ''),
+  );
   return {
     complete: true,
-    limited: Boolean(limits),
-    limitation: limits ? `first ${limits.maxStorageObjects} objects across ${limits.maxStorageBuckets} buckets` : null,
+    limited: Boolean(limits?.firstObjectPerBucket || limits?.maxStorageObjects != null),
+    limitation,
     bucketCount: manifest.buckets.length,
     objectCount: manifest.objectCount,
     totalBytes: manifest.totalBytes,
@@ -868,6 +1002,10 @@ async function captureStorage(rawDir, limits = null, config = {}) {
     downloaded: manifest.downloaded,
     concurrency,
     inventory,
+    namesFingerprintMd5: manifest.capsuleNamesFingerprintMd5,
+    sourceNamesFingerprintMd5: manifest.sourceNamesFingerprintMd5,
+    sampleExpectedNamesFingerprintMd5: sampleExpectedFingerprintMd5,
+    sampleMatchesCapsule: manifest.sampleMatchesCapsule,
     manifestPath,
   };
 }
@@ -936,7 +1074,9 @@ async function captureFunctions(config, rawDir, limits = null) {
     if (!Array.isArray(availableFunctions)) availableFunctions = availableFunctions?.functions || [];
   }
 
-  const functions = limits ? availableFunctions.slice(0, limits.maxFunctions) : availableFunctions;
+  const functions = (limits?.maxFunctions != null)
+    ? availableFunctions.slice(0, limits.maxFunctions)
+    : availableFunctions;
   const functionMeta = [];
   for (const fn of functions) {
     const name = fn.name || fn.slug;
@@ -989,10 +1129,27 @@ async function captureFunctions(config, rawDir, limits = null) {
   await writeFile(join(functionsDir, 'REDEPLOY-ALL.ps1'), redeploy.ps1);
   await writeFile(join(functionsDir, 'redeploy-all.sh'), redeploy.bash);
 
+  const functionsLimited = limits?.maxFunctions != null;
+  // Non-storage fingerprint: function name + file path + content sha256
+  const functionFpLines = [];
+  for (const fn of functionMeta) {
+    if (!fn.name) continue;
+    if (!fn.files?.length) {
+      functionFpLines.push(`${fn.name}\t0`);
+      continue;
+    }
+    for (const file of fn.files) {
+      functionFpLines.push(`${fn.name}/${file.path}\t${file.sha256 || file.bytes || 0}`);
+    }
+  }
+  const inventoryFingerprintMd5 = fingerprintSortedKeys(functionFpLines, 'md5');
+  console.log(
+    `Functions inventory fingerprint (MD5): ${inventoryFingerprintMd5.fingerprint} · count=${inventoryFingerprintMd5.count}`,
+  );
   return {
     complete: true,
-    limited: Boolean(limits),
-    limitation: limits ? `first ${limits.maxFunctions} Functions` : null,
+    limited: functionsLimited,
+    limitation: functionsLimited ? `first ${limits.maxFunctions} Functions` : null,
     count: functions.length,
     names: functionMeta.map(fn => fn.name),
     verifyJwt: Object.fromEntries(functionMeta.map(fn => [fn.name, fn.verifyJwt])),
@@ -1003,6 +1160,7 @@ async function captureFunctions(config, rawDir, limits = null) {
     manifestFile: 'functions-manifest.json',
     listVia,
     supabaseCliVersion: PINNED_SUPABASE_CLI,
+    inventoryFingerprintMd5,
   };
 }
 
@@ -1057,6 +1215,12 @@ async function captureAuth(config, rawDir) {
   ].join('\n');
   await writeFile(join(authDir, 'auth-inventory.json'), `${JSON.stringify(inventory, null, 2)}\n`);
   await writeFile(join(authDir, 'AUTH-CUTOVER.md'), checklist);
+  // Non-storage fingerprint: auth user id + email (no secrets)
+  const authFpLines = (inventory.users || []).map((u) => `${u.id || ''}\t${u.email || ''}`);
+  const inventoryFingerprintMd5 = fingerprintSortedKeys(authFpLines, 'md5');
+  console.log(
+    `Auth inventory fingerprint (MD5): ${inventoryFingerprintMd5.fingerprint} · count=${inventoryFingerprintMd5.count}`,
+  );
   return {
     complete: inventory.truncated !== false,
     partial: !inventory.truncated,
@@ -1064,6 +1228,7 @@ async function captureAuth(config, rawDir) {
     checklist: 'AUTH-CUTOVER.md',
     inventoryFile: 'auth-inventory.json',
     reason: inventory.reason || null,
+    inventoryFingerprintMd5,
   };
 }
 
@@ -1233,10 +1398,25 @@ async function backup() {
   const { config } = await loadConfig();
   const entitlement = await resolveEdition({ forceTrial: hasFlag('trial'), licensePath: flag('license') });
   const trial = entitlement.edition === 'trial';
-  console.log(trial
-    ? 'Portabase demo mode (--trial): limited sample capture for safe drills. Full open-source capture is the default without this flag.'
-    : 'Portabase community edition: full open-source capture. No license required.');
-  const limits = trial ? TRIAL_LIMITS : null;
+  const firstPerBucket = !trial && (
+    hasFlag('storage-first-per-bucket')
+    || config.capture?.storageSample === 'first-per-bucket'
+  );
+  if (trial) {
+    console.log('Portabase demo mode (--trial): limited sample capture for safe drills. Full open-source capture is the default without this flag.');
+  } else if (firstPerBucket) {
+    console.log(
+      'Portabase community edition: FULL database, Functions, and Auth; '
+      + 'Storage = first object from every bucket (size-bounded multi-bucket proof).',
+    );
+  } else {
+    console.log('Portabase community edition: full open-source capture. No license required.');
+  }
+  const limits = trial
+    ? TRIAL_LIMITS
+    : firstPerBucket
+      ? FIRST_PER_BUCKET_STORAGE
+      : null;
   const passphraseEnv = config.encryption?.passphraseEnv || 'PORTABASE_ENCRYPTION_PASSPHRASE';
   const passphrase = process.env[passphraseEnv];
   if (!passphrase || passphrase.length < 16) throw new Error(`${passphraseEnv} must contain at least 16 characters.`);
@@ -1416,6 +1596,336 @@ async function verify() {
   if (failures) process.exitCode = 4;
 }
 
+/**
+ * Offline capsule simulation — no Supabase target required.
+ * Decrypts, unpacks, checks layers against outer capsule.json + inner manifest.json.
+ */
+async function simulate() {
+  const capsuleArg = flag('capsule', argv[1] || '.');
+  const materialized = await materializeCapsule(capsuleArg);
+  const capsuleDir = materialized.capsuleDir;
+  const lines = [];
+  const checks = [];
+  const pass = (name, detail = '') => {
+    checks.push({ ok: true, name, detail });
+    lines.push(`PASS  ${name}${detail ? ` — ${detail}` : ''}`);
+  };
+  const fail = (name, detail = '') => {
+    checks.push({ ok: false, name, detail });
+    lines.push(`FAIL  ${name}${detail ? ` — ${detail}` : ''}`);
+  };
+  const warn = (name, detail = '') => {
+    checks.push({ ok: true, name, detail, warn: true });
+    lines.push(`WARN  ${name}${detail ? ` — ${detail}` : ''}`);
+  };
+
+  console.log([
+    'Portabase SIMULATE (offline)',
+    'No destination Supabase project is used.',
+    'Decrypt → unpack → match components to capture manifest.',
+    '',
+    `Capsule: ${capsuleDir}`,
+    '',
+  ].join('\n'));
+
+  try {
+    // 1 · Outer envelope checksums
+    const checksumPath = join(capsuleDir, 'checksums.sha256');
+    if (!existsSync(checksumPath)) fail('outer-checksums', 'checksums.sha256 missing');
+    else {
+      const results = await verifyChecksumFile(capsuleDir, checksumPath);
+      const bad = results.filter(r => !r.ok);
+      if (bad.length) fail('outer-checksums', bad.map(b => b.path).join(', '));
+      else pass('outer-checksums', `${results.length} file(s)`);
+    }
+
+    // 2 · Outer capsule.json present
+    const outerPath = join(capsuleDir, 'capsule.json');
+    if (!existsSync(outerPath)) {
+      fail('capsule.json', 'missing outer metadata');
+      throw new Error('Cannot continue without capsule.json');
+    }
+    const outer = JSON.parse(await readFile(outerPath, 'utf8'));
+    pass('capsule.json', `id=${outer.id} status=${outer.status} edition=${outer.edition || 'n/a'}`);
+
+    if (!process.env.PORTABASE_ENCRYPTION_PASSPHRASE) {
+      fail('passphrase', 'PORTABASE_ENCRYPTION_PASSPHRASE not set');
+      throw new Error('Passphrase required to open capsule');
+    }
+
+    // 3 · Decrypt + extract (same path as restore plan)
+    let opened;
+    try {
+      opened = await openCapsule(capsuleDir, process.env.PORTABASE_ENCRYPTION_PASSPHRASE);
+      pass('decrypt+unpack', 'AES-256-GCM auth + tar extract');
+    } catch (error) {
+      fail('decrypt+unpack', error.message);
+      throw error;
+    }
+
+    const { metadata, manifest, extracted, temp } = opened;
+    try {
+      // 4 · Outer vs inner identity
+      if (metadata.id && manifest.projectRef && outer.projectRef && metadata.id !== outer.id) {
+        fail('id-match', `outer id ${outer.id} ≠ encrypted metadata ${metadata.id}`);
+      } else if (outer.id && metadata.id && outer.id !== metadata.id) {
+        fail('id-match', `outer ${outer.id} ≠ meta ${metadata.id}`);
+      } else {
+        pass('id-match', outer.id || metadata.id);
+      }
+
+      if (outer.projectRef && manifest.projectRef && outer.projectRef !== manifest.projectRef) {
+        fail('project-ref', `outer ${outer.projectRef} ≠ inner ${manifest.projectRef}`);
+      } else {
+        pass('project-ref', manifest.projectRef || outer.projectRef);
+      }
+
+      if (outer.status && manifest.status && outer.status !== manifest.status) {
+        warn('status-sync', `outer=${outer.status} inner=${manifest.status}`);
+      } else {
+        pass('status', manifest.status || outer.status);
+      }
+
+      if (['PARTIAL', 'TRIAL'].includes(manifest.status) || ['PARTIAL', 'TRIAL'].includes(outer.status)) {
+        warn(
+          'capture-completeness',
+          `${manifest.status || outer.status} — not a full production Escape; gaps expected`,
+        );
+      } else if (manifest.status === 'COMPLETE') {
+        pass('capture-completeness', 'COMPLETE');
+      }
+
+      // 5 · Layer presence vs manifest
+      const contents = manifest.contents || outer.contents || {};
+      for (const layer of ['database', 'storage', 'functions', 'auth']) {
+        const item = contents[layer];
+        if (!item) {
+          warn(`layer:${layer}`, 'not listed in manifest');
+          continue;
+        }
+        if (item.skipped) {
+          warn(`layer:${layer}`, item.reason || 'skipped');
+          continue;
+        }
+        if (!item.complete) {
+          fail(`layer:${layer}`, item.error || item.reason || 'incomplete');
+          continue;
+        }
+
+        if (layer === 'database') {
+          const expected = item.files?.length
+            ? item.files
+            : ['roles.sql', 'schema.sql', 'database-inventory.json'].filter(f => true);
+          // data.sql may be absent for trial/schema-only
+          let missing = [];
+          for (const f of expected) {
+            if (!existsSync(join(extracted, 'database', f))) missing.push(f);
+          }
+          // Always require inventory or schema for a "complete" db layer claim
+          if (!existsSync(join(extracted, 'database', 'schema.sql')) && !existsSync(join(extracted, 'database', 'roles.sql'))) {
+            missing.push('schema.sql|roles.sql');
+          }
+          if (missing.length) fail('layer:database', `missing ${missing.join(', ')}`);
+          else {
+            const extra = item.limited ? ` limited: ${item.limitation || 'yes'}` : '';
+            const sum = item.summary
+              ? ` tables≈${item.summary.tables} rows≈${item.summary.rows}`
+              : '';
+            pass('layer:database', `files OK${extra}${sum}`);
+          }
+        } else if (layer === 'storage') {
+          const smPath = join(extracted, 'storage', 'storage-manifest.json');
+          if (!existsSync(smPath)) {
+            // trial may claim complete with empty objects
+            if (item.limited && Number(item.objectCount || 0) === 0) {
+              warn('layer:storage', 'limited trial with 0 captured objects (inventory-only)');
+            } else {
+              fail('layer:storage', 'storage-manifest.json missing');
+            }
+          } else {
+            const storage = JSON.parse(await readFile(smPath, 'utf8'));
+            let hashOk = 0;
+            let hashFail = 0;
+            let missingObj = 0;
+            for (const bucket of storage.buckets || []) {
+              for (const object of bucket.objects || []) {
+                const source = join(
+                  extracted,
+                  'storage',
+                  safeObjectPath(bucket.id),
+                  safeObjectPath(object.name),
+                );
+                if (!existsSync(source)) {
+                  missingObj += 1;
+                  continue;
+                }
+                if (object.sha256) {
+                  const actual = await hashFile(source);
+                  if (actual === object.sha256) hashOk += 1;
+                  else hashFail += 1;
+                } else {
+                  hashOk += 1;
+                }
+              }
+            }
+            const expectedCount = Number(storage.objectCount ?? item.objectCount ?? 0);
+            const detail = `manifest objects=${expectedCount} on-disk hash_ok=${hashOk} hash_fail=${hashFail} missing=${missingObj}`;
+            if (hashFail || missingObj) fail('layer:storage', detail);
+            else if (item.limited) warn('layer:storage', `${detail} (limited sample)`);
+            else pass('layer:storage', detail);
+
+            // Inventory totals (source truth at capture) vs what is in the capsule
+            if (item.inventory?.totalBytes != null && item.totalBytes != null
+              && Number(item.inventory.totalBytes) > Number(item.totalBytes || 0)
+              && item.limited) {
+              warn(
+                'storage-source-vs-capsule',
+                `source inventory ${formatBytes(item.inventory.totalBytes)} · in capsule ${formatBytes(item.totalBytes || 0)} (trial/partial)`,
+              );
+            }
+            // Recompute names fingerprint from capsule contents vs stored snapshot
+            if (storage.capsuleNamesFingerprintMd5) {
+              const recomputed = fingerprintSortedKeys(storageObjectKeysFromBuckets(storage.buckets), 'md5');
+              if (fingerprintsMatch(storage.capsuleNamesFingerprintMd5, recomputed)) {
+                pass(
+                  'storage-names-fingerprint',
+                  `MD5 ${recomputed.fingerprint} · ${recomputed.count} name+size rows`,
+                );
+              } else {
+                fail(
+                  'storage-names-fingerprint',
+                  `stored=${storage.capsuleNamesFingerprintMd5.fingerprint} recomputed=${recomputed.fingerprint}`,
+                );
+              }
+            }
+            if (storage.sourceNamesFingerprintMd5 && item.limited) {
+              warn(
+                'storage-source-names-fingerprint',
+                `source inventory MD5 ${storage.sourceNamesFingerprintMd5.fingerprint} `
+                + `(${storage.sourceNamesFingerprintMd5.count} name+size rows) · capsule has sample only`,
+              );
+            }
+          }
+        } else if (layer === 'functions') {
+          const fm = join(extracted, 'functions', 'functions-manifest.json');
+          if (!existsSync(fm) && !(item.names?.length)) {
+            if (item.limited || item.error) fail('layer:functions', item.error || item.reason || 'no functions payload');
+            else warn('layer:functions', 'no functions-manifest.json');
+          } else if (existsSync(fm)) {
+            const functions = JSON.parse(await readFile(fm, 'utf8'));
+            const entries = functions.functions || (functions.names || item.names || []).map(name => ({ name }));
+            const { missing, skipped, present } = classifyFunctionDirs(
+              entries,
+              name => existsSync(join(extracted, 'functions', safeObjectPath(name))),
+            );
+            if (missing.length) {
+              fail('layer:functions', `${missing.length}/${entries.length} function dirs missing: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '…' : ''}`);
+            } else if (skipped.length) {
+              warn('layer:functions', `${present}/${entries.length} function(s) present · ${skipped.length} ghost name(s) skipped at capture (404 on source): ${skipped.join(', ')}`);
+            } else {
+              pass('layer:functions', `${entries.length} function(s) present`);
+            }
+          } else {
+            pass('layer:functions', `${(item.names || []).length} name(s) in outer metadata`);
+          }
+        } else if (layer === 'auth') {
+          const authDir = join(extracted, 'auth');
+          if (!existsSync(authDir)) warn('layer:auth', 'no auth/ directory (may be embedded in database dump)');
+          else pass('layer:auth', 'auth artifacts present');
+        }
+      }
+
+      // 6 · Manual reconfig reminders (always — not failures)
+      console.log('\n--- Manifest summary (what a new Supabase would need) ---');
+      console.log(`Source project: ${manifest.projectRef}`);
+      console.log(`Capture status: ${manifest.status} · edition: ${manifest.edition || outer.edition || 'community'}`);
+      for (const layer of ['database', 'storage', 'functions', 'auth']) {
+        const item = contents[layer];
+        if (!item) continue;
+        const flag = item.complete ? (item.limited ? 'LIMITED' : 'READY') : (item.skipped ? 'SKIP' : 'GAP');
+        console.log(`  ${flag.padEnd(8)} ${layer}${item.limitation ? ` — ${item.limitation}` : ''}${item.error ? ` — ${item.error}` : ''}${item.reason && !item.limitation ? ` — ${item.reason}` : ''}`);
+      }
+      if (contents.functions?.secretNames?.length) {
+        console.log(`\nSecrets to re-create on a new project (names only): ${contents.functions.secretNames.join(', ')}`);
+      }
+      // 7 · Restore-plan-scoped sampling — validate only the selected subset, offline
+      const planPath = flag('restore-plan');
+      if (planPath) {
+        const plan = JSON.parse(await readFile(resolve(planPath), 'utf8'));
+        try {
+          validateRestorePlan(plan, { capsuleId: metadata.id });
+          pass('restore-plan', `bound to capsule ${metadata.id}, ${formatBytes(restorePlanSelectedBytes(plan))} selected`);
+        } catch (error) {
+          fail('restore-plan', error.message);
+        }
+        const selectedTables = restorePlanSelectedTableKeys(plan);
+        if (selectedTables.size) {
+          const dataSqlPath = join(extracted, 'database', 'data.sql');
+          if (!existsSync(dataSqlPath)) {
+            fail('restore-plan:database', 'data.sql missing — cannot sample selected tables');
+          } else {
+            const measured = new Map((await measureDataSqlTables(dataSqlPath)).map(t => [`${t.schema}.${t.table}`, t.bytes]));
+            const missing = [...selectedTables].filter(key => !measured.has(key));
+            if (missing.length) warn('restore-plan:database', `${missing.length} selected table(s) have no data rows in capsule (empty table, or not in dump): ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '…' : ''}`);
+            else pass('restore-plan:database', `${selectedTables.size} selected table(s) present in data.sql`);
+          }
+        }
+        const selectedBucketIds = new Set((plan.buckets || []).filter(b => b.selected).map(b => b.id));
+        if (selectedBucketIds.size) {
+          const smPath = join(extracted, 'storage', 'storage-manifest.json');
+          if (!existsSync(smPath)) {
+            fail('restore-plan:storage', 'storage-manifest.json missing — cannot sample selected buckets');
+          } else {
+            const storage = JSON.parse(await readFile(smPath, 'utf8'));
+            let hashOk = 0;
+            let hashFail = 0;
+            for (const bucket of (storage.buckets || []).filter(b => selectedBucketIds.has(b.id))) {
+              for (const object of bucket.objects || []) {
+                const source = join(extracted, 'storage', safeObjectPath(bucket.id), safeObjectPath(object.name));
+                if (!existsSync(source)) { hashFail += 1; continue; }
+                if (object.sha256 && await hashFile(source) !== object.sha256) hashFail += 1; else hashOk += 1;
+              }
+            }
+            if (hashFail) fail('restore-plan:storage', `selected buckets: hash_ok=${hashOk} hash_fail_or_missing=${hashFail}`);
+            else pass('restore-plan:storage', `selected buckets: ${hashOk} object(s) hash-verified`);
+          }
+        }
+        const selectedFunctionNames = restorePlanSelectedFunctionNames(plan);
+        if (selectedFunctionNames.size) {
+          let missingSrc = 0;
+          for (const name of selectedFunctionNames) {
+            if (!existsSync(join(extracted, 'functions', safeObjectPath(name)))) missingSrc += 1;
+          }
+          if (missingSrc) fail('restore-plan:functions', `${missingSrc}/${selectedFunctionNames.size} selected function dir(s) missing`);
+          else pass('restore-plan:functions', `${selectedFunctionNames.size} selected function(s) present`);
+        }
+      }
+
+      console.log('\nNot simulated (requires live blank project): psql apply, Storage upload, Functions deploy, blank-target guards.');
+      console.log('Next live proof: portabase replay --capsule <dir> --confirm-target <NEW_REF>');
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
+  } finally {
+    if (materialized.cleanup) await rm(materialized.cleanup, { recursive: true, force: true });
+  }
+
+  console.log(`\n--- Checks ---\n${lines.join('\n')}`);
+  const failures = checks.filter(c => !c.ok).length;
+  const warnings = checks.filter(c => c.warn).length;
+  const report = {
+    mode: 'simulate',
+    capsule: capsuleDir,
+    failures,
+    warnings,
+    checks,
+  };
+  if (hasFlag('json')) console.log(JSON.stringify(report, null, 2));
+  console.log(`\n${failures ? 'SIMULATE FAILED' : 'SIMULATE OK'}: ${checks.length - failures}/${checks.length} checks passed${warnings ? ` · ${warnings} warning(s)` : ''}`);
+  console.log('No Supabase destination was contacted.');
+  if (failures) process.exitCode = 4;
+}
+
 async function openCapsule(capsuleDir, passphrase) {
   const metadata = JSON.parse(await readFile(join(capsuleDir, 'capsule.json'), 'utf8'));
   const temp = await mkdtemp(join(tmpdir(), 'portabase-restore-'));
@@ -1448,63 +1958,179 @@ function targetFetch(path, options = {}) {
   return fetch(`${url}${path}`, { ...options, headers: supabaseHeaders(key, options.headers || {}) });
 }
 
-async function restoreDatabase(extracted) {
+async function restoreDatabase(extracted, plan = null) {
   const psql = resolveTool('psql');
   const targetDb = process.env.PORTABASE_TARGET_DB_URL;
   if (!psql || !targetDb) throw new Error('psql and PORTABASE_TARGET_DB_URL are required for database restore.');
   const applied = [];
+  // Dirty-target drills: continue past "already exists" / duplicate object errors.
+  const stopOnError = hasFlag('allow-occupied-target') ? '0' : '1';
+  let filteredDataDir = null;
   for (const file of ['roles.sql', 'schema.sql', 'data.sql']) {
-    const path = join(extracted, 'database', file);
+    let path = join(extracted, 'database', file);
+    if (file === 'data.sql' && plan && existsSync(path)) {
+      // Schema always applies in full (structure is small and required); only DATA rows
+      // are filtered to the plan's selected tables, so restore stays under the byte budget.
+      filteredDataDir = await mkdtemp(join(tmpdir(), 'portabase-plan-'));
+      const filteredPath = join(filteredDataDir, 'data.sql');
+      await filterDataSqlByTables(path, filteredPath, restorePlanSelectedTableKeys(plan));
+      path = filteredPath;
+    }
     if (existsSync(path)) {
-      await run(psql, [targetDb, '--set', 'ON_ERROR_STOP=1', '--file', path]);
+      await run(psql, [targetDb, '--set', `ON_ERROR_STOP=${stopOnError}`, '--file', path]);
       applied.push(file);
     }
   }
-  return { applied };
+  if (filteredDataDir) await rm(filteredDataDir, { recursive: true, force: true });
+  return { applied, plan: plan ? { selectedTables: [...restorePlanSelectedTableKeys(plan)] } : null };
 }
 
-async function restoreStorage(extracted) {
+async function restoreStorage(extracted, plan = null) {
   const manifestPath = join(extracted, 'storage', 'storage-manifest.json');
   if (!existsSync(manifestPath)) return { verified: false, reason: 'Storage manifest is missing.', bucketCount: 0, objectCount: 0, hashesVerified: 0 };
-  const storage = JSON.parse(await readFile(manifestPath, 'utf8'));
+  const fullStorage = JSON.parse(await readFile(manifestPath, 'utf8'));
+  const storage = plan ? filterStorageManifestByPlan(fullStorage, plan) : fullStorage;
   let hashesVerified = 0;
+  const restoredKeys = [];
   for (const bucket of storage.buckets) {
     const created = await targetFetch('/storage/v1/bucket', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: bucket.id, name: bucket.name, public: bucket.public, file_size_limit: bucket.fileSizeLimit, allowed_mime_types: bucket.allowedMimeTypes }),
+      body: JSON.stringify({ id: bucket.id, name: bucket.name || bucket.id, public: bucket.public, file_size_limit: bucket.fileSizeLimit, allowed_mime_types: bucket.allowedMimeTypes }),
     });
-    if (!created.ok) throw new Error(`Unable to create blank-target bucket ${bucket.id}: HTTP ${created.status}`);
+    // 200/201 = created; 409/400 often means bucket already exists (dirty-target drill)
+    if (!created.ok && created.status !== 409 && created.status !== 400) {
+      throw new Error(`Unable to create blank-target bucket ${bucket.id}: HTTP ${created.status}`);
+    }
     for (const object of bucket.objects) {
       const source = join(extracted, 'storage', safeObjectPath(bucket.id), safeObjectPath(object.name));
       const objectPath = object.name.split('/').map(encodeURIComponent).join('/');
+      // Buffer body avoids Node/Windows spawn EINVAL with stream+fetch duplex on some builds
+      const body = await readFile(source);
       const response = await targetFetch(`/storage/v1/object/${encodeURIComponent(bucket.id)}/${objectPath}`, {
         method: 'POST',
-        headers: { 'Content-Type': object.contentType || 'application/octet-stream', 'x-upsert': 'false' },
-        body: createReadStream(source),
-        duplex: 'half',
+        headers: { 'Content-Type': object.contentType || 'application/octet-stream', 'x-upsert': 'true' },
+        body,
       });
       if (!response.ok) throw new Error(`Unable to restore blank-target object ${bucket.id}/${object.name}: HTTP ${response.status}`);
       const readback = await targetFetch(`/storage/v1/object/authenticated/${encodeURIComponent(bucket.id)}/${objectPath}`);
       if (!readback.ok) throw new Error(`Unable to read back ${bucket.id}/${object.name}: HTTP ${readback.status}`);
       const remoteHash = createHash('sha256').update(Buffer.from(await readback.arrayBuffer())).digest('hex');
-      const expectedHash = object.sha256 || await hashFile(source);
+      const expectedHash = object.sha256 || createHash('sha256').update(body).digest('hex');
       if (remoteHash !== expectedHash) throw new Error(`Read-back hash mismatch for ${bucket.id}/${object.name}.`);
       hashesVerified += 1;
+      restoredKeys.push(storageInventoryLine(bucket.id, object.name, object.size ?? body.length));
     }
   }
-  return { verified: hashesVerified === Number(storage.objectCount || 0), bucketCount: storage.buckets.length, objectCount: storage.objectCount, hashesVerified };
+  // Name+size inventory fingerprint: destination restored set vs capsule snapshot (or, with a
+  // plan, vs the plan's selected subset — a filtered restore is expected to differ from the
+  // full capsule by design, same pattern as the trial/sample "limitation" fields).
+  const expectedNames = plan
+    ? fingerprintSortedKeys(storageObjectKeysFromBuckets(storage.buckets), 'md5')
+    : (fullStorage.capsuleNamesFingerprintMd5 || fingerprintSortedKeys(storageObjectKeysFromBuckets(fullStorage.buckets), 'md5'));
+  const actualNames = fingerprintSortedKeys(restoredKeys, expectedNames.algo || 'md5');
+  const namesMatch = fingerprintsMatch(expectedNames, actualNames);
+  if (!namesMatch) {
+    console.warn(
+      `WARNING: Storage name+size fingerprint mismatch — ${plan ? 'plan selection' : 'capsule'}=${expectedNames.fingerprint} `
+      + `destination=${actualNames.fingerprint} (count ${expectedNames.count} vs ${actualNames.count})`,
+    );
+  } else {
+    console.log(`Storage name+size fingerprint OK (MD5 ${actualNames.fingerprint} · ${actualNames.count} objects)`);
+  }
+  // Optional: live target listing fingerprint vs full source inventory (only meaningful after
+  // a full, unfiltered restore — a plan restores a deliberate subset, so skip this comparison).
+  let liveNamesMatch = null;
+  let liveNamesFingerprint = null;
+  if (!plan && fullStorage.sourceNamesFingerprintMd5 && !fullStorage.limitation) {
+    try {
+      liveNamesFingerprint = await fingerprintLiveTargetStorageNames();
+      liveNamesMatch = fingerprintsMatch(storage.sourceNamesFingerprintMd5, liveNamesFingerprint);
+      console.log(
+        liveNamesMatch
+          ? `Live target names match source inventory snapshot (MD5 ${liveNamesFingerprint.fingerprint})`
+          : `Live target names differ from source snapshot — capsule=${storage.sourceNamesFingerprintMd5.fingerprint} live=${liveNamesFingerprint.fingerprint}`,
+      );
+    } catch (err) {
+      console.warn(`WARNING: could not fingerprint live target Storage: ${err.message}`);
+    }
+  }
+  return {
+    verified: hashesVerified === Number(storage.objectCount || 0) && namesMatch,
+    limited: Boolean(plan),
+    bucketCount: storage.buckets.length,
+    objectCount: storage.objectCount,
+    hashesVerified,
+    namesFingerprint: actualNames,
+    expectedNamesFingerprint: expectedNames,
+    namesMatch,
+    liveNamesFingerprint,
+    liveNamesMatch,
+    sourceNamesFingerprint: fullStorage.sourceNamesFingerprintMd5 || null,
+  };
 }
 
-async function restoreFunctions(extracted, manifest, targetRef) {
+/** List all object names on the restore target and fingerprint (same method as capture). */
+async function fingerprintLiveTargetStorageNames() {
+  const bucketsResponse = await targetFetch('/storage/v1/bucket', { signal: AbortSignal.timeout(15000) });
+  if (!bucketsResponse.ok) throw new Error(`list buckets HTTP ${bucketsResponse.status}`);
+  const buckets = await bucketsResponse.json();
+  const keys = [];
+  for (const bucket of buckets) {
+    const id = bucket.id || bucket.name;
+    if (!id) continue;
+    const objects = await listTargetBucketObjects(id);
+    for (const object of objects) {
+      const name = object.fullName || object.name;
+      if (!name) continue;
+      keys.push(storageInventoryLine(id, name, object.size ?? object.metadata?.size ?? 0));
+    }
+  }
+  return fingerprintSortedKeys(keys, 'md5');
+}
+
+async function listTargetBucketObjects(bucketId, prefix = '') {
+  const objects = [];
+  let offset = 0;
+  for (;;) {
+    const response = await targetFetch(`/storage/v1/object/list/${encodeURIComponent(bucketId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prefix, limit: 1000, offset }),
+    });
+    if (!response.ok) throw new Error(`list ${bucketId}: HTTP ${response.status}`);
+    const batch = await response.json();
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    for (const entry of batch) {
+      const name = entry.name;
+      if (!name) continue;
+      const path = prefix ? `${prefix}${name}` : name;
+      // folders end with / in some listings
+      if (entry.id == null && !entry.metadata) {
+        const nested = await listTargetBucketObjects(bucketId, path.endsWith('/') ? path : `${path}/`);
+        objects.push(...nested);
+      } else {
+        const size = Number(entry.metadata?.size ?? entry.metadata?.contentLength ?? 0) || 0;
+        objects.push({ fullName: path, name: path, size, metadata: entry.metadata || {} });
+      }
+    }
+    if (batch.length < 1000) break;
+    offset += batch.length;
+  }
+  return objects;
+}
+
+async function restoreFunctions(extracted, manifest, targetRef, plan = null) {
   const functions = manifest.contents.functions;
   if (!functions?.complete) return { verified: false, reason: functions?.reason || functions?.error || 'Function capture was incomplete.', expected: [], active: [] };
-  if (!functions.names?.length) return { verified: true, expected: [], active: [] };
+  const selectedNames = plan ? restorePlanSelectedFunctionNames(plan) : null;
+  const names = plan ? (functions.names || []).filter(name => selectedNames.has(name)) : (functions.names || []);
+  if (!names.length) return { verified: true, limited: Boolean(plan), expected: [], active: [] };
   const supabase = resolveTool('supabase');
   if (!supabase || !process.env.SUPABASE_ACCESS_TOKEN) throw new Error('Supabase CLI and SUPABASE_ACCESS_TOKEN are required to restore Edge Functions.');
   const workdir = join(extracted, 'functions');
   const verifyMap = functions.verifyJwt || {};
-  for (const name of functions.names) {
+  for (const name of names) {
     const args = ['functions', 'deploy', name, '--project-ref', targetRef, '--workdir', workdir];
     if (verifyMap[name] === false) args.push('--no-verify-jwt');
     await run(supabase, args, { cwd: workdir, env: process.env });
@@ -1514,21 +2140,21 @@ async function restoreFunctions(extracted, manifest, targetRef) {
   });
   if (result.status !== 0) throw new Error(`Unable to verify restored Edge Functions: ${(result.stderr || '').trim().slice(0, 300)}`);
   const active = JSON.parse(result.stdout || '[]').map(fn => fn.name || fn.slug);
-  const missing = functions.names.filter(name => !active.includes(name));
-  return { verified: missing.length === 0, expected: functions.names, active, missing, redeployScripts: functions.redeployScripts || null };
+  const missing = names.filter(name => !active.includes(name));
+  return { verified: missing.length === 0, limited: Boolean(plan), expected: names, active, missing, redeployScripts: functions.redeployScripts || null };
 }
 
-async function verifyRestoredDatabase(extracted, limited = false) {
+async function verifyRestoredDatabase(extracted, limited = false, plan = null) {
   const expectedPath = join(extracted, 'database', 'database-inventory.json');
   if (!existsSync(expectedPath)) return { verified: false, reason: 'Source database inventory is missing.' };
   const expectedSource = JSON.parse(await readFile(expectedPath, 'utf8'));
-  const expected = limited ? {
-    ...expectedSource,
-    tables: (expectedSource.tables || []).map(table => ({ ...table, rows: 0 })),
-    authUsers: 0,
-  } : expectedSource;
+  let expected = expectedSource;
+  if (limited) {
+    expected = { ...expected, tables: (expected.tables || []).map(table => ({ ...table, rows: 0 })), authUsers: 0 };
+  }
+  if (plan) expected = applyRestorePlanToExpectedInventory(expected, plan);
   const actual = await captureDatabaseInventory(process.env.PORTABASE_TARGET_DB_URL);
-  return { ...compareDatabaseInventories(expected, actual), expected, actual };
+  return { ...compareDatabaseInventories(expected, actual), limited: limited || Boolean(plan), expected, actual };
 }
 
 const MANUAL_RECOVERY_ACTIONS = [
@@ -1565,7 +2191,7 @@ async function writeRecoveryEvidence(report) {
   return { jsonPath, htmlPath };
 }
 
-async function readTargetInventory(targetRef) {
+async function readTargetInventory(targetRef, opts = {}) {
   const psql = resolveTool('psql');
   const supabase = resolveTool('supabase');
   const targetDb = process.env.PORTABASE_TARGET_DB_URL;
@@ -1587,23 +2213,86 @@ async function readTargetInventory(targetRef) {
   if (!usersResponse.ok) throw new Error(`Target Auth inspection failed: HTTP ${usersResponse.status}`);
   const buckets = await bucketsResponse.json();
   const users = await usersResponse.json();
+  let edgeFunctions = 0;
   const functionsResult = spawnSync(supabase, ['functions', 'list', '--project-ref', targetRef, '--output', 'json'], {
     encoding: 'utf8', windowsHide: true, env: process.env,
   });
-  if (functionsResult.status !== 0) throw new Error(`Target Function inspection failed: ${(functionsResult.stderr || '').trim().slice(0, 240)}`);
-  let functions;
-  try { functions = JSON.parse(functionsResult.stdout || '[]'); } catch { throw new Error('Target Function inspection returned invalid JSON.'); }
+  if (functionsResult.status !== 0) {
+    const detail = `${functionsResult.stderr || ''}${functionsResult.stdout || ''}`.trim().slice(0, 240);
+    if (opts.allowOccupied) {
+      console.warn(`WARNING: target Function list failed (continuing with --allow-occupied-target): ${detail || 'no detail'}`);
+      edgeFunctions = 0;
+    } else {
+      throw new Error(`Target Function inspection failed: ${detail || 'supabase functions list failed'}`);
+    }
+  } else {
+    let functions;
+    try { functions = JSON.parse(functionsResult.stdout || '[]'); } catch { throw new Error('Target Function inspection returned invalid JSON.'); }
+    edgeFunctions = Array.isArray(functions) ? functions.length : 0;
+  }
   const inventory = {
     applicationTables: tableCount,
     authUsers: Array.isArray(users?.users) ? users.users.length : 0,
     storageBuckets: Array.isArray(buckets) ? buckets.length : 0,
-    edgeFunctions: Array.isArray(functions) ? functions.length : 0,
+    edgeFunctions,
   };
   return inventory;
 }
 
-async function inspectRestoreTarget(targetRef) {
-  return validateBlankRestoreInventory(await readTargetInventory(targetRef));
+async function inspectRestoreTarget(targetRef, opts = {}) {
+  return validateBlankRestoreInventory(await readTargetInventory(targetRef, opts), opts);
+}
+
+/**
+ * Generate a restore plan for a capsule: every table, storage bucket, and Function, with
+ * its measured byte size and `selected: true` by default. Edit `selected` per entry (and
+ * optionally `maxBytes`) to fit a budget — the customer's own filter, no GUI required.
+ * The capsule itself always contains everything; this only scopes what gets RESTORED.
+ */
+async function restorePlanCommand() {
+  const materialized = await materializeCapsule(flag('capsule', argv[1] || '.'));
+  const opened = await openCapsule(materialized.capsuleDir, process.env.PORTABASE_ENCRYPTION_PASSPHRASE);
+  try {
+    const { metadata, manifest, extracted } = opened;
+    const dataSqlPath = join(extracted, 'database', 'data.sql');
+    const tableSizes = existsSync(dataSqlPath) ? await measureDataSqlTables(dataSqlPath) : [];
+    const storageManifestPath = join(extracted, 'storage', 'storage-manifest.json');
+    const storageManifest = existsSync(storageManifestPath)
+      ? JSON.parse(await readFile(storageManifestPath, 'utf8'))
+      : null;
+    const maxBytes = Number(flag('max-restore-bytes', DEFAULT_RESTORE_PLAN_MAX_BYTES));
+    const plan = buildRestorePlan({ manifest, capsuleId: metadata.id, tableSizes, storageManifest, maxBytes });
+    const outputPath = resolve(flag('output', `restore-plan-${metadata.id}.json`));
+    if (existsSync(outputPath) && !hasFlag('force')) {
+      throw new Error(`${outputPath} already exists. Add --force to overwrite.`);
+    }
+    await writeFile(outputPath, `${JSON.stringify(plan, null, 2)}\n`);
+    const selectedBytes = restorePlanSelectedBytes(plan);
+    console.log([
+      `Restore plan written: ${outputPath}`,
+      `Capsule: ${metadata.id}`,
+      `Tables: ${plan.tables.length}  Buckets: ${plan.buckets.length}  Functions: ${plan.functions.length}`,
+      `Selected (all, by default): ${formatBytes(selectedBytes)} of budget ${formatBytes(maxBytes)}`,
+      selectedBytes > maxBytes
+        ? '\nOVER BUDGET as generated (everything selected). Edit "selected": false on tables/buckets in the plan file to fit, then pass it to restore/replay/simulate with --restore-plan.'
+        : '\nUnder budget with everything selected — edit "selected" per entry only if you want a smaller/targeted restore (e.g. sampling a few tables for validation).',
+    ].join('\n'));
+    if (hasFlag('json')) console.log(JSON.stringify({ path: outputPath, plan, selectedBytes }));
+  } finally {
+    await rm(opened.temp, { recursive: true, force: true });
+    if (materialized.cleanup) await rm(materialized.cleanup, { recursive: true, force: true });
+  }
+}
+
+/** Load and validate a --restore-plan file against the opened capsule's id. Returns null if no flag was given (unfiltered / full). */
+async function loadRestorePlanFlag(capsuleId) {
+  const planPath = flag('restore-plan');
+  if (!planPath) return null;
+  const plan = JSON.parse(await readFile(resolve(planPath), 'utf8'));
+  const maxBytesOverride = hasFlag('max-restore-bytes') ? Number(flag('max-restore-bytes')) : undefined;
+  const { selectedBytes, maxBytes } = validateRestorePlan(plan, { capsuleId, maxBytesOverride });
+  console.log(`Restore plan OK: ${formatBytes(selectedBytes)} selected of ${formatBytes(maxBytes)} budget (${plan.tables.filter(t => t.selected).length}/${plan.tables.length} tables, ${plan.buckets.filter(b => b.selected).length}/${plan.buckets.length} buckets, ${plan.functions.filter(f => f.selected).length}/${plan.functions.length} functions).`);
+  return plan;
 }
 
 async function restore() {
@@ -1617,6 +2306,8 @@ async function restore() {
   try {
     opened = await openCapsule(materialized.capsuleDir, process.env.PORTABASE_ENCRYPTION_PASSPHRASE);
     const { manifest, metadata, extracted } = opened;
+    evidence.capsuleId = metadata.id;
+    const restorePlan = await loadRestorePlanFlag(metadata.id);
     evidence = {
       ...evidence,
       capsuleId: metadata.id,
@@ -1626,9 +2317,11 @@ async function restore() {
       targetProjectRef: process.env.PORTABASE_TARGET_PROJECT_REF || null,
       captureContents: manifest.contents,
       captureErrors: manifest.errors,
+      restorePlan: restorePlan ? { maxBytes: restorePlan.maxBytes, selectedBytes: restorePlanSelectedBytes(restorePlan) } : null,
     };
     console.log(`Portabase guarded recovery plan\n\nSource: ${manifest.projectRef}\nCapsule: ${metadata.id}\nCapture status: ${manifest.status}\n`);
     if (manifest.edition === 'trial') console.log('TRIAL SAMPLE: database rows and most Storage objects/Functions are intentionally absent. This is not a complete recovery backup.\n');
+    if (restorePlan) console.log(`RESTORE PLAN ACTIVE: only selected tables/buckets/functions will be written to the target (budget ${formatBytes(restorePlan.maxBytes)}).\n`);
     for (const name of ['database', 'storage', 'functions']) {
       const item = manifest.contents[name];
       console.log(`${item?.complete ? 'READY' : 'GAP  '}  ${name}${item?.reason ? ` — ${item.reason}` : ''}${item?.error ? ` — ${item.error}` : ''}`);
@@ -1645,13 +2338,27 @@ async function restore() {
       return;
     }
     const targetRef = process.env.PORTABASE_TARGET_PROJECT_REF;
-    validateRestoreTarget(manifest.projectRef, targetRef, writesTarget ? flag('confirm-target') : targetRef, process.env.PORTABASE_TARGET_SUPABASE_URL);
+    const allowOccupied = hasFlag('allow-occupied-target');
+    const allowSourceTarget = hasFlag('allow-source-target');
+    if (allowOccupied) {
+      console.log('\nWARNING: --allow-occupied-target — restoring into a NON-BLANK project. Collisions and partial failures are expected.');
+    }
+    if (allowSourceTarget) {
+      console.log('\nWARNING: --allow-source-target — target may be the same ref as the capsule source (disposable drill only).');
+    }
+    validateRestoreTarget(
+      manifest.projectRef,
+      targetRef,
+      writesTarget ? flag('confirm-target') : targetRef,
+      process.env.PORTABASE_TARGET_SUPABASE_URL,
+      { allowSourceTarget },
+    );
     const health = await targetFetch('/storage/v1/bucket', { signal: AbortSignal.timeout(10000) });
     if (!health.ok) throw new Error(`Target credential check failed: HTTP ${health.status}`);
-    const inventory = await inspectRestoreTarget(targetRef);
-    evidence.preflight = { verified: true, inventory };
-    console.log(`\nTARGET PREFLIGHT PASSED: ${targetRef}`);
-    console.log(`Blank inventory: ${Object.entries(inventory).map(([name, count]) => `${name}=${count}`).join(', ')}`);
+    const inventory = await inspectRestoreTarget(targetRef, { allowOccupied });
+    evidence.preflight = { verified: true, inventory, allowOccupied, allowSourceTarget };
+    console.log(`\nTARGET PREFLIGHT PASSED: ${targetRef}${allowOccupied ? ' (occupied allowed)' : ' (blank)'}`);
+    console.log(`Inventory: ${Object.entries(inventory).map(([name, count]) => `${name}=${count}`).join(', ')}`);
     if (!writesTarget) {
       console.log('\nNO-WRITE PREFLIGHT COMPLETE. The target was not changed. Type the exact target ref and execute only after reviewing this plan.');
       evidence.status = recoveryEvidenceStatus({ mode: 'preflight', captureStatus: manifest.status });
@@ -1659,14 +2366,14 @@ async function restore() {
       return;
     }
     console.log(`${drill ? 'LIMITED DRILL' : 'TARGET WRITE'} CONFIRMED: ${targetRef}`);
-    const databaseApplied = await restoreDatabase(extracted);
-    const storage = await restoreStorage(extracted);
-    const functions = await restoreFunctions(extracted, manifest, targetRef);
-    const database = await verifyRestoredDatabase(extracted, drill);
+    const databaseApplied = await restoreDatabase(extracted, restorePlan);
+    const storage = await restoreStorage(extracted, restorePlan);
+    const functions = await restoreFunctions(extracted, manifest, targetRef, restorePlan);
+    const database = await verifyRestoredDatabase(extracted, drill, restorePlan);
     evidence.database = { ...database, applied: databaseApplied.applied };
     evidence.storage = storage;
     evidence.functions = functions;
-    evidence.status = recoveryEvidenceStatus({ mode, captureStatus: manifest.status, database, storage, functions });
+    evidence.status = recoveryEvidenceStatus({ mode, captureStatus: manifest.status, database, storage, functions, restorePlan });
     if (evidence.status === 'FAILED') throw new Error('Recovery verification failed. Review the generated evidence for mismatched or unverified layers.');
     if (drill) {
       const api = await targetFetch('/rest/v1/', { headers: { Accept: 'application/openapi+json' }, signal: AbortSignal.timeout(10000) });
@@ -1674,6 +2381,8 @@ async function restore() {
       const proof = await readTargetInventory(targetRef);
       console.log(`\nREAD-BACK PROOF: ${Object.entries(proof).map(([name, count]) => `${name}=${count}`).join(', ')}`);
       console.log('LIMITED RESTORE DRILL COMPLETE. Database structure/API surface, hash-verified sample Storage objects, and sample Functions were written from the trial capsule. This validates the path; it is not a complete recovery.');
+    } else if (restorePlan) {
+      console.log('\nSELECTIVE RESTORE VERIFIED. Only the tables/buckets/functions selected in the restore plan were written — this proves the plan-restore path and the selected data, not a complete recovery. Finish and verify the listed manual configuration before cutover.');
     } else {
       console.log('\nRECOVERY DATA PATH VERIFIED. Finish and verify the listed manual configuration before cutover.');
     }
@@ -1938,19 +2647,36 @@ Commands:
   backup              Capture, encrypt, transfer, and verify a capsule
                       Default: full community capture (no license)
                       Add --trial for a deliberately limited demo sample
+                      Add --storage-first-per-bucket for full DB/Functions/Auth
+                        but only the first Storage object in each bucket
                       Local Starter: add --allow-large-local to bypass ${LOCAL_STARTER_MAX_LABEL} cap
   verify              Verify checksums; add --decrypt for authenticated decryption
                       --report-drift   opt-in MD5 / row-count / RBAC drift report
+  simulate            Offline validation: decrypt, unpack, match layers to manifest
+                      No Supabase destination required. Optional --json
+                      Add --restore-plan <file> to sample/validate only the plan's
+                      selected tables/buckets/functions (no target project needed)
   status              Show the last durable backup result
   prune               Preview retention; add --execute to delete recognized capsules
   install-schedule    Preview a scheduled backup; add --execute to install
   remove-schedule     Preview task removal; add --execute to remove
+  restore-plan        Generate an editable JSON plan listing every table/bucket/function
+                      in a capsule with its byte size, for selective restore under a
+                      budget (default ${formatBytes(DEFAULT_RESTORE_PLAN_MAX_BYTES)}, e.g. to fit a free-tier target project).
+                      Edit "selected": false on entries to trim; --output <file>
+                      --max-restore-bytes <n> --force (overwrite) --json
   restore             Decrypt and plan restore; execution requires two target guards
+                      Add --restore-plan <file> to restore only the plan's selected
+                      tables/buckets/functions (hard-stops if the plan is over budget
+                      or was generated for a different capsule)
                       --fill-missing   absent-only Storage/DB fill (not incremental sync)
                       --writers N      parallel writers (default 1)
   replay              Validate a capsule by restoring into a NEW Supabase project
                       (never the source). Requires target env vars + --confirm-target.
                       Same guards as restore --execute; clearer validation report.
+                      Dirty-target drill: --allow-occupied-target
+                      Same-ref drill:     --allow-source-target (with --confirm-target)
+                      Accepts --restore-plan <file> the same as restore
   export-manifest     Name-only inventory (layers, tables, buckets, checksums — no secrets)
   capsule-unload      List unloadable layer names for a runner (still ciphertext)
   aws inventory       Scripted vs binary AWS inventory from --fixture <json> (read-only)
@@ -1994,9 +2720,10 @@ async function replay() {
     throw new Error('Set PORTABASE_TARGET_SUPABASE_URL, PORTABASE_TARGET_SERVICE_ROLE_KEY (or SECRET_KEY), and PORTABASE_TARGET_DB_URL for the new project only.');
   }
 
-  // Force write path used by restore() (unless user asked preflight-only)
+  // Force write path used by restore() (unless user asked preflight-only).
+  // Must mutate `argv` (the slice hasFlag reads), not only process.argv.
   if (!hasFlag('preflight') && !hasFlag('execute') && !hasFlag('drill')) {
-    process.argv.push('--execute');
+    enableCliFlag(argv, 'execute');
   }
 
   console.log('REPLAY STEPS: open capsule → decrypt/verify → refuse source target → blank preflight → restore layers → read-back evidence\n');
@@ -2057,10 +2784,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     else if (command === 'ui') await ui();
     else if (command === 'backup') await backup();
     else if (command === 'verify') await verify();
+    else if (command === 'simulate') await simulate();
     else if (command === 'status') await status();
     else if (command === 'prune') await prune();
     else if (command === 'install-schedule') await installSchedule();
     else if (command === 'remove-schedule') await removeSchedule();
+    else if (command === 'restore-plan') await restorePlanCommand();
     else if (command === 'restore') await restore();
     else if (command === 'replay') await replay();
     else if (command === 'probe') await probe();
