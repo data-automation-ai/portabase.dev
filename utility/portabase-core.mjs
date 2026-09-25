@@ -496,6 +496,54 @@ export function filterExcludedBuckets(buckets = [], excludeBucketIds = []) {
   return buckets.filter(bucket => !excluded.has(bucket?.id));
 }
 
+/** Validates `--include-table-data` / `capture.includeTableData` entries. Same shape as the exclude list. */
+export function validateIncludeTableData(value) {
+  const entries = parseSelectionList(value);
+  const invalid = entries.filter(entry => !EXCLUDE_TABLE_DATA_PATTERN.test(entry));
+  if (invalid.length) {
+    throw new Error(
+      `--include-table-data entries must look like schema.table (letters, digits, _, $; no quotes or punctuation): ${invalid.join(', ')}`,
+    );
+  }
+  return entries;
+}
+
+/** Validates `--include-buckets` / `capture.includeBuckets` entries. Same shape as the exclude list. */
+export function validateIncludeBuckets(value) {
+  const entries = parseSelectionList(value);
+  const invalid = entries.filter(entry => !EXCLUDE_BUCKET_ID_PATTERN.test(entry));
+  if (invalid.length) {
+    throw new Error(
+      `--include-buckets entries must be 1-100 chars of letters, digits, '.', '_', '-': ${invalid.join(', ')}`,
+    );
+  }
+  return entries;
+}
+
+/** Keeps only the listed bucket ids. Empty include list keeps everything (no whitelist). */
+export function filterIncludedBuckets(buckets = [], includeBucketIds = []) {
+  if (!includeBucketIds.length) return buckets;
+  const included = new Set(includeBucketIds);
+  return buckets.filter(bucket => included.has(bucket?.id));
+}
+
+/**
+ * Splits the full `schema.table` list into row-data vs DDL-only sets.
+ * With a non-empty include list only those tables keep row data (DDL is still captured for all).
+ * Throws when an entry appears in both lists; reports include entries absent from the database.
+ */
+export function resolveTableDataSelection({ allTables = [], include = [], exclude = [] } = {}) {
+  const all = new Set(allTables);
+  const conflicts = include.filter(entry => exclude.includes(entry));
+  if (conflicts.length) {
+    throw new Error(`Tables listed in both --include-table-data and --exclude-table-data: ${conflicts.join(', ')}`);
+  }
+  const unknown = include.filter(entry => !all.has(entry));
+  const dataTables = include.length ? include.filter(entry => all.has(entry)) : allTables.filter(entry => !exclude.includes(entry));
+  const ddlOnly = allTables.filter(entry => !dataTables.includes(entry));
+  return { dataTables, ddlOnly, unknown };
+}
+
 export function providerCommand(config, capsuleDir) {
   const provider = config.provider || {};
   const prefix = String(provider.prefix || '').replace(/^\/+|\/+$/g, '');

@@ -11,6 +11,8 @@ export const DOCS_NAV = Object.freeze([
     items: Object.freeze([
       Object.freeze({ slug: 'introduction', href: '/docs/introduction', title: 'Introduction' }),
       Object.freeze({ slug: 'quickstart', href: '/docs/quickstart', title: 'Quickstart' }),
+      Object.freeze({ slug: 'keepalive', href: '/docs/keepalive', title: 'Keepalive' }),
+      Object.freeze({ slug: 'rls-check', href: '/docs/rls-check', title: 'RLS exposure check' }),
     ]),
   }),
   Object.freeze({
@@ -37,6 +39,8 @@ export const DOCS_NAV = Object.freeze([
 export const DOCS_TITLES = Object.freeze({
   introduction: 'Introduction',
   quickstart: 'Quickstart',
+  keepalive: 'Keepalive',
+  'rls-check': 'RLS exposure check',
   cloud: 'Cloud',
   'threat-model': 'Threat model',
   proven: 'Proven vs not',
@@ -52,6 +56,8 @@ export function resolveDocsSlug(pathname = '', hash = '') {
   const path = String(pathname || '').split('?')[0].replace(/\/$/, '') || '/';
   const h = String(hash || '').replace(/^#/, '');
   if (path === '/docs/quickstart') return 'quickstart';
+  if (path === '/docs/keepalive') return 'keepalive';
+  if (path === '/docs/rls-check') return 'rls-check';
   if (path === '/docs/cloud') return 'cloud';
   if (path === '/docs/threat-model' || path === '/docs/keys') return 'threat-model';
   if (path === '/docs/proven' || path === '/docs/proven-vs-not') return 'proven';

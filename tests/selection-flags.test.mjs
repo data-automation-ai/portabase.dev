@@ -6,6 +6,10 @@ import {
   validateExcludeBuckets,
   buildExcludeTableDataArgs,
   filterExcludedBuckets,
+  validateIncludeTableData,
+  validateIncludeBuckets,
+  filterIncludedBuckets,
+  resolveTableDataSelection,
 } from '../utility/portabase-core.mjs';
 
 test('parseSelectionList: CSV, arrays, empty/null', () => {
@@ -74,6 +78,53 @@ test('filterExcludedBuckets: drops only the excluded bucket ids', () => {
   assert.deepEqual(
     filterExcludedBuckets(buckets, ['videos', 'exports']),
     [{ id: 'avatars' }],
+  );
+});
+
+test('validateIncludeTableData: accepts schema.table, rejects injection shapes', () => {
+  assert.deepEqual(validateIncludeTableData('public.orders,app.events'), ['public.orders', 'app.events']);
+  assert.deepEqual(validateIncludeTableData([]), []);
+  assert.throws(() => validateIncludeTableData('public.x;drop'), /--include-table-data/);
+  assert.throws(() => validateIncludeTableData('justtable'), /--include-table-data/);
+});
+
+test('validateIncludeBuckets: accepts ids, rejects injection shapes', () => {
+  assert.deepEqual(validateIncludeBuckets('avatars,exports'), ['avatars', 'exports']);
+  assert.deepEqual(validateIncludeBuckets(null), []);
+  assert.throws(() => validateIncludeBuckets('a b'), /--include-buckets/);
+});
+
+test('filterIncludedBuckets: whitelist keeps only listed ids; empty keeps all', () => {
+  const buckets = [{ id: 'videos' }, { id: 'avatars' }, { id: 'exports' }];
+  assert.deepEqual(filterIncludedBuckets(buckets, ['avatars']), [{ id: 'avatars' }]);
+  assert.deepEqual(filterIncludedBuckets(buckets, []), buckets);
+});
+
+test('resolveTableDataSelection: include narrows to rows-only set, rest is DDL-only', () => {
+  const all = ['public.a', 'public.b', 'public.c'];
+  assert.deepEqual(
+    resolveTableDataSelection({ allTables: all, include: ['public.a'], exclude: [] }),
+    { dataTables: ['public.a'], ddlOnly: ['public.b', 'public.c'], unknown: [] },
+  );
+});
+
+test('resolveTableDataSelection: empty include falls back to exclude semantics', () => {
+  const all = ['public.a', 'public.b'];
+  assert.deepEqual(
+    resolveTableDataSelection({ allTables: all, include: [], exclude: ['public.b'] }),
+    { dataTables: ['public.a'], ddlOnly: ['public.b'], unknown: [] },
+  );
+});
+
+test('resolveTableDataSelection: conflict throws, unknown includes are reported', () => {
+  const all = ['public.a', 'public.b'];
+  assert.throws(
+    () => resolveTableDataSelection({ allTables: all, include: ['public.a'], exclude: ['public.a'] }),
+    /both --include-table-data and --exclude-table-data/,
+  );
+  assert.deepEqual(
+    resolveTableDataSelection({ allTables: all, include: ['public.a', 'public.typo'] }).unknown,
+    ['public.typo'],
   );
 });
 

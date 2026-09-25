@@ -190,16 +190,17 @@ function Hero() {
   return <section className="hero" id="top">
     <div className="hero-noise" />
     <div className="shell hero-shell">
-      <div className="hero-brandline"><SupabaseMark /><span>Is great—until the doors are locked.</span></div>
+      <div className="hero-brandline"><SupabaseMark /><span>Like fire insurance for your Supabase ACCOUNT. Nobody shops for it AFTER the fire.</span></div>
       <div className="hero-grid">
        <div className="hero-copy">
         <div className="hero-copy-top">
         <p className="hero-usp"><span>USP</span><strong>Your Supabase Escape</strong> — a customer-owned way out when the dashboard is locked.</p>
         <h1>A Supabase lockout can freeze your <em>entire business.</em></h1>
+
         <p className="hero-risk-headline"><strong>No API. No Auth. No dashboard. No reachable backups.</strong></p>
         </div>
         <div className="hero-copy-rest">
-        <p className="hero-lead"><strong>Portabase is the Escape for Supabase</strong> — open source, Supabase-only. The free engine captures your <strong>database, Auth records, Storage object bytes, and Edge Functions</strong>; encrypts them; and stores the capsule where <em>you</em> choose. Platform backups cover the database — <strong>not your Storage files</strong>. Optional Cloud (this site) is the <strong>GUI, easy setup, and telemetry</strong> so the Escape keeps running — never custody of your keys.</p>
+        <p className="hero-lead">Supabase is a world-class product. It took millions of developers from idea to a real business. Now picture the morning you cannot log in. No dashboard, no API, and the backups you counted on are locked in the same console. Portabase snapshots your whole project into an encrypted capsule you own, ready to restore in a different account.</p>
         <div className="hero-analogy"><span aria-hidden="true">⌂</span><p><b>Your landlord changed the locks.</b> The backup inside the building is not an Escape. Portabase keeps your way out in another building—tested, current, and under your control.</p></div>
         <div className="incident-factline"><b>MY INCIDENT · 95+ HOURS</b><span>“Billing dispute” cited</span><span>No details or paperwork</span><span>Card issuer found nothing identifiable</span><span>Singapore payment entity</span><span>No response from Supabase</span></div>
         <div className="hero-actions">
@@ -209,18 +210,17 @@ function Hero() {
         <div className="hero-proof"><span>USP · Escape</span><span>Supabase only</span><span>Open source free · Cloud = GUI &amp; telemetry</span></div>
         </div>
       </div>
-      {/* Bridge: headline → ban dialog (same placement as design example) */}
       <img
         className="lockout-arrow"
         src="/images/arrow3.png"
-        alt="This is the actual login screenshot from the Founder, it's the reason Portabase.dev came to be"
+        alt="This is the actual login screenshot from the Founder, it is the reason Portabase.dev came to be"
         width="320"
         height="160"
       />
       <div className="lockout-stage">
         <figure className="lockout-evidence">
           <div className="evidence-label"><span><i /> Actual lockout</span><b>Not a mockup</b></div>
-          <img className="lockout-shot" src="/images/supabase-banned.jpg" alt="Actual Supabase sign-in screen showing the error: User is banned" />
+          <img className="lockout-shot" src="/images/banned.png" alt="Annotated screenshot of the founder Supabase sign-in showing Error: User is banned" />
           <figcaption><span>Account locked. Business frozen. Backups unreachable.</span><small>Actual founder scenario · identifying details redacted</small></figcaption>
         </figure>
       </div>
@@ -485,7 +485,7 @@ function WhyNow() {
             <div><small>TEAM · FROM $599/MO</small><b>Priority email</b><span>Support SLAs begin here</span></div>
             <div><small>ENTERPRISE</small><b>Private Slack</b><span>Premium 24×7 support</span></div>
           </div>
-          <p className="gap-close">If your production site is down on Pro, the published path is email. There is no published Pro phone number or private live-support channel. Supabase’s current legal materials name Supabase Pte. Ltd., and its billing guide identifies a Singapore payment entity. For customers elsewhere, that distance can matter when billing records, business hours, and escalation all collide. A Supabase representative has said the target is 24–48 hours and can run longer under volume; public reports on this page describe outages and support waits stretching far beyond that. Can your company afford to lose tomorrow’s orders, customers, and reputation while the inbox stays silent?</p>
+          <p className="gap-close">If your production site is down on Pro, the published path is email. There is no published Pro phone number or private live-support channel. Supabase’s current legal materials name Supabase Pte. Ltd., and its billing guide identifies a Singapore payment entity. For customers elsewhere, that distance can matter when billing records, business hours, and escalation all collide. A Supabase representative has said the target is 24–48 hours and can run longer under volume; public reports on this page describe outages and support waits stretching far beyond that. Can your company afford to lose tomorrow’s orders, customers, and reputation while the inbox stays silent? When your business goes down at 10am, it can be 10pm where your ticket gets read.</p>
           <aside className="escalation-reality"><span>THIS IS NOT A BUSINESS CONTINUITY PLAN</span><blockquote>“See if you can find a GitHub maintainer. Maybe they can escalate it.”</blockquote><p>When the best remaining idea is to find a stranger on the internet who might know someone inside, you do not control the recovery of your business. You are asking for a favor while the clock runs.</p><b>Portabase turns “please answer” into “restore the capsule.”</b></aside>
           <div className="source-links"><a href="https://supabase.com/solutions/vibe-coders" target="_blank" rel="noreferrer">Supabase for Vibe Coders <Arrow /></a><a href="https://supabase.com/pricing" target="_blank" rel="noreferrer">Published support tiers <Arrow /></a><a href="https://supabase.com/docs/guides/platform/billing-faq" target="_blank" rel="noreferrer">Singapore billing disclosure <Arrow /></a><a href="https://www.reddit.com/r/Supabase/comments/1kbj0sh/supabase_threatened_to_delete_all_my_work_after/" target="_blank" rel="noreferrer">24–48 hour support statement <Arrow /></a></div>
         </div>
@@ -525,6 +525,7 @@ function Reality() {
           <div><b>10</b><strong>Law or a provider intervenes</strong><p>Supabase’s terms permit suspension when service would violate law or when a required third-party vendor suspends the component Supabase depends on.</p></div>
           <div><b>11</b><strong>The only owner loses identity access</strong><p>The company email expires, a domain lapses, GitHub or SSO access changes, an authenticator is lost, or the sole administrator leaves. The database may still be running while every person able to manage or recover it is locked outside.</p></div>
           <div><b>12</b><strong>A trusted administrator makes one fatal click</strong><p>A cofounder, contractor, compromised administrator, or exhausted employee removes an owner, transfers the wrong organization, or deletes a production project. Legitimate authority does not guarantee legitimate intent—or a reversible result.</p></div>
+          <div><b>13</b><strong>Your database may already be public</strong><p>Most vibe-coded projects leave RLS off with the anon key in the frontend — readable by anyone. Supabase ships with the door unlocked and the instructions assume you know that. <a href="/docs/rls-check">Check yours in 5 minutes <Arrow /></a></p></div>
         </div>
         <div className="billing-emergency">
           <div><span>THE $50,000 DECISION</span><strong>$500 <i>→</i> $50,000</strong></div>
@@ -664,6 +665,10 @@ function EscapeVsSupabaseDiagram() {
           and public guidance from Supabase has pointed to a <strong>24–48 hour support turnaround</strong>
           {' '}(and longer under volume). If the business is already locked out, that wait is not a recovery plan.
           The Escape has to already exist <em>outside</em> the ticket queue.
+        </p>
+        <p style={{ marginTop: 12 }}>
+          <strong>On the free plan, there is no safety net at all.</strong> Free-tier projects get no automated backups — no daily snapshots, zero days retention. If you build on free Supabase, your first backup is the Escape you make yourself: <strong>Portabase captures your database, Auth, Storage files, and Functions into a capsule you own.</strong>
+          {' '}(<a href="https://supabase.com/pricing" target="_blank" rel="noreferrer">Supabase pricing</a>)
         </p>
         <div className="esc-cmp-doclinks">
           <a href="https://supabase.com/docs/guides/platform/backups" target="_blank" rel="noreferrer">Supabase backups docs ↗</a>
@@ -1301,6 +1306,21 @@ function CloudPage() {
             </table>
           </div>
           <p className="compare-footnote">The GitHub edition is not a lite edition. It is the full recovery path without the hosted GUI, telemetry product, or advanced reports.</p>
+        </div>
+      </section>
+
+      <section className="section" id="recovery-ladder">
+        <div className="shell">
+          <div className="section-kicker green">RECOVERY LADDER · COLD / WARM / HOT</div>
+          <div className="split-heading">
+            <h2>How fast is the way out?</h2>
+            <p>Every plan starts with an encrypted escape you already hold. Higher tiers shorten the walk back — but a hot replica is never promised.</p>
+          </div>
+          <div className="subscribe-case">
+            <article><small>01 · COLD · EVERY PLAN</small><b>Encrypted escape in your Dropbox.</b><p>Each capsule is encrypted and stored in storage you own. Recovery means a fresh project plus a guarded restore — proven by Replay, not by a status page.</p></article>
+            <article><small>02 · WARM · $17 / PREMIUM</small><b>Standby project, refreshed on schedule.</b><p>A standby Supabase project refreshed on schedule, plus the re-adapt runbook. Re-pointable in an hour, not a millisecond — recovery work, not failover magic.</p></article>
+            <article><small>03 · HOT · NEVER PROMISED</small><b>No hot replica. No instant cutover claim.</b><p>Anyone promising a millisecond Supabase failover is selling a different product. Portabase promises the capsule, the runbook, and the rehearsal — not a hot standby.</p></article>
+          </div>
         </div>
       </section>
 
@@ -2070,9 +2090,34 @@ function SecurityPage() {
   );
 }
 
+/** Bottom use cases: one-sentence summaries that expand for the curious. */
+function UseCases() {
+  const cases = [
+    { tag: 'LOCKED OUT · FREE', title: 'Locked out of a free project with no backups at all.', body: 'Free-tier projects get no automated backups, no daily snapshots, zero days retention. Portabase captures your database, Auth, Storage files, and Functions into a capsule you own. Under 500 MB, replicate it to a second free Supabase account and sleep well.' },
+    { tag: 'BUSINESS · PAID', title: 'A paid project goes down and support is an email queue.', body: 'Outside of Enterprise, help is an email queue with about a 48-hour turnaround. Your capsule already sits outside the ticket queue, ready to restore as a project in a different account while you wait.' },
+    { tag: 'VIBE-CODED', title: 'Dozens of Edge Functions a database copy will never save.', body: 'Tools like Claude Code and Codex can scaffold dozens of Edge Functions in an afternoon. A pg_dump copies the database and nothing else. Portabase captures function source as a first-class layer.' },
+    { tag: 'BLOBS · HUGE TABLES', title: 'Too big to copy whole, too important to skip.', body: 'Binary objects and giant tables blow up every naive backup. The free CLI has include and exclude controls for tables and buckets, so the capsule fits whatever vault you can store.' },
+    { tag: 'CUTOVER', title: 'Migrating, handing off, or just want a way back.', body: 'Snapshot before a migration, a contractor handoff, or a risky deploy. If the new direction fails, the capsule restores the project as it was, in a different account if needed.' },
+  ];
+  return <section className="section use-cases" id="use-cases">
+    <div className="shell">
+      <div className="section-kicker green">USE CASES</div>
+      <div className="split-heading"><h2>Which one<br />are you?</h2><p>One sentence each. Open any of them for the details.</p></div>
+      <div className="use-case-list">
+        {cases.map((item) => (
+          <details key={item.tag} className="use-case-row">
+            <summary><span className="use-case-tag">{item.tag}</span><span className="use-case-title">{item.title}</span></summary>
+            <p>{item.body}</p>
+          </details>
+        ))}
+      </div>
+    </div>
+  </section>;
+}
+
 function HomePage() {
   useEffect(() => { document.title = 'Portabase — Your Supabase Escape'; }, []);
-  return <><Header /><main><Hero /><HeroConcept /><NeverHoldKeys /><Faq /><CliVsCloud /><WhatIsThis /><WhyNow /><Reality /><ClosureRisk /><Stories /><Escape /><InstallCta Arrow={Arrow} /><Audit /><Cutover /><PublicDeal /><CloudTeaser /></main><Footer /></>;
+  return <><Header /><main><Hero /><HeroConcept /><NeverHoldKeys /><Faq /><CliVsCloud /><WhatIsThis /><WhyNow /><Reality /><ClosureRisk /><Stories /><Escape /><InstallCta Arrow={Arrow} /><Audit /><Cutover /><PublicDeal /><CloudTeaser /><UseCases /></main><Footer /></>;
 }
 
 function App() {

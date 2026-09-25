@@ -295,9 +295,124 @@ function CliReference({ Arrow }) {
   );
 }
 
+function Keepalive() {
+  return (
+    <>
+      <p className="docs-lead">
+        Supabase pauses free projects after about 7 days of inactivity. A tiny scheduled ping — run from
+        a machine you control — keeps your own project awake. The database password never leaves your box;
+        the passwordless variant uses only the publishable anon key.
+      </p>
+      <h2>Option A — SQL ping (most certain signal)</h2>
+      <p>
+        Needs <code>psql</code> and your database connection string. Run daily — weekly is one missed run from paused.
+      </p>
+      <Code>{`SELECT 'keepalive', now();`}</Code>
+      <p>Linux / macOS cron, daily 6 AM (<code>crontab -e</code>):</p>
+      <Code>{`SUPABASE_DB_URL='postgresql://postgres:YOUR-PASSWORD@db.YOUR-REF.supabase.co:5432/postgres'
+0 6 * * * psql "$SUPABASE_DB_URL" -c "SELECT 'keepalive', now();" >/dev/null 2>&1`}</Code>
+      <p>Windows — save as <code>keepalive.ps1</code>, then schedule it:</p>
+      <Code>{`$env:PGPASSWORD = 'YOUR-PASSWORD'
+& psql 'postgresql://postgres@db.YOUR-REF.supabase.co:5432/postgres' -c "SELECT 'keepalive', now();"`}</Code>
+      <Code>{`schtasks /create /tn SupabaseKeepalive /tr "powershell -NoProfile -File C:/path/to/keepalive.ps1" /sc daily /st 06:00`}</Code>
+      <h2>Option B — passwordless anon ping</h2>
+      <p>
+        A sacrificial single-row table, readable by <code>anon</code> for one purpose only: outside
+        connectivity. <code>anon</code> is the public internet — anyone with your project ref and
+        publishable key can read this table, so it holds exactly one dummy row and nothing else.
+      </p>
+      <Code>{`create table if not exists keepalive (id int primary key, ping text);
+alter table keepalive enable row level security;
+-- Justification: dummy single-row table, no user or customer data.
+-- Sole purpose is the outside keepalive ping below.
+create policy "keepalive public read"
+  on keepalive for select using (true);
+insert into keepalive values (1, 'ok') on conflict do nothing;`}</Code>
+      <div className="docs-callout danger">
+        <strong>Never widen this pattern.</strong> RLS stays on with zero public policies on every
+        other table. Never add real columns to <code>keepalive</code>, never copy the open policy
+        onto another table, and never put the service-role key in a ping script.
+      </div>
+      <p>Prove it with the adversarial check — only this table answers as <code>anon</code>:</p>
+      <Code>{`curl -s "https://YOUR-REF.supabase.co/rest/v1/keepalive?select=id&limit=1" -H "apikey: YOUR-ANON-KEY"`}</Code>
+      <p>Schedule the curl the same way as Option A (cron daily, or <code>schtasks</code> on Windows). Daily, not weekly.</p>
+      <h2>Honest limits</h2>
+      <p>
+        A ping prevents the 7-day pause. It does not prevent deletion of a project left unrestored for
+        about 90 days, and if Supabase ever narrows what counts as activity, the SQL ping (Option A)
+        is the signal most likely to keep counting.
+      </p>
+    </>
+  );
+}
+function RlsCheck() {
+  return (
+    <>
+      <p className="docs-lead">
+        Supabase ships with the door unlocked and the instructions assume you know that.
+        The publishable <code>anon</code> key is designed to live in frontend code — so anyone
+        can use it. What keeps your data private is <strong>row level security (RLS)</strong> on
+        every table. The villain here is the default, never you: new tables happily answer
+        the public internet until RLS and policies say otherwise.
+      </p>
+      <h2>What the anon key is</h2>
+      <p>
+        The <code>anon</code> key is a public, publishable credential. It ships inside your
+        JavaScript bundle, mobile app, or any client that talks to Supabase directly.
+        Treat it as <strong>already known to the whole internet</strong> — because for a
+        shipped frontend, it is. Reading with the anon key is the expected path, not a hack.
+      </p>
+      <h2>Why RLS-off means open</h2>
+      <p>
+        Without RLS enabled (plus a policy allowing only what you intend), a table served
+        through the auto-generated REST API answers anonymous requests the same way it
+        answers yours. No login bypass is needed — the default posture is readable.
+        Enabling RLS with zero public policies closes the table; each policy you add
+        re-opens exactly the slice you name.
+      </p>
+      <div className="docs-callout danger">
+        <strong>Never widen the keepalive pattern.</strong> The single-row public-read table in{' '}
+        <a href="/docs/keepalive">the keepalive guide</a> is the one deliberate exception.
+        Never copy its open policy onto a table that holds user or customer data.
+      </div>
+      <h2>Three exposure checks</h2>
+      <p>Run these against your own project. They read metadata and answer one question: what can <code>anon</code> see?</p>
+      <h3>1 · Which tables have RLS off</h3>
+      <Code>{`select c.relname as table_name,
+  c.relrowsecurity as rls_enabled
+from pg_class c
+join pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public'
+  and c.relkind = 'r'
+order by c.relname;`}</Code>
+      <p>Every row with <code>rls_enabled = false</code> answers anonymous requests unless another layer blocks it. That list is the fix list.</p>
+      <h3>2 · Which policies exist per table</h3>
+      <Code>{`select tablename, policyname, roles, cmd, qual
+from pg_policies
+where schemaname = 'public'
+order by tablename, policyname;`}</Code>
+      <p>Tables missing from this list have no policy at all. A policy with <code>using (true)</code> on a real data table is an open door with a label — narrow it or remove it.</p>
+      <h3>3 · What anon actually gets (adversarial read)</h3>
+      <Code>{`curl -s "https://YOUR-REF.supabase.co/rest/v1/YOUR-TABLE?select=id&limit=1" -H "apikey: YOUR-ANON-KEY"`}</Code>
+      <p>
+        This is the internet&apos;s view of one table: project ref plus publishable key, no login.
+        Repeat it per table. A <code>200</code> with rows on a table you assumed was private is the finding.
+        Expect a denial (or empty-by-policy) everywhere except the sacrificial keepalive row.
+      </p>
+      <h2>Fix order</h2>
+      <p>
+        Enable RLS on every data table, add the narrowest policy each feature needs, then re-run
+        all three checks. Keep the proof: the queries above should show RLS on everywhere, policies
+        only where intended, and anonymous reads denied on everything but the dummy row.
+      </p>
+    </>
+  );
+}
 const PAGES = {
   introduction: Introduction,
   quickstart: Quickstart,
+  keepalive: Keepalive,
+  'rls-check': RlsCheck,
   cloud: CloudDocs,
   'threat-model': ThreatModel,
   proven: ProvenVsNot,

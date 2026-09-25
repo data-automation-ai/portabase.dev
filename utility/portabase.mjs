@@ -42,6 +42,10 @@ import {
   validateExcludeBuckets,
   buildExcludeTableDataArgs,
   filterExcludedBuckets,
+  validateIncludeTableData,
+  validateIncludeBuckets,
+  filterIncludedBuckets,
+  resolveTableDataSelection,
   generateFunctionRedeployScripts,
   PINNED_SUPABASE_CLI,
   schemaExcludePattern,
@@ -728,13 +732,13 @@ async function loadPriorStorageIndex(config) {
   }
 }
 
-async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets = []) {
+async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets = [], includeBuckets = []) {
   const storageDir = join(rawDir, 'storage');
   const cacheRoot = resolve(config.backupDirectory || './portabase-capsules', '.storage-object-cache');
   await mkdir(storageDir, { recursive: true });
   await mkdir(cacheRoot, { recursive: true });
   const allBuckets = await (await checkedSourceFetch('/storage/v1/bucket')).json();
-  const buckets = filterExcludedBuckets(allBuckets, excludeBuckets);
+  const buckets = filterIncludedBuckets(filterExcludedBuckets(allBuckets, excludeBuckets), includeBuckets);
   if (excludeBuckets.length) {
     console.log(`Storage selection: excluding ${excludeBuckets.length} bucket(s) → ${excludeBuckets.join(', ')}`);
   }
@@ -1462,6 +1466,27 @@ async function backup() {
   const excludeBuckets = validateExcludeBuckets(
     resolveSelectionOption('exclude-buckets', config.capture?.excludeBuckets),
   );
+  const includeTableData = validateIncludeTableData(
+    resolveSelectionOption('include-table-data', config.capture?.includeTableData),
+  );
+  const includeBuckets = validateIncludeBuckets(
+    resolveSelectionOption('include-buckets', config.capture?.includeBuckets),
+  );
+  const bucketConflicts = includeBuckets.filter((bucket) => excludeBuckets.includes(bucket));
+  if (bucketConflicts.length) {
+    throw new Error(`Buckets listed in both --include-buckets and --exclude-buckets: ${bucketConflicts.join(', ')}`);
+  }
+  if (includeTableData.length) {
+    if (!resolveTool('psql')) throw new Error('--include-table-data needs psql to enumerate tables (DDL is still captured for all).');
+    if (!process.env.SUPABASE_DB_URL) throw new Error('SUPABASE_DB_URL is missing.');
+    const namesJson = psqlValue(process.env.SUPABASE_DB_URL, `SELECT COALESCE(json_agg(schemaname || '.' || tablename ORDER BY schemaname, tablename), '[]'::json)::text FROM pg_catalog.pg_tables WHERE ${APPLICATION_SCHEMA_SQL};`);
+    const allTables = JSON.parse(namesJson || '[]');
+    const resolved = resolveTableDataSelection({ allTables, include: includeTableData, exclude: excludeTables });
+    if (resolved.unknown.length) console.log(`Warning: --include-table-data names not in the database (typo?): ${resolved.unknown.join(', ')}`);
+    console.log(`Table data selection: rows for ${resolved.dataTables.length} table(s), DDL-only for ${resolved.ddlOnly.length}.`);
+    for (const table of resolved.ddlOnly) if (!excludeTables.includes(table)) excludeTables.push(table);
+  }
+  if (includeBuckets.length) console.log(`Storage selection: only ${includeBuckets.length} bucket(s) → ${includeBuckets.join(', ')}`);
   const passphraseEnv = config.encryption?.passphraseEnv || 'PORTABASE_ENCRYPTION_PASSPHRASE';
   const passphrase = process.env[passphraseEnv];
   if (!passphrase || passphrase.length < 16) throw new Error(`${passphraseEnv} must contain at least 16 characters.`);
@@ -1491,12 +1516,12 @@ async function backup() {
     status: 'RUNNING',
     contents: {},
     errors: [],
-    selection: { excludeTables, excludeBuckets },
+    selection: { excludeTables, excludeBuckets, includeTableData, includeBuckets },
   };
   try {
     for (const [name, enabled, capture] of [
       ['database', config.capture?.database !== false, () => captureDatabase(rawDir, limits, excludeTables)],
-      ['storage', config.capture?.storage !== false, () => captureStorage(rawDir, limits, config, excludeBuckets)],
+      ['storage', config.capture?.storage !== false, () => captureStorage(rawDir, limits, config, excludeBuckets, includeBuckets)],
       ['functions', config.capture?.functions !== false, () => captureFunctions(config, rawDir, limits)],
       ['auth', config.capture?.auth !== false, () => captureAuth(config, rawDir)],
     ]) {
@@ -2446,6 +2471,35 @@ async function restore() {
   }
 }
 
+async function sizes() {
+  const { config } = await loadConfig();
+  const snapshot = await collectUiSnapshot(config, false);
+  const toMB = (bytes) => (Number(bytes) || 0) / 1048576;
+  if (hasFlag('json')) {
+    return console.log(JSON.stringify({ generatedAt: snapshot.generatedAt, project: snapshot.project, database: snapshot.database, storage: snapshot.storage }, null, 2));
+  }
+  console.log(`Portabase sizes for ${config.projectRef}`);
+  if (snapshot.storage.ok) {
+    const buckets = [...snapshot.storage.data.buckets].sort((a, b) => b.totalBytes - a.totalBytes);
+    console.log('');
+    console.log('Storage buckets (by total size, descending):');
+    for (const bucket of buckets) {
+      console.log(`  ${bucket.id}  files=${bucket.objectCount}  total=${toMB(bucket.totalBytes).toFixed(2)} MB (${formatBytes(bucket.totalBytes)})`);
+    }
+    console.log(`  TOTAL  files=${snapshot.storage.data.objectCount}  total=${toMB(snapshot.storage.data.totalBytes).toFixed(2)} MB (${formatBytes(snapshot.storage.data.totalBytes)})`);
+  } else {
+    console.log(`Storage sizes unavailable: ${snapshot.storage.error}`);
+  }
+  if (!snapshot.database.ok) throw new Error(`Database sizes unavailable: ${snapshot.database.error}`);
+  const tables = [...snapshot.database.data.tables].sort((a, b) => (b.bytes || 0) - (a.bytes || 0));
+  const totalBytes = tables.reduce((sum, table) => sum + (Number(table.bytes) || 0), 0);
+  console.log('');
+  console.log('Tables by size in MB (descending):');
+  for (const table of tables) {
+    console.log(`  ${table.schema}.${table.name}  rows=${table.rows}  ${toMB(table.bytes).toFixed(2)} MB`);
+  }
+  console.log(`  TOTAL  tables=${tables.length}  ${toMB(totalBytes).toFixed(2)} MB (${formatBytes(totalBytes)})`);
+}
 async function status() {
   const { config } = await loadConfig();
   const path = join(resolve(config.statusDirectory || './portabase-status'), 'latest.json');
@@ -2509,6 +2563,18 @@ async function plan() {
   console.log(`Portabase recovery plan (open core)\n\nProject: ${config.projectRef}\nDestination: ${config.provider.type}\nEncrypted staging: ${resolve(config.backupDirectory)}\n`);
   for (const name of ['database', 'storage', 'functions']) console.log(`${config.capture?.[name] === false ? 'SKIP' : 'KEEP'}  ${name}`);
   console.log(`\nRetention: keep ${config.retention?.keepLast ?? 30}; pruning is guarded and dry-run by default.`);
+  const showSelection = (label, flagName, configValue, validate) => {
+    try {
+      const entries = validate(resolveSelectionOption(flagName, configValue));
+      console.log(`Selection ${label}: ${entries.length ? entries.join(', ') : '(all)'}`);
+    } catch (error) {
+      console.log(`Selection ${label}: INVALID — ${error.message}`);
+    }
+  };
+  showSelection('--include-table-data (row data only here)', 'include-table-data', config.capture?.includeTableData, validateIncludeTableData);
+  showSelection('--exclude-table-data (DDL only here)', 'exclude-table-data', config.capture?.excludeTableData, validateExcludeTableData);
+  showSelection('--include-buckets (objects only here)', 'include-buckets', config.capture?.includeBuckets, validateIncludeBuckets);
+  showSelection('--exclude-buckets (skipped entirely)', 'exclude-buckets', config.capture?.excludeBuckets, validateExcludeBuckets);
   console.log('Credentials and encryption keys remain local. No Portabase API or telemetry endpoint is contacted.');
 }
 
@@ -2699,9 +2765,17 @@ Commands:
                       --exclude-table-data schema.t1,schema.t2
                         Skip row data for these tables (schema DDL still dumped)
                         Config: capture.excludeTableData (array)
+                      --include-table-data schema.t1,schema.t2
+                        Row data ONLY for these tables (DDL still dumped for all;
+                        needs psql). Conflicts with --exclude-table-data.
+                        Config: capture.includeTableData (array)
                       --exclude-buckets b1,b2
                         Skip these Storage buckets entirely
                         Config: capture.excludeBuckets (array)
+                      --include-buckets b1,b2
+                        Capture objects ONLY from these buckets.
+                        Conflicts with --exclude-buckets.
+                        Config: capture.includeBuckets (array)
                       --incremental-binary
                         Whole files only, never a partial file. A binary whose
                         date stamp is greater than the prior copy is differential
@@ -2717,6 +2791,7 @@ Commands:
                       Add --restore-plan <file> to sample/validate only the plan's
                       selected tables/buckets/functions (no target project needed)
   status              Show the last durable backup result
+  sizes               Show bucket totals (files + size) and tables ranked by MB, descending
   prune               Preview retention; add --execute to delete recognized capsules
   install-schedule    Preview a scheduled backup; add --execute to install
   remove-schedule     Preview task removal; add --execute to remove
@@ -2846,6 +2921,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     else if (command === 'verify') await verify();
     else if (command === 'simulate') await simulate();
     else if (command === 'status') await status();
+    else if (command === 'sizes') await sizes();
     else if (command === 'prune') await prune();
     else if (command === 'install-schedule') await installSchedule();
     else if (command === 'remove-schedule') await removeSchedule();

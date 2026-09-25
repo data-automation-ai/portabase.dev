@@ -161,6 +161,13 @@ button { font:inherit; }
 .hero-analogy{display:grid;grid-template-columns:38px 1fr;gap:15px;align-items:center;max-width:650px;border-left:2px solid var(--acid);background:rgba(var(--accent-rgb),.055);padding:14px 17px 14px 15px}.hero-analogy>span{width:38px;height:38px;border:1px solid rgba(var(--accent-rgb),.35);border-radius:50%;display:grid;place-items:center;color:var(--acid);font-size:20px}.hero-analogy p{margin:0;color:#9e9f9a;font-size:13px;line-height:1.5}.hero-analogy b{color:#eeeee9}
 .incident-factline{display:flex;flex-wrap:wrap;gap:7px 16px;max-width:650px;margin-top:15px;color:#8d8e89;font:8px var(--mono);letter-spacing:.035em;text-transform:uppercase}.incident-factline b{color:var(--red)}.incident-factline span:before{content:'×';color:var(--red);margin-right:6px}
 .hero-actions { display:flex; align-items:center; gap:28px; margin:23px 0 25px; }
+.use-case-list{margin-top:34px}
+.use-case-row{border:1px solid var(--line);border-radius:8px;margin-bottom:10px;padding:16px 18px;background:transparent}
+.use-case-row summary{cursor:pointer;display:flex;gap:14px;align-items:baseline;list-style:none}
+.use-case-row summary::-webkit-details-marker{display:none}
+.use-case-tag{font:9px var(--mono);letter-spacing:.1em;color:var(--red);white-space:nowrap}
+.use-case-title{font-weight:700;font-size:15px}
+.use-case-row p{margin:12px 0 2px;color:#b4b4ae;font-size:14px;line-height:1.65;max-width:720px}
 .text-link { font-size:13px; font-weight:700; border-bottom:1px solid #555; padding:10px 0; }
 .text-link span { margin-left:10px; }
 .hero-proof { display:flex; flex-wrap:wrap; gap:9px 22px; color:#858681; font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.06em; }
@@ -185,7 +192,7 @@ button { font:inherit; }
   border-radius:9px;
   box-shadow:0 45px 100px rgba(0,0,0,.55);
   overflow:hidden;
-  transform:rotate(1deg);
+  transform:none;
   border:1px solid rgba(255,255,255,.18);
   z-index:1;
 }
@@ -194,6 +201,7 @@ button { font:inherit; }
 .evidence-label i{width:7px;height:7px;border-radius:50%;background:var(--red);box-shadow:0 0 0 5px rgba(240,68,56,.13)}
 .evidence-label b{color:var(--red);font-weight:500}
 .lockout-evidence .lockout-shot{display:block;width:100%;height:auto;max-height:480px;object-fit:cover;object-position:top}
+/* hero lockout tint retired 2026-09-26 with the exhibit card */
 .lockout-evidence figcaption{display:flex;justify-content:space-between;align-items:center;gap:18px;background:var(--red);color:#1c0d0b;padding:13px 16px}
 .lockout-evidence figcaption span{font-size:11px;font-weight:800}
 .lockout-evidence figcaption small{font:7px var(--mono);text-align:right;text-transform:uppercase;letter-spacing:.06em}

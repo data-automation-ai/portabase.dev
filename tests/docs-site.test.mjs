@@ -17,9 +17,11 @@ test('docs routes cover introduction, quickstart, cloud, threat model, proven', 
   assert.equal(resolveDocsSlug('/docs/cloud'), 'cloud');
   assert.equal(resolveDocsSlug('/docs/threat-model'), 'threat-model');
   assert.equal(resolveDocsSlug('/docs/proven'), 'proven');
+  assert.equal(resolveDocsSlug('/docs/keepalive'), 'keepalive');
+  assert.equal(resolveDocsSlug('/docs/rls-check'), 'rls-check');
   assert.equal(resolveDocsSlug('/docs', '#install'), 'cli');
   const slugs = DOCS_NAV.flatMap((g) => g.items.map((i) => i.slug));
-  for (const need of ['introduction', 'quickstart', 'cloud', 'threat-model', 'proven']) {
+  for (const need of ['introduction', 'quickstart', 'keepalive', 'rls-check', 'cloud', 'threat-model', 'proven']) {
     assert.equal(slugs.includes(need), true, need);
   }
 });
@@ -83,4 +85,48 @@ test('docs copy says open source, praises Supabase, never fake MATCH green', () 
   assert.match(app, /100 MB/);
   assert.match(app, /10 GB/);
   assert.match(app, /25 GB/);
+});
+
+test('rls-check page resolves, sits in nav, and blames the default', () => {
+  assert.equal(resolveDocsSlug('/docs/rls-check'), 'rls-check');
+  const slugs = DOCS_NAV.flatMap((g) => g.items.map((i) => i.slug));
+  assert.equal(slugs.includes('rls-check'), true);
+  const entry = DOCS_NAV.flatMap((g) => g.items).find((i) => i.slug === 'rls-check');
+  assert.equal(entry.href, '/docs/rls-check');
+  const app = readFileSync(new URL('../src/docs/DocsApp.jsx', import.meta.url), 'utf8');
+  assert.match(app, /'rls-check': RlsCheck/);
+  assert.match(app, /function RlsCheck/);
+  assert.match(app, /What the anon key is/);
+  assert.match(app, /Why RLS-off means open/);
+  assert.match(app, /Three exposure checks/);
+  assert.match(app, /relrowsecurity/);
+  assert.match(app, /pg_policies/);
+  assert.match(app, /apikey: YOUR-ANON-KEY/);
+  assert.match(app, /villain.*default|default.*villain/i);
+  assert.match(app, /never you/i);
+});
+
+test('homepage reality grid links item 13 to the rls-check guide', () => {
+  const src = readFileSync(new URL('../src/main.jsx', import.meta.url), 'utf8');
+  assert.match(src, /<b>13<\/b>/);
+  assert.match(src, /\/docs\/rls-check/);
+  assert.match(src, /Check yours in 5 minutes/);
+});
+
+test('cloud page carries the cold/warm ladder and never promises hot', () => {
+  const src = readFileSync(new URL('../src/main.jsx', import.meta.url), 'utf8');
+  assert.match(src, /COLD · EVERY PLAN/i);
+  assert.match(src, /Encrypted escape in your Dropbox/);
+  assert.match(src, /WARM · \$17 \/ PREMIUM/i);
+  assert.match(src, /re-adapt runbook/i);
+  assert.match(src, /Re-pointable in an hour, not a millisecond/);
+  assert.match(src, /HOT · NEVER PROMISED/i);
+});
+
+test('keepalive guide keeps RLS on with a single justified public-read policy', () => {
+  const docs = readFileSync(new URL('../src/docs/DocsApp.jsx', import.meta.url), 'utf8');
+  assert.match(docs, /keepalive: Keepalive,/);
+  assert.match(docs, /alter table keepalive enable row level security/);
+  assert.doesNotMatch(docs, /disable row level security/);
+  assert.match(docs, /Never widen this pattern/);
 });
