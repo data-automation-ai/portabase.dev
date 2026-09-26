@@ -12,6 +12,7 @@ export const DOCS_NAV = Object.freeze([
       Object.freeze({ slug: 'introduction', href: '/docs/introduction', title: 'Introduction' }),
       Object.freeze({ slug: 'quickstart', href: '/docs/quickstart', title: 'Quickstart' }),
       Object.freeze({ slug: 'keepalive', href: '/docs/keepalive', title: 'Keepalive' }),
+      Object.freeze({ slug: 'restore-targets', href: '/docs/restore-targets', title: 'Restore targets' }),
       Object.freeze({ slug: 'rls-check', href: '/docs/rls-check', title: 'RLS exposure check' }),
     ]),
   }),
@@ -40,6 +41,7 @@ export const DOCS_TITLES = Object.freeze({
   introduction: 'Introduction',
   quickstart: 'Quickstart',
   keepalive: 'Keepalive',
+  'restore-targets': 'Restore targets',
   'rls-check': 'RLS exposure check',
   cloud: 'Cloud',
   'threat-model': 'Threat model',
@@ -57,6 +59,7 @@ export function resolveDocsSlug(pathname = '', hash = '') {
   const h = String(hash || '').replace(/^#/, '');
   if (path === '/docs/quickstart') return 'quickstart';
   if (path === '/docs/keepalive') return 'keepalive';
+  if (path === '/docs/restore-targets') return 'restore-targets';
   if (path === '/docs/rls-check') return 'rls-check';
   if (path === '/docs/cloud') return 'cloud';
   if (path === '/docs/threat-model' || path === '/docs/keys') return 'threat-model';

@@ -20,6 +20,13 @@
 
 Plan caps meter **capsule usage Cloud is allowed to see** (ciphertext size reported by the runner). The vault is still customer BYO. Portabase does not host recovery bytes.
 
+### Refunds (self-serve)
+
+Full refund within **8 days** of purchase, prorated after that — no email, no call.
+The customer provisions their own refund from the dashboard; the server enforces the
+window and identity from the JWT email (never a client-supplied purchase id alone),
+with all price math server-authoritative per Square. Processor is Square, never Stripe.
+
 ### Plans
 
 | Plan id | Monthly | Cap | Transfers / 24h |

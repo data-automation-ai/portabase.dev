@@ -18,10 +18,11 @@ test('docs routes cover introduction, quickstart, cloud, threat model, proven', 
   assert.equal(resolveDocsSlug('/docs/threat-model'), 'threat-model');
   assert.equal(resolveDocsSlug('/docs/proven'), 'proven');
   assert.equal(resolveDocsSlug('/docs/keepalive'), 'keepalive');
+  assert.equal(resolveDocsSlug('/docs/restore-targets'), 'restore-targets');
   assert.equal(resolveDocsSlug('/docs/rls-check'), 'rls-check');
   assert.equal(resolveDocsSlug('/docs', '#install'), 'cli');
   const slugs = DOCS_NAV.flatMap((g) => g.items.map((i) => i.slug));
-  for (const need of ['introduction', 'quickstart', 'keepalive', 'rls-check', 'cloud', 'threat-model', 'proven']) {
+  for (const need of ['introduction', 'quickstart', 'keepalive', 'rls-check', 'restore-targets', 'cloud', 'threat-model', 'proven']) {
     assert.equal(slugs.includes(need), true, need);
   }
 });

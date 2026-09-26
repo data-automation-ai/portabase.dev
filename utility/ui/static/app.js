@@ -136,12 +136,22 @@ function renderDatabase() {
     row.tables += 1; row.bytes += Number(t.bytes);
     bySchema.set(t.schema, row);
   }
+  const schemaSelect = $('schema-filter');
+  const schemas = [...bySchema.keys()].sort();
+  const kept = schemaSelect.value || 'all';
+  schemaSelect.replaceChildren(
+    h('option', { value: 'all' }, `All schemas (${schemas.length})`),
+    ...schemas.map(name => h('option', { value: name, selected: name === kept || undefined }, name)),
+  );
+  if (!schemas.includes(kept)) schemaSelect.value = 'all';
+  const schemaFilter = schemaSelect.value;
   $('schemas').replaceChildren(h('div', { class: 'schemas' }, [...bySchema].sort((a, b) => b[1].bytes - a[1].bytes)
     .filter(([, row]) => showPlatform || !row.platform)
     .map(([name, row]) => h('span', { class: 'schema' }, h('strong', {}, name), ` ${row.tables} tables · ${bytes(row.bytes)}`))));
 
   const rows = db.data.tables
     .filter(t => showPlatform || !t.platform)
+    .filter(t => schemaFilter === 'all' || t.schema === schemaFilter)
     .filter(t => !filter || `${t.schema}.${t.name}`.toLowerCase().includes(filter))
     .sort((a, b) => {
       const av = a[sortKey]; const bv = b[sortKey];
@@ -164,8 +174,9 @@ function renderDatabase() {
 
 function renderStorage(storage) {
   if (!storage.ok) return $('buckets').replaceChildren(h('caption', { class: 'banner' }, storage.error));
+  const bucketFilter = ($('bucket-filter').value || '').trim().toLowerCase();
   const head = h('tr', {}, ['Bucket', 'Visibility', 'Objects', 'Size', 'Upload limit'].map(label => h('th', { scope: 'col' }, label)));
-  const body = [...storage.data.buckets].sort((a, b) => b.totalBytes - a.totalBytes).map(b => h('tr', {},
+  const body = [...storage.data.buckets].sort((a, b) => b.totalBytes - a.totalBytes).filter(b => !bucketFilter || b.id.toLowerCase().includes(bucketFilter)).map(b => h('tr', {},
     h('td', {}, b.id), h('td', {}, b.public ? h('span', { class: 'chip skip' }, 'public') : 'private'),
     h('td', { class: 'num' }, num(b.objectCount)), h('td', { class: 'num' }, bytes(b.totalBytes)),
     h('td', { class: 'num' }, b.fileSizeLimit ? bytes(b.fileSizeLimit) : '—')));
@@ -174,8 +185,9 @@ function renderStorage(storage) {
 
 function renderFunctions(functions) {
   if (!functions.ok) return $('functions').replaceChildren(h('caption', { class: 'banner' }, functions.error));
+  const functionFilter = ($('function-filter').value || '').trim().toLowerCase();
   const head = h('tr', {}, ['Function', 'Status', 'Version', 'JWT verification', 'Updated'].map(label => h('th', { scope: 'col' }, label)));
-  const body = functions.data.map(fn => h('tr', {},
+  const body = functions.data.filter(fn => !functionFilter || `${fn.slug || ''} ${fn.name || ''}`.toLowerCase().includes(functionFilter)).map(fn => h('tr', {},
     h('td', {}, fn.slug || fn.name), h('td', {}, fn.status || '—'), h('td', { class: 'num' }, fn.version ?? '—'),
     h('td', {}, fn.verifyJwt ? 'on' : h('span', { class: 'chip skip' }, 'off')),
     h('td', {}, fn.updatedAt ? new Date(fn.updatedAt).toLocaleString() : '—')));
@@ -203,5 +215,15 @@ for (const tab of document.querySelectorAll('[role=tab]')) {
 $('refresh').addEventListener('click', () => load(true));
 $('table-filter').addEventListener('input', () => snapshot && renderDatabase());
 $('show-platform').addEventListener('change', () => snapshot && renderDatabase());
+$('schema-filter').addEventListener('change', () => snapshot && renderDatabase());
+$('bucket-filter').addEventListener('input', () => snapshot && renderStorage(snapshot.storage));
+$('function-filter').addEventListener('input', () => snapshot && renderFunctions(snapshot.functions));
+$('type-filter').addEventListener('change', () => {
+  const tab = document.querySelector(`[role=tab][data-tab="${$('type-filter').value}"]`);
+  if (tab) tab.click();
+});
+for (const tab of document.querySelectorAll('[role=tab]')) {
+  tab.addEventListener('click', () => { $('type-filter').value = tab.dataset.tab; });
+}
 
 load();

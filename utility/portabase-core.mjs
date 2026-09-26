@@ -544,6 +544,59 @@ export function resolveTableDataSelection({ allTables = [], include = [], exclud
   return { dataTables, ddlOnly, unknown };
 }
 
+/**
+ * Delta capsule helpers. The baseline is read from its manifest only — its contents
+ * are never opened. Unchanged layers are referenced by hash, never re-stored.
+ */
+
+/**
+ * Strong pre-download match: same byte size plus same etag/updatedAt tag.
+ * Size-only equality is NOT enough (same size, different bytes is common).
+ */
+export function baselineObjectUnchanged(baselineObject = {}, listing = {}) {
+  if (!baselineObject?.sha256) return false;
+  if (!Number.isSafeInteger(Number(baselineObject.size)) || !Number.isSafeInteger(Number(listing.size))) return false;
+  if (Number(baselineObject.size) !== Number(listing.size)) return false;
+  const tag = listing.etag || listing.updatedAt || null;
+  const baseTag = baselineObject.etag || baselineObject.updatedAt || null;
+  if (!tag || !baseTag) return false;
+  return tag === baseTag;
+}
+
+/** Keys present in the baseline but absent from the current listing — deletions. */
+export function computeTombstones(baselineKeys = [], seenKeys = []) {
+  const seen = new Set(seenKeys);
+  return baselineKeys.filter(key => !seen.has(key));
+}
+
+/**
+ * Partitions current `{path: sha256}` hashes against the baseline map.
+ * Returns `{ changed, reused, missing }`: changed = new or different content,
+ * reused = identical sha (reference, do not store), missing = baseline-only paths.
+ */
+export function partitionChanged(currentHashes = {}, baselineHashes = {}) {
+  const changed = [];
+  const reused = [];
+  for (const [path, sha] of Object.entries(currentHashes)) {
+    if (baselineHashes[path] && baselineHashes[path] === sha) reused.push({ path, sha256: sha });
+    else changed.push(path);
+  }
+  const missing = Object.keys(baselineHashes).filter(path => !(path in currentHashes));
+  return { changed, reused, missing };
+}
+
+/**
+ * Capsule ids that must not be pruned: every baseline referenced by a delta.
+ * Reads outer capsule.json metadata only (`{ id, baselineCapsuleId }`).
+ */
+export function findProtectedBaselines(capsuleMetas = []) {
+  const protectedIds = new Set();
+  for (const meta of capsuleMetas) {
+    if (meta?.baselineCapsuleId) protectedIds.add(meta.baselineCapsuleId);
+  }
+  return protectedIds;
+}
+
 export function providerCommand(config, capsuleDir) {
   const provider = config.provider || {};
   const prefix = String(provider.prefix || '').replace(/^\/+|\/+$/g, '');

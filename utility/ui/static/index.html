@@ -32,6 +32,12 @@
       <button type="button" role="tab" data-tab="storage">Storage</button>
       <button type="button" role="tab" data-tab="functions">Edge Functions</button>
       <button type="button" role="tab" data-tab="local">Why this is local</button>
+      <select id="type-filter" aria-label="Jump to object type">
+        <option value="checklist">Type: summary</option>
+        <option value="database">Type: tables</option>
+        <option value="storage">Type: buckets</option>
+        <option value="functions">Type: functions</option>
+      </select>
     </nav>
 
     <section class="panel" data-panel="checklist">
@@ -42,6 +48,7 @@
     <section class="panel" data-panel="database" hidden>
       <div class="toolbar">
         <input type="search" id="table-filter" placeholder="Filter schema or table" aria-label="Filter tables">
+        <select id="schema-filter" aria-label="Filter by schema"></select>
         <label class="small"><input type="checkbox" id="show-platform"> Show platform schemas</label>
       </div>
       <div id="schemas"></div>
@@ -50,10 +57,16 @@
     </section>
 
     <section class="panel" data-panel="storage" hidden>
+      <div class="toolbar">
+        <input type="search" id="bucket-filter" placeholder="Filter buckets" aria-label="Filter buckets">
+      </div>
       <div class="scroll"><table id="buckets"></table></div>
     </section>
 
     <section class="panel" data-panel="functions" hidden>
+      <div class="toolbar">
+        <input type="search" id="function-filter" placeholder="Filter functions" aria-label="Filter functions">
+      </div>
       <div class="scroll"><table id="functions"></table></div>
     </section>
 

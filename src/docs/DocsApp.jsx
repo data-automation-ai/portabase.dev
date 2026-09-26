@@ -336,6 +336,28 @@ insert into keepalive values (1, 'ok') on conflict do nothing;`}</Code>
       <p>Prove it with the adversarial check — only this table answers as <code>anon</code>:</p>
       <Code>{`curl -s "https://YOUR-REF.supabase.co/rest/v1/keepalive?select=id&limit=1" -H "apikey: YOUR-ANON-KEY"`}</Code>
       <p>Schedule the curl the same way as Option A (cron daily, or <code>schtasks</code> on Windows). Daily, not weekly.</p>
+      <h2>Optional: lock down egress on Windows</h2>
+      <p>
+        If the pinger or runner lives on your Windows box, keep it silent by default and open a
+        backup window only while a capsule is being created. One honest limit first: Windows
+        Defender Firewall filters by port and IP, not by hostname, so port 443 covers Supabase
+        and your vault alike during the window — pair it with the runner log, which names every
+        destination. Outside the window, both programs are blocked from initiating anything.
+      </p>
+      <Code>{`# One-time setup: rules start DISABLED (silent by default)
+New-NetFirewallRule -DisplayName "Portabase node 443" -Direction Outbound -Program "C:/Program Files/nodejs/node.exe" -Protocol TCP -RemotePort 443 -Action Allow -Enabled False
+New-NetFirewallRule -DisplayName "Portabase psql postgres" -Direction Outbound -Program "C:/Program Files/PostgreSQL/16/bin/psql.exe" -Protocol TCP -RemotePort 5432,6543 -Action Allow -Enabled False
+New-NetFirewallRule -DisplayName "Portabase node block rest" -Direction Outbound -Program "C:/Program Files/nodejs/node.exe" -Action Block -Enabled False
+New-NetFirewallRule -DisplayName "Portabase psql block rest" -Direction Outbound -Program "C:/Program Files/PostgreSQL/16/bin/psql.exe" -Action Block -Enabled False
+# Open the backup window (Supabase + vault only), run the capsule, close it
+Enable-NetFirewallRule -DisplayName "Portabase *"
+portabase backup
+Disable-NetFirewallRule -DisplayName "Portabase *"`}</Code>
+      <p>
+        Adjust the install paths to yours, then verify with <code>Get-NetFirewallRule -DisplayName "Portabase *"</code>.
+        If a capture fails inside the window, the block rule caught something new — check the runner log
+        before widening anything.
+      </p>
       <h2>Honest limits</h2>
       <p>
         A ping prevents the 7-day pause. It does not prevent deletion of a project left unrestored for
@@ -408,10 +430,44 @@ order by tablename, policyname;`}</Code>
     </>
   );
 }
+function RestoreTargets() {
+  return (
+    <>
+      <p className="docs-lead">
+        Every Portabase restore lands in a <strong>new blank</strong> project — never the source.
+        The one decision is whose account that project lives in. The two options fail differently,
+        so pick by what you are recovering from.
+      </p>
+      <h2>Same account (new blank project, your login)</h2>
+      <p><strong>Advantages:</strong> fastest path — same org, same billing, same region, no new
+        signup. Ideal for test refreshes, trying a restore, or recovering from your own mistake
+        (bad migration, deleted rows) while your account is healthy.</p>
+      <p><strong>Disadvantages:</strong> shares the fate of the account. If the account is banned,
+        billing-locked, or under investigation, a new project inside it may be unreachable or
+        frozen too. This is a rewind button, not an escape hatch.</p>
+      <h2>Different account (escape restore)</h2>
+      <p><strong>Advantages:</strong> survives anything that happens to the source account — ban,
+        billing dispute, lost credentials. The business keeps running under a login the incident
+        cannot touch. This is the contingency Portabase exists for.</p>
+      <p><strong>Disadvantages:</strong> slower to set up — a second account, fresh secrets and
+        API keys, possibly a different region or plan limits (a free target caps at 500 MB).
+        Anything outside the capsule (DNS, custom domains, third-party integrations) must be
+        re-pointed by hand.</p>
+      <div className="docs-callout honest">
+        <strong>Rule of thumb.</strong> Recovering from your own error with a healthy account:
+        same account. Recovering from anything done <em>to</em> your account: different account.
+        When in doubt, restore to a different account — a capsule that escapes is never the
+        wrong choice.
+      </div>
+    </>
+  );
+}
+
 const PAGES = {
   introduction: Introduction,
   quickstart: Quickstart,
   keepalive: Keepalive,
+  'restore-targets': RestoreTargets,
   'rls-check': RlsCheck,
   cloud: CloudDocs,
   'threat-model': ThreatModel,

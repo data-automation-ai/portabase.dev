@@ -46,6 +46,10 @@ import {
   validateIncludeBuckets,
   filterIncludedBuckets,
   resolveTableDataSelection,
+  baselineObjectUnchanged,
+  computeTombstones,
+  partitionChanged,
+  findProtectedBaselines,
   generateFunctionRedeployScripts,
   PINNED_SUPABASE_CLI,
   schemaExcludePattern,
@@ -1437,6 +1441,90 @@ export async function transferCapsule(config, capsuleDir) {
   return { destination: providerRemote(config, capsuleDir), verified: Boolean(verifyRemote) };
 }
 
+/**
+ * Loads a delta baseline from its manifest only — contents are never opened.
+ * Accepts an unpacked directory (manifest.json at top) or an encrypted capsule
+ * directory (manifest read via openCapsule; caller supplies the passphrase).
+ * Baselines must be full capsules; delta-of-delta chains are refused.
+ */
+async function loadDeltaBaseline(baselinePath, passphrase) {
+  const dir = resolve(baselinePath);
+  let manifest = null;
+  let capsuleId = basename(dir);
+  let cleanup = null;
+  const topManifest = join(dir, 'manifest.json');
+  if (existsSync(topManifest)) {
+    manifest = JSON.parse(await readFile(topManifest, 'utf8'));
+    const outer = join(dir, 'capsule.json');
+    if (existsSync(outer)) {
+      try { capsuleId = JSON.parse(await readFile(outer, 'utf8')).id || capsuleId; } catch { /* keep dirname */ }
+    }
+  } else {
+    const materialized = await materializeCapsule(dir);
+    const opened = await openCapsule(materialized.capsuleDir, passphrase);
+    cleanup = async () => {
+      await rm(opened.temp, { recursive: true, force: true }).catch(() => {});
+      if (materialized.cleanup) await rm(materialized.cleanup, { recursive: true, force: true }).catch(() => {});
+    };
+    try {
+      manifest = JSON.parse(await readFile(join(opened.extracted, 'manifest.json'), 'utf8'));
+      capsuleId = opened.metadata?.id || capsuleId;
+      const storageManifestPath = join(opened.extracted, 'storage', 'storage-manifest.json');
+      const functionsManifestPath = join(opened.extracted, 'functions', 'functions-manifest.json');
+      manifest.__extractedStorageManifest = existsSync(storageManifestPath)
+        ? JSON.parse(await readFile(storageManifestPath, 'utf8')) : null;
+      manifest.__extractedFunctionsManifest = existsSync(functionsManifestPath)
+        ? JSON.parse(await readFile(functionsManifestPath, 'utf8')) : null;
+    } finally {
+      await cleanup();
+    }
+  }
+  if (!manifest || typeof manifest !== 'object') throw new Error(`No manifest found at baseline ${dir}.`);
+  if (manifest.kind === 'delta') throw new Error('Delta-of-delta chains are not supported: pick a full capsule as --baseline.');
+  if (!manifest.__extractedStorageManifest) {
+    const sidecar = join(dir, 'storage', 'storage-manifest.json');
+    if (existsSync(sidecar)) {
+      try { manifest.__extractedStorageManifest = JSON.parse(await readFile(sidecar, 'utf8')); } catch { /* ignore */ }
+    }
+  }
+  if (!manifest.__extractedFunctionsManifest) {
+    const sidecar = join(dir, 'functions', 'functions-manifest.json');
+    if (existsSync(sidecar)) {
+      try { manifest.__extractedFunctionsManifest = JSON.parse(await readFile(sidecar, 'utf8')); } catch { /* ignore */ }
+    }
+  }
+  const storageObjects = new Map();
+  const storageManifest = manifest.__extractedStorageManifest || manifest.storageManifest || null;
+  for (const bucket of storageManifest?.buckets || []) {
+    for (const object of bucket.objects || []) {
+      if (object?.downloaded === false && !object?.sha256) continue;
+      storageObjects.set(`${bucket.id}/${object.name}`, {
+        sha256: object.sha256 || null,
+        size: Number(object.size ?? NaN),
+        etag: object.etag || null,
+        updatedAt: object.updatedAt || null,
+      });
+    }
+  }
+  const functionFiles = {};
+  const functionsManifest = manifest.__extractedFunctionsManifest || manifest.functionsManifest || null;
+  for (const fn of functionsManifest?.functions || functionsManifest || []) {
+    for (const file of fn.files || []) {
+      if (file?.path && file?.sha256) functionFiles[`${fn.name}/${file.path}`] = file.sha256;
+    }
+  }
+  delete manifest.__extractedStorageManifest;
+  delete manifest.__extractedFunctionsManifest;
+  return {
+    capsuleId,
+    manifest,
+    manifestSha256: createHash('sha256').update(JSON.stringify(manifest)).digest('hex'),
+    storageObjects,
+    functionFiles,
+    dbHashes: manifest.deltaHashes?.database || null,
+  };
+}
+
 async function backup() {
   const { config } = await loadConfig();
   const entitlement = await resolveEdition({ forceTrial: hasFlag('trial'), licensePath: flag('license') });
@@ -1490,6 +1578,15 @@ async function backup() {
   const passphraseEnv = config.encryption?.passphraseEnv || 'PORTABASE_ENCRYPTION_PASSPHRASE';
   const passphrase = process.env[passphraseEnv];
   if (!passphrase || passphrase.length < 16) throw new Error(`${passphraseEnv} must contain at least 16 characters.`);
+  const deltaMode = hasFlag('delta');
+  const baselineFlag = flag('baseline', null);
+  if (deltaMode && !baselineFlag) throw new Error('--delta requires --baseline <capsule directory>.');
+  if (baselineFlag && !deltaMode) throw new Error('--baseline requires --delta.');
+  let baseline = null;
+  if (deltaMode) {
+    baseline = await loadDeltaBaseline(baselineFlag, passphrase);
+    console.log(`Delta baseline: ${baseline.capsuleId} (manifest only — contents never opened).`);
+  }
   const id = capsuleName(config.projectRef);
   const root = resolve(config.backupDirectory || './portabase-capsules');
   const capsuleDir = join(root, id);
@@ -2776,6 +2873,11 @@ Commands:
                         Capture objects ONLY from these buckets.
                         Conflicts with --exclude-buckets.
                         Config: capture.includeBuckets (array)
+                      --delta --baseline <dir>
+                        Delta capsule: capture everything, then store only layers
+                        changed since the baseline manifest. The baseline is read
+                        from its manifest only — its contents are never opened.
+                        Unchanged layers are referenced by hash, never re-stored.
                       --incremental-binary
                         Whole files only, never a partial file. A binary whose
                         date stamp is greater than the prior copy is differential

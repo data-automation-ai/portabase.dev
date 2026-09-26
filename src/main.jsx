@@ -666,10 +666,7 @@ function EscapeVsSupabaseDiagram() {
           {' '}(and longer under volume). If the business is already locked out, that wait is not a recovery plan.
           The Escape has to already exist <em>outside</em> the ticket queue.
         </p>
-        <p style={{ marginTop: 12 }}>
-          <strong>On the free plan, there is no safety net at all.</strong> Free-tier projects get no automated backups — no daily snapshots, zero days retention. If you build on free Supabase, your first backup is the Escape you make yourself: <strong>Portabase captures your database, Auth, Storage files, and Functions into a capsule you own.</strong>
-          {' '}(<a href="https://supabase.com/pricing" target="_blank" rel="noreferrer">Supabase pricing</a>)
-        </p>
+        
         <div className="esc-cmp-doclinks">
           <a href="https://supabase.com/docs/guides/platform/backups" target="_blank" rel="noreferrer">Supabase backups docs ↗</a>
           <a href="https://supabase.com/pricing" target="_blank" rel="noreferrer">Published support tiers ↗</a>
@@ -1156,7 +1153,7 @@ function CloudTeaser() {
       <div>
         <div className="section-kicker green">USP · ESCAPE OPS</div>
         <h2>Open source is the Escape.<br />Cloud keeps the Escape running.</h2>
-        <p><strong>Supabase only.</strong> GitHub = free Escape engine. <strong>This site</strong> = hosted <strong>GUI</strong>, guided configuration, <strong>telemetry</strong>, and optional SMS on $17 — so the Escape is not a forgotten cron job. <strong>Cloud Free</strong> is 100 MB, manual only. Paid: <strong>$7</strong> (one database, 10 GB, 1 capsule / 24h) or <strong>$17</strong> (unlimited databases, 25 GB, 3 capsules / day). You provide capsule storage. Zero knowledge of your encryption keys.</p>
+        <p><strong>Supabase only.</strong> GitHub = free Escape engine. <strong>This site</strong> = hosted <strong>GUI</strong>, guided configuration, <strong>telemetry</strong>, and optional SMS on $17 — so the Escape is not a forgotten cron job. <strong>Cloud Free</strong> is 100 MB, manual only. Paid: <strong>$7</strong> (one database, 10 GB, 1 capsule / 24h) or <strong>$17</strong> (unlimited databases, 25 GB, 3 capsules / day). You provide capsule storage. Zero knowledge of your encryption keys. Restore into your <strong>contingency account</strong> — a free second Supabase account that the incident cannot touch. Refunds are self-serve: full within 8 days, prorated after, one button, no email required.</p>
         <div className="cloud-teaser-actions">
           <a className="button button-primary" href="/login?mode=signup&next=/app">Start free trial <Arrow /></a>
           <a className="button button-ghost" href="/backend">Backend · how it talks <Arrow /></a>
@@ -2097,7 +2094,7 @@ function UseCases() {
     { tag: 'BUSINESS · PAID', title: 'A paid project goes down and support is an email queue.', body: 'Outside of Enterprise, help is an email queue with about a 48-hour turnaround. Your capsule already sits outside the ticket queue, ready to restore as a project in a different account while you wait.' },
     { tag: 'VIBE-CODED', title: 'Dozens of Edge Functions a database copy will never save.', body: 'Tools like Claude Code and Codex can scaffold dozens of Edge Functions in an afternoon. A pg_dump copies the database and nothing else. Portabase captures function source as a first-class layer.' },
     { tag: 'BLOBS · HUGE TABLES', title: 'Too big to copy whole, too important to skip.', body: 'Binary objects and giant tables blow up every naive backup. The free CLI has include and exclude controls for tables and buckets, so the capsule fits whatever vault you can store.' },
-    { tag: 'CUTOVER', title: 'Migrating, handing off, or just want a way back.', body: 'Snapshot before a migration, a contractor handoff, or a risky deploy. If the new direction fails, the capsule restores the project as it was, in a different account if needed.' },
+    { tag: 'CUTOVER', title: 'Migrating, handing off, or just want a way back.', body: 'Snapshot before a migration, a contractor handoff, or a risky deploy. If the new direction fails, the capsule restores the project as it was, in a different account if needed. See <a href="/docs/restore-targets">which account to restore into</a>.' },
   ];
   return <section className="section use-cases" id="use-cases">
     <div className="shell">
@@ -2107,11 +2104,16 @@ function UseCases() {
         {cases.map((item) => (
           <details key={item.tag} className="use-case-row">
             <summary><span className="use-case-tag">{item.tag}</span><span className="use-case-title">{item.title}</span></summary>
-            <p>{item.body}</p>
+            <p>{item.body}{item.link ? (<span> See <a href={item.link[1]}>{item.link[0]}</a>.</span>) : null}</p>
           </details>
         ))}
       </div>
     </div>
+
+      <figure className="hero-concept">
+        <img src="/images/escape-vaults.jpg" alt="Your Supabase Escape: courier carries the sealed capsule from the locked project to your vault (S3, Dropbox, Drive, or your disk), then restores it" width="1774" height="887" />
+        <figcaption><span>From locked project to your vault to restored.</span><small>The whole story on one screen</small></figcaption>
+      </figure>
   </section>;
 }
 
