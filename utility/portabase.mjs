@@ -50,6 +50,8 @@ import {
   computeTombstones,
   partitionChanged,
   findProtectedBaselines,
+  mergeStorageManifests,
+  mergeFunctionManifests,
   generateFunctionRedeployScripts,
   PINNED_SUPABASE_CLI,
   schemaExcludePattern,
@@ -736,7 +738,7 @@ async function loadPriorStorageIndex(config) {
   }
 }
 
-async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets = [], includeBuckets = []) {
+async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets = [], includeBuckets = [], deltaBaseline = null) {
   const storageDir = join(rawDir, 'storage');
   const cacheRoot = resolve(config.backupDirectory || './portabase-capsules', '.storage-object-cache');
   await mkdir(storageDir, { recursive: true });
@@ -862,6 +864,27 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
     const identity = storageObjectIdentity(object);
     const key = `${bucket.id}/${object.fullName}`;
     seenKeys.add(key);
+    const deltaHit = deltaBaseline?.size ? deltaBaseline.get(key) : null;
+    if (deltaHit && baselineObjectUnchanged(deltaHit, identity)) {
+      completed += 1;
+      progress({ phase: 'storage', item: `${key} (delta-reused)`, bytes: Number(identity.size) || 0, completed, total: jobs.length });
+      return {
+        bucketId: bucket.id,
+        entry: {
+          name: object.fullName,
+          size: Number(identity.size) || 0,
+          sha256: deltaHit.sha256,
+          updatedAt: identity.updatedAt,
+          etag: identity.etag,
+          contentType: identity.contentType || null,
+          resumed: true,
+          cacheHit: false,
+          downloaded: false,
+          reused: true,
+          incremental: 'delta-reused',
+        },
+      };
+    }
     const target = join(storageDir, safeObjectPath(bucket.id), safeObjectPath(object.fullName));
     await mkdir(dirname(target), { recursive: true });
     const prior = priorIndex.get(key) || null;
@@ -992,6 +1015,7 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
     else if (result.entry.resumed) manifest.skippedUnchanged += 1;
     else if (result.entry.downloaded) manifest.downloaded += 1;
     if (result.entry.incremental === 'binary-unchanged') manifest.incrementalReused += 1;
+    if (result.entry.reused) manifest.deltaReused = (manifest.deltaReused || 0) + 1;
     if (result.entry.incremental === 'binary-differential') manifest.incrementalDifferential += 1;
     manifest.objectCount += 1;
     manifest.totalBytes += result.entry.size;
@@ -1003,6 +1027,10 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
 
   // W8: reconcile — drop prior keys no longer present (stale index entries)
   manifest.reconciledDropped = [...priorIndex.keys()].filter(k => !seenKeys.has(k)).length;
+  if (deltaBaseline?.size) {
+    manifest.tombstones = computeTombstones([...deltaBaseline.keys()], [...seenKeys]);
+    if (manifest.tombstones.length) console.log(`Delta storage: ${manifest.tombstones.length} object(s) deleted since baseline (tombstones).`);
+  }
   // Capsule-side fingerprint: only objects actually written into this capsule
   const capsuleObjectKeys = storageObjectKeysFromBuckets(manifest.buckets);
   manifest.capsuleNamesFingerprintMd5 = fingerprintSortedKeys(capsuleObjectKeys, 'md5');
@@ -1618,7 +1646,7 @@ async function backup() {
   try {
     for (const [name, enabled, capture] of [
       ['database', config.capture?.database !== false, () => captureDatabase(rawDir, limits, excludeTables)],
-      ['storage', config.capture?.storage !== false, () => captureStorage(rawDir, limits, config, excludeBuckets, includeBuckets)],
+      ['storage', config.capture?.storage !== false, () => captureStorage(rawDir, limits, config, excludeBuckets, includeBuckets, baseline ? baseline.storageObjects : null)],
       ['functions', config.capture?.functions !== false, () => captureFunctions(config, rawDir, limits)],
       ['auth', config.capture?.auth !== false, () => captureAuth(config, rawDir)],
     ]) {
@@ -1636,6 +1664,46 @@ async function backup() {
         console.error(`PARTIAL ${name}: ${error.message}`);
       }
     }
+    const dbDir = join(rawDir, 'database');
+    const currentDbHashes = {};
+    for (const file of ['roles.sql', 'schema.sql', 'data.sql']) {
+      const full = join(dbDir, file);
+      if (existsSync(full)) currentDbHashes[file] = await hashFile(full);
+    }
+    if (baseline) {
+      manifest.kind = 'delta';
+      manifest.baseline = { capsuleId: baseline.capsuleId, manifestSha256: baseline.manifestSha256 };
+      manifest.delta = { storage: { tombstones: manifest.contents.storage?.tombstones || [] } };
+      const dbPart = partitionChanged(currentDbHashes, baseline.dbHashes || {});
+      if (!baseline.dbHashes) console.log('Delta database: baseline has no layer hashes — storing the full database layer.');
+      for (const reused of dbPart.reused) await rm(join(dbDir, reused.path), { force: true });
+      manifest.delta.database = { changed: dbPart.changed, reused: dbPart.reused, baselineWithoutHashes: !baseline.dbHashes };
+      const fnManifestPath = join(rawDir, 'functions', 'functions-manifest.json');
+      const currentFnHashes = {};
+      const fnEntries = [];
+      if (existsSync(fnManifestPath)) {
+        try {
+          const fnManifest = JSON.parse(await readFile(fnManifestPath, 'utf8'));
+          for (const fn of fnManifest?.functions || fnManifest || []) {
+            for (const file of fn.files || []) {
+              if (!file?.path || !file?.sha256) continue;
+              currentFnHashes[`${fn.name}/${file.path}`] = file.sha256;
+              fnEntries.push({ name: fn.name, path: file.path });
+            }
+          }
+        } catch { /* keep sick functions layer as-is */ }
+      }
+      const fnPart = partitionChanged(currentFnHashes, baseline.functionFiles || {});
+      for (const reused of fnPart.reused) {
+        const entry = fnEntries.find(item => `${item.name}/${item.path}` === reused.path);
+        if (entry) await rm(join(rawDir, 'functions', entry.name, entry.path), { force: true });
+      }
+      manifest.delta.functions = { changed: fnPart.changed, reused: fnPart.reused };
+      const changedCount = dbPart.changed.length + fnPart.changed.length + (manifest.contents.storage?.downloaded || 0);
+      const reusedCount = dbPart.reused.length + fnPart.reused.length + (manifest.contents.storage?.deltaReused || 0);
+      console.log(`Delta capsule: ${changedCount} new/changed item(s) stored, ${reusedCount} referenced from baseline ${baseline.capsuleId}.`);
+    }
+    manifest.deltaHashes = { database: currentDbHashes };
     manifest.status = manifest.errors.length || Object.values(manifest.contents).some(item => !item.complete) ? 'PARTIAL' : trial ? 'TRIAL' : 'COMPLETE';
     await writeFile(join(rawDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
     // Persist storage object identity for next-run resume (metadata only; lives outside capsule)
@@ -1688,6 +1756,8 @@ async function backup() {
     const capsuleMetadata = {
       formatVersion: 1,
       id,
+      kind: manifest.kind === 'delta' ? 'delta' : 'full',
+      baselineCapsuleId: manifest.baseline?.capsuleId || null,
       edition: manifest.edition,
       licenseId: entitlement.license.valid ? entitlement.license.payload.licenseId : null,
       projectRef: config.projectRef,
@@ -2423,6 +2493,7 @@ async function restorePlanCommand() {
   const opened = await openCapsule(materialized.capsuleDir, process.env.PORTABASE_ENCRYPTION_PASSPHRASE);
   try {
     const { metadata, manifest, extracted } = opened;
+    if (manifest.kind === 'delta') throw new Error(`Capsule ${metadata.id} is a delta capsule: build restore plans at restore time with --baseline <full capsule directory> (a delta never stands alone).`);
     const dataSqlPath = join(extracted, 'database', 'data.sql');
     const tableSizes = existsSync(dataSqlPath) ? await measureDataSqlTables(dataSqlPath) : [];
     const storageManifestPath = join(extracted, 'storage', 'storage-manifest.json');
@@ -2474,7 +2545,54 @@ async function restore() {
   let evidence = { formatVersion: 1, portabaseVersion: VERSION, mode, startedAt, status: 'RUNNING' };
   try {
     opened = await openCapsule(materialized.capsuleDir, process.env.PORTABASE_ENCRYPTION_PASSPHRASE);
-    const { manifest, metadata, extracted } = opened;
+    let { manifest, metadata, extracted } = opened;
+    if (manifest.kind === 'delta') {
+      const baselineFlag = flag('baseline', null);
+      if (!baselineFlag) throw new Error(`Capsule ${metadata.id} is a delta capsule: pass --baseline <full capsule directory> (a delta never restores alone).`);
+      const baseMaterialized = await materializeCapsule(resolve(baselineFlag));
+      const baseOpened = await openCapsule(baseMaterialized.capsuleDir, process.env.PORTABASE_ENCRYPTION_PASSPHRASE);
+      opened.chainCleanups = [async () => {
+        await rm(baseOpened.temp, { recursive: true, force: true });
+        if (baseMaterialized.cleanup) await rm(baseMaterialized.cleanup, { recursive: true, force: true });
+      }];
+      if (baseOpened.manifest.kind === 'delta') throw new Error('Delta-of-delta restore is not supported: --baseline must be a full capsule.');
+      if (baseOpened.manifest.projectRef !== manifest.projectRef) {
+        throw new Error(`Baseline project ${baseOpened.manifest.projectRef} does not match delta project ${manifest.projectRef}.`);
+      }
+      console.log(`Delta chain: assembling baseline ${baseOpened.metadata.id} + delta ${metadata.id}...`);
+      const merged = join(opened.temp, 'merged');
+      await mkdir(merged, { recursive: true });
+      await cp(baseOpened.extracted, merged, { recursive: true, force: true });
+      await cp(extracted, merged, { recursive: true, force: true });
+      for (const tomb of manifest.delta?.storage?.tombstones || []) {
+        const slash = tomb.indexOf('/');
+        if (slash < 0) continue;
+        const bucket = tomb.slice(0, slash);
+        const name = tomb.slice(slash + 1);
+        if (name) await rm(join(merged, 'storage', safeObjectPath(bucket), ...name.split('/').map(safeObjectPath)), { recursive: true, force: true });
+      }
+      const baseStoragePath = join(baseOpened.extracted, 'storage', 'storage-manifest.json');
+      const mergedStoragePath = join(merged, 'storage', 'storage-manifest.json');
+      if (existsSync(baseStoragePath)) {
+        const baseStorage = JSON.parse(await readFile(baseStoragePath, 'utf8'));
+        const deltaStorage = existsSync(mergedStoragePath) ? JSON.parse(await readFile(mergedStoragePath, 'utf8')) : { buckets: [] };
+        const mergedStorage = mergeStorageManifests(baseStorage, deltaStorage, manifest.delta?.storage?.tombstones || []);
+        await mkdir(join(merged, 'storage'), { recursive: true });
+        await writeFile(mergedStoragePath, `${JSON.stringify(mergedStorage, null, 2)}\n`);
+      }
+      const baseFnPath = join(baseOpened.extracted, 'functions', 'functions-manifest.json');
+      const mergedFnPath = join(merged, 'functions', 'functions-manifest.json');
+      if (existsSync(baseFnPath)) {
+        const baseFn = JSON.parse(await readFile(baseFnPath, 'utf8'));
+        const deltaFn = existsSync(mergedFnPath) ? JSON.parse(await readFile(mergedFnPath, 'utf8')) : { functions: [] };
+        const mergedFns = mergeFunctionManifests(baseFn.functions || baseFn || [], deltaFn.functions || deltaFn || []);
+        await mkdir(join(merged, 'functions'), { recursive: true });
+        const outFn = Array.isArray(deltaFn) ? mergedFns : { ...deltaFn, functions: mergedFns };
+        await writeFile(mergedFnPath, `${JSON.stringify(outFn, null, 2)}\n`);
+      }
+      extracted = merged;
+      console.log('Chain assembled at restore time; the baseline capsule was never modified.');
+    }
     evidence.capsuleId = metadata.id;
     const restorePlan = await loadRestorePlanFlag(metadata.id);
     evidence = {
@@ -2565,6 +2683,7 @@ async function restore() {
   } finally {
     if (opened) await rm(opened.temp, { recursive: true, force: true });
     if (materialized.cleanup) await rm(materialized.cleanup, { recursive: true, force: true });
+    if (opened?.chainCleanups) for (const cleanup of opened.chainCleanups) await cleanup();
   }
 }
 
@@ -2622,6 +2741,20 @@ async function prune() {
   if (!candidates.length) return console.log('Nothing to prune.');
   for (const name of candidates) console.log(`${hasFlag('execute') ? 'DELETE' : 'WOULD DELETE'}  ${name}`);
   if (!hasFlag('execute')) return console.log('\nDRY RUN ONLY. Add --execute after reviewing the exact capsule IDs.');
+  const metas = [];
+  for (const name of capsules) {
+    try {
+      metas.push(JSON.parse(await readFile(join(root, name, 'capsule.json'), 'utf8')));
+    } catch { /* foreign or partial directory; prune matches by name only */ }
+  }
+  const protectedIds = findProtectedBaselines(metas);
+  const blocked = candidates.filter(name => protectedIds.has(name));
+  if (blocked.length) {
+    const dependents = metas
+      .filter(meta => meta.baselineCapsuleId && blocked.includes(meta.baselineCapsuleId))
+      .map(meta => `${meta.id} needs ${meta.baselineCapsuleId}`);
+    throw new Error(`Refusing to prune baselines still referenced by deltas: ${blocked.join(', ')} (${dependents.join('; ')}). Prune the deltas first.`);
+  }
   for (const name of candidates) await rm(join(root, name), { recursive: true });
 }
 
@@ -2903,6 +3036,7 @@ Commands:
                       Edit "selected": false on entries to trim; --output <file>
                       --max-restore-bytes <n> --force (overwrite) --json
   restore             Decrypt and plan restore; execution requires two target guards
+                        Delta capsules need --baseline <full capsule directory>
                       Add --restore-plan <file> to restore only the plan's selected
                       tables/buckets/functions (hard-stops if the plan is over budget
                       or was generated for a different capsule)

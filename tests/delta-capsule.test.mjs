@@ -6,6 +6,8 @@ import {
   computeTombstones,
   partitionChanged,
   findProtectedBaselines,
+  mergeStorageManifests,
+  mergeFunctionManifests,
 } from '../utility/portabase-core.mjs';
 
 test('baselineObjectUnchanged: size+tag match reuses; anything weaker re-downloads', () => {
@@ -32,6 +34,21 @@ test('partitionChanged: identical sha reuses, new/different stores, baseline-onl
       missing: ['gone.sql'],
     },
   );
+});
+
+test('mergeStorageManifests: delta wins per name, tombstones drop', () => {
+  const baseline = { buckets: [{ id: 'b', objects: [{ name: 'keep', sha256: 'k' }, { name: 'chg', sha256: 'old' }, { name: 'del', sha256: 'd' }] }] };
+  const delta = { buckets: [{ id: 'b', objects: [{ name: 'chg', sha256: 'new' }, { name: 'new', sha256: 'n' }] }] };
+  const merged = mergeStorageManifests(baseline, delta, ['b/del']);
+  assert.deepEqual(merged.buckets[0].objects.map(o => [o.name, o.sha256]), [['keep', 'k'], ['chg', 'new'], ['new', 'n']]);
+});
+
+test('mergeFunctionManifests: delta wins per (name, path)', () => {
+  const baseline = [{ name: 'f', files: [{ path: 'a.ts', sha256: '1' }, { path: 'b.ts', sha256: '2' }] }];
+  const delta = [{ name: 'f', files: [{ path: 'b.ts', sha256: '3' }] }, { name: 'g', files: [{ path: 'x.ts', sha256: '4' }] }];
+  const merged = mergeFunctionManifests(baseline, delta);
+  assert.deepEqual(merged.find(f => f.name === 'f').files.map(f => [f.path, f.sha256]), [['a.ts', '1'], ['b.ts', '3']]);
+  assert.equal(merged.find(f => f.name === 'g').files.length, 1);
 });
 
 test('findProtectedBaselines: every referenced baseline is protected', () => {

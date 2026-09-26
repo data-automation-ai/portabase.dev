@@ -597,6 +597,47 @@ export function findProtectedBaselines(capsuleMetas = []) {
   return protectedIds;
 }
 
+/**
+ * Merges a delta storage manifest over its baseline: delta entries win per
+ * object name, tombstoned keys are dropped. Bucket metadata comes from baseline.
+ */
+export function mergeStorageManifests(baseline = {}, delta = {}, tombstones = []) {
+  const tomb = new Set(tombstones);
+  const byBucket = new Map();
+  for (const bucket of baseline.buckets || []) {
+    byBucket.set(bucket.id, {
+      ...bucket,
+      objects: (bucket.objects || []).filter(object => !tomb.has(`${bucket.id}/${object.name}`)),
+    });
+  }
+  for (const bucket of delta.buckets || []) {
+    const record = byBucket.get(bucket.id) || { ...bucket, objects: [] };
+    const names = new Set((bucket.objects || []).map(object => object.name));
+    record.objects = [...record.objects.filter(object => !names.has(object.name)), ...(bucket.objects || [])];
+    byBucket.set(bucket.id, record);
+  }
+  return { ...baseline, buckets: [...byBucket.values()] };
+}
+
+/**
+ * Merges function file lists (arrays of `{ name, files: [{ path, ... }] }`):
+ * delta entries win per (name, path). Returns the merged array.
+ */
+export function mergeFunctionManifests(baselineFunctions = [], deltaFunctions = []) {
+  const byName = new Map();
+  const put = (list) => {
+    for (const fn of list || []) {
+      const current = byName.get(fn.name) || { ...fn, files: [] };
+      const paths = new Set((fn.files || []).map(file => file.path));
+      current.files = [...current.files.filter(file => !paths.has(file.path)), ...(fn.files || [])];
+      byName.set(fn.name, current);
+    }
+  };
+  put(baselineFunctions);
+  put(deltaFunctions);
+  return [...byName.values()];
+}
+
 export function providerCommand(config, capsuleDir) {
   const provider = config.provider || {};
   const prefix = String(provider.prefix || '').replace(/^\/+|\/+$/g, '');
