@@ -1,0 +1,237 @@
+{
+  "accountId": "123456789012",
+  "aliases": ["example-escape"],
+  "partition": "aws",
+  "regions": ["us-east-1"],
+  "iam": {
+    "users": [
+      {
+        "UserName": "deploy",
+        "UserId": "AIDATESTUSER",
+        "Arn": "arn:aws:iam::123456789012:user/deploy",
+        "Path": "/",
+        "AccessKeyIds": ["AKIATESTEXAMPLE"],
+        "AttachedPolicies": ["arn:aws:iam::aws:policy/ReadOnlyAccess"]
+      }
+    ],
+    "roles": [
+      {
+        "RoleName": "app-ec2",
+        "Arn": "arn:aws:iam::123456789012:role/app-ec2",
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": { "Service": "ec2.amazonaws.com" },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "AttachedPolicies": ["arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"]
+      }
+    ]
+  },
+  "vpc": {
+    "vpcs": [{ "VpcId": "vpc-aaa", "CidrBlock": "10.0.0.0/16" }],
+    "subnets": [{ "SubnetId": "subnet-aaa", "VpcId": "vpc-aaa", "CidrBlock": "10.0.1.0/24" }],
+    "securityGroups": [{ "GroupId": "sg-aaa", "GroupName": "app", "VpcId": "vpc-aaa" }]
+  },
+  "ec2": {
+    "instances": [
+      {
+        "InstanceId": "i-abc",
+        "InstanceType": "t3.medium",
+        "KeyName": "prod-key",
+        "SubnetId": "subnet-aaa",
+        "SecurityGroupIds": ["sg-aaa"],
+        "Tags": { "Name": "app-1" },
+        "BlockDeviceMappings": [
+          { "DeviceName": "/dev/xvda", "Ebs": { "VolumeId": "vol-111" } }
+        ]
+      }
+    ],
+    "volumes": [
+      {
+        "VolumeId": "vol-111",
+        "Size": 100,
+        "VolumeType": "gp3",
+        "Encrypted": true,
+        "KmsKeyId": "alias/aws/ebs",
+        "AvailabilityZone": "us-east-1a",
+        "Iops": 3000,
+        "Attachments": [{ "InstanceId": "i-abc", "Device": "/dev/xvda" }]
+      },
+      {
+        "VolumeId": "vol-approved",
+        "Size": 20,
+        "VolumeType": "gp3",
+        "Encrypted": true,
+        "AvailabilityZone": "us-east-1a",
+        "RecommendedSnapshotId": "snap-already-approved"
+      },
+      {
+        "VolumeId": "vol-daily",
+        "Size": 80,
+        "VolumeType": "gp3",
+        "Encrypted": true,
+        "AvailabilityZone": "us-east-1a"
+      },
+      {
+        "VolumeId": "vol-tagged",
+        "Size": 40,
+        "VolumeType": "gp3",
+        "Encrypted": true,
+        "AvailabilityZone": "us-east-1a"
+      },
+      {
+        "VolumeId": "vol-pinned",
+        "Size": 10,
+        "VolumeType": "gp3",
+        "Encrypted": true,
+        "AvailabilityZone": "us-east-1a",
+        "PinnedSnapshotId": "snap-pinned-old"
+      }
+    ],
+    "instanceStoreVolumes": [
+      { "InstanceId": "i-gpu", "sizeGiB": 150 }
+    ],
+    "images": [
+      { "ImageId": "ami-123", "Name": "app-golden", "sizeGiB": 8, "SnapshotIds": ["snap-ami"], "State": "available", "RootDeviceType": "ebs", "Public": false, "CreationDate": "2026-03-01T00:00:00.000Z" },
+      { "ImageId": "ami-capece-old", "Name": "capece-daily-20260101", "sizeGiB": 100, "SnapshotIds": ["snap-ami-old"], "State": "available", "RootDeviceType": "ebs", "Public": false, "CreationDate": "2026-01-01T00:00:00.000Z" },
+      { "ImageId": "ami-capece-new", "Name": "capece-daily-20260901", "sizeGiB": 110, "SnapshotIds": ["snap-ami-new"], "State": "available", "RootDeviceType": "ebs", "Public": false, "CreationDate": "2026-09-01T00:00:00.000Z" },
+      { "ImageId": "ami-capece-pending", "Name": "capece-daily-20260920", "sizeGiB": 110, "State": "pending", "RootDeviceType": "ebs", "Public": false, "CreationDate": "2026-09-20T00:00:00.000Z" },
+      { "ImageId": "ami-combo", "Name": "combo-auto-20260815", "sizeGiB": 200, "SnapshotIds": ["snap-combo"], "State": "available", "RootDeviceType": "ebs", "Public": false, "CreationDate": "2026-08-15T00:00:00.000Z" }
+    ],
+    "keyPairs": [{ "KeyName": "prod-key", "KeyType": "ed25519" }],
+    "snapshots": [
+      { "SnapshotId": "snap-already-approved", "VolumeId": "vol-approved", "VolumeSize": 20, "Encrypted": true, "State": "completed", "StartTime": "2026-08-01T00:00:00.000Z" },
+      { "SnapshotId": "snap-daily-old", "VolumeId": "vol-daily", "VolumeSize": 80, "Encrypted": true, "State": "completed", "StartTime": "2026-01-01T00:00:00.000Z", "Description": "older daily" },
+      { "SnapshotId": "snap-daily-new", "VolumeId": "vol-daily", "VolumeSize": 80, "Encrypted": true, "State": "completed", "StartTime": "2026-09-01T12:00:00.000Z", "Description": "latest daily" },
+      { "SnapshotId": "snap-daily-pending", "VolumeId": "vol-daily", "VolumeSize": 80, "Encrypted": true, "State": "pending", "StartTime": "2026-09-20T00:00:00.000Z", "Description": "must not win" },
+      { "SnapshotId": "snap-tagged-old", "VolumeId": "vol-tagged", "VolumeSize": 40, "Encrypted": true, "State": "completed", "StartTime": "2026-08-01T00:00:00.000Z", "Tags": [{ "Key": "PortabaseBackup", "Value": "true" }] },
+      { "SnapshotId": "snap-untagged-new", "VolumeId": "vol-tagged", "VolumeSize": 40, "Encrypted": true, "State": "completed", "StartTime": "2026-09-15T00:00:00.000Z" },
+      { "SnapshotId": "snap-pinned-old", "VolumeId": "vol-pinned", "VolumeSize": 10, "Encrypted": true, "State": "completed", "StartTime": "2026-02-01T00:00:00.000Z" },
+      { "SnapshotId": "snap-pinned-new", "VolumeId": "vol-pinned", "VolumeSize": 10, "Encrypted": true, "State": "completed", "StartTime": "2026-09-10T00:00:00.000Z" }
+    ],
+    "networkAcls": [{ "NetworkAclId": "acl-aaa", "VpcId": "vpc-aaa" }],
+    "routeTables": [{ "RouteTableId": "rtb-aaa", "VpcId": "vpc-aaa" }],
+    "addresses": [{ "AllocationId": "eipalloc-aaa", "PublicIp": "203.0.113.10", "Domain": "vpc" }]
+  },
+  "dynamodb": {
+    "tables": [{ "TableName": "sessions", "ItemCount": 1200, "TableSizeBytes": 1048576, "BillingMode": "PAY_PER_REQUEST" }]
+  },
+  "kms": {
+    "keys": [{ "KeyId": "11111111-2222-3333-4444-555555555555", "Arn": "arn:aws:kms:us-east-1:123456789012:key/11111111-2222-3333-4444-555555555555", "Alias": "alias/app" }]
+  },
+  "cloudfront": {
+    "distributions": [{ "Id": "E123", "DomainName": "d111.cloudfront.net", "Enabled": true }]
+  },
+  "cognito": {
+    "userPools": [{ "Id": "us-east-1_abc", "Name": "app-users" }]
+  },
+  "rds": {
+    "instances": [
+      {
+        "DBInstanceIdentifier": "app-db",
+        "Engine": "postgres",
+        "EngineVersion": "16.4",
+        "AllocatedStorage": 50,
+        "StorageEncrypted": true,
+        "AvailabilityZone": "us-east-1a",
+        "DBParameterGroups": ["default.postgres16"],
+        "OptionGroupMemberships": []
+      }
+    ]
+  },
+  "lambda": {
+    "functions": [
+      {
+        "FunctionName": "invoice-worker",
+        "Runtime": "nodejs20.x",
+        "Handler": "index.handler",
+        "MemorySize": 256,
+        "Timeout": 30,
+        "Role": "arn:aws:iam::123456789012:role/lambda-invoice",
+        "CodeSha256": "abc123sha",
+        "CodeSize": 1048576,
+        "Environment": { "Variables": { "DATABASE_URL": "must-not-be-packed" } }
+      }
+    ]
+  },
+  "s3": {
+    "buckets": [
+      {
+        "Name": "app-assets",
+        "Region": "us-east-1",
+        "objectCount": 12000,
+        "totalBytes": 53687091200,
+        "Versioning": "Enabled",
+        "Encryption": { "Algorithm": "aws:kms" },
+        "Lifecycle": [{ "Id": "expire-old", "Status": "Enabled" }],
+        "Cors": null,
+        "Policy": { "Statement": [{ "Effect": "Deny", "Action": "s3:*", "Condition": { "Bool": { "aws:SecureTransport": "false" } } }] }
+      },
+      {
+        "Name": "capece-supabase-backups",
+        "Region": "us-east-1",
+        "objectCount": 3,
+        "totalBytes": 3145728,
+        "objects": [
+          { "Key": "nightly/db-20260731-0700.dump", "Size": 1048576, "LastModified": "2026-07-31T07:00:00.000Z" },
+          { "Key": "nightly/db-20260801-0700.dump", "Size": 1048576, "LastModified": "2026-08-01T07:00:00.000Z" },
+          { "Key": "notes/readme.txt", "Size": 120, "LastModified": "2026-09-01T00:00:00.000Z" }
+        ]
+      }
+    ]
+  },
+  "elbv2": {
+    "loadBalancers": [
+      { "LoadBalancerName": "app-alb", "Type": "application", "Scheme": "internet-facing" }
+    ]
+  },
+  "ecs": { "clusters": [{ "clusterName": "app" }] },
+  "eks": { "clusters": [{ "name": "prod" }] },
+  "cloudwatch": { "alarms": [{ "AlarmName": "high-cpu", "MetricName": "CPUUtilization" }] },
+  "eventbridge": { "rules": [{ "Name": "nightly", "ScheduleExpression": "rate(1 day)" }] },
+  "sqs": { "queues": [{ "QueueName": "jobs" }] },
+  "sns": { "topics": [{ "TopicArn": "arn:aws:sns:us-east-1:123456789012:ops" }] },
+  "secretsmanager": {
+    "secrets": [{ "Name": "app/db", "ARN": "arn:aws:secretsmanager:us-east-1:123456789012:secret:app/db" }]
+  },
+  "ssm": {
+    "parameters": [{ "Name": "/app/log-level", "Type": "String" }]
+  },
+  "route53": {
+    "hostedZones": [
+      {
+        "Id": "/hostedzone/Z1",
+        "Name": "example.test.",
+        "records": [
+          { "Name": "example.test.", "Type": "A", "TTL": 300, "ResourceRecords": ["203.0.113.10"] },
+          { "Name": "example.test.", "Type": "TXT", "TTL": 300, "ResourceRecords": ["v=spf1 -all"] }
+        ]
+      }
+    ]
+  },
+  "cloudformation": {
+    "stacks": [
+      {
+        "StackName": "app-stack",
+        "TemplateBody": { "Resources": { "Bucket": { "Type": "AWS::S3::Bucket" } } },
+        "CdkMetadata": null
+      }
+    ]
+  },
+  "ecr": {
+    "repositories": [
+      {
+        "repositoryName": "app",
+        "encryption": "AES256",
+        "images": [
+          { "digest": "sha256:deadbeef", "tags": ["latest"], "sizeBytes": 2147483648 }
+        ]
+      }
+    ]
+  }
+}

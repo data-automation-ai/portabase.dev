@@ -8,6 +8,7 @@
   1. Scans known S3 backup buckets and self-owned AMIs
   2. Groups related backups into "series" (e.g. nightly dumps for one project)
   3. Defaults to ONLY the MOST RECENT object per series
+  CI source of truth (no AWS mutate): utility/aws/latest-backup.mjs
   4. Opens a visual picker (Out-GridView) so you multi-select/deselect rows
   5. Prints a clear confirmation list and waits for Y/N
   6. Copies only the confirmed binaries to Dropbox

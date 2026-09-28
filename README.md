@@ -55,6 +55,8 @@ npm run portabase -- init
 
 # Check tools and config
 npm run portabase -- doctor
+npm run portabase -- plan
+npm run portabase -- ui              # local read-only GUI: inventory, sizes, capsule checklist
 
 # Full capture → encrypted capsule in your destination
 npm run portabase -- backup
@@ -103,9 +105,44 @@ npm run build
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Bug reports and pull requests are welcome. Security issues: [SECURITY.md](SECURITY.md) — do not file a public issue for an active exploit.
 
+## Privacy model
+
+- Readiness checks and encryption run on the customer runner.
+- No analytics on the public site.
+- Telemetry to Portabase Cloud is opt-in and health-metadata only.
+- Credentials and passphrases never go to Portabase infrastructure.
+
+## Portabase Cloud infrastructure
+
+**Launch scope: Supabase only** — Cloud login is hosted Supabase Auth (email + Google + GitHub). Cognito/AWS product identity is reserved for a later release (see [docs/LAUNCH-SCOPE.md](./docs/LAUNCH-SCOPE.md)).
+
+Control plane: trial/billing (Square), Supabase account DB, optional ECS runners, CloudWatch:
+
+- How Cloud layers on the free CLI: [docs/CLOUD.md](./docs/CLOUD.md)
+- Launch scope: [docs/LAUNCH-SCOPE.md](./docs/LAUNCH-SCOPE.md)
+- Design: [docs/CLOUD_INFRASTRUCTURE.md](./docs/CLOUD_INFRASTRUCTURE.md)
+- Control-plane store: [docs/CLOUD_CONTROL_PLANE_STORE.md](./docs/CLOUD_CONTROL_PLANE_STORE.md)
+- Billing: [docs/BILLING.md](./docs/BILLING.md)
+- Terraform (future AWS path / customer vault): [aws/cloud/](./aws/cloud/)
+- Control-plane SQL: [supabase/cloud/0001_control_plane.sql](./supabase/cloud/0001_control_plane.sql)
+
 ## Docs
 
-Public index: [docs/README.md](docs/README.md)
+- Public index: [docs/README.md](docs/README.md)
+- **[Project handoff (for agents / new providers)](./docs/HANDOFF.md)** — start here for Claude or any successor
+- [Agent rules](./AGENTS.md) — never F:; cloud spool for backups
+- [Launch scope (Supabase only)](./docs/LAUNCH-SCOPE.md)
+- [Open-core model](./docs/OPEN_CORE.md)
+- [Security & trust](./docs/SECURITY-TRUST.md)
+- [Cloud on the free CLI](./docs/CLOUD.md)
+- [Billing](./docs/BILLING.md) — Square **$7 / $17 / $37** (1 / 10 / 100 GB)
+- [Site ship checklist](./docs/SITE-SHIP.md) — Netlify deploy + Louis env
+- [Replay proof](./docs/REPLAY.md)
+- [Cloud infrastructure](./docs/CLOUD_INFRASTRUCTURE.md)
+- [Product specification](./docs/PRODUCT_SPEC.md)
+- [Essentials runbook](./docs/ESSENTIALS_RUNBOOK.md)
+- [Telemetry schema](./docs/TELEMETRY_SCHEMA.md)
+- [Restore drill](./docs/RESTORE_DRILL.md)
 
 | For | Start here |
 | --- | --- |

@@ -2,6 +2,8 @@
 
 This covers the **export / mapping scripts** under `scripts/export-*.ps1` and `scripts/test-binary-backup-mode.ps1`. Goal: **least privilege** for discovery (mappings) vs full binary ship.
 
+Checked-in generic sketches (placeholders, no access keys): [`utility/aws/iam/portabase-export-map.json`](../utility/aws/iam/portabase-export-map.json) (MAP) and [`portabase-export-ship.json`](../utility/aws/iam/portabase-export-ship.json) (SHIP). Runner credential chain: [AWS_RUNNER_AUTH.md](./AWS_RUNNER_AUTH.md).
+
 ---
 
 ## 1. Where credentials live (nothing magic in the scripts)

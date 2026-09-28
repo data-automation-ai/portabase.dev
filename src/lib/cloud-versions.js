@@ -1,7 +1,7 @@
 /**
  * Portabase Cloud identity backends.
  *
- * LAUNCH: Supabase-only (email + Google via hosted Supabase Auth).
+ * LAUNCH: Supabase-only (email, magic link, Google, GitHub via hosted Supabase Auth).
  * AWS Cognito remains in code for a later release — not offered in the UI.
  */
 
@@ -13,10 +13,10 @@ export const CLOUD_VERSIONS = {
     id: 'supabase',
     label: 'Supabase',
     short: 'Supabase',
-    description: 'Sign in with hosted Supabase Auth (email + Google). Portabase Cloud is built for Supabase projects first.',
+    description: 'Sign in with hosted Supabase Auth (email, magic link, Google, or GitHub). Portabase Cloud is built for Supabase projects first.',
     authLabel: 'Supabase Auth',
     loginPath: '/login',
-    providers: ['email', 'google'],
+    providers: ['email', 'google', 'github'],
     launch: true,
   },
   aws: {

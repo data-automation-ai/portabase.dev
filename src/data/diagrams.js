@@ -1,6 +1,6 @@
 /**
  * Homepage technical diagrams — open-core first.
- * Captions explain Community (OSS) vs optional Cloud convenience.
+ * Captions explain Community (open source) vs optional Cloud convenience.
  * Image files are legacy product art; copy is the source of truth for the model.
  */
 export const diagrams = [
@@ -48,7 +48,7 @@ export const diagrams = [
   },
   {
     src: '/images/diagrams/08-what-portabase-captures.png',
-    title: 'What the OSS engine captures',
+    title: 'What the open-source engine captures',
     body: 'Not just Postgres: Auth records, Storage objects, Functions, and configuration inventory required to rebuild application recovery.',
     layer: 'community',
   },

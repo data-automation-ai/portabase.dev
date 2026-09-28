@@ -5,21 +5,45 @@ Professional recovery ops console. **Portabase product**, not a Supabase Dashboa
 ## Design intent
 
 - **Borrow:** clear sidebar, dense tables, status badges, calm dark UI, keyboard-friendly filters  
-- **Do not copy:** Studio table editor, SQL, Auth users, Storage browser, or Supabase nav taxonomy  
+- **Do not copy:** Studio as the console IA. Live table/storage browsing is a **separate client-side tool** that talks only to the customer’s Supabase — never a capsule inventory.
 
 Tone: *did the capsule land, can we restore, who gets woken* — instrument panel for DR.
 
-## Nav (7 items)
+## Nav
 
 | Item | Purpose |
 | --- | --- |
-| **Home** | Recovery status, RPO, recent events |
+| **Home** | Recovery status, gauges (capsule / rescue / storage / workers), **transfers used / 24h** (1 or 3), RPO, recent events |
 | **Sources** | Supabase projects you protect (labels/refs only) |
-| **Backups** | Capsules + schedule |
+| **Live Supabase** | Browser-only explorer of the **live** project (URL+key stay in-tab). Not the capsule. |
+| **Capsules** | Manage (register, schedule, verify, retention, destination, **customer-side key injection**) — not a content browser |
+| **Telemetry** | Graphical health signals only (success/fail, duration, encrypted-byte aggregates, workers, plan cap, rescue, drift counts) |
+| **Open capsule** | Customer-side inspect wizard — local file or CLI `verify --decrypt`. Portabase cannot open the archive. |
 | **Agents** | Your runners (+ optional managed) |
 | **Alerts** | Escalation chains, channels, event feed |
 | **Replay** | Validate capsule by restoring into a **new blank** Supabase project/account |
 | **Account** | Plan, team, destinations, **CloudTrail live**, settings |
+
+### Telemetry (Cloud dashboard)
+
+Graphs and gauges of **allowlisted health signals**: job success/fail, timing, ciphertext size totals if the runner reported them, worker online counts, plan usage vs Square GB cap, **transfers used in the rolling 24h window** (allowance 1, or 3 with Extra transfers), rescue readiness, drift pass/fail counts, a status timeline.
+
+**Provably zero-knowledge:** this page must never list Storage object names/paths, table row contents, or capsule plaintext inventory. It must not imply Portabase can see inside the capsule. Ciphertext-only echoes; runner-originated aggregates; no server-side decrypt. View-model: `src/lib/telemetry-view.js`. Law: `docs/ZERO-KNOWLEDGE.md`.
+
+### Live Supabase viewer (not the capsule)
+
+`/app/supabase-viewer` and `/tools/supabase-viewer`. Customer pastes project URL + anon/service key. `@supabase/supabase-js` + PostgREST OpenAPI / Storage run **in the browser** toward the customer project. Keys and query results are never POSTed to Portabase `/api/*`. Management API is fail-closed (CLI fallback). sessionStorage is opt-in; default memory-only; wipe clears the tab.
+
+**Still in force:** Cloud cannot list capsule object names or plaintext.
+
+### Open capsule (zero-knowledge inspect)
+
+Decrypt happens **only** with the customer’s passphrase on their side:
+
+- Browser: pick a local `capsule.json` (layer flags / status) or acknowledge a `.pbase` as sealed ciphertext. WebCrypto **cannot** run CLI scrypt (N=32768) or stream multi-GB archives — the UI says so.
+- CLI: `portabase verify --capsule <dir> --decrypt` on the machine that has the key.
+- Passphrase is fingerprinted locally then discarded. **Never POSTed to Cloud APIs.**
+- We do **not** fake a server-side peek.
 
 ### CloudWatch live (Account tab) — secret-scoped
 
@@ -47,4 +71,4 @@ Tone: *did the capsule land, can we restore, who gets woken* — instrument pane
 
 ## Stack
 
-`src/console/` — shell, CSS, pages, local store. Never accepts passphrases or capsule bytes.
+`src/console/` — shell, CSS, pages, local store. Cloud APIs never receive passphrases or capsule bytes. The Open capsule wizard may read a **local** file / passphrase in the tab only, then discard them.

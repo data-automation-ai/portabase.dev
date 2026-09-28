@@ -5,15 +5,26 @@ import {
   updateConsoleState,
 } from './data/store.js';
 import {
+  ADDON_TRANSFERS_PER_24H,
+  BASE_TRANSFERS_PER_24H,
   CLOUD_MAX_AGENTS,
   CLOUD_PLANS,
   CLOUD_DEFAULT_PLAN_ID,
+  TRANSFER_WINDOW_HOURS,
   agentSlotsUsed,
   getCloudPlan,
+  minScheduleHours,
+  planPriceRangeLabel,
+  publicCloudPlans,
+  storageUsage,
 } from '../lib/product.js';
-import { IngestMonitor } from './IngestMonitor.jsx';
-import { createIngestState, applyIngestEvent } from './data/ingest-stream.js';
-import { demoIngestSource } from './data/ingest-demo.js';
+import { BarGauge, RingGauge, StatusPip } from './gauges.jsx';
+import { CapsuleManagePage } from './capsule-manage.jsx';
+import { TransferWindowPanel } from './transfer-window.jsx';
+import { looksLikeStorageObjectPath } from '../lib/zero-knowledge.js';
+import { proofFromConsoleState } from '../lib/proof-status.js';
+import { SealKeysPanel } from './seal-keys.jsx';
+import { KEYS_COPY } from '../data/never-hold-keys.js';
 
 function Badge({ tone, children }) {
   const t = tone === 'ok' || tone === 'online' || tone === 'healthy' || tone === 'COMPLETE' || tone === 'running' || tone === 'completed' || tone === 'active' || tone === 'trialing'
@@ -69,7 +80,7 @@ function copyText(text, toast) {
 }
 
 /* ─── HOME ─── */
-export function OverviewPage({ state, navigate, toast }) {
+export function OverviewPage({ state, navigate, toast, me, startAddon, busy, demoMode }) {
   const healthy = state.projects.filter(p => p.status === 'healthy').length;
   const issues = state.projects.filter(p => p.status !== 'healthy').length;
   const lastEvents = [...state.events].sort((a, b) => new Date(b.occurredAt) - new Date(a.occurredAt)).slice(0, 6);
@@ -77,26 +88,65 @@ export function OverviewPage({ state, navigate, toast }) {
   const trialDays = Math.max(0, Math.ceil((new Date(state.billing.trialEndsAt) - Date.now()) / 86400e3));
   const success = state.capsules.filter(c => c.status === 'COMPLETE').length;
   const failed = state.capsules.filter(c => c.status === 'FAILED').length;
+  const verified = state.capsules.filter(c => c.verified).length;
+  const rescueReady = state.capsules.filter(c => c.status === 'COMPLETE' && c.verified).length;
+  const plan = getCloudPlan(state.billing?.planId || state.billing?.plan);
+  const usedBytes = state.capsules.reduce((sum, c) => sum + (Number(c.sizeBytes) || 0), 0);
+  const usage = storageUsage(usedBytes, plan.id);
+  const agentsOnline = state.agents.filter(a => a.status === 'online').length;
+  const lastCapsule = [...state.capsules].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+  const onboarding = state.onboarding?.steps || {};
+  const proof = proofFromConsoleState(state, { demoMode: Boolean(demoMode) });
+  const paidPlan = getCloudPlan(me?.subscription?.plan || me?.subscription?.planId || state.billing?.planId || state.billing?.plan);
 
   return (
     <>
       <PageHead
         title="Recovery status"
-        subtitle="Did last night’s capsule land? Can you restore without the Supabase dashboard? Keys stay on your runners."
+        subtitle="Capsule health, rescue readiness, and worker signals. Telemetry is status and hashes only — no keys, no capsule bytes."
         actions={
           <>
+            <button type="button" className="pb-btn" onClick={() => navigate('telemetry')}><Icon name="chart" size={14} /> Telemetry graphs</button>
+            <button type="button" className="pb-btn" onClick={() => navigate('inspect')}><Icon name="key" size={14} /> Open capsule locally</button>
+            <button type="button" className="pb-btn" onClick={() => navigate('supabase-viewer')}><Icon name="table" size={14} /> Live Supabase</button>
             <button type="button" className="pb-btn" onClick={() => navigate('restore')}><Icon name="restore" size={14} /> Replay to new account</button>
             <button type="button" className="pb-btn pb-btn-primary" onClick={() => navigate('projects')}><Icon name="plus" size={14} /> Add source</button>
           </>
         }
       />
 
+      <div className={`pb-callout ${proof.proven ? 'ok' : 'danger'}`} data-proof-tone={proof.tone}>
+        <Icon name={proof.proven ? 'shield' : 'warn'} size={18} />
+        <div>
+          <strong>{proof.proven ? 'Dry-run MATCH' : 'Proof lamp · RED'}</strong>
+          <p>
+            {proof.detail} Dashboard stays red until a real dry-run or compare from the free CLI / Cloud Runner reports MATCH.
+            Demo gauges are mocked and cannot turn this green.
+            {me?.subscription?.status && (me.subscription.status === 'active' || me.subscription.status === 'trialing')
+              ? ` Paid plan on file: ${paidPlan.shortLabel}.`
+              : ' Complete Square checkout to attach a paid plan.'}
+          </p>
+        </div>
+      </div>
+
+      <div className="pb-grid pb-grid-4" style={{ marginBottom: 14 }}>
+        {['Sign in', 'Start trial', 'Connect project', 'Prove capsule'].map((step, i) => {
+          const done = [true, state.billing?.status === 'trialing' || state.billing?.status === 'active', Boolean(onboarding.project), proof.proven];
+          return (
+            <div className="pb-card" key={step}>
+              <div className="pb-kpi-label">0{i + 1}</div>
+              <div className="pb-inline"><strong style={{ fontSize: 13 }}>{step}</strong><StatusPip tone={done[i] ? 'ok' : 'warn'} label={done[i] ? 'done' : 'next'} /></div>
+            </div>
+          );
+        })}
+      </div>
+
       {state.billing.status === 'trialing' && (
         <div className="pb-callout warn">
           <Icon name="clock" size={18} />
           <div>
             <strong>Trial · {trialDays} day{trialDays === 1 ? '' : 's'} remaining</strong>
-            <p>Card on file. Auto-converts to ${(state.billing.priceMonthlyCents / 100).toFixed(0)}/mo unless canceled. Manage under Billing.</p>
+            <p>Card on file. Auto-converts to ${plan.priceMonthlyUsd}/mo · {plan.storageCapLabel} · {BASE_TRANSFERS_PER_24H} transfer / {TRANSFER_WINDOW_HOURS}h unless canceled. Manage under Billing.</p>
           </div>
         </div>
       )}
@@ -113,24 +163,67 @@ export function OverviewPage({ state, navigate, toast }) {
 
       <div className="pb-grid pb-grid-4" style={{ marginBottom: 14 }}>
         <div className="pb-card">
+          <RingGauge
+            value={state.capsules.length ? (verified / state.capsules.length) * 100 : 0}
+            label="Capsule verify"
+            detail={`${verified} green · last ${relativeTime(lastCapsule?.createdAt)}`}
+            tone={failed ? 'warn' : 'ok'}
+            mocked
+          />
+        </div>
+        <div className="pb-card">
+          <RingGauge
+            value={state.capsules.length ? (rescueReady / state.capsules.length) * 100 : 0}
+            label="Rescue readiness"
+            detail={`${rescueReady} replay-ready`}
+            tone={rescueReady ? 'ok' : 'warn'}
+            mocked
+          />
+        </div>
+        <div className="pb-card">
+          <BarGauge
+            used={usage.usedBytes}
+            cap={usage.capBytes}
+            label={`Storage vs ${plan.shortLabel}`}
+            usedLabel={formatBytes(usage.usedBytes)}
+            capLabel={usage.capLabel}
+            tone={usage.percent > 85 ? 'warn' : 'ok'}
+            mocked
+          />
+        </div>
+        <div className="pb-card">
+          <RingGauge
+            value={state.agents.length ? (agentsOnline / state.agents.length) * 100 : 0}
+            label="Worker health"
+            detail={`${agentsOnline}/${state.agents.length} agents · ${state.agents.length}/${CLOUD_MAX_AGENTS} slots`}
+            tone={agentsOnline ? 'ok' : 'danger'}
+            mocked
+          />
+        </div>
+      </div>
+
+      <TransferWindowPanel state={state} me={me} onUpgrade={startAddon} busy={busy} navigate={navigate} />
+
+      <div className="pb-grid pb-grid-4" style={{ marginBottom: 14 }}>
+        <div className="pb-card">
           <div className="pb-kpi-label">Sources</div>
           <div className="pb-kpi-value">{state.projects.length}</div>
           <div className="pb-kpi-meta">{healthy} OK · {issues} need attention</div>
         </div>
         <div className="pb-card">
           <div className="pb-kpi-label">Agents online</div>
-          <div className="pb-kpi-value">{state.agents.filter(a => a.status === 'online').length}<span style={{ fontSize: 16, color: 'var(--c-faint)' }}>/{state.agents.length}</span></div>
-          <div className="pb-kpi-meta">{state.agents.length}/{CLOUD_MAX_AGENTS} plan slots · {relativeTime(state.agents[0]?.lastSeenAt)}</div>
+          <div className="pb-kpi-value">{agentsOnline}<span style={{ fontSize: 16, color: 'var(--c-faint)' }}>/{state.agents.length}</span></div>
+          <div className="pb-kpi-meta">{relativeTime(state.agents[0]?.lastSeenAt)}</div>
         </div>
         <div className="pb-card">
           <div className="pb-kpi-label">Verified capsules</div>
-          <div className="pb-kpi-value">{state.capsules.filter(c => c.verified).length}</div>
+          <div className="pb-kpi-value">{verified}</div>
           <div className="pb-kpi-meta">{success} ok · {failed} failed</div>
           <div className="pb-spark" aria-hidden="true">{spark.map((s, i) => <i key={i} className={s.fail ? 'fail' : ''} style={{ height: `${s.h * 100}%` }} />)}</div>
         </div>
         <div className="pb-card">
           <div className="pb-kpi-label">Freshest RPO</div>
-          <div className="pb-kpi-value">{Math.min(...state.projects.map(p => p.rpoHours || 999)).toFixed(1)}<span style={{ fontSize: 14, color: 'var(--c-faint)' }}>h</span></div>
+          <div className="pb-kpi-value">{state.projects.length ? Math.min(...state.projects.map(p => p.rpoHours || 999)).toFixed(1) : '—'}{state.projects.length ? <span style={{ fontSize: 14, color: 'var(--c-faint)' }}>h</span> : null}</div>
           <div className="pb-kpi-meta">Age of newest good capsule</div>
         </div>
       </div>
@@ -196,92 +289,36 @@ export function BackupsHubPage(props) {
   const [tab, setTab] = useState('capsules');
   return (
     <>
-      <PageHead title="Backups" subtitle="Encrypted capsules on your destinations, plus the schedule Cloud expects agents to meet." />
+      <PageHead title="Capsules" subtitle="Manage sealed archives — register, schedule, verify, retain, destination, inject key. Open locally on your machine. Not a Cloud content browser." />
       <div className="pb-tabs">
-        <button type="button" className={tab === 'capsules' ? 'is-active' : ''} onClick={() => setTab('capsules')}>Capsules</button>
-        <button type="button" className={tab === 'live' ? 'is-active' : ''} onClick={() => setTab('live')}>Live capture</button>
+        <button type="button" className={tab === 'capsules' ? 'is-active' : ''} onClick={() => setTab('capsules')}>Manage</button>
+        <button type="button" className={tab === 'open' ? 'is-active' : ''} onClick={() => props.navigate('inspect')}>Open locally</button>
         <button type="button" className={tab === 'schedules' ? 'is-active' : ''} onClick={() => setTab('schedules')}>Schedule</button>
       </div>
-      {tab === 'capsules' ? <CapsulesPage {...props} embedded />
-        : tab === 'live' ? <LiveIngestPage {...props} embedded />
-          : <SchedulesPage {...props} embedded />}
-    </>
-  );
-}
-
-/* ─── LIVE INGESTION ───
-   Real-time view of a capture as it reads the customer's Supabase project. */
-export function LiveIngestPage({ state: consoleState, embedded }) {
-  const [ingest, setIngest] = useState(createIngestState);
-  const [running, setRunning] = useState(false);
-  const stopRef = React.useRef(null);
-
-  const start = useCallback(() => {
-    if (stopRef.current) stopRef.current();
-    setIngest(createIngestState());
-    setRunning(true);
-    stopRef.current = demoIngestSource(event => {
-      setIngest(prev => applyIngestEvent(prev, event));
-      if (event.phase === 'done' || event.phase === 'failed') setRunning(false);
-    });
-  }, []);
-
-  const stop = useCallback(() => {
-    if (stopRef.current) stopRef.current();
-    stopRef.current = null;
-    setRunning(false);
-  }, []);
-
-  useEffect(() => () => { if (stopRef.current) stopRef.current(); }, []);
-
-  const source = consoleState?.projects?.[0]?.projectRef || 'ekklokrukxmqlahtonnc';
-  const idle = ingest.status === 'idle';
-
-  const body = (
-    <>
-      <div className="pb-inline" style={{ marginBottom: 14, justifyContent: 'space-between' }}>
-        <p style={{ margin: 0, color: 'var(--c-muted)', fontSize: 12.5 }}>
-          Progress is weighted by estimated table size, not table count — a few large tables
-          dominate most captures.
-        </p>
-        <button type="button" className="pb-btn pb-btn-primary" onClick={start} disabled={running}>
-          {running ? 'Capture running…' : idle ? 'Start capture' : 'Run again'}
-        </button>
-      </div>
-      {idle ? (
-        <div className="pb-empty">
-          <h3>No capture running</h3>
-          <p>
-            Start a capture to watch each table stream into the capsule in real time, with a
-            size-weighted progress meter and a live read of the object being ingested.
-          </p>
-          <button type="button" className="pb-btn pb-btn-primary" onClick={start}>Start capture</button>
-        </div>
-      ) : (
-        <IngestMonitor state={ingest} source={source} onStop={running ? stop : null} />
-      )}
-    </>
-  );
-  if (embedded) return body;
-  return (
-    <>
-      <PageHead title="Live capture" subtitle="Watch objects enter the capsule as the Escape runs." />
-      {body}
+      {tab === 'capsules' ? <CapsuleManagePage {...props} embedded /> : <SchedulesPage {...props} embedded />}
     </>
   );
 }
 
 export function AgentsHubPage(props) {
-  const [tab, setTab] = useState('agents');
+  const [tab, setTab] = useState(props.tab === 'seal' ? 'seal' : 'agents');
   const used = props.state?.agents?.length || 0;
   return (
     <>
-      <PageHead title="Agents" subtitle={`Customer-run boxes that report health. Cloud plan: up to ${CLOUD_MAX_AGENTS} agents (${used} in use). Optional managed runners for hosted compute.`} />
+      <PageHead
+        title="Agents"
+        subtitle={tab === 'seal'
+          ? KEYS_COPY.sealTitle
+          : `Customer-run boxes that report health. Cloud plan: up to ${CLOUD_MAX_AGENTS} agents (${used} in use). Optional managed runners for hosted compute.`}
+      />
       <div className="pb-tabs">
         <button type="button" className={tab === 'agents' ? 'is-active' : ''} onClick={() => setTab('agents')}>Your agents</button>
+        <button type="button" className={tab === 'seal' ? 'is-active' : ''} onClick={() => setTab('seal')}>Seal keys</button>
         <button type="button" className={tab === 'runners' ? 'is-active' : ''} onClick={() => setTab('runners')}>Managed runners</button>
       </div>
-      {tab === 'agents' ? <AgentsPage {...props} embedded /> : <RunnersPage {...props} embedded />}
+      {tab === 'seal'
+        ? <SealKeysPanel demo={props.demoMode} toast={props.toast} />
+        : tab === 'agents' ? <AgentsPage {...props} embedded /> : <RunnersPage {...props} embedded />}
     </>
   );
 }
@@ -290,7 +327,7 @@ export function AlertsHubPage(props) {
   const [tab, setTab] = useState('sms');
   return (
     <>
-      <PageHead title="Alerts" subtitle="SMS on success, failure, and every source-key access · escalation chains · channels." />
+      <PageHead title="Alerts" subtitle="SMS on success/failure at run time · escalation chains · channels." />
       <div className="pb-tabs">
         <button type="button" className={tab === 'sms' ? 'is-active' : ''} onClick={() => setTab('sms')}>SMS texts</button>
         <button type="button" className={tab === 'policies' ? 'is-active' : ''} onClick={() => setTab('policies')}>Escalation</button>
@@ -333,7 +370,7 @@ export function AccountHubPage(props) {
 /* ─── PROJECTS (sources) ─── */
 export function ProjectsPage({ state, navigate, toast, setState }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', ref: '', region: 'us-east-1', everyHours: 12 });
+  const [form, setForm] = useState({ name: '', ref: '', region: 'us-east-1', everyHours: minScheduleHours() });
 
   const add = () => {
     if (!form.name.trim() || !/^[a-z0-9]{20}$/i.test(form.ref.trim())) {
@@ -347,11 +384,11 @@ export function ProjectsPage({ state, navigate, toast, setState }) {
         name: form.name.trim(),
         region: form.region,
         status: 'healthy',
-        scheduleEveryHours: Number(form.everyHours) || 12,
+        scheduleEveryHours: Number(form.everyHours) || minScheduleHours(),
         lastSuccessAt: null,
         lastFailureAt: null,
         rpoHours: null,
-        rpoTargetHours: Number(form.everyHours) || 12,
+        rpoTargetHours: Number(form.everyHours) || minScheduleHours(),
         agentId: null,
         destinationIds: [],
         layers: { database: true, auth: true, storage: true, functions: true },
@@ -362,7 +399,7 @@ export function ProjectsPage({ state, navigate, toast, setState }) {
       return s;
     });
     setOpen(false);
-    setForm({ name: '', ref: '', region: 'us-east-1', everyHours: 12 });
+    setForm({ name: '', ref: '', region: 'us-east-1', everyHours: minScheduleHours() });
     toast('Project added', 'ok');
   };
 
@@ -425,7 +462,7 @@ export function ProjectsPage({ state, navigate, toast, setState }) {
               {['us-east-1', 'us-west-1', 'eu-west-1', 'eu-central-1', 'ap-southeast-1'].map(r => <option key={r}>{r}</option>)}
             </select>
           </div>
-          <div className="pb-field"><label>RPO target (hours)</label><input type="number" min={1} value={form.everyHours} onChange={e => setForm({ ...form, everyHours: e.target.value })} /></div>
+          <div className="pb-field"><label>RPO target (hours)</label><input type="number" min={minScheduleHours()} value={form.everyHours} onChange={e => setForm({ ...form, everyHours: e.target.value })} /><span className="pb-field-hint">Cloud included plan: {BASE_TRANSFERS_PER_24H} transfer / {TRANSFER_WINDOW_HOURS}h (add-on: up to {ADDON_TRANSFERS_PER_24H}).</span></div>
         </Modal>
       )}
     </>
@@ -511,7 +548,7 @@ export function ProjectDetailPage({ state, params, navigate, toast, setState }) 
             toast('Saved', 'ok');
           }} /></div>
           <div className="pb-field"><label>RPO target hours</label><input type="number" defaultValue={project.rpoTargetHours} onBlur={e => {
-            setState(s => { const p = s.projects.find(x => x.id === project.id); if (p) { p.rpoTargetHours = Number(e.target.value) || 12; p.scheduleEveryHours = p.rpoTargetHours; } return s; });
+            setState(s => { const p = s.projects.find(x => x.id === project.id); if (p) { p.rpoTargetHours = Number(e.target.value) || minScheduleHours(); p.scheduleEveryHours = p.rpoTargetHours; } return s; });
             toast('RPO target updated', 'ok');
           }} /></div>
           <p className="pb-field-hint">Schedule cadence is enforced on the agent. Cloud only monitors whether heartbeats meet this target.</p>
@@ -591,7 +628,7 @@ export function AgentsPage({ state, toast, setState, embedded }) {
     <>
       <div className="pb-inline" style={{ marginBottom: 12 }}>
         <Badge tone={slots.atLimit ? 'warn' : 'acid'}>{slots.used} / {slots.max} agents</Badge>
-        <span className="pb-muted" style={{ fontSize: 12.5 }}>Cloud · up to {CLOUD_MAX_AGENTS} agents · $17 or $27/mo</span>
+        <span className="pb-muted" style={{ fontSize: 12.5 }}>Cloud · up to {CLOUD_MAX_AGENTS} agents · {planPriceRangeLabel()}/mo</span>
         <button
           type="button"
           className="pb-btn pb-btn-primary pb-right"
@@ -681,35 +718,8 @@ export PORTABASE_CLOUD_ENDPOINT=https://portabase.dev/api/cloud/telemetry`}</div
 }
 
 /* ─── CAPSULES ─── */
-export function CapsulesPage({ state, embedded }) {
-  const [q, setQ] = useState('');
-  const [status, setStatus] = useState('all');
-  const list = useMemo(() => state.capsules.filter(c => {
-    if (status !== 'all' && c.status !== status) return false;
-    if (q && !`${c.id} ${c.projectRef} ${c.destinationKind}`.toLowerCase().includes(q.toLowerCase())) return false;
-    return true;
-  }), [state.capsules, q, status]);
-
-  const body = (
-    <>
-      <div className="pb-inline" style={{ marginBottom: 14 }}>
-        <div className="pb-search" style={{ minWidth: 220 }}><Icon name="search" size={14} /><input value={q} onChange={e => setQ(e.target.value)} placeholder="Filter…" /></div>
-        <select className="pb-btn" value={status} onChange={e => setStatus(e.target.value)}>
-          <option value="all">All statuses</option>
-          <option value="COMPLETE">COMPLETE</option>
-          <option value="FAILED">FAILED</option>
-        </select>
-      </div>
-      <CapsuleTable capsules={list} state={state} />
-    </>
-  );
-  if (embedded) return body;
-  return (
-    <>
-      <PageHead title="Capsules" subtitle="Encrypted recovery artifacts. Bytes stay on your destinations." />
-      {body}
-    </>
-  );
+export function CapsulesPage(props) {
+  return <CapsuleManagePage {...props} />;
 }
 
 /* ─── SCHEDULES ─── */
@@ -754,16 +764,19 @@ export function SchedulesPage({ state, setState, toast, embedded }) {
 /* ─── DESTINATIONS ─── */
 export function DestinationsPage({ state, setState, toast, embedded }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', kind: 'local', path: './portabase-capsules/vault' });
+  const [form, setForm] = useState({ name: '', kind: 'local', path: '' });
   const add = () => {
     if (!form.name.trim()) return toast('Name required', 'danger');
+    if (looksLikeStorageObjectPath(form.path) || looksLikeStorageObjectPath(form.name)) {
+      return toast('Destination type only — do not paste Storage object paths', 'danger');
+    }
     setState(s => {
-      s.destinations.push({ id: uid('dest'), name: form.name.trim(), kind: form.kind, status: 'idle', path: form.path || form.kind, lastWriteAt: null, createdAt: new Date().toISOString() });
+      s.destinations.push({ id: uid('dest'), name: form.name.trim(), kind: form.kind, status: 'idle', path: '', lastWriteAt: null, createdAt: new Date().toISOString() });
       s.onboarding.steps.destination = true;
       return s;
     });
     setOpen(false);
-    setForm({ name: '', kind: 'local', path: './portabase-capsules/vault' });
+    setForm({ name: '', kind: 'local', path: '' });
     toast(form.kind === 'local' ? 'Local Starter label saved · wire folder on agent (≤100 MB)' : 'Destination registered (credentials stay on agent)', 'ok');
   };
   const body = (
@@ -779,7 +792,7 @@ export function DestinationsPage({ state, setState, toast, embedded }) {
         <Icon name="folder" size={16} />
         <div>
           <strong>Local Starter (≤100 MB)</strong>
-          <p className="pb-muted" style={{ margin: '6px 0 0' }}>On the runner: <code className="pb-mono">provider.type = &quot;local&quot;</code> and a folder path. Engine refuses oversized capsules unless you set <code className="pb-mono">allowLargeLocal</code>. Passphrase still never leaves the runner.</p>
+          <p className="pb-muted" style={{ margin: '6px 0 0' }}>On the runner: <code className="pb-mono">provider.type = &quot;local&quot;</code>. Engine refuses oversized capsules unless you set <code className="pb-mono">allowLargeLocal</code>. Cloud stores destination <em>type</em> only — not object listings or vault URIs.</p>
         </div>
       </div>
       <div className="pb-inline" style={{ marginBottom: 12 }}>
@@ -790,14 +803,14 @@ export function DestinationsPage({ state, setState, toast, embedded }) {
           <div className="pb-card" key={d.id}>
             <div className="pb-inline"><Badge tone={d.status === 'ok' ? 'ok' : 'info'}>{d.kind}</Badge><Badge tone={d.status}>{d.status}</Badge></div>
             <h3 style={{ margin: '12px 0 6px', fontSize: 15 }}>{d.name}</h3>
-            <div className="pb-mono pb-muted">{d.path}</div>
+            <div className="pb-mono pb-muted">type · {d.kind}</div>
             <div className="pb-faint" style={{ marginTop: 10, fontSize: 12 }}>Last write {relativeTime(d.lastWriteAt)}</div>
           </div>
         ))}
       </div>
       {open && (
         <Modal title="Your binary storage" onClose={() => setOpen(false)} footer={<><button type="button" className="pb-btn" onClick={() => setOpen(false)}>Cancel</button><button type="button" className="pb-btn pb-btn-primary" onClick={add}>Save label</button></>}>
-          <p className="pb-field-hint" style={{ marginBottom: 12 }}>This registers a destination label for the console. Wire real credentials on the runner (rclone / env) — never upload keys here.</p>
+          <p className="pb-field-hint" style={{ marginBottom: 12 }}>This registers a destination <strong>type + label</strong>. Object names stay on your runner. Never upload keys or vault URIs that list Storage objects.</p>
           <div className="pb-field"><label>Name</label><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="prod-s3-vault" /></div>
           <div className="pb-field"><label>Kind</label>
             <select value={form.kind} onChange={e => setForm({ ...form, kind: e.target.value })}>
@@ -808,7 +821,7 @@ export function DestinationsPage({ state, setState, toast, embedded }) {
               <option value="nas">nas</option>
             </select>
           </div>
-          <div className="pb-field"><label>Path label</label><input value={form.path} onChange={e => setForm({ ...form, path: e.target.value })} placeholder={form.kind === 'local' ? './portabase-capsules/vault' : 's3://bucket/prefix'} className="pb-mono" /></div>
+          <div className="pb-field"><label>Console label (optional)</label><input value={form.path} onChange={e => setForm({ ...form, path: e.target.value })} placeholder="prod vault — no object paths" /></div>
           {form.kind === 'local' && (
             <p className="pb-field-hint">Local Starter: agent enforces ≤100 MB per capsule. Prefer S3/Dropbox for production Escape.</p>
           )}
@@ -828,7 +841,7 @@ export function DestinationsPage({ state, setState, toast, embedded }) {
 /* ─── REPLAY (validate capsule → new Supabase account/project) ─── */
 const REPLAY_STEPS = [
   { id: 'select', label: 'Select verified capsule' },
-  { id: 'decrypt', label: 'Decrypt & authenticate bundle' },
+  { id: 'decrypt', label: 'Decrypt on your runner — no Cloud decrypt API' },
   { id: 'guard', label: 'Refuse if target is the source' },
   { id: 'preflight', label: 'Blank-target preflight (new account)' },
   { id: 'restore', label: 'Restore DB · Auth · Storage · Functions' },
@@ -1382,7 +1395,7 @@ export function AlertsPage({ state, setState, toast, forcedTab, embedded }) {
   if (embedded) return inner;
   return (
     <>
-      <PageHead title="Alerts" subtitle="SMS on success, failure, and every source-key access · escalation chains · channels." />
+      <PageHead title="Alerts" subtitle="SMS on success/failure · escalation chains · channels." />
       {inner}
     </>
   );
@@ -1443,7 +1456,7 @@ export function RunnersPage({ state, setState, toast, embedded }) {
   if (embedded) return grid;
   return (
     <>
-      <PageHead title="Managed runners" subtitle="Optional hosted compute. Default is your agent." />
+      <PageHead title="Managed runners" subtitle="Optional hosted compute. Default is your agent. Keys still seal to the runner — this site stays blind." />
       {grid}
     </>
   );
@@ -1501,12 +1514,11 @@ export function TeamPage({ state, setState, toast, embedded }) {
   return (<><PageHead title="Team" subtitle="Who can see this workspace." />{body}</>);
 }
 
-export function BillingPage({ state, me, startTrial, requestRefund, busy, setState, toast, embedded }) {
+export function BillingPage({ state, me, startTrial, startAddon, busy, setState, toast, embedded }) {
   const b = { ...state.billing, ...(me?.subscription || {}) };
   const planId = b.plan && CLOUD_PLANS[b.plan] ? b.plan : (state.billing.planId || CLOUD_DEFAULT_PLAN_ID);
   const plan = getCloudPlan(planId);
   const trialDays = b.trialEndsAt ? Math.max(0, Math.ceil((new Date(b.trialEndsAt) - Date.now()) / 86400e3)) : null;
-  const used24 = Number(b.cyclesUsedLast24h ?? state.billing.cyclesUsedLast24h) || 0;
 
   const selectPlan = (id) => {
     if (setState) {
@@ -1525,14 +1537,15 @@ export function BillingPage({ state, me, startTrial, requestRefund, busy, setSta
         <div>
           <strong>You provide capsule storage</strong>
           <p>
-            Two plans via Square: <strong>$17/mo</strong> = 1 escape per 24 hours;
-            {' '}<strong>$27/mo</strong> = up to 3 escapes per day.
+            Public plans: <strong>Cloud Free 100 MB</strong> (manual only), <strong>$7/mo · one DB · 10 GB · 1 capsule / 24h</strong>, <strong>$17/mo · unlimited DBs · 25 GB · 3 capsules / day</strong>.
+            Use the table sizer to include or exclude tables and Storage buckets so the capsule fits.
             Capsules land in <em>your</em> S3, Dropbox, NAS, or Local Starter folder.
+            The paid service is designed to be blind to encryption keys and capsule contents — status and hashes only.
           </p>
         </div>
       </div>
       <div className="pb-grid pb-grid-2" style={{ marginBottom: 14 }}>
-        {Object.values(CLOUD_PLANS).map(p => (
+        {publicCloudPlans().map(p => (
           <button
             type="button"
             key={p.id}
@@ -1540,8 +1553,8 @@ export function BillingPage({ state, me, startTrial, requestRefund, busy, setSta
             style={{
               textAlign: 'left',
               cursor: 'pointer',
-              borderColor: plan.id === p.id ? 'var(--acid, #c9ff4a)' : undefined,
-              boxShadow: plan.id === p.id ? '0 0 0 1px rgba(201,255,74,.45)' : undefined,
+              borderColor: plan.id === p.id ? 'var(--c-acid, #0e7c74)' : undefined,
+              boxShadow: plan.id === p.id ? '0 0 0 1px rgba(14,124,116,.45)' : undefined,
             }}
             onClick={() => selectPlan(p.id)}
           >
@@ -1560,7 +1573,8 @@ export function BillingPage({ state, me, startTrial, requestRefund, busy, setSta
           <div style={{ marginTop: 14 }} className="pb-inline">
             <Badge tone={b.status || state.billing.status}>{b.status || state.billing.status}</Badge>
             <Badge tone="acid">Square</Badge>
-            <Badge tone="info">{plan.escapesPerDay || plan.cyclesPerDay} escapes / day max</Badge>
+            <Badge tone="info">up to {plan.storageCapLabel}</Badge>
+            <Badge tone="info">{BASE_TRANSFERS_PER_24H} / {TRANSFER_WINDOW_HOURS}h included</Badge>
           </div>
           {(b.status || state.billing.status) === 'trialing' && trialDays != null && (
             <p className="pb-muted" style={{ marginTop: 12 }}>Trial ends in {trialDays} day(s) · then billed on the card on file</p>
@@ -1576,34 +1590,19 @@ export function BillingPage({ state, me, startTrial, requestRefund, busy, setSta
               {busy ? 'Opening Square…' : `Pay with Square · 7-day trial then $${plan.priceMonthlyUsd}/mo`}
             </button>
           )}
-          {me?.access?.hasAccess && me?.access?.moneyBack?.ok && (
-            <button
-              type="button"
-              className="pb-btn pb-btn-ghost"
-              style={{ marginTop: 16 }}
-              disabled={busy}
-              onClick={() => requestRefund?.()}
-            >
-              {busy ? 'Closing…' : 'Refund & close account'}
-            </button>
-          )}
-          {me?.access?.hasAccess && (
-            <p className="pb-muted" style={{ marginTop: 10, fontSize: 12, lineHeight: 1.5 }}>
-              7-day money-back is self-serve. You trigger the refund. We cancel Square and close Cloud.
-              Capsules in your vault are not deleted.
-            </p>
-          )}
         </div>
         <div className="pb-card">
-          <div className="pb-kpi-label">Escapes (per day)</div>
+          <div className="pb-kpi-label">Plan cap + transfers</div>
           <p className="pb-muted" style={{ margin: '8px 0 12px', fontSize: 13, lineHeight: 1.5 }}>
-            Plan allowance: <strong>{plan.escapesPerDay || plan.cyclesPerDay}</strong>. Used last 24h: <strong>{used24}</strong> / {plan.escapesPerDay || plan.cyclesPerDay}.
+            Usage vs {plan.storageCapLabel}. Single cryptographic entry on the capsule (your secret only).
           </p>
+          <TransferWindowPanel state={state} me={me} onUpgrade={startAddon} busy={busy} compact />
           <ul className="pb-muted" style={{ margin: '14px 0 0', paddingLeft: 18, lineHeight: 1.55, fontSize: 13 }}>
             <li>Console · SMS success/failure · ≤{CLOUD_MAX_AGENTS} agents</li>
-            <li>$17 · 1 escape / 24h · or · $27 · up to 3 escapes / day</li>
+            <li>Cloud Free 100 MB · $7 · 10 GB · 1 / 24h · $17 · 25 GB · 3 / day</li>
+            <li>Table sizer include/exclude before a job · loud NOT COVERED when omitted</li>
             <li>Not capsule storage (you provide)</li>
-            <li>Not encryption keys or Supabase secrets</li>
+            <li>Zero knowledge of encryption keys, object names, or capsule plaintext</li>
           </ul>
           <div className="pb-callout info" style={{ marginTop: 16 }}>
             <div>
@@ -1617,7 +1616,7 @@ export function BillingPage({ state, me, startTrial, requestRefund, busy, setSta
     </>
   );
   if (embedded) return body;
-  return (<><PageHead title="Plan" subtitle="Square · $17 (1 escape/24h) or $27 (up to 3 escapes/day) · you provide capsule storage." />{body}</>);
+  return (<><PageHead title="Plan" subtitle={`Square · ${planPriceRangeLabel()} · Cloud Free 100 MB · $7 10 GB 1/24h · $17 25 GB 3/day.`} />{body}</>);
 }
 
 export function SettingsPage({ state, setState, toast, resetDemo, embedded }) {
@@ -1660,7 +1659,7 @@ export function SettingsPage({ state, setState, toast, resetDemo, embedded }) {
   return (<><PageHead title="Settings" subtitle="Workspace prefs. No secrets forms." />{body}</>);
 }
 
-function demoTrailEvents(vaultHint = 's3://company-portabase/prod') {
+function demoTrailEvents(vaultHint = 'customer vault') {
   const now = Date.now();
   const row = (minsAgo, eventName, eventSource, username, resources, errorCode = null) => ({
     id: `demo_${minsAgo}_${eventName}`,
@@ -1675,13 +1674,13 @@ function demoTrailEvents(vaultHint = 's3://company-portabase/prod') {
     sourceIPAddress: 'portabase-runner',
   });
   return [
-    row(2, 'PutObject', 's3.amazonaws.com', 'portabase-runner-session', [`${vaultHint}/capsules/…/capsule.pbase`]),
+    row(2, 'PutObject', 's3.amazonaws.com', 'portabase-runner-session', [`${vaultHint} · sealed object (name withheld)`]),
     row(3, 'Encrypt', 'kms.amazonaws.com', 'portabase-runner-session', ['arn:aws:kms:us-east-1:…:key/cmk-…']),
     row(4, 'GenerateDataKey', 'kms.amazonaws.com', 'portabase-runner-session', ['arn:aws:kms:us-east-1:…:key/cmk-…']),
-    row(18, 'PutObject', 's3.amazonaws.com', 'portabase-runner-session', [`${vaultHint}/capsules/…/checksums.sha256`]),
+    row(18, 'PutObject', 's3.amazonaws.com', 'portabase-runner-session', [`${vaultHint} · checksum object (name withheld)`]),
     row(19, 'Decrypt', 'kms.amazonaws.com', 'portabase-runner-session', ['arn:aws:kms:us-east-1:…:key/cmk-…']),
     row(95, 'LookupEvents', 'cloudtrail.amazonaws.com', 'portabase-audit-session', ['—']),
-    row(120, 'PutObject', 's3.amazonaws.com', 'portabase-runner-session', [`${vaultHint}/capsules/…/capsule.json`]),
+    row(120, 'PutObject', 's3.amazonaws.com', 'portabase-runner-session', [`${vaultHint} · manifest object (name withheld)`]),
   ];
 }
 
@@ -1895,7 +1894,7 @@ export function CloudWatchLivePage({ state, setState, toast, embedded }) {
           lineHeight: 1.55,
           maxHeight: 420,
           overflow: 'auto',
-          background: '#0a0c0f',
+          background: 'var(--c-bg)',
           padding: '14px 16px',
         }}
         >
@@ -2080,7 +2079,7 @@ export function CloudTrailLivePage({ state, setState, toast, embedded }) {
             <input value={draft.region} onChange={e => setDraft(d => ({ ...d, region: e.target.value }))} />
           </div>
           <div className="pb-field"><label>Vault prefix filter (optional)</label>
-            <input value={draft.vaultPrefixHint} onChange={e => setDraft(d => ({ ...d, vaultPrefixHint: e.target.value }))} placeholder="s3://your-bucket/prefix" />
+            <input value={draft.vaultPrefixHint} onChange={e => setDraft(d => ({ ...d, vaultPrefixHint: e.target.value }))} placeholder="customer vault (no object names)" />
           </div>
           <button type="button" className="pb-btn pb-btn-primary" onClick={saveConnection}>Save connection</button>
         </div>
@@ -2088,7 +2087,7 @@ export function CloudTrailLivePage({ state, setState, toast, embedded }) {
           <h3 style={{ marginTop: 0 }}>What you will see</h3>
           <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--c-muted)', fontSize: 13, lineHeight: 1.55 }}>
             <li><code>kms:Encrypt</code> / <code>Decrypt</code> when using your CMK</li>
-            <li><code>s3:PutObject</code> when capsules land in your vault</li>
+            <li><code>s3:PutObject</code> when sealed capsules land — object names withheld from this console</li>
             <li>Principal / session that Portabase used</li>
             <li>Errors if a grant was revoked or denied</li>
           </ul>
@@ -2096,7 +2095,12 @@ export function CloudTrailLivePage({ state, setState, toast, embedded }) {
             Without a role, this panel still runs a <strong>demo live feed</strong> so the product is understandable before AWS setup.
             Job history in the console is always recorded separately (see Security page).
           </p>
-          <a className="pb-btn" style={{ marginTop: 14, display: 'inline-flex' }} href="/security#options" target="_blank" rel="noreferrer">Security &amp; trust ↗</a>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
+            <a className="pb-btn" style={{ display: 'inline-flex' }} href="/security#options" target="_blank" rel="noreferrer">Security &amp; trust ↗</a>
+            <a className="pb-btn" style={{ display: 'inline-flex' }} href="/backend" target="_blank" rel="noreferrer">Backend · capsules &amp; workers ↗</a>
+            <a className="pb-btn" style={{ display: 'inline-flex' }} href="/docs" target="_blank" rel="noreferrer">Docs ↗</a>
+            <a className="pb-btn" style={{ display: 'inline-flex' }} href="/legal" target="_blank" rel="noreferrer">Legal ↗</a>
+          </div>
         </div>
       </div>
 

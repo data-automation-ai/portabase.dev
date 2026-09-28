@@ -179,6 +179,60 @@ export function shouldSkipStorageDownload(localStat, listingIdentity, previousRe
   return false;
 }
 
+const BINARY_MIME = /^(image|audio|video|font)\//i;
+const BINARY_MIME_EXACT = /^application\/(octet-stream|pdf|zip|gzip|wasm|x-tar|x-|vnd\.)/i;
+const BINARY_EXT = /\.(bin|jpg|jpeg|png|gif|webp|avif|mp4|mov|webm|mp3|wav|zip|gz|tgz|pdf|wasm|woff2?|ttf|otf|ico|dmg|exe|iso)$/i;
+
+/** Storage object whose body is a binary blob rather than text, SQL, or JSON. */
+export function isBinaryStorageObject({ name = '', contentType = '' } = {}) {
+  const type = String(contentType || '').split(';')[0].trim().toLowerCase();
+  if (type && (BINARY_MIME.test(type) || BINARY_MIME_EXACT.test(type))) return true;
+  return BINARY_EXT.test(String(name || ''));
+}
+
+/** Milliseconds from an ISO date stamp or a numeric timestamp. Unparseable values are null. */
+export function fileDateStamp(value) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * Differential means the file's date stamp is strictly greater than the prior file.
+ * No prior stamp, or a stamp that cannot be read, is treated as differential:
+ * the whole file is taken rather than guessing from size or etag.
+ */
+export function isDifferentialFile(listing, prior) {
+  if (!prior) return true;
+  const current = fileDateStamp(listing?.updatedAt);
+  const previous = fileDateStamp(prior?.updatedAt);
+  if (current == null || previous == null) return true;
+  return current > previous;
+}
+
+/**
+ * `--incremental-binary` / API `incrementalBinary: true`.
+ * Whole files only. A newer date stamp is differential and the entire file is fetched.
+ * An equal or older stamp reuses the local whole file. Etag and size do not override the stamp.
+ * A missing local copy is still fetched in full so the capsule stays restorable.
+ */
+export function shouldFetchStorageObject({
+  incrementalBinary = false,
+  name = '',
+  contentType = '',
+  listing = null,
+  prior = null,
+  bytesAlreadyLocal = false,
+} = {}) {
+  const wholeFile = true;
+  if (!incrementalBinary) return { fetch: true, reason: 'incremental-off', wholeFile };
+  if (!isBinaryStorageObject({ name, contentType })) return { fetch: true, reason: 'not-binary', wholeFile };
+  if (isDifferentialFile(listing, prior)) return { fetch: true, reason: 'binary-differential', wholeFile };
+  if (bytesAlreadyLocal) return { fetch: false, reason: 'binary-unchanged', wholeFile };
+  return { fetch: true, reason: 'binary-unchanged-cache-miss', wholeFile };
+}
+
 /**
  * Generate human redeploy scripts for Edge Functions (ported from supabase-backup patterns).
  * @param {Array<{ name: string, verifyJwt?: boolean }>} functions
@@ -388,6 +442,201 @@ export const DATA_SCHEMA_EXCLUDES = Object.freeze([
   'extensions', 'pgbouncer', 'realtime', 'storage', 'supabase_functions', 'supabase_migrations',
   '_analytics', '_realtime', '_supavisor',
 ]);
+
+/** Individual platform tables excluded from data.sql even though their schema's data is kept. */
+export const DATA_TABLE_EXCLUDES = Object.freeze(['auth.schema_migrations', 'storage.migrations', 'supabase_functions.migrations']);
+
+/**
+ * Selection (Cloud $7): customer-chosen tables/buckets to skip. Table entries must be exactly
+ * `schema.table` (quoted-safe identifiers only) so they can never inject extra pg_dump argv or SQL.
+ */
+export const EXCLUDE_TABLE_DATA_PATTERN = /^[A-Za-z_][A-Za-z0-9_$]*\.[A-Za-z_][A-Za-z0-9_$]*$/;
+export const EXCLUDE_BUCKET_ID_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
+
+/** Parses a CSV flag value (or passes through an array/config list) into trimmed, non-empty entries. */
+export function parseSelectionList(value) {
+  if (value == null) return [];
+  if (Array.isArray(value)) return value.map(entry => String(entry).trim()).filter(Boolean);
+  return String(value).split(',').map(entry => entry.trim()).filter(Boolean);
+}
+
+/** Validates `--exclude-table-data` / `capture.excludeTableData` entries. Throws on any invalid entry. */
+export function validateExcludeTableData(value) {
+  const entries = parseSelectionList(value);
+  const invalid = entries.filter(entry => !EXCLUDE_TABLE_DATA_PATTERN.test(entry));
+  if (invalid.length) {
+    throw new Error(
+      `--exclude-table-data entries must look like schema.table (letters, digits, _, $; no quotes or punctuation): ${invalid.join(', ')}`,
+    );
+  }
+  return entries;
+}
+
+/** Validates `--exclude-buckets` / `capture.excludeBuckets` entries. Throws on any invalid entry. */
+export function validateExcludeBuckets(value) {
+  const entries = parseSelectionList(value);
+  const invalid = entries.filter(entry => !EXCLUDE_BUCKET_ID_PATTERN.test(entry));
+  if (invalid.length) {
+    throw new Error(
+      `--exclude-buckets entries must be 1-100 chars of letters, digits, '.', '_', '-': ${invalid.join(', ')}`,
+    );
+  }
+  return entries;
+}
+
+/** Builds the pg_dump argv fragment that skips row data (but not DDL) for the given schema.table entries. */
+export function buildExcludeTableDataArgs(excludeTables = []) {
+  return excludeTables.map(table => `--exclude-table-data=${table}`);
+}
+
+/** Filters a Storage bucket list (each needing an `id`) down to the ones NOT in excludeBucketIds. */
+export function filterExcludedBuckets(buckets = [], excludeBucketIds = []) {
+  if (!excludeBucketIds.length) return buckets;
+  const excluded = new Set(excludeBucketIds);
+  return buckets.filter(bucket => !excluded.has(bucket?.id));
+}
+
+/** Validates `--include-table-data` / `capture.includeTableData` entries. Same shape as the exclude list. */
+export function validateIncludeTableData(value) {
+  const entries = parseSelectionList(value);
+  const invalid = entries.filter(entry => !EXCLUDE_TABLE_DATA_PATTERN.test(entry));
+  if (invalid.length) {
+    throw new Error(
+      `--include-table-data entries must look like schema.table (letters, digits, _, $; no quotes or punctuation): ${invalid.join(', ')}`,
+    );
+  }
+  return entries;
+}
+
+/** Validates `--include-buckets` / `capture.includeBuckets` entries. Same shape as the exclude list. */
+export function validateIncludeBuckets(value) {
+  const entries = parseSelectionList(value);
+  const invalid = entries.filter(entry => !EXCLUDE_BUCKET_ID_PATTERN.test(entry));
+  if (invalid.length) {
+    throw new Error(
+      `--include-buckets entries must be 1-100 chars of letters, digits, '.', '_', '-': ${invalid.join(', ')}`,
+    );
+  }
+  return entries;
+}
+
+/** Keeps only the listed bucket ids. Empty include list keeps everything (no whitelist). */
+export function filterIncludedBuckets(buckets = [], includeBucketIds = []) {
+  if (!includeBucketIds.length) return buckets;
+  const included = new Set(includeBucketIds);
+  return buckets.filter(bucket => included.has(bucket?.id));
+}
+
+/**
+ * Splits the full `schema.table` list into row-data vs DDL-only sets.
+ * With a non-empty include list only those tables keep row data (DDL is still captured for all).
+ * Throws when an entry appears in both lists; reports include entries absent from the database.
+ */
+export function resolveTableDataSelection({ allTables = [], include = [], exclude = [] } = {}) {
+  const all = new Set(allTables);
+  const conflicts = include.filter(entry => exclude.includes(entry));
+  if (conflicts.length) {
+    throw new Error(`Tables listed in both --include-table-data and --exclude-table-data: ${conflicts.join(', ')}`);
+  }
+  const unknown = include.filter(entry => !all.has(entry));
+  const dataTables = include.length ? include.filter(entry => all.has(entry)) : allTables.filter(entry => !exclude.includes(entry));
+  const ddlOnly = allTables.filter(entry => !dataTables.includes(entry));
+  return { dataTables, ddlOnly, unknown };
+}
+
+/**
+ * Delta capsule helpers. The baseline is read from its manifest only — its contents
+ * are never opened. Unchanged layers are referenced by hash, never re-stored.
+ */
+
+/**
+ * Strong pre-download match: same byte size plus same etag/updatedAt tag.
+ * Size-only equality is NOT enough (same size, different bytes is common).
+ */
+export function baselineObjectUnchanged(baselineObject = {}, listing = {}) {
+  if (!baselineObject?.sha256) return false;
+  if (!Number.isSafeInteger(Number(baselineObject.size)) || !Number.isSafeInteger(Number(listing.size))) return false;
+  if (Number(baselineObject.size) !== Number(listing.size)) return false;
+  const tag = listing.etag || listing.updatedAt || null;
+  const baseTag = baselineObject.etag || baselineObject.updatedAt || null;
+  if (!tag || !baseTag) return false;
+  return tag === baseTag;
+}
+
+/** Keys present in the baseline but absent from the current listing — deletions. */
+export function computeTombstones(baselineKeys = [], seenKeys = []) {
+  const seen = new Set(seenKeys);
+  return baselineKeys.filter(key => !seen.has(key));
+}
+
+/**
+ * Partitions current `{path: sha256}` hashes against the baseline map.
+ * Returns `{ changed, reused, missing }`: changed = new or different content,
+ * reused = identical sha (reference, do not store), missing = baseline-only paths.
+ */
+export function partitionChanged(currentHashes = {}, baselineHashes = {}) {
+  const changed = [];
+  const reused = [];
+  for (const [path, sha] of Object.entries(currentHashes)) {
+    if (baselineHashes[path] && baselineHashes[path] === sha) reused.push({ path, sha256: sha });
+    else changed.push(path);
+  }
+  const missing = Object.keys(baselineHashes).filter(path => !(path in currentHashes));
+  return { changed, reused, missing };
+}
+
+/**
+ * Capsule ids that must not be pruned: every baseline referenced by a delta.
+ * Reads outer capsule.json metadata only (`{ id, baselineCapsuleId }`).
+ */
+export function findProtectedBaselines(capsuleMetas = []) {
+  const protectedIds = new Set();
+  for (const meta of capsuleMetas) {
+    if (meta?.baselineCapsuleId) protectedIds.add(meta.baselineCapsuleId);
+  }
+  return protectedIds;
+}
+
+/**
+ * Merges a delta storage manifest over its baseline: delta entries win per
+ * object name, tombstoned keys are dropped. Bucket metadata comes from baseline.
+ */
+export function mergeStorageManifests(baseline = {}, delta = {}, tombstones = []) {
+  const tomb = new Set(tombstones);
+  const byBucket = new Map();
+  for (const bucket of baseline.buckets || []) {
+    byBucket.set(bucket.id, {
+      ...bucket,
+      objects: (bucket.objects || []).filter(object => !tomb.has(`${bucket.id}/${object.name}`)),
+    });
+  }
+  for (const bucket of delta.buckets || []) {
+    const record = byBucket.get(bucket.id) || { ...bucket, objects: [] };
+    const names = new Set((bucket.objects || []).map(object => object.name));
+    record.objects = [...record.objects.filter(object => !names.has(object.name)), ...(bucket.objects || [])];
+    byBucket.set(bucket.id, record);
+  }
+  return { ...baseline, buckets: [...byBucket.values()] };
+}
+
+/**
+ * Merges function file lists (arrays of `{ name, files: [{ path, ... }] }`):
+ * delta entries win per (name, path). Returns the merged array.
+ */
+export function mergeFunctionManifests(baselineFunctions = [], deltaFunctions = []) {
+  const byName = new Map();
+  const put = (list) => {
+    for (const fn of list || []) {
+      const current = byName.get(fn.name) || { ...fn, files: [] };
+      const paths = new Set((fn.files || []).map(file => file.path));
+      current.files = [...current.files.filter(file => !paths.has(file.path)), ...(fn.files || [])];
+      byName.set(fn.name, current);
+    }
+  };
+  put(baselineFunctions);
+  put(deltaFunctions);
+  return [...byName.values()];
+}
 
 export function providerCommand(config, capsuleDir) {
   const provider = config.provider || {};

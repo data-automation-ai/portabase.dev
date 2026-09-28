@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Portabase Inventory</title>
+  <link rel="stylesheet" href="/app.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <strong>Portabase</strong>
+      <span class="pill" id="project">…</span>
+      <span class="pill muted" id="destination"></span>
+      <span class="pill warn" id="edition" hidden>trial</span>
+    </div>
+    <div class="actions">
+      <span class="muted small" id="generated"></span>
+      <button type="button" id="refresh">Refresh</button>
+    </div>
+  </header>
+
+  <main>
+    <p class="banner" id="error" hidden></p>
+    <section class="tiles" id="tiles" aria-label="Summary"></section>
+
+    <nav class="tabs" role="tablist">
+      <button type="button" role="tab" data-tab="checklist" aria-selected="true">Capsule checklist</button>
+      <button type="button" role="tab" data-tab="database">Database</button>
+      <button type="button" role="tab" data-tab="storage">Storage</button>
+      <button type="button" role="tab" data-tab="functions">Edge Functions</button>
+      <button type="button" role="tab" data-tab="local">Why this is local</button>
+      <select id="type-filter" aria-label="Jump to object type">
+        <option value="checklist">Type: summary</option>
+        <option value="database">Type: tables</option>
+        <option value="storage">Type: buckets</option>
+        <option value="functions">Type: functions</option>
+      </select>
+    </nav>
+
+    <section class="panel" data-panel="checklist">
+      <div class="legend" id="legend"></div>
+      <div id="checklist"></div>
+    </section>
+
+    <section class="panel" data-panel="database" hidden>
+      <div class="toolbar">
+        <input type="search" id="table-filter" placeholder="Filter schema or table" aria-label="Filter tables">
+        <select id="schema-filter" aria-label="Filter by schema"></select>
+        <label class="small"><input type="checkbox" id="show-platform"> Show platform schemas</label>
+      </div>
+      <div id="schemas"></div>
+      <div class="scroll"><table id="tables"></table></div>
+      <p class="muted small">Row counts are Postgres planner estimates (<code>reltuples</code>); sizes include indexes and TOAST.</p>
+    </section>
+
+    <section class="panel" data-panel="storage" hidden>
+      <div class="toolbar">
+        <input type="search" id="bucket-filter" placeholder="Filter buckets" aria-label="Filter buckets">
+      </div>
+      <div class="scroll"><table id="buckets"></table></div>
+    </section>
+
+    <section class="panel" data-panel="functions" hidden>
+      <div class="toolbar">
+        <input type="search" id="function-filter" placeholder="Filter functions" aria-label="Filter functions">
+      </div>
+      <div class="scroll"><table id="functions"></table></div>
+    </section>
+
+    <section class="panel" data-panel="local" hidden>
+      <h2>How to check this yourself</h2>
+      <ol class="proof">
+        <li>The page's Content-Security-Policy, as served by this process:<pre id="csp"></pre>
+          <code>connect-src 'self'</code> means your browser refuses any network request to another origin. That includes Portabase and Supabase.</li>
+        <li>Open DevTools, go to the Network tab, and press Refresh. Every request goes to <code id="origin"></code>.</li>
+        <li>The CLI listens only on the loopback address. Check with
+          <pre>netstat -ano | findstr <span id="port"></span></pre>
+          It shows <code>127.0.0.1</code>, never <code>0.0.0.0</code>.</li>
+        <li>The data behind this page comes from the <code>portabase</code> process on this machine. It uses the credentials already in your shell, connects directly to your Supabase project, and sends back names, counts, and sizes only.</li>
+        <li>The page is read-only. The server accepts only GET requests and has no endpoint that backs up, restores, or deletes anything.</li>
+        <li>The source is <code>utility/ui/</code> in the open-source repository.</li>
+      </ol>
+      <h2>Credentials this process can see</h2>
+      <p class="muted small">Only whether each variable is set. Values are never sent to this page.</p>
+      <div id="readiness"></div>
+    </section>
+  </main>
+</body>
+</html>

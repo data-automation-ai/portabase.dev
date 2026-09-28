@@ -4,7 +4,8 @@
  * Never stores passphrases, service keys, or capsule bytes.
  */
 
-const KEY = 'portabase.console.v1';
+const KEY = 'portabase.console.v2';
+const LIVE_KEY = 'portabase.console.live.v1';
 
 function uid(prefix = 'id') {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(-4)}`;
@@ -28,7 +29,7 @@ export function seedWorkspace(user = {}) {
   const policyA = uid('pol');
 
   const capsules = [
-    { id: uid('cap'), projectId: projectA, projectRef: 'kiuwcdpjsdotkoojbkoi', status: 'COMPLETE', verified: true, destinationId: destA, destinationKind: 's3', sizeBytes: 482_331_904, durationMs: 184_200, createdAt: hoursAgo(2.1), edition: 'community', layers: { database: true, auth: true, storage: true, functions: true }, rpoHours: 2.1 },
+    { id: uid('cap'), projectId: projectA, projectRef: 'kiuwcdpjsdotkoojbkoi', status: 'COMPLETE', verified: true, destinationId: destA, destinationKind: 's3', sizeBytes: 482_331_904, durationMs: 184_200, createdAt: hoursAgo(2.1), edition: 'community', layers: { database: true, auth: true, storage: true, functions: true }, rpoHours: 2.1, retainDays: 30, scheduleEveryHours: 24 },
     { id: uid('cap'), projectId: projectA, projectRef: 'kiuwcdpjsdotkoojbkoi', status: 'COMPLETE', verified: true, destinationId: destA, destinationKind: 's3', sizeBytes: 479_102_208, durationMs: 176_800, createdAt: hoursAgo(14), edition: 'community', layers: { database: true, auth: true, storage: true, functions: true }, rpoHours: 14 },
     { id: uid('cap'), projectId: projectA, projectRef: 'kiuwcdpjsdotkoojbkoi', status: 'COMPLETE', verified: true, destinationId: destB, destinationKind: 'dropbox', sizeBytes: 476_890_112, durationMs: 201_400, createdAt: hoursAgo(38), edition: 'community', layers: { database: true, auth: true, storage: true, functions: true }, rpoHours: 38 },
     { id: uid('cap'), projectId: projectB, projectRef: 'acmeprodxyzabcdefghij', status: 'COMPLETE', verified: true, destinationId: destA, destinationKind: 's3', sizeBytes: 91_204_608, durationMs: 42_100, createdAt: hoursAgo(5), edition: 'community', layers: { database: true, auth: true, storage: true, functions: false }, rpoHours: 5 },
@@ -55,7 +56,7 @@ export function seedWorkspace(user = {}) {
         ? `${user.email.split('@')[1].split('.')[0]} recovery`
         : 'Production recovery',
       slug: 'production',
-      plan: 'cloud-intro-17',
+      plan: 'cloud-17',
       cloudVersion: user.cloudVersion || 'supabase',
       createdAt: daysAgo(40),
     },
@@ -77,11 +78,11 @@ export function seedWorkspace(user = {}) {
         name: 'Primary app',
         region: 'us-east-1',
         status: 'healthy',
-        scheduleEveryHours: 12,
+        scheduleEveryHours: 24,
         lastSuccessAt: hoursAgo(2.1),
         lastFailureAt: daysAgo(4),
         rpoHours: 2.1,
-        rpoTargetHours: 12,
+        rpoTargetHours: 24,
         agentId: agentA,
         destinationIds: [destA, destB],
         layers: { database: true, auth: true, storage: true, functions: true },
@@ -93,11 +94,11 @@ export function seedWorkspace(user = {}) {
         name: 'Billing service',
         region: 'eu-west-1',
         status: 'degraded',
-        scheduleEveryHours: 12,
+        scheduleEveryHours: 24,
         lastSuccessAt: hoursAgo(5),
         lastFailureAt: hoursAgo(29),
         rpoHours: 5,
-        rpoTargetHours: 12,
+        rpoTargetHours: 24,
         agentId: agentB,
         destinationIds: [destA],
         layers: { database: true, auth: true, storage: true, functions: false },
@@ -133,14 +134,14 @@ export function seedWorkspace(user = {}) {
       },
     ],
     destinations: [
-      { id: destA, name: 'AWS S3 · recover-prod', kind: 's3', status: 'ok', path: 's3://company-portabase/prod', lastWriteAt: hoursAgo(2.1), createdAt: daysAgo(34) },
-      { id: destB, name: 'Dropbox · DR vault', kind: 'dropbox', status: 'ok', path: 'dropbox:Portabase/capsules', lastWriteAt: hoursAgo(38), createdAt: daysAgo(28) },
-      { id: uid('dest'), name: 'Google Drive (warm)', kind: 'gdrive', status: 'idle', path: 'gdrive:Portabase', lastWriteAt: daysAgo(12), createdAt: daysAgo(15) },
+      { id: destA, name: 'AWS S3 · recover-prod', kind: 's3', status: 'ok', path: '', lastWriteAt: hoursAgo(2.1), createdAt: daysAgo(34) },
+      { id: destB, name: 'Dropbox · DR vault', kind: 'dropbox', status: 'ok', path: '', lastWriteAt: hoursAgo(38), createdAt: daysAgo(28) },
+      { id: uid('dest'), name: 'Google Drive (warm)', kind: 'gdrive', status: 'idle', path: '', lastWriteAt: daysAgo(12), createdAt: daysAgo(15) },
     ],
     capsules,
     schedules: [
-      { id: uid('sch'), projectId: projectA, everyHours: 12, timezone: 'America/New_York', enabled: true, nextRunAt: hoursAgo(-9.9), lastRunAt: hoursAgo(2.1) },
-      { id: uid('sch'), projectId: projectB, everyHours: 12, timezone: 'UTC', enabled: true, nextRunAt: hoursAgo(-7), lastRunAt: hoursAgo(5) },
+      { id: uid('sch'), projectId: projectA, everyHours: 24, timezone: 'America/New_York', enabled: true, nextRunAt: hoursAgo(-9.9), lastRunAt: hoursAgo(2.1) },
+      { id: uid('sch'), projectId: projectB, everyHours: 24, timezone: 'UTC', enabled: true, nextRunAt: hoursAgo(-7), lastRunAt: hoursAgo(5) },
     ],
     restores: [
       {
@@ -158,7 +159,7 @@ export function seedWorkspace(user = {}) {
         capsuleId: capsules[2].id,
         steps: [
           { id: 'select', label: 'Select capsule', status: 'ok', detail: 'Verified COMPLETE capsule' },
-          { id: 'decrypt', label: 'Decrypt & authenticate', status: 'ok', detail: 'AES-256-GCM + checksums' },
+          { id: 'decrypt', label: 'Decrypt on your runner', status: 'ok', detail: 'AES-256-GCM + checksums — no Cloud decrypt path' },
           { id: 'guard', label: 'Refuse source target', status: 'ok', detail: 'Target ≠ source ref' },
           { id: 'preflight', label: 'Blank-target preflight', status: 'ok', detail: '0 tables · 0 auth · 0 storage · 0 functions' },
           { id: 'restore', label: 'Restore layers', status: 'ok', detail: 'DB · Auth · Storage · Functions' },
@@ -219,18 +220,23 @@ export function seedWorkspace(user = {}) {
       { id: uid('run'), name: 'managed-billing', isolation: 'L1', status: 'stopped', projectId: projectB, ecsService: null, lastError: 'Scaled to zero · resume from console', tailscale: false, updatedAt: daysAgo(3) },
     ],
     events,
+    jobs: [],
+    proofReport: null,
+    demoMode: true,
     billing: {
       status: 'trialing',
       trialEndsAt: new Date(Date.now() + 5 * 86400e3).toISOString(),
       priceMonthlyCents: 1700,
-      listPriceMonthlyCents: 2700,
+      listPriceMonthlyCents: 3700,
       plan: 'cloud-17',
       planId: 'cloud-17',
       paymentMethod: 'Visa •••• 4242',
       cloudVersion: user.cloudVersion || 'supabase',
-      /** Daily Escape = 1 escape / 24h; Triple Escape = up to 3 escapes / day */
+      storageCapGb: 10,
       includedCyclesPerDay: 1,
-      cyclesUsedLast24h: 1,
+      transfersPer24h: 1,
+      extraTransfersAddon: false,
+      cyclesUsedLast24h: 3,
     },
     settings: {
       telemetryOptIn: true,
@@ -246,7 +252,7 @@ export function seedWorkspace(user = {}) {
       region: 'us-east-1',
       roleArn: '',
       externalId: '',
-      vaultPrefixHint: 's3://company-portabase/prod',
+      vaultPrefixHint: '',
       connected: false,
       lastPolledAt: null,
       mode: 'demo',
@@ -297,6 +303,128 @@ export function seedWorkspace(user = {}) {
       steps: { workspace: true, project: true, agent: false, destination: true, schedule: true, alert: false, drill: false },
     },
   };
+}
+
+export function emptyWorkspace(user = {}) {
+  return {
+    version: 2,
+    workspace: {
+      id: 'ws_empty',
+      name: user.email?.split('@')[1]?.split('.')[0]
+        ? `${user.email.split('@')[1].split('.')[0]} recovery`
+        : 'Your recovery workspace',
+      slug: 'workspace',
+      plan: 'cloud-17',
+      cloudVersion: user.cloudVersion || 'supabase',
+      createdAt: new Date().toISOString(),
+    },
+    profile: {
+      id: user.id || 'user_local',
+      email: user.email || '',
+      name: user.name || 'Operator',
+      role: 'owner',
+    },
+    members: user.email
+      ? [{ id: user.id || 'user_local', email: user.email, name: user.name || 'Operator', role: 'owner', lastActiveAt: new Date().toISOString() }]
+      : [],
+    projects: [],
+    agents: [],
+    destinations: [],
+    capsules: [],
+    schedules: [],
+    restores: [],
+    alertChannels: [],
+    sms: {
+      onFailure: true,
+      onSuccess: false,
+      quietHoursEnabled: false,
+      quietStart: '22:00',
+      quietEnd: '07:00',
+      timezone: 'UTC',
+      optIn: false,
+      numbers: [],
+      recent: [],
+    },
+    alertPolicies: [],
+    runners: [],
+    events: [],
+    jobs: [],
+    proofReport: null,
+    demoMode: false,
+    billing: {
+      status: 'none',
+      trialEndsAt: null,
+      priceMonthlyCents: 1700,
+      listPriceMonthlyCents: 3700,
+      plan: 'cloud-17',
+      planId: 'cloud-17',
+      paymentMethod: null,
+      cloudVersion: user.cloudVersion || 'supabase',
+      storageCapGb: 10,
+      includedCyclesPerDay: 1,
+      transfersPer24h: 1,
+      extraTransfersAddon: false,
+      cyclesUsedLast24h: 0,
+    },
+    settings: {
+      telemetryOptIn: true,
+      retainEventsDays: 90,
+      requireVerifyGreen: true,
+      timezone: 'UTC',
+      notifyOnSuccess: false,
+    },
+    auditTrail: {
+      enabled: false,
+      livePollSeconds: 20,
+      region: 'us-east-1',
+      roleArn: '',
+      externalId: '',
+      vaultPrefixHint: '',
+      connected: false,
+      lastPolledAt: null,
+      mode: 'live',
+    },
+    cloudWatchLive: {
+      enabled: false,
+      livePollSeconds: 8,
+      region: 'us-east-1',
+      secretId: '',
+      secretLabel: '',
+      workspaceId: null,
+      lastPolledAt: null,
+      mode: 'live',
+    },
+    secrets: [],
+    onboarding: {
+      completed: false,
+      steps: { workspace: true, project: false, agent: false, destination: false, schedule: false, alert: false, drill: false },
+    },
+  };
+}
+
+export function loadLiveConsoleState(user) {
+  try {
+    const raw = localStorage.getItem(LIVE_KEY);
+    if (raw) {
+      const data = JSON.parse(raw);
+      if (data?.workspace && data.demoMode !== true) {
+        if (user?.email) data.profile = { ...data.profile, email: user.email, name: user.name || data.profile?.name, id: user.id || data.profile?.id };
+        if (user?.cloudVersion) {
+          data.workspace.cloudVersion = user.cloudVersion;
+          data.billing = { ...data.billing, cloudVersion: user.cloudVersion };
+        }
+        return data;
+      }
+    }
+  } catch {
+    /* empty */
+  }
+  return emptyWorkspace(user || {});
+}
+
+export function saveLiveConsoleState(state) {
+  localStorage.setItem(LIVE_KEY, JSON.stringify({ ...state, demoMode: false }));
+  window.dispatchEvent(new CustomEvent('portabase-console', { detail: state }));
 }
 
 export function loadConsoleState(user) {

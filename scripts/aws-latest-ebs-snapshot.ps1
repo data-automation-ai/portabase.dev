@@ -7,6 +7,8 @@
   Policy: with EBS volume images, ALWAYS take the most recent completed backup.
   Never use a hand-picked older snapshot unless -SnapshotId override is passed.
 
+  CI source of truth (no AWS mutate): utility/aws/latest-backup.mjs
+
 .EXAMPLE
   .\scripts\aws-latest-ebs-snapshot.ps1
   .\scripts\aws-latest-ebs-snapshot.ps1 -VolumeId vol-abc123

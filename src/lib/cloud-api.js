@@ -42,10 +42,58 @@ export function startTrialCheckout(version, planId = 'cloud-17') {
   return api('/api/cloud/subscribe', { method: 'POST', body: { planId }, version });
 }
 
-export function confirmCheckout({ attempt, version } = {}) {
-  return api('/api/cloud/confirm-checkout', { method: 'POST', body: { attempt: attempt || null }, version });
+export function startAddonCheckout(version, addon = 'extra-transfers') {
+  return api('/api/cloud/subscribe', { method: 'POST', body: { addon }, version });
+}
+
+export function confirmCheckout({ attempt, version, addon } = {}) {
+  return api('/api/cloud/confirm-checkout', { method: 'POST', body: { attempt: attempt || null, addon: addon || null }, version });
+}
+
+export function fetchRunners(version) {
+  return api('/api/cloud/runners', { version });
+}
+
+export function provisionRunner(version, body = {}) {
+  return api('/api/cloud/runners', { method: 'POST', body: { action: 'provision', ...body }, version });
+}
+
+export function fetchDashboard(version) {
+  return api('/api/cloud/dashboard', { version });
 }
 
 export function requestSelfRefund(version) {
   return api('/api/cloud/self-refund', { method: 'POST', body: {}, version });
+}
+
+/** List the caller's Supabase projects for a pasted Personal Access Token. Token is sent in-request only. */
+export function fetchSupabaseProjects(token, version) {
+  return api('/api/cloud/supabase', { method: 'POST', body: { action: 'projects', token }, version });
+}
+
+/** Measure tables + Storage buckets for one Supabase project ref. Token is sent in-request only. */
+export function fetchSupabaseInventory(token, ref, version) {
+  return api('/api/cloud/supabase', { method: 'POST', body: { action: 'inventory', token, ref }, version });
+}
+
+/** Saved cloud-7 selection, or `{ selection: null }` when nothing is saved yet. */
+export function fetchCloudSelection(version) {
+  return api('/api/cloud/selection', { version });
+}
+
+/** Save the capsule selection (tables/buckets to include, estimate, plan). */
+export function saveCloudSelection(selection, version) {
+  return api('/api/cloud/selection', { method: 'PUT', body: selection, version });
+}
+
+/**
+ * Queue a manual backup/verify/replay intent. The body is labels only —
+ * project ref, destination kind, exclude lists. The worker pulls it.
+ */
+export function queueCloudJob(body, version) {
+  return api('/api/cloud/jobs', { method: 'POST', body, version });
+}
+
+export function fetchCloudJobs(version) {
+  return api('/api/cloud/jobs', { version });
 }

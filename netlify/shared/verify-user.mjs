@@ -6,6 +6,7 @@
 
 import { verifyIdToken as verifyCognitoIdToken, getPublicAuthConfig as getCognitoPublic } from './cognito-jwt.mjs';
 import { resolveSupabasePublicConfig, verifySupabaseUser } from './supabase-auth.mjs';
+import { CLOUD_MAX_AGENTS, CLOUD_PLANS, CLOUD_TRIAL_DAYS, extraTransfersAddonPublic, publicPlansPayload } from './product.mjs';
 
 function header(event, name) {
   const h = event.headers || {};
@@ -106,20 +107,19 @@ export async function publicAuthConfigBoth() {
         note: 'Not offered at launch — Supabase only.',
       },
     },
-    trialDays: 7,
-    priceMonthlyCents: 1700,
-    listPriceMonthlyCents: 2700,
+    trialDays: CLOUD_TRIAL_DAYS,
+    priceMonthlyCents: CLOUD_PLANS['cloud-17'].priceMonthlyCents,
+    listPriceMonthlyCents: CLOUD_PLANS['cloud-37'].priceMonthlyCents,
     currency: 'USD',
     paymentGateway: 'square',
-    maxAgents: 12,
-    plans: {
-      'cloud-17': { id: 'cloud-17', priceMonthlyCents: 1700, escapesPerDay: 1, cyclesPerDay: 1, title: 'Daily Escape', cadenceLabel: '1 escape per 24 hours' },
-      'cloud-27': { id: 'cloud-27', priceMonthlyCents: 2700, escapesPerDay: 3, cyclesPerDay: 3, title: 'Triple Escape', cadenceLabel: 'up to 3 escapes per day' },
-    },
+    maxAgents: CLOUD_MAX_AGENTS,
+    plans: publicPlansPayload(),
+    extraTransfersAddon: extraTransfersAddonPublic(),
+    transfersPer24hIncluded: 1,
     storage: {
       owner: 'customer',
       includedInCloud: false,
-      summary: 'Customer provides capsule storage. Portabase Cloud never hosts recovery bytes.',
+      summary: 'Customer provides capsule storage. Portabase Cloud never hosts recovery bytes and has zero knowledge of encryption keys.',
     },
   };
 }

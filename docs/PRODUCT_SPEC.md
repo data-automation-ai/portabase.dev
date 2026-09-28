@@ -51,7 +51,7 @@ Audience: teams who expect **Portabase to perform staging** and operate the cont
 
 **Launch platform: Supabase only** (see [LAUNCH-SCOPE.md](./LAUNCH-SCOPE.md)).
 
-Commercial defaults: **$17/mo** (Square), **7-day trial with card**, **up to 12 agents/runners**, **customer-provided capsule destination (BYO storage)**.
+Commercial defaults: **Cloud Free 100 MB (manual only)**, then Square **$7** (one database, ≤10 GB, 1 capsule / 24h) and **$17** (unlimited databases, ≤25 GB, 3 capsules / day). Hidden legacy `$37` is not offered on new checkouts. **7-day trial with card**, **up to 12 agents/runners**, **customer-provided capsule destination (BYO storage)**. Use the Cloud table/bucket sizer to include or exclude so the capsule fits.
 
 Includes:
 
@@ -69,7 +69,7 @@ Does **not** include: Portabase as permanent recovery vault; requiring local lap
 
 Cloud subscribers pick how hard the locks are (see [SECURITY-TRUST.md](./SECURITY-TRUST.md) and `/security`):
 
-Honest default: managed Cloud still has a **possibility that Portabase sees or uses key material during a run**. Customer KMS and audits reduce that; they do not claim zero. Standalone OSS if zero vendor key path is required.
+Honest default: managed Cloud still has a **possibility that Portabase sees or uses key material during a run**. Customer KMS and audits reduce that; they do not claim zero. Standalone open source if zero vendor key path is required.
 
 | Option | Intent |
 | --- | --- |
@@ -78,7 +78,7 @@ Honest default: managed Cloud still has a **possibility that Portabase sees or u
 | **Customer CloudTrail** | Audit KMS/S3 use in *their* AWS account (always theirs when Trail is on; enable early for history) |
 | **Customer KMS** | Crypto authority in *their* CMK; revocable grant |
 | **Any combination** | Start simple; tighten later |
-| **Standalone OSS** | Zero Portabase compute |
+| **Standalone open source** | Zero Portabase compute |
 
 ## Recovery model
 

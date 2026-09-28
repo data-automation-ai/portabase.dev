@@ -3,6 +3,8 @@
  * Never include secrets, passphrases, capsule bytes, or connection strings.
  */
 
+import { FORBIDDEN_INVENTORY_KEY, looksLikeStorageObjectPath } from './zero-knowledge.mjs';
+
 const FORBIDDEN = [
   /password/i,
   /passphrase/i,
@@ -21,6 +23,11 @@ const EVENT_TYPES = new Set([
   'verify.failed',
   'restore.completed',
   'schedule.missed',
+  'job.started',
+  'job.phase',
+  'job.completed',
+  'job.failed',
+  'meter.daily',
 ]);
 
 export function assertSafeTelemetryValue(value, path = 'root') {
@@ -30,6 +37,7 @@ export function assertSafeTelemetryValue(value, path = 'root') {
       if (pattern.test(value)) throw new Error(`Telemetry rejected forbidden content at ${path}`);
     }
     if (value.length > 2000) throw new Error(`Telemetry field too long at ${path}`);
+    if (looksLikeStorageObjectPath(value)) throw new Error(`Telemetry rejected Storage object path at ${path}`);
     return value;
   }
   if (typeof value === 'number' || typeof value === 'boolean') return value;
@@ -39,7 +47,7 @@ export function assertSafeTelemetryValue(value, path = 'root') {
   if (typeof value === 'object') {
     const out = {};
     for (const [key, child] of Object.entries(value)) {
-      if (FORBIDDEN.some(pattern => pattern.test(key))) {
+      if (FORBIDDEN.some(pattern => pattern.test(key)) || FORBIDDEN_INVENTORY_KEY.test(key)) {
         throw new Error(`Telemetry rejected forbidden key ${key}`);
       }
       out[key] = assertSafeTelemetryValue(child, `${path}.${key}`);

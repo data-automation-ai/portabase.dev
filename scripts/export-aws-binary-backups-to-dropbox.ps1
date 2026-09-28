@@ -6,6 +6,7 @@
 .DESCRIPTION
   Policy:
   - Always take the MOST RECENT completed EBS/AMI backup for each critical workload.
+  CI source of truth (no AWS mutate): utility/aws/latest-backup.mjs
   - Sync existing S3 backup buckets (real binary dumps) to Dropbox cloud-to-cloud.
   - Store latest AMI images into S3 via CreateStoreImageTask, then copy to Dropbox.
   - Export secrets-bundle as an AES-encrypted archive (values included, encrypted at rest in Dropbox).

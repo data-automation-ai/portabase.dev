@@ -1,0 +1,85 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "Identity",
+      "Effect": "Allow",
+      "Action": ["sts:GetCallerIdentity"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ListIamMap",
+      "Effect": "Allow",
+      "Action": [
+        "iam:ListUsers",
+        "iam:ListRoles",
+        "iam:ListGroups",
+        "iam:ListPolicies",
+        "iam:ListInstanceProfiles",
+        "iam:ListOpenIDConnectProviders",
+        "iam:ListSAMLProviders",
+        "iam:ListAccountAliases"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DescribeComputeNetwork",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:Describe*",
+        "ecs:ListClusters",
+        "ecs:ListServices",
+        "ecs:DescribeClusters",
+        "ecs:DescribeServices",
+        "lambda:ListFunctions",
+        "elasticloadbalancing:Describe*",
+        "autoscaling:Describe*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ListBucketsAndObjectsMetadata",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListAllMyBuckets",
+        "s3:ListBucket",
+        "s3:GetBucketLocation",
+        "s3:GetBucketTagging",
+        "s3:GetBucketVersioning"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DescribeDataServices",
+      "Effect": "Allow",
+      "Action": [
+        "rds:Describe*",
+        "dynamodb:ListTables",
+        "dynamodb:DescribeTable",
+        "logs:DescribeLogGroups",
+        "sns:ListTopics",
+        "sqs:ListQueues",
+        "kms:ListKeys",
+        "kms:DescribeKey",
+        "cloudformation:ListStacks",
+        "cloudformation:DescribeStacks",
+        "cognito-idp:ListUserPools",
+        "dlm:GetLifecyclePolicies",
+        "ssm:DescribeParameters",
+        "route53:ListHostedZones",
+        "cloudfront:ListDistributions",
+        "ecr:DescribeRepositories"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ListSecretNamesOnly",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:ListSecrets",
+        "secretsmanager:DescribeSecret"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

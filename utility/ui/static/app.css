@@ -1,0 +1,99 @@
+:root {
+  --bg: #f6fbfa;
+  --surface: #ffffff;
+  --ink: #12302c;
+  --muted: #5b7470;
+  --line: #d9e8e5;
+  --accent: #0f766e;
+  --keep-bg: #dcf3ee; --keep-ink: #0b5d55;
+  --partial-bg: #e5eefc; --partial-ink: #1e4f9c;
+  --skip-bg: #fdf1dc; --skip-ink: #8a5a0b;
+  --blocked-bg: #fde4e2; --blocked-ink: #9f2a1f;
+  --never-bg: #eceff1; --never-ink: #4a5a60;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1716; --surface: #13211f; --ink: #e3f1ee; --muted: #93aca8; --line: #23413c; --accent: #4fd1c0;
+    --keep-bg: #123d37; --keep-ink: #8ee6d7;
+    --partial-bg: #1a2c4a; --partial-ink: #a9c6f5;
+    --skip-bg: #3d2f12; --skip-ink: #f3cf8a;
+    --blocked-bg: #46201c; --blocked-ink: #f6aba3;
+    --never-bg: #232c2f; --never-ink: #b3c1c5;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+code, pre { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 13px; }
+pre { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; word-break: break-word; }
+
+.top { position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.brand { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.brand strong { color: var(--accent); font-size: 17px; }
+.actions { display: flex; gap: 12px; align-items: center; }
+.pill { padding: 2px 10px; border-radius: 999px; background: var(--keep-bg); color: var(--keep-ink); font-size: 13px; font-weight: 600; }
+.pill.muted { background: transparent; color: var(--muted); font-weight: 500; }
+.pill.warn { background: var(--skip-bg); color: var(--skip-ink); }
+button { font: inherit; border: 1px solid var(--accent); background: var(--accent); color: var(--surface); padding: 6px 14px; border-radius: 8px; cursor: pointer; }
+button:disabled { opacity: .6; cursor: progress; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+
+main { max-width: 1180px; margin: 0 auto; padding: 20px 24px 60px; }
+.banner { background: var(--blocked-bg); color: var(--blocked-ink); padding: 10px 14px; border-radius: 8px; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tile .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.tile .value { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tile .sub { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; overflow-x: auto; }
+.tabs button { background: none; border: none; border-bottom: 2px solid transparent; border-radius: 0; color: var(--muted); padding: 8px 12px; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.chip.keep { background: var(--keep-bg); color: var(--keep-ink); }
+.chip.partial { background: var(--partial-bg); color: var(--partial-ink); }
+.chip.skip { background: var(--skip-bg); color: var(--skip-ink); }
+.chip.blocked { background: var(--blocked-bg); color: var(--blocked-ink); }
+.chip.never { background: var(--never-bg); color: var(--never-ink); }
+
+.group { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px 16px 8px; margin-bottom: 12px; }
+.group h3 { font-size: 14px; margin: 10px 0 6px; }
+.items { list-style: none; margin: 0; padding: 0; }
+.items li { display: grid; grid-template-columns: 110px minmax(140px, 240px) 80px 1fr; gap: 10px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--line); }
+.items li:first-child { border-top: none; }
+.items .name { font-weight: 600; overflow-wrap: anywhere; }
+.items .size { color: var(--muted); font-variant-numeric: tabular-nums; }
+.items .detail { color: var(--muted); font-size: 14px; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 12px; }
+input[type="search"] { font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); min-width: 240px; }
+.schemas { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.schema { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; font-size: 13px; color: var(--muted); }
+.schema strong { color: var(--ink); }
+
+.scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; font-size: 13px; position: sticky; top: 0; background: var(--surface); }
+th.sortable { cursor: pointer; }
+th[aria-sort="descending"]::after { content: " ↓"; }
+th[aria-sort="ascending"]::after { content: " ↑"; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr:last-child td { border-bottom: none; }
+caption { text-align: left; }
+
+.proof { padding-left: 20px; }
+.proof li { margin-bottom: 14px; }
+h2 { font-size: 16px; margin: 20px 0 8px; }
+
+@media (max-width: 720px) {
+  .top, main { padding-left: 16px; padding-right: 16px; }
+  .items li { grid-template-columns: 1fr; gap: 2px; }
+}
+.items.readiness li { grid-template-columns: 110px 1fr; }

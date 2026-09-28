@@ -35,10 +35,28 @@ import {
   recoveryEvidenceStatus,
   safeObjectPath,
   DATA_SCHEMA_EXCLUDES,
+  DATA_TABLE_EXCLUDES,
+  PLATFORM_SCHEMA_EXCLUDES,
+  parseSelectionList,
+  validateExcludeTableData,
+  validateExcludeBuckets,
+  buildExcludeTableDataArgs,
+  filterExcludedBuckets,
+  validateIncludeTableData,
+  validateIncludeBuckets,
+  filterIncludedBuckets,
+  resolveTableDataSelection,
+  baselineObjectUnchanged,
+  computeTombstones,
+  partitionChanged,
+  findProtectedBaselines,
+  mergeStorageManifests,
+  mergeFunctionManifests,
   generateFunctionRedeployScripts,
   PINNED_SUPABASE_CLI,
   schemaExcludePattern,
   shouldSkipStorageDownload,
+  shouldFetchStorageObject,
   storageCacheKey,
   storageObjectIdentity,
   supabaseHeaders,
@@ -77,6 +95,7 @@ import {
 } from './portabase-core.mjs';
 import { resolveEdition } from './license.mjs';
 import { emitTelemetry } from './telemetry.mjs';
+import { runAwsCli } from './aws/cli.mjs';
 
 export {
   providerCommand,
@@ -99,6 +118,13 @@ function flag(name, fallback) {
 
 function hasFlag(name) {
   return argv.includes(`--${name}`);
+}
+
+/** `--<name> a,b` (CLI) wins over `config.capture.<configKey>` (array) when both are given. */
+function resolveSelectionOption(name, configValue) {
+  const raw = flag(name);
+  if (raw != null) return parseSelectionList(raw);
+  return parseSelectionList(configValue);
 }
 
 function progress(event) {
@@ -339,13 +365,13 @@ async function touchAgentRegistry(config, event = {}) {
   } catch { /* non-fatal */ }
 }
 
-async function captureDatabase(rawDir, limits = null) {
+async function captureDatabase(rawDir, limits = null, excludeTables = []) {
   const dbUrl = process.env.SUPABASE_DB_URL;
   if (!dbUrl) throw new Error('SUPABASE_DB_URL is missing.');
   const dbDir = join(rawDir, 'database');
   await mkdir(dbDir, { recursive: true });
   if (resolveTool('pg_dump') && resolveTool('pg_dumpall')) {
-    return captureDatabaseNative(dbUrl, dbDir, limits);
+    return captureDatabaseNative(dbUrl, dbDir, limits, excludeTables);
   }
   const supabase = resolveTool('supabase');
   if (!supabase) throw new Error('Install PostgreSQL client tools or the Supabase CLI for database capture.');
@@ -353,7 +379,7 @@ async function captureDatabase(rawDir, limits = null) {
   const common = ['db', 'dump', '--db-url', dbUrl];
   await run(supabase, [...common, '--file', join(dbDir, 'roles.sql'), '--role-only']);
   await run(supabase, [...common, '--file', join(dbDir, 'schema.sql')]);
-  if (!limits?.databaseSchemaOnly) await run(supabase, [...common, '--file', join(dbDir, 'data.sql'), '--use-copy', '--data-only']);
+  if (!limits?.databaseSchemaOnly) await run(supabase, [...common, '--file', join(dbDir, 'data.sql'), '--use-copy', '--data-only', ...buildExcludeTableDataArgs(excludeTables)]);
   const files = limits?.databaseSchemaOnly ? ['roles.sql', 'schema.sql'] : ['roles.sql', 'schema.sql', 'data.sql'];
   const inventory = resolveTool('psql') ? await captureDatabaseInventory(dbUrl, join(dbDir, 'database-inventory.json'), { estimateRows: Boolean(limits) }) : null;
   const schemaOnly = Boolean(limits?.databaseSchemaOnly);
@@ -617,7 +643,7 @@ function cleanRoleLine(line) {
   return line.startsWith('-- ') ? null : line;
 }
 
-async function captureDatabaseNative(dbUrl, dbDir, limits = null) {
+async function captureDatabaseNative(dbUrl, dbDir, limits = null, excludeTables = []) {
   const env = postgresEnvironment(dbUrl);
   const pgDump = resolveTool('pg_dump');
   const pgDumpAll = resolveTool('pg_dumpall');
@@ -634,7 +660,7 @@ async function captureDatabaseNative(dbUrl, dbDir, limits = null) {
     await transformSql(rawSchema, join(dbDir, 'schema.sql'), cleanSchemaLine);
     if (!limits?.databaseSchemaOnly) {
       progress({ phase: 'database', item: 'table rows' });
-      await runDumpToFile(pgDump, ['--data-only', '--quote-all-identifiers', '--role', 'postgres', '--exclude-schema', DATA_EXCLUDES, '--exclude-table', 'auth.schema_migrations', '--exclude-table', 'storage.migrations', '--exclude-table', 'supabase_functions.migrations', '--schema', '*'], rawData, { env });
+      await runDumpToFile(pgDump, ['--data-only', '--quote-all-identifiers', '--role', 'postgres', '--exclude-schema', DATA_EXCLUDES, ...DATA_TABLE_EXCLUDES.flatMap(table => ['--exclude-table', table]), ...buildExcludeTableDataArgs(excludeTables), '--schema', '*'], rawData, { env });
       await transformSql(rawData, join(dbDir, 'data.sql'), line => /^\\(un)?restrict /.test(line) ? `-- ${line}` : line, 'SET session_replication_role = replica;\n', 'RESET ALL;\n');
     }
   } finally {
@@ -712,12 +738,16 @@ async function loadPriorStorageIndex(config) {
   }
 }
 
-async function captureStorage(rawDir, limits = null, config = {}) {
+async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets = [], includeBuckets = [], deltaBaseline = null) {
   const storageDir = join(rawDir, 'storage');
   const cacheRoot = resolve(config.backupDirectory || './portabase-capsules', '.storage-object-cache');
   await mkdir(storageDir, { recursive: true });
   await mkdir(cacheRoot, { recursive: true });
-  const buckets = await (await checkedSourceFetch('/storage/v1/bucket')).json();
+  const allBuckets = await (await checkedSourceFetch('/storage/v1/bucket')).json();
+  const buckets = filterIncludedBuckets(filterExcludedBuckets(allBuckets, excludeBuckets), includeBuckets);
+  if (excludeBuckets.length) {
+    console.log(`Storage selection: excluding ${excludeBuckets.length} bucket(s) → ${excludeBuckets.join(', ')}`);
+  }
   const concurrency = resolveStorageConcurrency(config);
   const manifest = {
     capturedAt: new Date().toISOString(),
@@ -728,6 +758,9 @@ async function captureStorage(rawDir, limits = null, config = {}) {
     skippedUnchanged: 0,
     cacheHits: 0,
     downloaded: 0,
+    incrementalBinary: hasFlag('incremental-binary') || config.capture?.incrementalBinary === true,
+    incrementalReused: 0,
+    incrementalDifferential: 0,
     concurrency,
   };
   const inventory = { bucketCount: buckets.length, objectCount: 0, totalBytes: 0, buckets: [] };
@@ -831,6 +864,27 @@ async function captureStorage(rawDir, limits = null, config = {}) {
     const identity = storageObjectIdentity(object);
     const key = `${bucket.id}/${object.fullName}`;
     seenKeys.add(key);
+    const deltaHit = deltaBaseline?.size ? deltaBaseline.get(key) : null;
+    if (deltaHit && baselineObjectUnchanged(deltaHit, identity)) {
+      completed += 1;
+      progress({ phase: 'storage', item: `${key} (delta-reused)`, bytes: Number(identity.size) || 0, completed, total: jobs.length });
+      return {
+        bucketId: bucket.id,
+        entry: {
+          name: object.fullName,
+          size: Number(identity.size) || 0,
+          sha256: deltaHit.sha256,
+          updatedAt: identity.updatedAt,
+          etag: identity.etag,
+          contentType: identity.contentType || null,
+          resumed: true,
+          cacheHit: false,
+          downloaded: false,
+          reused: true,
+          incremental: 'delta-reused',
+        },
+      };
+    }
     const target = join(storageDir, safeObjectPath(bucket.id), safeObjectPath(object.fullName));
     await mkdir(dirname(target), { recursive: true });
     const prior = priorIndex.get(key) || null;
@@ -864,6 +918,21 @@ async function captureStorage(rawDir, limits = null, config = {}) {
           skipped = true;
         }
       } catch { /* re-download */ }
+    }
+    const decision = shouldFetchStorageObject({
+      incrementalBinary: manifest.incrementalBinary,
+      name: object.fullName,
+      contentType: identity.contentType,
+      listing: identity,
+      prior,
+      bytesAlreadyLocal: fromCache || skipped,
+    });
+    if (decision.reason === 'binary-differential') {
+      // Newer date stamp: discard any cached older copy and take the whole file.
+      skipped = false;
+      fromCache = false;
+    } else if (!decision.fetch) {
+      skipped = true;
     }
     if (!skipped && !fromCache) {
       const objectPath = object.fullName.split('/').map(encodeURIComponent).join('/');
@@ -920,6 +989,8 @@ async function captureStorage(rawDir, limits = null, config = {}) {
         resumed: skipped || fromCache,
         cacheHit: fromCache,
         downloaded: !skipped && !fromCache,
+        incremental: decision.reason,
+        wholeFile: decision.wholeFile === true,
       },
     };
   });
@@ -943,6 +1014,9 @@ async function captureStorage(rawDir, limits = null, config = {}) {
     if (result.entry.cacheHit) manifest.cacheHits += 1;
     else if (result.entry.resumed) manifest.skippedUnchanged += 1;
     else if (result.entry.downloaded) manifest.downloaded += 1;
+    if (result.entry.incremental === 'binary-unchanged') manifest.incrementalReused += 1;
+    if (result.entry.reused) manifest.deltaReused = (manifest.deltaReused || 0) + 1;
+    if (result.entry.incremental === 'binary-differential') manifest.incrementalDifferential += 1;
     manifest.objectCount += 1;
     manifest.totalBytes += result.entry.size;
   }
@@ -953,6 +1027,10 @@ async function captureStorage(rawDir, limits = null, config = {}) {
 
   // W8: reconcile — drop prior keys no longer present (stale index entries)
   manifest.reconciledDropped = [...priorIndex.keys()].filter(k => !seenKeys.has(k)).length;
+  if (deltaBaseline?.size) {
+    manifest.tombstones = computeTombstones([...deltaBaseline.keys()], [...seenKeys]);
+    if (manifest.tombstones.length) console.log(`Delta storage: ${manifest.tombstones.length} object(s) deleted since baseline (tombstones).`);
+  }
   // Capsule-side fingerprint: only objects actually written into this capsule
   const capsuleObjectKeys = storageObjectKeysFromBuckets(manifest.buckets);
   manifest.capsuleNamesFingerprintMd5 = fingerprintSortedKeys(capsuleObjectKeys, 'md5');
@@ -1391,6 +1469,90 @@ export async function transferCapsule(config, capsuleDir) {
   return { destination: providerRemote(config, capsuleDir), verified: Boolean(verifyRemote) };
 }
 
+/**
+ * Loads a delta baseline from its manifest only — contents are never opened.
+ * Accepts an unpacked directory (manifest.json at top) or an encrypted capsule
+ * directory (manifest read via openCapsule; caller supplies the passphrase).
+ * Baselines must be full capsules; delta-of-delta chains are refused.
+ */
+async function loadDeltaBaseline(baselinePath, passphrase) {
+  const dir = resolve(baselinePath);
+  let manifest = null;
+  let capsuleId = basename(dir);
+  let cleanup = null;
+  const topManifest = join(dir, 'manifest.json');
+  if (existsSync(topManifest)) {
+    manifest = JSON.parse(await readFile(topManifest, 'utf8'));
+    const outer = join(dir, 'capsule.json');
+    if (existsSync(outer)) {
+      try { capsuleId = JSON.parse(await readFile(outer, 'utf8')).id || capsuleId; } catch { /* keep dirname */ }
+    }
+  } else {
+    const materialized = await materializeCapsule(dir);
+    const opened = await openCapsule(materialized.capsuleDir, passphrase);
+    cleanup = async () => {
+      await rm(opened.temp, { recursive: true, force: true }).catch(() => {});
+      if (materialized.cleanup) await rm(materialized.cleanup, { recursive: true, force: true }).catch(() => {});
+    };
+    try {
+      manifest = JSON.parse(await readFile(join(opened.extracted, 'manifest.json'), 'utf8'));
+      capsuleId = opened.metadata?.id || capsuleId;
+      const storageManifestPath = join(opened.extracted, 'storage', 'storage-manifest.json');
+      const functionsManifestPath = join(opened.extracted, 'functions', 'functions-manifest.json');
+      manifest.__extractedStorageManifest = existsSync(storageManifestPath)
+        ? JSON.parse(await readFile(storageManifestPath, 'utf8')) : null;
+      manifest.__extractedFunctionsManifest = existsSync(functionsManifestPath)
+        ? JSON.parse(await readFile(functionsManifestPath, 'utf8')) : null;
+    } finally {
+      await cleanup();
+    }
+  }
+  if (!manifest || typeof manifest !== 'object') throw new Error(`No manifest found at baseline ${dir}.`);
+  if (manifest.kind === 'delta') throw new Error('Delta-of-delta chains are not supported: pick a full capsule as --baseline.');
+  if (!manifest.__extractedStorageManifest) {
+    const sidecar = join(dir, 'storage', 'storage-manifest.json');
+    if (existsSync(sidecar)) {
+      try { manifest.__extractedStorageManifest = JSON.parse(await readFile(sidecar, 'utf8')); } catch { /* ignore */ }
+    }
+  }
+  if (!manifest.__extractedFunctionsManifest) {
+    const sidecar = join(dir, 'functions', 'functions-manifest.json');
+    if (existsSync(sidecar)) {
+      try { manifest.__extractedFunctionsManifest = JSON.parse(await readFile(sidecar, 'utf8')); } catch { /* ignore */ }
+    }
+  }
+  const storageObjects = new Map();
+  const storageManifest = manifest.__extractedStorageManifest || manifest.storageManifest || null;
+  for (const bucket of storageManifest?.buckets || []) {
+    for (const object of bucket.objects || []) {
+      if (object?.downloaded === false && !object?.sha256) continue;
+      storageObjects.set(`${bucket.id}/${object.name}`, {
+        sha256: object.sha256 || null,
+        size: Number(object.size ?? NaN),
+        etag: object.etag || null,
+        updatedAt: object.updatedAt || null,
+      });
+    }
+  }
+  const functionFiles = {};
+  const functionsManifest = manifest.__extractedFunctionsManifest || manifest.functionsManifest || null;
+  for (const fn of functionsManifest?.functions || functionsManifest || []) {
+    for (const file of fn.files || []) {
+      if (file?.path && file?.sha256) functionFiles[`${fn.name}/${file.path}`] = file.sha256;
+    }
+  }
+  delete manifest.__extractedStorageManifest;
+  delete manifest.__extractedFunctionsManifest;
+  return {
+    capsuleId,
+    manifest,
+    manifestSha256: createHash('sha256').update(JSON.stringify(manifest)).digest('hex'),
+    storageObjects,
+    functionFiles,
+    dbHashes: manifest.deltaHashes?.database || null,
+  };
+}
+
 async function backup() {
   const { config } = await loadConfig();
   const entitlement = await resolveEdition({ forceTrial: hasFlag('trial'), licensePath: flag('license') });
@@ -1414,9 +1576,45 @@ async function backup() {
     : firstPerBucket
       ? FIRST_PER_BUCKET_STORAGE
       : null;
+  const excludeTables = validateExcludeTableData(
+    resolveSelectionOption('exclude-table-data', config.capture?.excludeTableData),
+  );
+  const excludeBuckets = validateExcludeBuckets(
+    resolveSelectionOption('exclude-buckets', config.capture?.excludeBuckets),
+  );
+  const includeTableData = validateIncludeTableData(
+    resolveSelectionOption('include-table-data', config.capture?.includeTableData),
+  );
+  const includeBuckets = validateIncludeBuckets(
+    resolveSelectionOption('include-buckets', config.capture?.includeBuckets),
+  );
+  const bucketConflicts = includeBuckets.filter((bucket) => excludeBuckets.includes(bucket));
+  if (bucketConflicts.length) {
+    throw new Error(`Buckets listed in both --include-buckets and --exclude-buckets: ${bucketConflicts.join(', ')}`);
+  }
+  if (includeTableData.length) {
+    if (!resolveTool('psql')) throw new Error('--include-table-data needs psql to enumerate tables (DDL is still captured for all).');
+    if (!process.env.SUPABASE_DB_URL) throw new Error('SUPABASE_DB_URL is missing.');
+    const namesJson = psqlValue(process.env.SUPABASE_DB_URL, `SELECT COALESCE(json_agg(schemaname || '.' || tablename ORDER BY schemaname, tablename), '[]'::json)::text FROM pg_catalog.pg_tables WHERE ${APPLICATION_SCHEMA_SQL};`);
+    const allTables = JSON.parse(namesJson || '[]');
+    const resolved = resolveTableDataSelection({ allTables, include: includeTableData, exclude: excludeTables });
+    if (resolved.unknown.length) console.log(`Warning: --include-table-data names not in the database (typo?): ${resolved.unknown.join(', ')}`);
+    console.log(`Table data selection: rows for ${resolved.dataTables.length} table(s), DDL-only for ${resolved.ddlOnly.length}.`);
+    for (const table of resolved.ddlOnly) if (!excludeTables.includes(table)) excludeTables.push(table);
+  }
+  if (includeBuckets.length) console.log(`Storage selection: only ${includeBuckets.length} bucket(s) → ${includeBuckets.join(', ')}`);
   const passphraseEnv = config.encryption?.passphraseEnv || 'PORTABASE_ENCRYPTION_PASSPHRASE';
   const passphrase = process.env[passphraseEnv];
   if (!passphrase || passphrase.length < 16) throw new Error(`${passphraseEnv} must contain at least 16 characters.`);
+  const deltaMode = hasFlag('delta');
+  const baselineFlag = flag('baseline', null);
+  if (deltaMode && !baselineFlag) throw new Error('--delta requires --baseline <capsule directory>.');
+  if (baselineFlag && !deltaMode) throw new Error('--baseline requires --delta.');
+  let baseline = null;
+  if (deltaMode) {
+    baseline = await loadDeltaBaseline(baselineFlag, passphrase);
+    console.log(`Delta baseline: ${baseline.capsuleId} (manifest only — contents never opened).`);
+  }
   const id = capsuleName(config.projectRef);
   const root = resolve(config.backupDirectory || './portabase-capsules');
   const capsuleDir = join(root, id);
@@ -1443,11 +1641,12 @@ async function backup() {
     status: 'RUNNING',
     contents: {},
     errors: [],
+    selection: { excludeTables, excludeBuckets, includeTableData, includeBuckets },
   };
   try {
     for (const [name, enabled, capture] of [
-      ['database', config.capture?.database !== false, () => captureDatabase(rawDir, limits)],
-      ['storage', config.capture?.storage !== false, () => captureStorage(rawDir, limits, config)],
+      ['database', config.capture?.database !== false, () => captureDatabase(rawDir, limits, excludeTables)],
+      ['storage', config.capture?.storage !== false, () => captureStorage(rawDir, limits, config, excludeBuckets, includeBuckets, baseline ? baseline.storageObjects : null)],
       ['functions', config.capture?.functions !== false, () => captureFunctions(config, rawDir, limits)],
       ['auth', config.capture?.auth !== false, () => captureAuth(config, rawDir)],
     ]) {
@@ -1465,6 +1664,46 @@ async function backup() {
         console.error(`PARTIAL ${name}: ${error.message}`);
       }
     }
+    const dbDir = join(rawDir, 'database');
+    const currentDbHashes = {};
+    for (const file of ['roles.sql', 'schema.sql', 'data.sql']) {
+      const full = join(dbDir, file);
+      if (existsSync(full)) currentDbHashes[file] = await hashFile(full);
+    }
+    if (baseline) {
+      manifest.kind = 'delta';
+      manifest.baseline = { capsuleId: baseline.capsuleId, manifestSha256: baseline.manifestSha256 };
+      manifest.delta = { storage: { tombstones: manifest.contents.storage?.tombstones || [] } };
+      const dbPart = partitionChanged(currentDbHashes, baseline.dbHashes || {});
+      if (!baseline.dbHashes) console.log('Delta database: baseline has no layer hashes — storing the full database layer.');
+      for (const reused of dbPart.reused) await rm(join(dbDir, reused.path), { force: true });
+      manifest.delta.database = { changed: dbPart.changed, reused: dbPart.reused, baselineWithoutHashes: !baseline.dbHashes };
+      const fnManifestPath = join(rawDir, 'functions', 'functions-manifest.json');
+      const currentFnHashes = {};
+      const fnEntries = [];
+      if (existsSync(fnManifestPath)) {
+        try {
+          const fnManifest = JSON.parse(await readFile(fnManifestPath, 'utf8'));
+          for (const fn of fnManifest?.functions || fnManifest || []) {
+            for (const file of fn.files || []) {
+              if (!file?.path || !file?.sha256) continue;
+              currentFnHashes[`${fn.name}/${file.path}`] = file.sha256;
+              fnEntries.push({ name: fn.name, path: file.path });
+            }
+          }
+        } catch { /* keep sick functions layer as-is */ }
+      }
+      const fnPart = partitionChanged(currentFnHashes, baseline.functionFiles || {});
+      for (const reused of fnPart.reused) {
+        const entry = fnEntries.find(item => `${item.name}/${item.path}` === reused.path);
+        if (entry) await rm(join(rawDir, 'functions', entry.name, entry.path), { force: true });
+      }
+      manifest.delta.functions = { changed: fnPart.changed, reused: fnPart.reused };
+      const changedCount = dbPart.changed.length + fnPart.changed.length + (manifest.contents.storage?.downloaded || 0);
+      const reusedCount = dbPart.reused.length + fnPart.reused.length + (manifest.contents.storage?.deltaReused || 0);
+      console.log(`Delta capsule: ${changedCount} new/changed item(s) stored, ${reusedCount} referenced from baseline ${baseline.capsuleId}.`);
+    }
+    manifest.deltaHashes = { database: currentDbHashes };
     manifest.status = manifest.errors.length || Object.values(manifest.contents).some(item => !item.complete) ? 'PARTIAL' : trial ? 'TRIAL' : 'COMPLETE';
     await writeFile(join(rawDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
     // Persist storage object identity for next-run resume (metadata only; lives outside capsule)
@@ -1517,6 +1756,8 @@ async function backup() {
     const capsuleMetadata = {
       formatVersion: 1,
       id,
+      kind: manifest.kind === 'delta' ? 'delta' : 'full',
+      baselineCapsuleId: manifest.baseline?.capsuleId || null,
       edition: manifest.edition,
       licenseId: entitlement.license.valid ? entitlement.license.payload.licenseId : null,
       projectRef: config.projectRef,
@@ -1524,6 +1765,7 @@ async function backup() {
       status: manifest.status,
       contents: manifest.contents,
       errors: manifest.errors,
+      selection: manifest.selection,
       encryption,
       durationMs: Date.now() - startedAt,
     };
@@ -2251,6 +2493,7 @@ async function restorePlanCommand() {
   const opened = await openCapsule(materialized.capsuleDir, process.env.PORTABASE_ENCRYPTION_PASSPHRASE);
   try {
     const { metadata, manifest, extracted } = opened;
+    if (manifest.kind === 'delta') throw new Error(`Capsule ${metadata.id} is a delta capsule: build restore plans at restore time with --baseline <full capsule directory> (a delta never stands alone).`);
     const dataSqlPath = join(extracted, 'database', 'data.sql');
     const tableSizes = existsSync(dataSqlPath) ? await measureDataSqlTables(dataSqlPath) : [];
     const storageManifestPath = join(extracted, 'storage', 'storage-manifest.json');
@@ -2302,7 +2545,54 @@ async function restore() {
   let evidence = { formatVersion: 1, portabaseVersion: VERSION, mode, startedAt, status: 'RUNNING' };
   try {
     opened = await openCapsule(materialized.capsuleDir, process.env.PORTABASE_ENCRYPTION_PASSPHRASE);
-    const { manifest, metadata, extracted } = opened;
+    let { manifest, metadata, extracted } = opened;
+    if (manifest.kind === 'delta') {
+      const baselineFlag = flag('baseline', null);
+      if (!baselineFlag) throw new Error(`Capsule ${metadata.id} is a delta capsule: pass --baseline <full capsule directory> (a delta never restores alone).`);
+      const baseMaterialized = await materializeCapsule(resolve(baselineFlag));
+      const baseOpened = await openCapsule(baseMaterialized.capsuleDir, process.env.PORTABASE_ENCRYPTION_PASSPHRASE);
+      opened.chainCleanups = [async () => {
+        await rm(baseOpened.temp, { recursive: true, force: true });
+        if (baseMaterialized.cleanup) await rm(baseMaterialized.cleanup, { recursive: true, force: true });
+      }];
+      if (baseOpened.manifest.kind === 'delta') throw new Error('Delta-of-delta restore is not supported: --baseline must be a full capsule.');
+      if (baseOpened.manifest.projectRef !== manifest.projectRef) {
+        throw new Error(`Baseline project ${baseOpened.manifest.projectRef} does not match delta project ${manifest.projectRef}.`);
+      }
+      console.log(`Delta chain: assembling baseline ${baseOpened.metadata.id} + delta ${metadata.id}...`);
+      const merged = join(opened.temp, 'merged');
+      await mkdir(merged, { recursive: true });
+      await cp(baseOpened.extracted, merged, { recursive: true, force: true });
+      await cp(extracted, merged, { recursive: true, force: true });
+      for (const tomb of manifest.delta?.storage?.tombstones || []) {
+        const slash = tomb.indexOf('/');
+        if (slash < 0) continue;
+        const bucket = tomb.slice(0, slash);
+        const name = tomb.slice(slash + 1);
+        if (name) await rm(join(merged, 'storage', safeObjectPath(bucket), ...name.split('/').map(safeObjectPath)), { recursive: true, force: true });
+      }
+      const baseStoragePath = join(baseOpened.extracted, 'storage', 'storage-manifest.json');
+      const mergedStoragePath = join(merged, 'storage', 'storage-manifest.json');
+      if (existsSync(baseStoragePath)) {
+        const baseStorage = JSON.parse(await readFile(baseStoragePath, 'utf8'));
+        const deltaStorage = existsSync(mergedStoragePath) ? JSON.parse(await readFile(mergedStoragePath, 'utf8')) : { buckets: [] };
+        const mergedStorage = mergeStorageManifests(baseStorage, deltaStorage, manifest.delta?.storage?.tombstones || []);
+        await mkdir(join(merged, 'storage'), { recursive: true });
+        await writeFile(mergedStoragePath, `${JSON.stringify(mergedStorage, null, 2)}\n`);
+      }
+      const baseFnPath = join(baseOpened.extracted, 'functions', 'functions-manifest.json');
+      const mergedFnPath = join(merged, 'functions', 'functions-manifest.json');
+      if (existsSync(baseFnPath)) {
+        const baseFn = JSON.parse(await readFile(baseFnPath, 'utf8'));
+        const deltaFn = existsSync(mergedFnPath) ? JSON.parse(await readFile(mergedFnPath, 'utf8')) : { functions: [] };
+        const mergedFns = mergeFunctionManifests(baseFn.functions || baseFn || [], deltaFn.functions || deltaFn || []);
+        await mkdir(join(merged, 'functions'), { recursive: true });
+        const outFn = Array.isArray(deltaFn) ? mergedFns : { ...deltaFn, functions: mergedFns };
+        await writeFile(mergedFnPath, `${JSON.stringify(outFn, null, 2)}\n`);
+      }
+      extracted = merged;
+      console.log('Chain assembled at restore time; the baseline capsule was never modified.');
+    }
     evidence.capsuleId = metadata.id;
     const restorePlan = await loadRestorePlanFlag(metadata.id);
     evidence = {
@@ -2393,9 +2683,39 @@ async function restore() {
   } finally {
     if (opened) await rm(opened.temp, { recursive: true, force: true });
     if (materialized.cleanup) await rm(materialized.cleanup, { recursive: true, force: true });
+    if (opened?.chainCleanups) for (const cleanup of opened.chainCleanups) await cleanup();
   }
 }
 
+async function sizes() {
+  const { config } = await loadConfig();
+  const snapshot = await collectUiSnapshot(config, false);
+  const toMB = (bytes) => (Number(bytes) || 0) / 1048576;
+  if (hasFlag('json')) {
+    return console.log(JSON.stringify({ generatedAt: snapshot.generatedAt, project: snapshot.project, database: snapshot.database, storage: snapshot.storage }, null, 2));
+  }
+  console.log(`Portabase sizes for ${config.projectRef}`);
+  if (snapshot.storage.ok) {
+    const buckets = [...snapshot.storage.data.buckets].sort((a, b) => b.totalBytes - a.totalBytes);
+    console.log('');
+    console.log('Storage buckets (by total size, descending):');
+    for (const bucket of buckets) {
+      console.log(`  ${bucket.id}  files=${bucket.objectCount}  total=${toMB(bucket.totalBytes).toFixed(2)} MB (${formatBytes(bucket.totalBytes)})`);
+    }
+    console.log(`  TOTAL  files=${snapshot.storage.data.objectCount}  total=${toMB(snapshot.storage.data.totalBytes).toFixed(2)} MB (${formatBytes(snapshot.storage.data.totalBytes)})`);
+  } else {
+    console.log(`Storage sizes unavailable: ${snapshot.storage.error}`);
+  }
+  if (!snapshot.database.ok) throw new Error(`Database sizes unavailable: ${snapshot.database.error}`);
+  const tables = [...snapshot.database.data.tables].sort((a, b) => (b.bytes || 0) - (a.bytes || 0));
+  const totalBytes = tables.reduce((sum, table) => sum + (Number(table.bytes) || 0), 0);
+  console.log('');
+  console.log('Tables by size in MB (descending):');
+  for (const table of tables) {
+    console.log(`  ${table.schema}.${table.name}  rows=${table.rows}  ${toMB(table.bytes).toFixed(2)} MB`);
+  }
+  console.log(`  TOTAL  tables=${tables.length}  ${toMB(totalBytes).toFixed(2)} MB (${formatBytes(totalBytes)})`);
+}
 async function status() {
   const { config } = await loadConfig();
   const path = join(resolve(config.statusDirectory || './portabase-status'), 'latest.json');
@@ -2421,6 +2741,20 @@ async function prune() {
   if (!candidates.length) return console.log('Nothing to prune.');
   for (const name of candidates) console.log(`${hasFlag('execute') ? 'DELETE' : 'WOULD DELETE'}  ${name}`);
   if (!hasFlag('execute')) return console.log('\nDRY RUN ONLY. Add --execute after reviewing the exact capsule IDs.');
+  const metas = [];
+  for (const name of capsules) {
+    try {
+      metas.push(JSON.parse(await readFile(join(root, name, 'capsule.json'), 'utf8')));
+    } catch { /* foreign or partial directory; prune matches by name only */ }
+  }
+  const protectedIds = findProtectedBaselines(metas);
+  const blocked = candidates.filter(name => protectedIds.has(name));
+  if (blocked.length) {
+    const dependents = metas
+      .filter(meta => meta.baselineCapsuleId && blocked.includes(meta.baselineCapsuleId))
+      .map(meta => `${meta.id} needs ${meta.baselineCapsuleId}`);
+    throw new Error(`Refusing to prune baselines still referenced by deltas: ${blocked.join(', ')} (${dependents.join('; ')}). Prune the deltas first.`);
+  }
   for (const name of candidates) await rm(join(root, name), { recursive: true });
 }
 
@@ -2459,7 +2793,118 @@ async function plan() {
   console.log(`Portabase recovery plan (open core)\n\nProject: ${config.projectRef}\nDestination: ${config.provider.type}\nEncrypted staging: ${resolve(config.backupDirectory)}\n`);
   for (const name of ['database', 'storage', 'functions']) console.log(`${config.capture?.[name] === false ? 'SKIP' : 'KEEP'}  ${name}`);
   console.log(`\nRetention: keep ${config.retention?.keepLast ?? 30}; pruning is guarded and dry-run by default.`);
+  const showSelection = (label, flagName, configValue, validate) => {
+    try {
+      const entries = validate(resolveSelectionOption(flagName, configValue));
+      console.log(`Selection ${label}: ${entries.length ? entries.join(', ') : '(all)'}`);
+    } catch (error) {
+      console.log(`Selection ${label}: INVALID — ${error.message}`);
+    }
+  };
+  showSelection('--include-table-data (row data only here)', 'include-table-data', config.capture?.includeTableData, validateIncludeTableData);
+  showSelection('--exclude-table-data (DDL only here)', 'exclude-table-data', config.capture?.excludeTableData, validateExcludeTableData);
+  showSelection('--include-buckets (objects only here)', 'include-buckets', config.capture?.includeBuckets, validateIncludeBuckets);
+  showSelection('--exclude-buckets (skipped entirely)', 'exclude-buckets', config.capture?.excludeBuckets, validateExcludeBuckets);
   console.log('Credentials and encryption keys remain local. No Portabase API or telemetry endpoint is contacted.');
+}
+
+const UI_DATABASE_SQL = `SELECT json_build_object(
+  'databaseBytes', pg_database_size(current_database()),
+  'serverVersion', current_setting('server_version'),
+  'tables', (SELECT COALESCE(json_agg(json_build_object(
+      'schema', n.nspname, 'name', c.relname,
+      'rows', GREATEST(c.reltuples, 0)::bigint, 'analyzed', c.reltuples >= 0,
+      'bytes', pg_total_relation_size(c.oid), 'tableBytes', pg_relation_size(c.oid), 'indexBytes', pg_indexes_size(c.oid),
+      'rls', c.relrowsecurity) ORDER BY pg_total_relation_size(c.oid) DESC), '[]'::json)
+    FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relkind IN ('r','p') AND n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'),
+  'extensions', (SELECT COALESCE(json_agg(json_build_object('name', extname, 'version', extversion) ORDER BY extname), '[]'::json) FROM pg_catalog.pg_extension),
+  'authUsers', (SELECT count(*) FROM auth.users),
+  'policies', (SELECT count(*) FROM pg_catalog.pg_policies WHERE ${APPLICATION_SCHEMA_SQL}),
+  'views', (SELECT count(*) FROM pg_catalog.pg_views WHERE ${APPLICATION_SCHEMA_SQL})
+)::text;`;
+
+/** Read-only snapshot for `portabase ui`: names, counts and sizes — never credential values. */
+export async function collectUiSnapshot(config, trial) {
+  const layer = async (fn) => {
+    try { return { ok: true, data: await fn() }; } catch (error) { return { ok: false, error: error.message }; }
+  };
+  const passphraseEnv = config.encryption?.passphraseEnv || 'PORTABASE_ENCRYPTION_PASSPHRASE';
+  const readiness = {
+    env: {
+      SUPABASE_DB_URL: Boolean(process.env.SUPABASE_DB_URL),
+      SUPABASE_URL: Boolean(process.env.SUPABASE_URL),
+      SUPABASE_SERVICE_ROLE_KEY: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+      SUPABASE_ACCESS_TOKEN: Boolean(process.env.SUPABASE_ACCESS_TOKEN),
+      passphrase: (process.env[passphraseEnv] || '').length >= 16,
+      passphraseEnv,
+    },
+    tools: Object.fromEntries(['pg_dump', 'pg_dumpall', 'psql', 'supabase', 'tar'].map(name => [name, Boolean(resolveTool(name))])),
+  };
+  const [database, storage, functions] = await Promise.all([
+    layer(async () => {
+      if (!process.env.SUPABASE_DB_URL) throw new Error('SUPABASE_DB_URL is not set.');
+      return JSON.parse(psqlValue(process.env.SUPABASE_DB_URL, UI_DATABASE_SQL));
+    }),
+    layer(async () => {
+      const buckets = await (await checkedSourceFetch('/storage/v1/bucket')).json();
+      const rows = await mapPool(buckets, 8, async (bucket) => {
+        const objects = await listBucketObjects(bucket.id);
+        return {
+          id: bucket.id,
+          public: Boolean(bucket.public),
+          fileSizeLimit: bucket.file_size_limit ?? null,
+          objectCount: objects.length,
+          totalBytes: objects.reduce((total, object) => total + (Number(object.metadata?.size) || 0), 0),
+        };
+      });
+      return { buckets: rows, objectCount: rows.reduce((t, b) => t + b.objectCount, 0), totalBytes: rows.reduce((t, b) => t + b.totalBytes, 0) };
+    }),
+    layer(async () => {
+      const list = await managementApiJson(`/v1/projects/${config.projectRef}/functions`);
+      return (Array.isArray(list) ? list : list?.functions || []).map(fn => ({
+        slug: fn.slug, name: fn.name, status: fn.status, version: fn.version, verifyJwt: fn.verify_jwt !== false, updatedAt: fn.updated_at ?? null,
+      }));
+    }),
+  ]);
+  const { buildChecklist, classifyTable, schemaMatches } = await import('./ui/checklist.mjs');
+  if (database.ok) {
+    for (const table of database.data.tables) {
+      const verdict = classifyTable(table.schema, table.name, { trial });
+      table.platform = schemaMatches(table.schema, PLATFORM_SCHEMA_EXCLUDES);
+      table.capsule = verdict.structure.keep && verdict.rows.keep ? 'structure + rows'
+        : verdict.structure.keep ? 'structure' : verdict.rows.keep ? 'rows' : 'recreated';
+    }
+  }
+  return {
+    generatedAt: new Date().toISOString(),
+    portabaseVersion: VERSION,
+    project: { ref: config.projectRef, destination: config.provider.type, capture: config.capture || {}, edition: trial ? 'trial' : 'community' },
+    readiness,
+    database,
+    storage,
+    functions,
+    checklist: buildChecklist({ config, trial, readiness, database, storage, functions }),
+  };
+}
+
+function openInBrowser(url) {
+  const [cmd, args] = process.platform === 'win32' ? ['rundll32', ['url.dll,FileProtocolHandler', url]]
+    : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
+  try { spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true }).unref(); } catch { /* URL is printed anyway */ }
+}
+
+async function ui() {
+  const { config } = await loadConfig();
+  const trial = hasFlag('trial');
+  const { startUiServer } = await import('./ui/server.mjs');
+  const port = Number(flag('port', 0));
+  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('--port must be 0-65535.');
+  const session = await startUiServer({ port, collect: () => collectUiSnapshot(config, trial) });
+  console.log(`Portabase UI (read-only) for ${config.projectRef}\n\n  ${session.url}\n\nListening on ${session.address.address}:${session.address.port} only. The page can reach this process and nothing else.\nThe #t= part is a one-launch session token; it never leaves your machine. Ctrl+C to stop.`);
+  if (!hasFlag('no-open')) openInBrowser(session.url);
+  await new Promise(resolveStop => process.once('SIGINT', resolveStop));
+  await session.close();
 }
 
 async function probeToken() {
@@ -2540,18 +2985,48 @@ Commands:
   init                Create a non-secret configuration
   doctor              Test tools, credentials, destination, and live authorization
   plan                Show the capture and destination plan
+  ui                  Local read-only GUI: inventory, sizes, capsule checklist
+                      (127.0.0.1 only; --port N, --no-open, --trial)
   backup              Capture, encrypt, transfer, and verify a capsule
                       Default: full community capture (no license)
                       Add --trial for a deliberately limited demo sample
                       Add --storage-first-per-bucket for full DB/Functions/Auth
                         but only the first Storage object in each bucket
+                      --exclude-table-data schema.t1,schema.t2
+                        Skip row data for these tables (schema DDL still dumped)
+                        Config: capture.excludeTableData (array)
+                      --include-table-data schema.t1,schema.t2
+                        Row data ONLY for these tables (DDL still dumped for all;
+                        needs psql). Conflicts with --exclude-table-data.
+                        Config: capture.includeTableData (array)
+                      --exclude-buckets b1,b2
+                        Skip these Storage buckets entirely
+                        Config: capture.excludeBuckets (array)
+                      --include-buckets b1,b2
+                        Capture objects ONLY from these buckets.
+                        Conflicts with --exclude-buckets.
+                        Config: capture.includeBuckets (array)
+                      --delta --baseline <dir>
+                        Delta capsule: capture everything, then store only layers
+                        changed since the baseline manifest. The baseline is read
+                        from its manifest only — its contents are never opened.
+                        Unchanged layers are referenced by hash, never re-stored.
+                      --incremental-binary
+                        Whole files only, never a partial file. A binary whose
+                        date stamp is greater than the prior copy is differential
+                        and the entire file is fetched. An equal or older stamp
+                        reuses the local whole file. Etag does not decide this.
+                        Config: capture.incrementalBinary (boolean)
+                        Cloud: POST /api/cloud/jobs { incrementalBinary: true }
                       Local Starter: add --allow-large-local to bypass ${LOCAL_STARTER_MAX_LABEL} cap
   verify              Verify checksums; add --decrypt for authenticated decryption
+                      --report-drift   opt-in MD5 / row-count / RBAC drift report
   simulate            Offline validation: decrypt, unpack, match layers to manifest
                       No Supabase destination required. Optional --json
                       Add --restore-plan <file> to sample/validate only the plan's
                       selected tables/buckets/functions (no target project needed)
   status              Show the last durable backup result
+  sizes               Show bucket totals (files + size) and tables ranked by MB, descending
   prune               Preview retention; add --execute to delete recognized capsules
   install-schedule    Preview a scheduled backup; add --execute to install
   remove-schedule     Preview task removal; add --execute to remove
@@ -2561,15 +3036,23 @@ Commands:
                       Edit "selected": false on entries to trim; --output <file>
                       --max-restore-bytes <n> --force (overwrite) --json
   restore             Decrypt and plan restore; execution requires two target guards
+                        Delta capsules need --baseline <full capsule directory>
                       Add --restore-plan <file> to restore only the plan's selected
                       tables/buckets/functions (hard-stops if the plan is over budget
                       or was generated for a different capsule)
+                      --fill-missing   absent-only Storage/DB fill (not incremental sync)
+                      --writers N      parallel writers (default 1)
   replay              Validate a capsule by restoring into a NEW Supabase project
                       (never the source). Requires target env vars + --confirm-target.
                       Same guards as restore --execute; clearer validation report.
                       Dirty-target drill: --allow-occupied-target
                       Same-ref drill:     --allow-source-target (with --confirm-target)
                       Accepts --restore-plan <file> the same as restore
+  export-manifest     Name-only inventory (layers, tables, buckets, checksums — no secrets)
+  capsule-unload      List unloadable layer names for a runner (still ciphertext)
+  aws inventory       Scripted vs binary AWS inventory from --fixture <json> (read-only)
+  aws doctor          will-copy / will-warn / will-fail (never claims proven; no snapshots)
+  aws plan            Dry-run runbook: inventory → doctor → latest backup → export → seal
 
 Optional Cloud:
   Set cloud.enabled=true and PORTABASE_CLOUD_URL / PORTABASE_CLOUD_TOKEN
@@ -2623,15 +3106,58 @@ async function replay() {
   }
 }
 
+function namesOnlyCapsuleReport(metadata, mode = 'export-manifest') {
+  const contents = metadata.contents || {};
+  return {
+    command: mode,
+    id: metadata.id || null,
+    status: metadata.status || null,
+    projectRef: metadata.projectRef || null,
+    createdAt: metadata.createdAt || null,
+    layers: Object.keys(contents),
+    layerComplete: Object.fromEntries(Object.entries(contents).map(([k, v]) => [k, Boolean(v?.complete)])),
+    errors: Array.isArray(metadata.errors) ? metadata.errors : [],
+    hasEncryption: Boolean(metadata.encryption),
+    secretsIncluded: false,
+    note: 'Names and status only. Passphrase, keys, and object bytes are not written.',
+  };
+}
+
+async function exportManifest() {
+  const capsuleDir = resolve(flag('capsule', argv[1] || ''));
+  if (!capsuleDir || !existsSync(join(capsuleDir, 'capsule.json'))) {
+    throw new Error('export-manifest requires --capsule <dir> with capsule.json');
+  }
+  const metadata = JSON.parse(await readFile(join(capsuleDir, 'capsule.json'), 'utf8'));
+  const report = namesOnlyCapsuleReport(metadata, 'export-manifest');
+  const out = flag('out', join(capsuleDir, 'export-manifest.json'));
+  await writeFile(out, `${JSON.stringify(report, null, 2)}\n`);
+  console.log(`export-manifest wrote ${out} (names only; no secrets)`);
+}
+
+async function capsuleUnload() {
+  const capsuleDir = resolve(flag('capsule', argv[1] || ''));
+  if (!capsuleDir || !existsSync(join(capsuleDir, 'capsule.json'))) {
+    throw new Error('capsule-unload requires --capsule <dir> with capsule.json');
+  }
+  const metadata = JSON.parse(await readFile(join(capsuleDir, 'capsule.json'), 'utf8'));
+  const report = namesOnlyCapsuleReport(metadata, 'capsule-unload');
+  report.unloadable = report.layers.filter((name) => report.layerComplete[name]);
+  report.stillCiphertext = true;
+  console.log(JSON.stringify(report, null, 2));
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
     if (command === 'init') await init();
     else if (command === 'doctor') await doctor();
     else if (command === 'plan') await plan();
+    else if (command === 'ui') await ui();
     else if (command === 'backup') await backup();
     else if (command === 'verify') await verify();
     else if (command === 'simulate') await simulate();
     else if (command === 'status') await status();
+    else if (command === 'sizes') await sizes();
     else if (command === 'prune') await prune();
     else if (command === 'install-schedule') await installSchedule();
     else if (command === 'remove-schedule') await removeSchedule();
@@ -2639,6 +3165,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     else if (command === 'restore') await restore();
     else if (command === 'replay') await replay();
     else if (command === 'probe') await probe();
+    else if (command === 'export-manifest') await exportManifest();
+    else if (command === 'capsule-unload') await capsuleUnload();
+    else if (command === 'aws') {
+      const awsResult = await runAwsCli(argv.slice(1));
+      if (awsResult?.exitCode) process.exitCode = awsResult.exitCode;
+    }
     else help();
   } catch (error) {
     console.error(`\nPortabase failed: ${error.message}`);

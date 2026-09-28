@@ -3,22 +3,32 @@ import './console.css';
 import { Icon } from './icons.jsx';
 import {
   loadConsoleState, saveConsoleState, resetConsoleState, updateConsoleState,
+  emptyWorkspace, loadLiveConsoleState, saveLiveConsoleState,
 } from './data/store.js';
 import { CLOUD_VERSIONS, normalizeCloudVersion, getStoredCloudVersion, setStoredCloudVersion, isSupabaseOnlyLaunch } from '../lib/cloud-versions.js';
 import { clearSession, loadSession, sessionCloudVersion, sessionUser } from '../lib/session.js';
-import { ensureSessionForVersion, fetchMe, startTrialCheckout, confirmCheckout, requestSelfRefund } from '../lib/cloud-api.js';
+import { ensureSessionForVersion, fetchMe, fetchDashboard, startTrialCheckout, startAddonCheckout, confirmCheckout } from '../lib/cloud-api.js';
+import { getCloudPlan } from '../lib/product.js';
 import * as supabaseAuth from '../lib/supabase-auth.js';
 import * as awsAuth from '../lib/cognito.js';
 import {
   OverviewPage, ProjectsPage, ProjectDetailPage, RestoresPage,
   BackupsHubPage, AgentsHubPage, AlertsHubPage, AccountHubPage,
 } from './pages.jsx';
+import { TelemetryPage } from './telemetry-page.jsx';
+import { OpenCapsulePage } from './open-capsule.jsx';
+import { SupabaseViewerPage } from './supabase-viewer.jsx';
+import { CustomerDashboardPage } from './customer-dashboard.jsx';
 
 /** Portabase-native IA — recovery ops only (not a Supabase Studio clone). */
 const NAV = [
-  { id: 'home', label: 'Home', icon: 'home' },
+  { id: 'dashboard', label: 'Dashboard', icon: 'home' },
+  { id: 'home', label: 'Ops home', icon: 'activity' },
   { id: 'projects', label: 'Sources', icon: 'folder' },
+  { id: 'supabase-viewer', label: 'Live Supabase', icon: 'table' },
   { id: 'backups', label: 'Capsules', icon: 'capsule' },
+  { id: 'telemetry', label: 'Telemetry', icon: 'chart' },
+  { id: 'inspect', label: 'Open capsule', icon: 'key' },
   { id: 'agents', label: 'Agents', icon: 'cpu' },
   { id: 'alerts', label: 'Alerts', icon: 'bell' },
   { id: 'restore', label: 'Replay', icon: 'restore' },
@@ -35,12 +45,27 @@ const ALIASES = {
   destinations: 'account',
   restores: 'restore',
   activity: 'alerts',
-  reports: 'home',
+  reports: 'telemetry',
+  telemetry: 'telemetry',
+  inspect: 'inspect',
+  open: 'inspect',
+  live: 'supabase-viewer',
+  'supabase-viewer': 'supabase-viewer',
+  studio: 'supabase-viewer',
   runners: 'agents',
+  seal: 'agents',
+  'seal-keys': 'agents',
   team: 'account',
   billing: 'account',
   settings: 'account',
-  onboarding: 'home',
+  onboarding: 'dashboard',
+  dashboard: 'dashboard',
+  log: 'dashboard',
+  'backup-log': 'dashboard',
+  utilities: 'dashboard',
+  charts: 'dashboard',
+  sizer: 'dashboard',
+  'table-sizer': 'dashboard',
 };
 
 function parseRoute() {
@@ -49,9 +74,14 @@ function parseRoute() {
   const parts = path.split('/').filter(Boolean);
   let page = 'home';
   let id = null;
-  if (parts[0] === 'app') {
+  if (parts[0] === 'dashboard') {
+    page = 'dashboard';
+  } else if (parts[0] === 'app') {
     if (parts[1] === 'projects' && parts[2]) { page = 'project'; id = parts[2]; }
     else if (parts[1]) page = parts[1];
+    else page = 'dashboard';
+  } else if (parts[0] === 'tools' && parts[1] === 'supabase-viewer') {
+    page = 'supabase-viewer';
   }
   if (window.location.hash.startsWith('#/')) {
     const h = window.location.hash.slice(2).split('/');
@@ -66,18 +96,27 @@ function parseRoute() {
     version: normalizeCloudVersion(params.get('version') || sessionCloudVersion() || getStoredCloudVersion()),
     checkout: params.get('checkout'),
     attempt: params.get('attempt'),
+    addon: params.get('addon'),
     accountTab: params.get('tab') || null,
+    dashboardTab: params.get('section') || params.get('tab') || null,
   };
+}
+
+function isDemoMode() {
+  return new URLSearchParams(window.location.search).get('demo') === '1'
+    || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('portabase.console.demo') === '1');
 }
 
 function buildPath(page, { id, version, tab } = {}) {
   const v = version || getStoredCloudVersion();
-  let path = '/app';
-  if (page === 'home') path = '/app';
+  let path = '/dashboard';
+  if (page === 'dashboard') path = '/dashboard';
+  else if (page === 'home') path = '/app/home';
   else if (page === 'project' && id) path = `/app/projects/${id}`;
   else path = `/app/${page}`;
   const q = new URLSearchParams({ version: v });
   if (tab) q.set('tab', tab);
+  if (isDemoMode()) q.set('demo', '1');
   return `${path}?${q}`;
 }
 
@@ -91,6 +130,9 @@ export function ConsoleApp() {
   const [sideOpen, setSideOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
   const [search, setSearch] = useState('');
+  const [liveJobs, setLiveJobs] = useState(null);
+  const [liveDashboard, setLiveDashboard] = useState(false);
+  const [square, setSquare] = useState(null);
 
   const version = route.version;
   const meta = CLOUD_VERSIONS[version] || CLOUD_VERSIONS.supabase;
@@ -103,11 +145,14 @@ export function ConsoleApp() {
   }, []);
 
   const setState = useCallback((mutator) => {
+    const demo = sessionStorage.getItem('portabase.console.demo') === '1'
+      || new URLSearchParams(window.location.search).get('demo') === '1';
     setStateRaw(current => {
-      const base = current || loadConsoleState(user);
+      const base = current || (demo ? loadConsoleState(user) : loadLiveConsoleState(user));
       const draft = structuredClone(base);
       const next = typeof mutator === 'function' ? mutator(draft) : mutator;
-      saveConsoleState(next);
+      if (demo) saveConsoleState(next);
+      else saveLiveConsoleState(next);
       return next;
     });
   }, [user]);
@@ -149,31 +194,41 @@ export function ConsoleApp() {
         }
         if (route.checkout === 'complete' && !demoMode) {
           try {
-            await confirmCheckout({ attempt: route.attempt, version });
-            toast('Trial started — card on file', 'ok');
+            const confirmed = await confirmCheckout({ attempt: route.attempt, version, addon: route.addon });
+            toast(confirmed?.addon === 'extra-transfers'
+              ? 'Extra transfers add-on is on — up to 3 / 24h'
+              : 'Trial started — card on file', 'ok');
           } catch (e) {
             toast(e.message || 'Checkout confirmation pending', 'danger');
           }
           window.history.replaceState({}, '', buildPath(route.page === 'overview' ? 'overview' : route.page, { id: route.id, version }));
         }
         const profile = session.user || sessionUser(session) || { id: 'demo-user', email: 'demo@portabase.dev', name: 'Demo operator' };
-        const consoleState = loadConsoleState({ ...profile, cloudVersion: version });
+        const consoleState = demoMode
+          ? loadConsoleState({ ...profile, cloudVersion: version })
+          : loadLiveConsoleState({ ...profile, cloudVersion: version });
         if (!cancelled) {
           setStateRaw(consoleState);
           setReady(true);
         }
         if (demoMode) {
-          if (!cancelled) setMe({ user: profile, access: { hasAccess: true, status: 'trialing', label: '7-day trial (demo)' }, subscription: consoleState.billing });
+          if (!cancelled) {
+            setMe({ user: profile, access: { hasAccess: true, status: 'trialing', label: '7-day trial (demo)' }, subscription: consoleState.billing });
+            setLiveJobs(null);
+            setLiveDashboard(false);
+            setSquare(null);
+          }
           return;
         }
         try {
           const data = await fetchMe(version);
           if (!cancelled) {
             setMe(data);
+            if (data.square) setSquare(data.square);
             if (data.subscription) {
               setStateRaw(s => {
                 const next = { ...s, billing: { ...s.billing, ...data.subscription, cloudVersion: version } };
-                saveConsoleState(next);
+                saveLiveConsoleState(next);
                 return next;
               });
             }
@@ -181,7 +236,32 @@ export function ConsoleApp() {
         } catch (err) {
           if (err.status === 401) {
             clearSession();
-            window.location.replace(`/login?version=${version}&next=/app`);
+            window.location.replace(`/login?version=${version}&next=/dashboard`);
+          }
+        }
+        try {
+          const dash = await fetchDashboard(version);
+          if (!cancelled) {
+            setLiveJobs(Array.isArray(dash.jobs) ? dash.jobs : []);
+            setLiveDashboard(Boolean(dash.live));
+            if (dash.proof) {
+              setStateRaw(s => {
+                const next = { ...s, proofReport: dash.proof.proven ? dash.proof : s.proofReport, jobs: dash.jobs || [] };
+                saveLiveConsoleState(next);
+                return next;
+              });
+            } else {
+              setStateRaw(s => {
+                const next = { ...s, jobs: dash.jobs || [] };
+                saveLiveConsoleState(next);
+                return next;
+              });
+            }
+          }
+        } catch {
+          if (!cancelled) {
+            setLiveJobs([]);
+            setLiveDashboard(false);
           }
         }
       } catch (e) {
@@ -190,6 +270,30 @@ export function ConsoleApp() {
     })();
     return () => { cancelled = true; };
   }, [version]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const startAddon = async () => {
+    if (sessionStorage.getItem('portabase.console.demo') === '1') {
+      setStateRaw((s) => {
+        const next = { ...s, billing: { ...s.billing, extraTransfersAddon: true, transfersPer24h: 3 } };
+        saveConsoleState(next);
+        return next;
+      });
+      setMe((m) => (m ? { ...m, subscription: { ...m.subscription, extraTransfersAddon: true, transfersPer24h: 3 } } : m));
+      toast('Demo: Extra transfers add-on on — up to 3 / 24h', 'ok');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await startAddonCheckout(version);
+      if (result.url) window.location.href = result.url;
+      else toast(result.message || 'Add-on checkout URL missing', 'danger');
+    } catch (e) {
+      if (e.data?.error === 'checkout_blocked' && e.data) setSquare(e.data);
+      toast(e.message || 'Add-on checkout failed', 'danger');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const startTrial = async (planId = 'cloud-17') => {
     if (sessionStorage.getItem('portabase.console.demo') === '1') {
@@ -208,28 +312,8 @@ export function ConsoleApp() {
       if (result.url) window.location.href = result.url;
       else toast('Checkout URL missing', 'danger');
     } catch (e) {
+      if (e.data?.error === 'checkout_blocked' && e.data) setSquare(e.data);
       toast(e.message || 'Checkout failed', 'danger');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const requestRefund = async () => {
-    if (sessionStorage.getItem('portabase.console.demo') === '1') {
-      toast('Demo mode — refund is not sent to Square', 'ok');
-      return;
-    }
-    if (!window.confirm('This refunds any first charge still inside the 7-day window, cancels Square, and closes Cloud access. Capsules in your vault stay. Continue?')) {
-      return;
-    }
-    setBusy(true);
-    try {
-      const result = await requestSelfRefund(version);
-      toast(result.message || 'Account closed', 'ok');
-      const data = await fetchMe(version);
-      setMe(data);
-    } catch (e) {
-      toast(e.message || 'Refund failed', 'danger');
     } finally {
       setBusy(false);
     }
@@ -291,7 +375,11 @@ export function ConsoleApp() {
     params: { id: route.id },
     busy,
     startTrial,
-    requestRefund,
+    startAddon,
+    demoMode: sessionStorage.getItem('portabase.console.demo') === '1',
+    liveJobs,
+    live: liveDashboard,
+    square,
     resetDemo: () => {
       const next = resetConsoleState({ ...user, cloudVersion: version });
       setStateRaw(next);
@@ -304,11 +392,15 @@ export function ConsoleApp() {
     case 'projects': body = <ProjectsPage {...pageProps} />; break;
     case 'project': body = <ProjectDetailPage {...pageProps} />; break;
     case 'backups': body = <BackupsHubPage {...pageProps} />; break;
-    case 'agents': body = <AgentsHubPage {...pageProps} />; break;
+    case 'telemetry': body = <TelemetryPage {...pageProps} />; break;
+    case 'inspect': body = <OpenCapsulePage {...pageProps} />; break;
+    case 'supabase-viewer': body = <SupabaseViewerPage {...pageProps} />; break;
+    case 'agents': body = <AgentsHubPage {...pageProps} tab={route.dashboardTab === 'seal' ? 'seal' : undefined} />; break;
     case 'alerts': body = <AlertsHubPage {...pageProps} />; break;
     case 'restore': body = <RestoresPage {...pageProps} />; break;
     case 'account': body = <AccountHubPage {...pageProps} tab={route.accountTab} />; break;
-    default: body = <OverviewPage {...pageProps} />;
+    case 'dashboard': body = <CustomerDashboardPage {...pageProps} section={route.dashboardTab === 'billing' ? 'overview' : (route.dashboardTab || 'overview')} />; break;
+    default: body = <CustomerDashboardPage {...pageProps} section="overview" />;
   }
 
   const crumb = route.page === 'project'
@@ -326,7 +418,7 @@ export function ConsoleApp() {
         <div className="pb-ws">
           <small>Workspace</small>
           <strong>{state.workspace.name}</strong>
-          <span>{meta.short} · {state.billing.status}</span>
+          <span>{meta.short} · {getCloudPlan(state.billing?.plan || state.billing?.planId).shortLabel} · {state.billing.status}</span>
         </div>
         <nav className="pb-nav">
           <div className="pb-nav-section">Recovery</div>
@@ -375,6 +467,7 @@ export function ConsoleApp() {
             </div>
             <button type="button" className="pb-btn pb-btn-sm" onClick={() => navigate('account', { tab: 'billing' })}>
               <BadgeInline status={state.billing.status} />
+              <span style={{ marginLeft: 6 }}>{getCloudPlan(me?.subscription?.plan || state.billing?.plan).shortLabel}</span>
             </button>
             <span className="pb-badge pb-badge-acid" style={{ height: 28, padding: '0 10px' }}>Supabase</span>
             <a className="pb-btn pb-btn-sm pb-btn-ghost" href="/cloud" target="_blank" rel="noreferrer">

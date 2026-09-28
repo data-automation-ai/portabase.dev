@@ -65,10 +65,11 @@ Do **not** thrash C: for multi‑GB Storage capture. Disk is tight; user rejects
 | --- | --- |
 | Gateway | **Square** |
 | Base | **$17/mo** |
-| Included | **1 backup cycle per 24 hours** (workspace) |
-| Plans | **$17/mo** · 1 escape / 24h · or · **$27/mo** · up to 3 escapes / day |
+| Cloud Free | **100 MB** · dashboard + **manual only** (no scheduled service) |
+| Included | **$7** = 1 capsule / 24h · **$17** = 3 capsules / day |
+| Plans | **$7 / one DB / 10 GB** · **$17 / unlimited DBs / 25 GB** · `$37` hidden legacy |
 | Agents | Up to **12** |
-| SMS | Success **and** failure at run time (console: Alerts → SMS texts) |
+| SMS | Optional on **$17 / $37** (Twilio). Status only — never keys, capsule bytes, or customer data. |
 | Trial | 7 days, **card required**, auto-convert |
 | Vault | **Customer BYO** — not Portabase object storage |
 | Staging (Cloud) | **Portabase managed runners** — not customer laptop |
@@ -172,12 +173,16 @@ Engine already supports `aws`, dropbox/gdrive via rclone, `local`. **OAuth Dropb
 
 Public page: **`/security`** (alias `/trust`). Spec: `docs/SECURITY-TRUST.md`.
 
-**Up front:** On managed Cloud, a runner must use crypto for the job window → **possibility Portabase can see or use key material**. Customer KMS / CloudTrail / CloudWatch **reduce** that; they do **not** claim zero. Zero vendor key path → **standalone OSS only**.
+**Up front:** On managed Cloud, a runner must use crypto for the job window → **possibility Portabase can see or use key material**. Customer KMS / CloudTrail / CloudWatch **reduce** that; they do **not** claim zero. Zero vendor key path → **standalone open source only**.
 
 Trust dial: Trust Portabase · mix controls · max (KMS+Trail+CW) · standalone.
 
 Console:
 
+- **Provably zero-knowledge** — control plane cannot see object names, rows, plaintext, or sealing keys (`docs/ZERO-KNOWLEDGE.md`)
+- **Telemetry** — graphical health signals only (no object names, rows, or plaintext inventory)
+- **Open capsule** — local file / CLI `verify --decrypt`. Passphrase never posted to Cloud. Browser decrypt is an honest stub. No server-side decrypt path.
+- **Live Supabase viewer** — browser-only live project explorer (`/app/supabase-viewer`). Keys/results never posted to Cloud. Not a capsule viewer.
 - **Account → CloudWatch live** — secret-scoped job logs (`/api/cloud/cloudwatch-live`)
 - **Account → CloudTrail live** — customer Trail via AssumeRole (`/api/cloud/audit-trail`)
 
@@ -196,6 +201,7 @@ portabase.dev/
   docs/SECURITY-TRUST.md
   docs/REPLAY.md
   docs/CLOUD_CONSOLE.md
+  docs/ZERO-KNOWLEDGE.md
   docs/CLOUD_INFRASTRUCTURE.md
   docs/AUTH_AND_TRIAL.md
   src/main.jsx              # Marketing + routes
@@ -385,7 +391,8 @@ Local env: `.env.portabase.local` (source) · `.env.replay-target.local` (target
 5. **`docs/PRODUCT_SPEC.md`** · **`docs/LAUNCH-SCOPE.md`** · **`docs/OPEN_CORE.md`**  
 6. **`docs/SECURITY-TRUST.md`** · **`docs/BILLING.md`**  
 7. **`docs/CLOUD_CONSOLE.md`** · **`docs/CLOUD_INFRASTRUCTURE.md`** · **`docs/AUTH_AND_TRIAL.md`**  
-8. **`docs/ESSENTIALS_RUNBOOK.md`** (CLI operator path)
+8. **`docs/ESSENTIALS_RUNBOOK.md`** (CLI operator path)  
+9. **`docs/AWS_CAPSULE.md`** · **`docs/AWS_INVENTORY.md`** · **`docs/AWS_RUN_PLAN.md`** · **`docs/AWS_RUNNER_AUTH.md`** (AWS escape scaffold — not proven; binaries = most recent backups; runner-local AWS creds; `aws plan` is dry-run)
 
 ---
 

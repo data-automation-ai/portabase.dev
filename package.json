@@ -39,6 +39,7 @@
     "portabase": "node utility/portabase.mjs",
     "trial": "node utility/portabase.mjs backup --trial",
     "test": "node --test utility/*.test.mjs tests/*.test.mjs tests/*.test.cjs src/console/data/*.test.mjs",
+    "cloud:store": "node cloud/control-plane/cli.mjs",
     "desktop": "electron .",
     "desktop:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stage-desktop-tools.ps1 && electron-builder --win nsis",
     "desktop:linux": "node -e \"console.error('Launch desktop is Windows 11 only. Use the open-source CLI on Linux.'); process.exit(1)\"",
@@ -54,6 +55,7 @@
     "aws-jwt-verify": "^5.2.1",
     "react": "19.2.7",
     "react-dom": "19.2.7",
+    "recharts": "^2.15.4",
     "square": "^44.2.0",
     "supabase": "2.109.1"
   },
