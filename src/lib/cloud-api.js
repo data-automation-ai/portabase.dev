@@ -94,6 +94,11 @@ export function queueCloudJob(body, version) {
   return api('/api/cloud/jobs', { method: 'POST', body, version });
 }
 
+/** Live runner telemetry for the user's own projects (7d default, 30d max server-side). */
+export function fetchTelemetryEvents(version, days = 7) {
+  return api(`/api/cloud/telemetry-events?days=${encodeURIComponent(days)}`, { version });
+}
+
 export function fetchCloudJobs(version) {
   return api('/api/cloud/jobs', { version });
 }

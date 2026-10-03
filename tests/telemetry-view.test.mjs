@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildTelemetryModel,
+  liveEventToHealthEvent,
   sanitizeHealthEvent,
   telemetryForbiddenCopy,
 } from '../src/lib/telemetry-view.js';
@@ -57,5 +58,44 @@ test('buildTelemetryModel is health-signals-only aggregates over 7 days', () => 
   assert.equal(model.totals.driftFail, 1);
   assert.doesNotMatch(JSON.stringify(model), /nope\.bin|objectName|tableRows/);
   assert.ok(telemetryForbiddenCopy().some((item) => /object names/i.test(item)));
+  assert.equal(model.mocked, true);
   assert.ok(telemetryForbiddenCopy().some((item) => /plaintext/i.test(item)));
+});
+
+test('liveEventToHealthEvent adapts ingest events without leaking payload detail', () => {
+  const ok = liveEventToHealthEvent({
+    eventType: 'backup.completed',
+    occurredAt: '2026-10-03T10:00:00.000Z',
+    projectRef: 'abcdefghijklmnopqrst',
+    payload: { status: 'COMPLETE', capsuleId: 'cap-1' },
+  });
+  assert.equal(ok.type, 'backup.completed');
+  assert.equal(ok.level, 'ok');
+  assert.ok(ok.summary.includes('backup.completed'));
+  assert.ok(ok.summary.includes('COMPLETE'));
+
+  const failed = liveEventToHealthEvent({
+    eventType: 'backup.failed',
+    occurredAt: '2026-10-03T10:00:00.000Z',
+    projectRef: 'abcdefghijklmnopqrst',
+    payload: { status: 'FAILED', errorClass: 'backup_error' },
+  });
+  assert.equal(failed.level, 'error');
+
+  const unknown = liveEventToHealthEvent({ eventType: 'meter.daily', occurredAt: '2026-10-03T10:00:00.000Z' });
+  assert.equal(unknown.type, 'health.other');
+  assert.equal(unknown.level, 'info');
+
+  const sneaky = liveEventToHealthEvent({
+    eventType: 'job.completed',
+    occurredAt: '2026-10-03T10:00:00.000Z',
+    projectRef: 'abcdefghijklmnopqrst',
+    payload: { status: 'COMPLETE objectPath buckets/avatars/photo.png' },
+  });
+  assert.equal(sneaky.summary, 'health signal (detail stripped)');
+});
+
+test('buildTelemetryModel drops the mocked badge on live ingest', () => {
+  assert.equal(buildTelemetryModel({}).mocked, true);
+  assert.equal(buildTelemetryModel({ liveTelemetry: true }).mocked, false);
 });

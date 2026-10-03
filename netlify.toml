@@ -96,6 +96,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/cloud/telemetry-events"
+  to = "/.netlify/functions/cloud-telemetry-events"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

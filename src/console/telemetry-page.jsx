@@ -35,7 +35,7 @@ export function TelemetryPage({ state, navigate }) {
           <strong>{ZK_COPY.headline} · health signals only</strong>
           <p>
             {ZK_COPY.architecture} Forbidden from Cloud: {telemetryForbiddenCopy().join(' · ')}.
-            Series below are demo aggregates until live ingest is connected.
+            {model.mocked ? 'Series below are demo aggregates until live ingest is connected.' : 'Series below are live runner reports from your projects.'}
           </p>
         </div>
       </div>
@@ -47,7 +47,7 @@ export function TelemetryPage({ state, navigate }) {
             label="Job success"
             detail={`${t.success} ok · ${t.failed} failed`}
             tone={t.failed ? 'warn' : 'ok'}
-            mocked
+            mocked={model.mocked}
           />
         </div>
         <div className="pb-card">
@@ -56,7 +56,7 @@ export function TelemetryPage({ state, navigate }) {
             label="Rescue readiness"
             detail={`${t.rescueReady} verify-green`}
             tone={t.rescueReady ? 'ok' : 'warn'}
-            mocked
+            mocked={model.mocked}
           />
         </div>
         <div className="pb-card">
@@ -67,7 +67,7 @@ export function TelemetryPage({ state, navigate }) {
             usedLabel={formatBytes(t.encryptedBytes)}
             capLabel={usage.capLabel}
             tone={usage.percent > 85 ? 'warn' : 'ok'}
-            mocked
+            mocked={model.mocked}
           />
         </div>
         <div className="pb-card">
@@ -76,7 +76,7 @@ export function TelemetryPage({ state, navigate }) {
             label="Worker health"
             detail={`${t.agentsOnline}/${t.agentsTotal} online`}
             tone={t.agentsOnline ? 'ok' : 'danger'}
-            mocked
+            mocked={model.mocked}
           />
         </div>
       </div>
@@ -84,7 +84,7 @@ export function TelemetryPage({ state, navigate }) {
       <div className="pb-grid pb-grid-2" style={{ marginBottom: 14 }}>
         <div className="pb-card">
           <div className="pb-card-head"><h3>Success vs fail</h3><span>7-day</span></div>
-          <DualBarChart rows={model.series} mocked />
+          <DualBarChart rows={model.series} mocked={model.mocked} />
         </div>
         <div className="pb-card">
           <div className="pb-card-head"><h3>Encrypted bytes (aggregate)</h3><span>ciphertext totals</span></div>
@@ -93,7 +93,7 @@ export function TelemetryPage({ state, navigate }) {
             valueKey="encryptedBytes"
             label="Sealed size reported by runner"
             format={formatBytes}
-            mocked
+            mocked={model.mocked}
           />
         </div>
         <div className="pb-card">
@@ -103,7 +103,7 @@ export function TelemetryPage({ state, navigate }) {
             valueKey="durationMs"
             label="Capture duration"
             format={formatDuration}
-            mocked
+            mocked={model.mocked}
           />
         </div>
         <div className="pb-card">

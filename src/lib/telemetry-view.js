@@ -13,6 +13,10 @@ const HEALTH_EVENTS = new Set([
   'restore.completed',
   'schedule.missed',
   'agent.heartbeat',
+  'job.started',
+  'job.phase',
+  'job.completed',
+  'job.failed',
   'alert.escalated',
   'capsule.registered',
 ]);
@@ -28,6 +32,38 @@ export function dayKey(iso, now = Date.now()) {
 function cleanText(value, fallback = 'event') {
   const text = String(value ?? fallback).slice(0, 160);
   return FORBIDDEN_KEYS.test(text) ? 'health signal (detail stripped)' : text;
+}
+
+const LIVE_LEVEL = {
+  'backup.failed': 'error',
+  'verify.failed': 'error',
+  'job.failed': 'error',
+  'schedule.missed': 'warn',
+  'backup.completed': 'ok',
+  'job.started': 'info',
+  'job.phase': 'info',
+  'job.completed': 'ok',
+  'restore.completed': 'ok',
+  'job.completed': 'ok',
+};
+
+/**
+ * Adapt a live ingest event (buildTelemetryEvent shape) to the timeline
+ * health-event shape. Allowlisted scalar payload fields only — the payload
+ * allowlist is enforced server-side on read; this never adds new keys.
+ */
+export function liveEventToHealthEvent(event = {}) {
+  const type = HEALTH_EVENTS.has(event.eventType) ? event.eventType : 'health.other';
+  const payload = event.payload && typeof event.payload === 'object' ? event.payload : {};
+  const status = typeof payload.status === 'string' ? ` · ${payload.status.slice(0, 40)}` : '';
+  return sanitizeHealthEvent({
+    id: `${event.occurredAt || 'unknown'}-${type}`,
+    type,
+    projectRef: event.projectRef,
+    occurredAt: event.occurredAt,
+    level: LIVE_LEVEL[type] || 'info',
+    summary: `${type}${status}`,
+  });
 }
 
 /** Allowlisted envelope only — extra inventory keys are dropped, never graphed. */
@@ -76,7 +112,7 @@ export function buildTelemetryModel(state = {}, now = Date.now()) {
   });
 
   return {
-    mocked: true,
+    mocked: state.liveTelemetry !== true,
     privacy: 'health-signals-only',
     totals: {
       success,

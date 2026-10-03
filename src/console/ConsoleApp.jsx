@@ -7,7 +7,7 @@ import {
 } from './data/store.js';
 import { CLOUD_VERSIONS, normalizeCloudVersion, getStoredCloudVersion, setStoredCloudVersion, isSupabaseOnlyLaunch } from '../lib/cloud-versions.js';
 import { clearSession, loadSession, sessionCloudVersion, sessionUser } from '../lib/session.js';
-import { ensureSessionForVersion, fetchMe, fetchDashboard, startTrialCheckout, startAddonCheckout, confirmCheckout } from '../lib/cloud-api.js';
+import { ensureSessionForVersion, fetchMe, fetchDashboard, fetchTelemetryEvents, startTrialCheckout, startAddonCheckout, confirmCheckout } from '../lib/cloud-api.js';
 import { getCloudPlan } from '../lib/product.js';
 import * as supabaseAuth from '../lib/supabase-auth.js';
 import * as awsAuth from '../lib/cognito.js';
@@ -16,6 +16,7 @@ import {
   BackupsHubPage, AgentsHubPage, AlertsHubPage, AccountHubPage,
 } from './pages.jsx';
 import { TelemetryPage } from './telemetry-page.jsx';
+import { liveEventToHealthEvent } from '../lib/telemetry-view.js';
 import { OpenCapsulePage } from './open-capsule.jsx';
 import { SupabaseViewerPage } from './supabase-viewer.jsx';
 import { CustomerDashboardPage } from './customer-dashboard.jsx';
@@ -266,6 +267,27 @@ export function ConsoleApp() {
         }
       } catch (e) {
         if (!cancelled) setAuthError(e.message || 'Could not load console');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [version]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (isDemoMode()) return;
+      try {
+        const tel = await fetchTelemetryEvents(version);
+        if (!cancelled && tel && Array.isArray(tel.events) && tel.events.length) {
+          const live = tel.events.map(liveEventToHealthEvent);
+          setStateRaw(s => {
+            const next = { ...(s || {}), events: live, liveTelemetry: true };
+            saveLiveConsoleState(next);
+            return next;
+          });
+        }
+      } catch {
+        // Telemetry stays on local/demo events; the page keeps its mocked badge.
       }
     })();
     return () => { cancelled = true; };
