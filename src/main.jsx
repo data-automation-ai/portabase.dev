@@ -231,7 +231,10 @@ function Hero() {
       <div className="lockout-stage">
         <figure className="lockout-evidence">
           <div className="evidence-label"><span><i /> Actual lockout</span><b>Not a mockup</b></div>
-          <img className="lockout-shot" src="/images/banned.png" alt="Annotated screenshot of the founder Supabase sign-in showing Error: User is banned" />
+          <picture>
+            <source srcSet="/images/banned.webp" type="image/webp" />
+            <img className="lockout-shot" src="/images/banned.png" alt="Annotated screenshot of the founder Supabase sign-in showing Error: User is banned" />
+          </picture>
           <figcaption><span>Account locked. Business frozen. Backups unreachable.</span><small>Actual founder scenario · identifying details redacted</small></figcaption>
         </figure>
       </div>
