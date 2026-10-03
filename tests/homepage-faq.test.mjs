@@ -14,6 +14,7 @@ const REQUIRED = [
   'Do you store my capsule?',
   'How do I keep a Cloud capsule under the plan cap?',
   'My code is already in GitHub — isn’t that enough?',
+  'How is this better than a backup I’ve never restored?',
 ];
 
 test('homepage FAQ covers the honest questions Louis asked for', () => {
@@ -74,6 +75,14 @@ test('FAQ answers stay honest: keys, free path, lamp, SMS, vault', () => {
   assert.match(byQ['My code is already in GitHub — isn’t that enough?'], /Auth users/);
   assert.match(byQ['My code is already in GitHub — isn’t that enough?'], /active, tested backup/i);
   assert.match(byQ['My code is already in GitHub — isn’t that enough?'], /code survives and the business does not/i);
+
+  // Tested-restore pitch: capability + verification, with the honest Auth carve-out.
+  assert.match(byQ['How is this better than a backup I’ve never restored?'], /hope, not a plan/);
+  assert.match(byQ['How is this better than a backup I’ve never restored?'], /replay straight into a brand-new Supabase project/);
+  assert.match(byQ['How is this better than a backup I’ve never restored?'], /--confirm-target/);
+  assert.match(byQ['How is this better than a backup I’ve never restored?'], /MATCH/);
+  assert.match(byQ['How is this better than a backup I’ve never restored?'], /no automation can do it/i);
+  assert.match(byQ['How is this better than a backup I’ve never restored?'], /AUTH-CUTOVER\.md/);
 });
 
 test('FAQ says open source, not OSS, and never claims proven-green', () => {

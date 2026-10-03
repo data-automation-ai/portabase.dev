@@ -37,7 +37,11 @@ export const HOMEPAGE_FAQ = Object.freeze([
   }),
   Object.freeze({
     q: 'My code is already in GitHub — isn’t that enough?',
-    a: 'Probably, for code. A repo holds your application source — and likely your Edge Functions, if you deploy them from source. But no git push ever touched your data: the rows customers wrote today, Auth users, and every uploaded Storage object live only inside Supabase. Without an active, tested backup, a locked account means the code survives and the business does not. That gap — database, Auth, Storage object bytes, and Functions in one encrypted capsule you own — is the whole product.',
+    a: 'Probably, for code. A repo holds your application source — and likely your Edge Functions, if you deploy them from source. But no git push ever touched your data: the rows customers wrote today, Auth users, and every uploaded Storage object live only inside Supabase. Without an active, tested backup, a locked account means the code survives and the business does not. That gap — database, Auth, Storage object bytes, and Functions in one encrypted capsule you own — is the whole product. And the capsule is built to pump straight into a brand-new account, not to sit in a bucket as a hope.',
+  }),
+  Object.freeze({
+    q: 'How is this better than a backup I’ve never restored?',
+    a: 'A backup that has never been through an emergency restore is a hope, not a plan. Portabase capsules are built to replay straight into a brand-new Supabase project — often a free one under 500 MB — while the original account is still locked: database, Storage object bytes, and Edge Functions pump straight in. The one deliberate exception is Auth — and no automation can do it, ours or anyone else’s: providers, SMTP, API keys, and the JWT secret are per-project and cannot travel. So the capsule carries user identities as an inventory plus AUTH-CUTOVER.md, step-by-step manual instructions for re-creating providers and re-onboarding users, written before you need them. The restore is also something you rehearse: portabase replay --confirm-target <NEW_REF> proves the path on your schedule, and the proof lamp stays red until a real dry-run or compare reports MATCH. Recovery you have tested beats recovery you have merely scheduled.',
   }),
   Object.freeze({
     q: 'Do you store my capsule?',

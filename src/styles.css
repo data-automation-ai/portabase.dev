@@ -161,6 +161,9 @@ button { font:inherit; }
 .hero-analogy{display:grid;grid-template-columns:38px 1fr;gap:15px;align-items:center;max-width:650px;border-left:2px solid var(--acid);background:rgba(var(--accent-rgb),.055);padding:14px 17px 14px 15px}.hero-analogy>span{width:38px;height:38px;border:1px solid rgba(var(--accent-rgb),.35);border-radius:50%;display:grid;place-items:center;color:var(--acid);font-size:20px}.hero-analogy p{margin:0;color:#9e9f9a;font-size:13px;line-height:1.5}.hero-analogy b{color:#eeeee9}
 .incident-factline{display:flex;flex-wrap:wrap;gap:7px 16px;max-width:650px;margin-top:15px;color:#8d8e89;font:8px var(--mono);letter-spacing:.035em;text-transform:uppercase}.incident-factline b{color:var(--red)}.incident-factline span:before{content:'×';color:var(--red);margin-right:6px}
 .hero-actions { display:flex; align-items:center; gap:28px; margin:23px 0 25px; }
+/* Cloud trial CTA is mobile-only: on desktop the CLI leads (devs install at a desk);
+   on mobile the hosted trial is the only actionable conversion. */
+.hero-cta-cloud { display:none; }
 .use-case-list{margin-top:34px}
 .use-case-row{border:1px solid var(--line);border-radius:8px;margin-bottom:10px;padding:16px 18px;background:transparent}
 .use-case-row summary{cursor:pointer;display:flex;gap:14px;align-items:baseline;list-style:none}
@@ -1197,6 +1200,18 @@ img,svg,video,canvas{max-width:100%;height:auto}
   .lockout-arrow{order:2}
   .lockout-stage{order:3}
   .hero-copy-rest{order:4}
+  /* Mobile sales order: headline(1) → arrow(2) → evidence(3) → pitch → CTA → benefit → proof */
+  .hero-copy-rest{display:contents}
+  .hero-copy-rest>.hero-lead{order:4}
+  .hero-copy-rest>.hero-actions{order:5}
+  .hero-copy-rest>.hero-lead-cloud{order:6}
+  .hero-copy-rest>.incident-factline{order:7}
+  .hero-copy-rest>.hero-proof{order:8}
+  /* Mobile leads with the SaaS trial; the CLI CTA stays visible but secondary */
+  .hero-cta-cloud{display:inline-flex}
+  .hero-actions .hero-cta-cloud{order:-1}
+  .hero-cta-cli{background:transparent;box-shadow:none;border:1px solid rgba(var(--accent-rgb),.55)}
+  #mid-cta .hero-actions .button-ghost{order:-1}
   .hero h1{font-size:clamp(32px,8.6vw,48px);line-height:1.06;letter-spacing:-.045em;max-width:100%}
   .hero-lead,.hero-usp,.hero-analogy,.incident-factline,.hero-risk-headline{max-width:100%}
   .hero-lead strong{font-size:clamp(17px,4.6vw,21px)}

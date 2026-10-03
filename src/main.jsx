@@ -211,10 +211,11 @@ function Hero() {
         </div>
         <div className="hero-copy-rest">
         <p className="hero-lead">Supabase is a world-class product. It took millions of developers from idea to a real business. Now picture the morning you cannot log in. No dashboard, no API, and the backups you counted on are locked in the same console. <strong>Supabase's published support target is 48 hours — by email. Can your business or project wait that long?</strong> <a className="text-link" href="https://www.reddit.com/r/Supabase/comments/1kbj0sh/supabase_threatened_to_delete_all_my_work_after/" target="_blank" rel="noreferrer">Source <Arrow /></a> Portabase snapshots your whole project into an encrypted capsule you own, ready to restore in a different account.</p>
-        <p className="hero-lead hero-lead-cloud">On the hosted Portabase Cloud, restore is the key benefit: it rebuilds your database into a <strong>brand-new Supabase account</strong> — in many cases even a <strong>free</strong> one, as long as you are under 500&nbsp;MB of storage total (tables, objects, and edge functions).</p>
+        <p className="hero-lead hero-lead-cloud">Hosted Portabase Cloud rebuilds your capsule into a <strong>brand-new Supabase account</strong> — often even a <strong>free</strong> one, under 500&nbsp;MB total (tables, objects, edge functions).</p>
         <div className="incident-factline"><b>MY INCIDENT · 95+ HOURS</b><span>“Billing dispute” cited</span><span>No details or paperwork</span><span>Card issuer found nothing identifiable</span><span>No response from Supabase</span></div>
         <div className="hero-actions">
-          <a className="button button-primary" href="#escape">Build your Escape <Arrow /></a>
+          <a className="button button-primary hero-cta-cli" href="#escape">Build your Escape <Arrow /></a>
+          <a className="button button-primary hero-cta-cloud" href="/login?mode=signup&next=/app">Start free Cloud trial <Arrow /></a>
           <a className="text-link" href="#stories">See what lockout looks like <span>↓</span></a>
         </div>
         <div className="hero-proof"><span>USP · Escape</span><span>Supabase only</span><a href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">Open source free · Cloud = GUI &amp; telemetry <Arrow /></a></div>
