@@ -13,6 +13,7 @@ const REQUIRED = [
   'What do SMS alerts contain?',
   'Do you store my capsule?',
   'How do I keep a Cloud capsule under the plan cap?',
+  'My code is already in GitHub — isn’t that enough?',
 ];
 
 test('homepage FAQ covers the honest questions Louis asked for', () => {
@@ -65,6 +66,14 @@ test('FAQ answers stay honest: keys, free path, lamp, SMS, vault', () => {
 
   assert.match(byQ['Do you store my capsule?'], /^No\b/);
   assert.match(byQ['Do you store my capsule?'], /customer-owned/i);
+
+  // Advanced-user skeptic: concedes the repo is real, then isolates the actual gap.
+  assert.match(byQ['My code is already in GitHub — isn’t that enough?'], /^Probably, for code\b/);
+  assert.match(byQ['My code is already in GitHub — isn’t that enough?'], /Edge Functions/);
+  assert.match(byQ['My code is already in GitHub — isn’t that enough?'], /Storage object/);
+  assert.match(byQ['My code is already in GitHub — isn’t that enough?'], /Auth users/);
+  assert.match(byQ['My code is already in GitHub — isn’t that enough?'], /active, tested backup/i);
+  assert.match(byQ['My code is already in GitHub — isn’t that enough?'], /code survives and the business does not/i);
 });
 
 test('FAQ says open source, not OSS, and never claims proven-green', () => {

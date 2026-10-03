@@ -36,6 +36,10 @@ export const HOMEPAGE_FAQ = Object.freeze([
     a: 'Status only, optional on $17. A text says the run succeeded or failed. Never keys, never the passphrase, never capsule bytes.',
   }),
   Object.freeze({
+    q: 'My code is already in GitHub — isn’t that enough?',
+    a: 'Probably, for code. A repo holds your application source — and likely your Edge Functions, if you deploy them from source. But no git push ever touched your data: the rows customers wrote today, Auth users, and every uploaded Storage object live only inside Supabase. Without an active, tested backup, a locked account means the code survives and the business does not. That gap — database, Auth, Storage object bytes, and Functions in one encrypted capsule you own — is the whole product.',
+  }),
+  Object.freeze({
     q: 'Do you store my capsule?',
     a: 'No. Destinations are customer-owned: S3, Dropbox, Drive, NAS, Local Starter, or rclone. Portabase Cloud is not the storage of record.',
   }),
