@@ -1,7 +1,7 @@
 {
   "name": "portabase",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Open-source Supabase Escape — encrypted customer-owned recovery capsules (database, Auth, Storage bytes, Edge Functions). Optional Portabase Cloud for GUI and alerts.",
   "homepage": "https://portabase.dev",
   "repository": {
