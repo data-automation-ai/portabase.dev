@@ -107,9 +107,10 @@ test('rls-check page resolves, sits in nav, and blames the default', () => {
   assert.match(app, /never you/i);
 });
 
-test('homepage reality grid links item 13 to the rls-check guide', () => {
+test('homepage reality grid links the RLS-public item to the rls-check guide', () => {
   const src = readFileSync(new URL('../src/main.jsx', import.meta.url), 'utf8');
-  assert.match(src, /<b>13<\/b>/);
+  // Item moved from the removed 13-reason ban grid into reality-grid as article 05.
+  assert.match(src, /<span>05<\/span><h3>Your database may already be public\.<\/h3>/);
   assert.match(src, /\/docs\/rls-check/);
   assert.match(src, /Check yours in 5 minutes/);
 });

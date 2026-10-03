@@ -75,10 +75,12 @@ test('FAQ says open source, not OSS, and never claims proven-green', () => {
   assert.doesNotMatch(blob, /90%|99%/);
 });
 
-test('homepage mounts FAQ after never-hold-keys and uses the shared copy', () => {
+test('homepage mounts FAQ after the install CTA and uses the shared copy', () => {
   const src = readFileSync(new URL('../src/main.jsx', import.meta.url), 'utf8');
   assert.match(src, /from '\.\/data\/faq\.js'/);
-  assert.match(src, /<NeverHoldKeys \/><Faq \/>/);
+  // FAQ follows the conversion sections (InstallCta) so it answers questions
+  // readers actually have by then — not ones nobody has asked yet.
+  assert.match(src, /<InstallCta Arrow=\{Arrow\} \/><Faq \/>/);
   assert.match(src, /id="faq"/);
   assert.doesNotMatch(src, /id="faq"[\s\S]{0,400}\bOSS\b/);
 });

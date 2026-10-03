@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import { nightmares as stories } from './data/nightmares.js';
@@ -7,9 +7,19 @@ import { HOMEPAGE_FAQ } from './data/faq.js';
 import { KEYS_COPY } from './data/never-hold-keys.js';
 import { KeysFlow, KeysHonest, KeysPathCards } from './components/keys-flow.jsx';
 import { closureReasons, closureCases } from './data/closure-cases.js';
-import { AppPage, AuthCallbackPage, LoginPage } from './auth-pages.jsx';
-import { BackendPage } from './backend-page.jsx';
-import { DocsPage, InstallCta, LegalPage } from './site-pages.jsx';
+import { InstallCta } from './install-cta.jsx';
+
+/* Route-level code splitting: keep console, auth, docs, legal and backend out of
+   the landing bundle so the homepage ships only what it renders. */
+const AppPage = lazy(() => import('./auth-pages.jsx').then(m => ({ default: m.AppPage })));
+const AuthCallbackPage = lazy(() => import('./auth-pages.jsx').then(m => ({ default: m.AuthCallbackPage })));
+const LoginPage = lazy(() => import('./auth-pages.jsx').then(m => ({ default: m.LoginPage })));
+const BackendPage = lazy(() => import('./backend-page.jsx').then(m => ({ default: m.BackendPage })));
+const DocsPage = lazy(() => import('./site-pages.jsx').then(m => ({ default: m.DocsPage })));
+const LegalPage = lazy(() => import('./site-pages.jsx').then(m => ({ default: m.LegalPage })));
+
+const PageFallback = () => <main className="shell" style={{ padding: '120px 24px', color: '#b4b4ae' }}>Loading…</main>;
+const Lazy = ({ children }) => <Suspense fallback={<PageFallback />}>{children}</Suspense>;
 import { isSignedIn, loadSession, sessionUser } from './lib/session.js';
 import { CLOUD_FREE, planPriceRangeLabel, publicCloudPlans } from './lib/product.js';
 import { isCloudConsolePath, isDocsPath } from './lib/site-links.js';
@@ -200,15 +210,14 @@ function Hero() {
         <p className="hero-risk-headline"><strong>No API. No Auth. No dashboard. No reachable backups.</strong></p>
         </div>
         <div className="hero-copy-rest">
-        <p className="hero-lead">Supabase is a world-class product. It took millions of developers from idea to a real business. Now picture the morning you cannot log in. No dashboard, no API, and the backups you counted on are locked in the same console. <strong>Supabase's official SLA is 48 hours — by email. Can your business or project wait that long?</strong> Portabase snapshots your whole project into an encrypted capsule you own, ready to restore in a different account.</p>
+        <p className="hero-lead">Supabase is a world-class product. It took millions of developers from idea to a real business. Now picture the morning you cannot log in. No dashboard, no API, and the backups you counted on are locked in the same console. <strong>Supabase's published support target is 48 hours — by email. Can your business or project wait that long?</strong> <a className="text-link" href="https://www.reddit.com/r/Supabase/comments/1kbj0sh/supabase_threatened_to_delete_all_my_work_after/" target="_blank" rel="noreferrer">Source <Arrow /></a> Portabase snapshots your whole project into an encrypted capsule you own, ready to restore in a different account.</p>
         <p className="hero-lead hero-lead-cloud">On the hosted Portabase Cloud, restore is the key benefit: it rebuilds your database into a <strong>brand-new Supabase account</strong> — in many cases even a <strong>free</strong> one, as long as you are under 500&nbsp;MB of storage total (tables, objects, and edge functions).</p>
-        <div className="hero-analogy"><span aria-hidden="true">⌂</span><p><b>Your landlord changed the locks.</b> The backup inside the building is not an Escape. Portabase keeps your way out in another building—tested, current, and under your control.</p></div>
         <div className="incident-factline"><b>MY INCIDENT · 95+ HOURS</b><span>“Billing dispute” cited</span><span>No details or paperwork</span><span>Card issuer found nothing identifiable</span><span>No response from Supabase</span></div>
         <div className="hero-actions">
           <a className="button button-primary" href="#escape">Build your Escape <Arrow /></a>
           <a className="text-link" href="#stories">See what lockout looks like <span>↓</span></a>
         </div>
-        <div className="hero-proof"><span>USP · Escape</span><span>Supabase only</span><span>Open source free · Cloud = GUI &amp; telemetry</span></div>
+        <div className="hero-proof"><span>USP · Escape</span><span>Supabase only</span><a href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">Open source free · Cloud = GUI &amp; telemetry <Arrow /></a></div>
         </div>
       </div>
       <img
@@ -470,6 +479,7 @@ function WhyNow() {
   return <section className="section why-now" id="why-now">
     <div className="shell">
       <div className="love-note"><span>Let’s be clear</span><h2>Supabase is great.</h2><p>That is why so many prototypes quietly became real companies on it. But loving the building does not mean leaving your only exit key with the landlord.</p></div>
+      <div className="hero-analogy"><span aria-hidden="true">⌂</span><p><b>Your landlord changed the locks.</b> The backup inside the building is not an Escape. Portabase keeps your way out in another building—tested, current, and under your control.</p></div>
       <aside className="founder-note">
         <div className="founder-note-label"><span>FOUNDER’S NOTE</span><small>WHY THIS ISN’T AN ATTACK</small></div>
         <div className="founder-note-copy"><h3>I almost gave this product an angry name.</h3><p>“Supabase Sucks.” “Not So Supa.” Something that captured exactly how it felt to be locked out and unable to reach the business behind the screen.</p><div className="founder-incident"><span>THIS IS MY CURRENT SITUATION</span><p>Supabase cited a billing dispute. I received no transaction details, paperwork, or other explanation my credit-card company could identify. I contacted support. At the time of writing, <strong>95 hours have passed with absolutely no response from Supabase.</strong></p><p>But when you are already disputing a vague billing claim, payment records, time zones, and remedies can add friction to an emergency that is already costing the business.</p><p>The business did not stop needing its database while the ticket waited. That is the danger Portabase exists to make visible.</p></div><p>But an angry name still would not have been fair—or true. <strong>Supabase is an excellent product.</strong> It has introduced millions of people to databases, Auth, Storage, Functions, and the possibility of building a real application without first becoming a backend engineer.</p><p>Portabase is not here to tell you to leave Supabase. It is here to point out one danger many builders never see: <strong>when the application, dashboard, support path, and backup all depend on the same account, one lock can stand between you and your entire business.</strong></p><b>Keep the platform. Remove the single point of failure.</b></div>
@@ -510,24 +520,9 @@ function Reality() {
         <article><span>02</span><h3>A database dump is not your business.</h3><p>Customers still need Auth. Products still need images. Workflows still need Functions, secrets, URLs, and integrations. Recover only Postgres and you may recover a database that cannot run the company.</p></article>
         <article><span>03</span><h3>Deletion can erase the safety net.</h3><p>Supabase states that deleting a project permanently removes its data and associated backups. One destructive action can take the production system and the provider-held recovery copy with it.</p></article>
         <article><span>04</span><h3>Pro support is an email path.</h3><p>No published Pro hotline. No private live-support channel. If that email does not get answered, how many hours can your company bleed before “waiting” becomes “we may not recover”?</p></article>
+        <article><span>05</span><h3>Your database may already be public.</h3><p>Most vibe-coded projects leave RLS off with the anon key in the frontend — readable by anyone. Supabase ships with the door unlocked and the instructions assume you know that. <a href="/docs/rls-check">Check yours in 5 minutes <Arrow /></a></p></article>
       </div>
       <div className="ban-reasons">
-        <div className="ban-reasons-head"><div><span>IT CAN START WITH SOMETHING ORDINARY</span><h3>Restriction does not require a reckless business owner.</h3></div><p>A payment descriptor is questioned. A card expires. A customer uploads disputed material. A traffic spike looks abusive. The result may be a billing restriction, project suspension, investigation, or account-level lockout—different mechanisms with the same immediate problem: your business can no longer depend on normal access.</p></div>
-        <div className="ban-reason-grid">
-          <div><b>01</b><strong>Foreign payment questioned</strong><p>A bookkeeper, accountant, bank, or fraud system may not recognize an unfamiliar foreign payment descriptor. A chargeback inquiry is not documented as an automatic ban, but it can become a payment or fraud review.</p></div>
-          <div><b>02</b><strong>Routine card failure</strong><p>An expired card, bank decline, insufficient funds, missing card, overdue invoice, or incorrect billing address can restrict services or pause projects.</p></div>
-          <div><b>03</b><strong>Quota or runaway usage</strong><p>Repeated plan overages, spend-cap limits, viral traffic, bot traffic, reconnection loops, uncontrolled channels, or a load test pointed at production can trigger restrictions.</p></div>
-          <div><b>04</b><strong>Someone reports hosted content</strong><p>A copyright, privacy, harassment, fraud, or other abuse complaint may trigger investigation. The owner can face the operational consequence before the underlying dispute is resolved.</p></div>
-          <div><b>05</b><strong>Your user causes the problem</strong><p>Customer-uploaded piracy, malware, phishing forms, spam, stolen data, or illegal material can place the account at risk even when the business owner did not personally upload it.</p></div>
-          <div><b>06</b><strong>Security systems see danger</strong><p>Port scanning, vulnerability probing, denial-of-service patterns, an open proxy, credential compromise, or activity performed through a stolen login can look like platform abuse.</p></div>
-          <div><b>07</b><strong>Account-pattern flags</strong><p>Disposable email addresses, automated registration, bulk accounts, excessive accounts, cryptocurrency mining, or attempts to bypass platform controls are expressly prohibited.</p></div>
-          <div><b>08</b><strong>Regulated data crosses a line</strong><p>Storing payment-card information without prior written approval, or protected health information without the required agreement, can breach the platform terms even if the application itself is legitimate.</p></div>
-          <div><b>09</b><strong>An API key leaks. Attackers use it.</strong><p>A service-role key, database password, access token, or administrator login is exposed through no fault of your own. Bots can steal data, generate abusive traffic, attack other systems, or turn a normal $500 monthly bill into $50,000. The leak may be innocent. The bleeding can still be fatal.</p></div>
-          <div><b>10</b><strong>Law or a provider intervenes</strong><p>Supabase’s terms permit suspension when service would violate law or when a required third-party vendor suspends the component Supabase depends on.</p></div>
-          <div><b>11</b><strong>The only owner loses identity access</strong><p>The company email expires, a domain lapses, GitHub or SSO access changes, an authenticator is lost, or the sole administrator leaves. The database may still be running while every person able to manage or recover it is locked outside.</p></div>
-          <div><b>12</b><strong>A trusted administrator makes one fatal click</strong><p>A cofounder, contractor, compromised administrator, or exhausted employee removes an owner, transfers the wrong organization, or deletes a production project. Legitimate authority does not guarantee legitimate intent—or a reversible result.</p></div>
-          <div><b>13</b><strong>Your database may already be public</strong><p>Most vibe-coded projects leave RLS off with the anon key in the frontend — readable by anyone. Supabase ships with the door unlocked and the instructions assume you know that. <a href="/docs/rls-check">Check yours in 5 minutes <Arrow /></a></p></div>
-        </div>
         <div className="billing-emergency">
           <div><span>THE $50,000 DECISION</span><strong>$500 <i>→</i> $50,000</strong></div>
           <div><h3>How do you stop the bleeding without stopping the business?</h3><p>A leaked key explodes your normal bill. Your first instinct may be to stop the card—to establish a point of defense while the charge is investigated. But now the same account may face suspected-abuse review and a failed or overdue payment. Supabase does not publicly state that every card stop causes an automatic ban. It does document that suspected abuse and overdue payment can restrict an organization: projects may be paused, databases made read-only, transfers disabled, or requests returned with HTTP 402. Your financial defense and your production access can become the same negotiation.</p><p className="billing-emergency-close">The accident may not be your fault. The consequences still belong to your business.</p></div>
@@ -2226,22 +2221,39 @@ function UseCases() {
 
 function HomePage() {
   useEffect(() => { document.title = 'Portabase — Your Supabase Escape'; }, []);
-  return <><Header /><main><Hero /><HeroConcept /><NeverHoldKeys /><Faq /><CliVsCloud /><WhatIsThis /><WhyNow /><Reality /><ClosureRisk /><Stories /><TwoScenarios /><RunnerArchitectureDiagram /><Escape /><InstallCta Arrow={Arrow} /><Audit /><Cutover /><PublicDeal /><CloudTeaser /><UseCases /></main><Footer /></>;
+  return <><Header /><main><Hero /><HeroConcept /><NeverHoldKeys /><WhatIsThis /><CliVsCloud /><WhyNow /><Reality /><ClosureRisk /><Stories /><TwoScenarios /><MidPageCta /><RunnerArchitectureDiagram /><Escape /><InstallCta Arrow={Arrow} /><Faq /><Audit /><Cutover /><PublicDeal /><CloudTeaser /><UseCases /></main><Footer /></>;
+}
+
+/** Mid-page conversion point placed at the emotional peak, after Stories + TwoScenarios. */
+function MidPageCta() {
+  return <section className="section" id="mid-cta">
+    <div className="shell install-cta-card">
+      <div>
+        <div className="section-kicker green">THE OTHER ENDING</div>
+        <h2>Every story above ends the same way without a capsule.</h2>
+        <p>With one, it ends in a restore: your encrypted capsule rebuilds into a brand-new Supabase account — often a free one — while the original account is still locked.</p>
+        <div className="hero-actions">
+          <a className="button button-primary" href="#escape">Build your Escape <Arrow /></a>
+          <a className="button button-ghost" href="/login?mode=signup&next=/app">Start free Cloud trial <Arrow /></a>
+        </div>
+      </div>
+    </div>
+  </section>;
 }
 
 function App() {
   const path = window.location.pathname.replace(/\/$/, '') || '/';
   const loc = `${window.location.pathname}${window.location.search}`;
   if (path === '/thanks' || path === '/buy') return <LegacyPurchaseNotice />;
-  if (path === '/login' || path === '/signup') return <LoginPage />;
-  if (path === '/auth/callback') return <AuthCallbackPage />;
+  if (path === '/login' || path === '/signup') return <Lazy><LoginPage /></Lazy>;
+  if (path === '/auth/callback') return <Lazy><AuthCallbackPage /></Lazy>;
   /* pathname + search so /dashboard?demo=1 never falls through to HomePage */
-  if (isCloudConsolePath(path) || isCloudConsolePath(loc)) return <AppPage />;
+  if (isCloudConsolePath(path) || isCloudConsolePath(loc)) return <Lazy><AppPage /></Lazy>;
   if (path === '/cloud' || path === '/pricing') return <CloudPage />;
   if (path === '/security' || path === '/trust') return <SecurityPage />;
-  if (path === '/backend') return <BackendPage Logo={Logo} Arrow={Arrow} Footer={Footer} />;
-  if (isDocsPath(path) || path === '/docs') return <DocsPage Logo={Logo} Arrow={Arrow} Footer={Footer} />;
-  if (path === '/legal' || path === '/disclaimer') return <LegalPage Logo={Logo} Arrow={Arrow} Footer={Footer} />;
+  if (path === '/backend') return <Lazy><BackendPage Logo={Logo} Arrow={Arrow} Footer={Footer} /></Lazy>;
+  if (isDocsPath(path) || path === '/docs') return <Lazy><DocsPage Logo={Logo} Arrow={Arrow} Footer={Footer} /></Lazy>;
+  if (path === '/legal' || path === '/disclaimer') return <Lazy><LegalPage Logo={Logo} Arrow={Arrow} Footer={Footer} /></Lazy>;
   return <HomePage />;
 }
 
