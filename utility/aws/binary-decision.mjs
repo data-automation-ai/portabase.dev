@@ -312,9 +312,9 @@ function classifyResource(resource) {
       return {
         action: ACTIONS.RECOMMEND_RDS_SNAPSHOT,
         finding: resource.snapshotId ? 'will-copy' : 'will-warn',
-        reason: 'RDS/Aurora descriptions and allocated storage are scripted. Row data is a follow-on; prefer an AWS RDS snapshot referenced from the manifest.',
-        coverage: resource.snapshotId ? 'binary-reference' : 'excluded',
-        inCapsule: false,
+        reason: 'RDS/Aurora descriptions and allocated storage are scripted into the capsule. Row data is a follow-on; prefer an AWS RDS snapshot referenced from the manifest.',
+        coverage: resource.snapshotId ? 'scripted+binary-reference' : 'scripted',
+        inCapsule: true,
         recommendedPath: 'rds-create-snapshot',
         restoreBlockers: resource.snapshotId ? [] : ['rds-rows-not-in-capsule-v1'],
       };

@@ -303,22 +303,40 @@ export function createLiveClient() {
   );
 }
 
-export function assertReadOnlyClient(client) {
+/**
+ * Verify a client is genuinely read-only: every forbidden-mutation method it
+ * exposes must refuse when invoked (sync throw or rejected promise). A method
+ * that executes without throwing fails the assertion.
+ *
+ * Safe to probe only because this scaffold never builds live clients —
+ * createLiveClient() throws, so anything reaching this guard is fixture-built.
+ */
+export async function assertReadOnlyClient(client) {
   if (!client || typeof client !== 'object') {
     throw new Error('collector client is required');
   }
+  const probe = async (service, method, fn) => {
+    try {
+      await fn({});
+    } catch {
+      return; // refusal is the required behavior
+    }
+    throw new Error(
+      `Client violation: ${service}.${method} is a forbidden mutation but executed without throwing. Read-only collectors must refuse it.`,
+    );
+  };
   for (const [service, api] of Object.entries(client)) {
     if (!api || typeof api !== 'object') continue;
-    for (const method of Object.keys(api)) {
-      if (!isForbiddenMutation(method)) continue;
-      // Allowed only as a throwing stub — calling it must fail.
+    for (const [method, fn] of Object.entries(api)) {
+      if (typeof fn !== 'function' || !isForbiddenMutation(method)) continue;
+      await probe(service, method, fn);
     }
     const contract = COLLECTOR_CONTRACTS[service];
     if (!contract) continue;
     for (const method of contract.never || []) {
-      if (typeof api[method] === 'function') {
-        // Probe without awaiting success: the function must exist as a refusal.
-      }
+      const fn = api[method];
+      if (typeof fn !== 'function') continue;
+      await probe(service, method, fn);
     }
   }
   return true;

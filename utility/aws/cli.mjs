@@ -10,7 +10,6 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { buildDoctorReport, formatDoctorText } from './doctor.mjs';
 import { buildInventory } from './inventory.mjs';
-import { createLiveClient } from './interfaces.mjs';
 import {
   assertRunnerAwsAuth,
   detectRunnerAwsAuth,
@@ -108,7 +107,7 @@ export function assertAwsFlagsAllowed(flags) {
 }
 
 function resolveCliAuth(flags, env) {
-  if (flags.live) createLiveClient();
+  // --live never reaches here: assertAwsFlagsAllowed refuses it first (REFUSED_FLAGS).
   const checkSharedFiles = env === process.env;
   if (!flags.fixture) {
     const auth = assertRunnerAwsAuth(env, { checkSharedFiles });

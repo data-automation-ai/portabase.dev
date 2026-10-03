@@ -553,10 +553,22 @@ export function resolveTableDataSelection({ allTables = [], include = [], exclud
  * Strong pre-download match: same byte size plus same etag/updatedAt tag.
  * Size-only equality is NOT enough (same size, different bytes is common).
  */
+/** Strict byte-size parse: null/''/undefined coerce to 0 under Number(), so reject them. */
+function toSafeSize(value) {
+  if (typeof value === 'number') return Number.isSafeInteger(value) ? value : null;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const n = Number(value);
+    return Number.isSafeInteger(n) ? n : null;
+  }
+  return null;
+}
+
 export function baselineObjectUnchanged(baselineObject = {}, listing = {}) {
   if (!baselineObject?.sha256) return false;
-  if (!Number.isSafeInteger(Number(baselineObject.size)) || !Number.isSafeInteger(Number(listing.size))) return false;
-  if (Number(baselineObject.size) !== Number(listing.size)) return false;
+  const baseSize = toSafeSize(baselineObject.size);
+  const listSize = toSafeSize(listing.size);
+  if (baseSize === null || listSize === null) return false;
+  if (baseSize !== listSize) return false;
   const tag = listing.etag || listing.updatedAt || null;
   const baseTag = baselineObject.etag || baselineObject.updatedAt || null;
   if (!tag || !baseTag) return false;
