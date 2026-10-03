@@ -453,6 +453,12 @@ function RestoreTargets() {
         API keys, possibly a different region or plan limits (a free target caps at 500 MB).
         Anything outside the capsule (DNS, custom domains, third-party integrations) must be
         re-pointed by hand.</p>
+      <h2>Choosing the region</h2>
+      <p>The target is a project you create, so its region is your choice at creation time. Paid
+        Supabase plans offer the widest region set, so a restore can deliberately re-home the
+        project — closer to your users, or out of a region you no longer trust. This is a
+        restore-time move, not live multi-region replication: the project runs in one region
+        until you replay again.</p>
       <div className="docs-callout honest">
         <strong>Rule of thumb.</strong> Recovering from your own error with a healthy account:
         same account. Recovering from anything done <em>to</em> your account: different account.
@@ -463,11 +469,218 @@ function RestoreTargets() {
   );
 }
 
+function DisasterRecovery() {
+  return (
+    <>
+      <p className="docs-lead">
+        The disaster already happened — the account is locked, banned, or gone, and you have a
+        capsule. This is the runbook: what to do now, in order, and the post-mortem that makes the
+        next one faster.
+      </p>
+      <h2>1 · First hour — triage, don't make it worse</h2>
+      <p>
+        Freeze deploys and migrations. Start a written timeline now — you will need it for the
+        post-mortem and for any support ticket. Confirm the blast radius: can you log in at all,
+        is it one project or the whole account, is there mail from Supabase? If the account is
+        healthy and you are recovering from your own mistake, use a same-account restore instead —
+        see <a href="/docs/restore-targets">restore targets</a>. Everything below assumes the
+        account itself is the problem.
+      </p>
+      <h2>2 · Create the lifeboat project</h2>
+      <p>
+        New blank project in an account the incident cannot touch. Pick the region deliberately —
+        you are re-creating the project anyway, so put it where you want it (a free target works if
+        the capsule is ≤ 500 MB total). Create <strong>nothing</strong> in it: replay refuses a
+        non-blank target, which is your guarantee you are not overwriting someone else's data.
+      </p>
+      <h2>3 · Replay the capsule</h2>
+      <Code>{`export PORTABASE_ENCRYPTION_PASSPHRASE='…'
+export PORTABASE_TARGET_PROJECT_REF='newprojectref0000001'
+export PORTABASE_TARGET_SUPABASE_URL='https://newprojectref0000001.supabase.co'
+export PORTABASE_TARGET_SERVICE_ROLE_KEY='…'
+export PORTABASE_TARGET_DB_URL='postgresql://…'
+export SUPABASE_ACCESS_TOKEN='…'   # for Edge Functions deploy
+
+# No-write check first: decrypts, validates, confirms the target is blank
+portabase replay --capsule ./portabase-capsules/<id> --confirm-target newprojectref0000001 --preflight
+
+# Full restore into the new project
+portabase replay --capsule ./portabase-capsules/<id> --confirm-target newprojectref0000001`}</Code>
+      <p>
+        <code>--confirm-target</code> must match <code>PORTABASE_TARGET_PROJECT_REF</code> exactly —
+        that friction is deliberate. Replay decrypts the capsule (AES-256-GCM), verifies checksums,
+        then restores the layers: database, Storage object bytes, and Edge Functions via the
+        capsule's redeploy scripts. On Cloud, the console's Replay flow walks the same steps and
+        stores only refs and step status — never target keys.
+      </p>
+      <h2>4 · Verify before you announce anything</h2>
+      <p>
+        Check the read-back proof, then spot-check with your own eyes: row counts on the tables
+        that pay you, Storage object counts against the capsule inventory, one real sign-in path.
+        Compare the user list against <code>auth-inventory.json</code>. Only after this do you tell
+        anyone the service is back.
+      </p>
+      <h2>5 · Auth cutover — the manual layer</h2>
+      <p>
+        Auth configuration never travels in any capsule, ours or anyone else's. Providers, redirect
+        URLs, SMTP, and MFA are re-created by hand on the new project, and every user either signs
+        in again (OAuth) or resets a password (email). Full walkthroughs for both novice and expert:
+        <a href="/docs/auth-cutover"> Auth cutover</a>.
+      </p>
+      <h2>6 · Re-point everything outside the capsule</h2>
+      <p>
+        The capsule restores your project, not your perimeter. New project URL and new anon /
+        service-role keys go into env files, CI, and your secrets manager. Then the external
+        pointers: custom-domain DNS, payment-webhook endpoints (Square/Stripe dashboards),
+        OAuth redirect URIs at each provider, and any mobile or desktop build that pinned the old
+        URL — that one ships as an app update, so start it early.
+      </p>
+      <h2>7 · Post-mortem — while it's fresh</h2>
+      <p>
+        Write it within a day and store it next to the capsule: the timeline (detected → lifeboat
+        created → replay green → cutover), what failed versus what held, and two numbers you now
+        know for real instead of guessing — the capsule's age at disaster (your actual RPO) and the
+        minutes from decision to green replay (your actual RTO). Close with what changes: capture
+        cadence, vault locations, and the date of your next drill.
+      </p>
+      <div className="docs-callout honest">
+        <strong>Restore under pressure is when typos happen.</strong> A replay you have rehearsed
+        on a quiet afternoon takes a fraction of the time and none of the panic. The proof lamp
+        stays red until a real replay or compare reports MATCH — treat that as your drill
+        reminder, not decoration.
+      </div>
+    </>
+  );
+}
+
+function AuthCutover() {
+  return (
+    <>
+      <p className="docs-lead">
+        Auth is the one layer no automation can copy — provider secrets, SMTP credentials, and the
+        JWT secret are per-project and cannot travel. The capsule carries the{' '}
+        <strong>user inventory</strong> (<code>auth-inventory.json</code>: ids, emails, phones,
+        roles, sign-in metadata, providers) and a written checklist (<code>AUTH-CUTOVER.md</code>).
+        The two how-tos below walk the manual part: A for the first-timer, B for the engineer.
+      </p>
+      <h2>What the capsule gives you — and what it never contains</h2>
+      <div className="docs-table-wrap">
+        <table className="docs-table">
+          <thead>
+            <tr><th>In the capsule</th><th>Never in the capsule</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>User ids, emails, phones, roles</td><td>Password hashes — users reset instead</td></tr>
+            <tr><td>Per-user provider list (google, github…)</td><td>OAuth client secrets — re-entered from your records</td></tr>
+            <tr><td>Created / last-sign-in metadata</td><td>JWT secret — the new project mints its own</td></tr>
+            <tr><td>AUTH-CUTOVER.md checklist</td><td>SMTP / SMS / hook secrets — from your providers</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h2>How-to A — first-timer, click by click</h2>
+      <p>
+        <strong>1 · Gather your own records first.</strong> Most Auth secrets do not live only in
+        Supabase — they live at the providers, which you can still reach: OAuth client IDs and
+        secrets in the Google / GitHub / Apple developer consoles, SMTP credentials at your mail
+        provider, SMS keys at Twilio or similar. Collect these before touching the new project.
+      </p>
+      <p>
+        <strong>2 · Re-enable each provider.</strong> In the new project: Authentication → Sign In /
+        Providers. For every provider that was on, enable it and paste the client ID and secret
+        from your records. The Google walkthrough below is the pattern every provider follows.
+      </p>
+      <p>
+        <strong>3 · Set URLs.</strong> Authentication → URL Configuration: your app's Site URL and
+        every redirect URL your flows use (confirm, recover, invite, magic link).
+      </p>
+      <p>
+        <strong>4 · Reconnect email.</strong> Re-enter SMTP credentials, then redo the email
+        templates if you customized them — password recovery only works once this is done.
+      </p>
+      <p>
+        <strong>5 · MFA and phone.</strong> Re-enable the factors you used and re-enter SMS provider
+        keys.
+      </p>
+      <p>
+        <strong>6 · Bring users back.</strong> Password hashes never left the old project, so email
+        users go through "forgot password" once — that is the designed path, not a failure. OAuth
+        users just sign in again. Use <code>auth-inventory.json</code> as your checklist of who to
+        expect.
+      </p>
+      <p>
+        <strong>7 · Prove it with one account</strong> — sign up or reset, sign in, exercise one
+        real app flow — before announcing the restore to everyone.
+      </p>
+      <h3>Worked example — Google sign-in</h3>
+      <p>
+        Google is the provider most projects use, and it shows the whole pattern:
+      </p>
+      <p>
+        <strong>1</strong> · Google Cloud Console → APIs &amp; Services → Credentials → your
+        OAuth 2.0 Client ID (Web application). Your client ID and secret are here even if Supabase
+        is unreachable — this is why step 1 of the how-to works.
+      </p>
+      <p>
+        <strong>2</strong> · Edit <strong>Authorized redirect URIs</strong>: replace{' '}
+        <code>https://OLD-REF.supabase.co/auth/v1/callback</code> with{' '}
+        <code>https://NEW-REF.supabase.co/auth/v1/callback</code>. One character wrong here and
+        every Google sign-in fails with <code>redirect_uri_mismatch</code>.
+      </p>
+      <p>
+        <strong>3</strong> · In the new Supabase project: Authentication → Providers → Google →
+        paste the same client ID and secret.
+      </p>
+      <p>
+        <strong>4</strong> · Check the OAuth consent screen: if it is still in <em>Testing</em>,
+        only listed test users can sign in — publish it or re-add testers before your users hit it.
+      </p>
+      <p>
+        <strong>5</strong> · Existing Google users simply sign in again. Behind the scenes they
+        receive <strong>new Supabase user ids</strong> — if your tables key rows by user id, that
+        mapping is the expert track below.
+      </p>
+      <h2>How-to B — engineer, the parts that bite</h2>
+      <p>
+        <strong>1 · Identity mapping.</strong> The new project issues new <code>auth.users</code>{' '}
+        UUIDs, while the capsule restored your public-schema rows with the old ones. Build the
+        old→new map by joining <code>auth-inventory.json</code> (old id ↔ email) against the new
+        project's admin user list, then remap foreign keys (<code>profiles.id</code>,{' '}
+        <code>created_by</code>, …) as a deliberate migration before real traffic.
+      </p>
+      <p>
+        <strong>2 · Sessions and keys.</strong> The new project mints a new JWT secret, so every old
+        access and refresh token dies at cutover — plan a forced re-login, not silent continuity.
+        New anon and service-role keys replace the old ones everywhere: env files, CI, your secrets
+        manager, and any shipped mobile or desktop build.
+      </p>
+      <p>
+        <strong>3 · Users at scale.</strong> The Admin API can pre-create users and send invite or
+        recovery links, but it cannot set password hashes you never had — the password-reset flow
+        remains the honest path for email users.
+      </p>
+      <p>
+        <strong>4 · The config nobody remembers.</strong> Auth hooks (custom access token), captcha,
+        and rate limits are per-project too — re-create them from your own records. This is the
+        step a drill exposes: screenshot or export the Auth settings pages into your password
+        manager today, and cutover is a 30-minute job instead of an archaeological dig.
+      </p>
+      <div className="docs-callout honest">
+        <strong>Why this is manual by design.</strong> Anything that could copy your Auth
+        configuration wholesale would have to hold your provider secrets, SMTP credentials, and
+        JWT secret — exactly what Portabase refuses to hold. A competitor promising "full Auth
+        backup" is holding secrets you should not want them to have.
+      </div>
+    </>
+  );
+}
+
 const PAGES = {
   introduction: Introduction,
   quickstart: Quickstart,
   keepalive: Keepalive,
   'restore-targets': RestoreTargets,
+  'disaster-recovery': DisasterRecovery,
+  'auth-cutover': AuthCutover,
   'rls-check': RlsCheck,
   cloud: CloudDocs,
   'threat-model': ThreatModel,

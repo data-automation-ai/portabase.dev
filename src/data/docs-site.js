@@ -12,8 +12,15 @@ export const DOCS_NAV = Object.freeze([
       Object.freeze({ slug: 'introduction', href: '/docs/introduction', title: 'Introduction' }),
       Object.freeze({ slug: 'quickstart', href: '/docs/quickstart', title: 'Quickstart' }),
       Object.freeze({ slug: 'keepalive', href: '/docs/keepalive', title: 'Keepalive' }),
-      Object.freeze({ slug: 'restore-targets', href: '/docs/restore-targets', title: 'Restore targets' }),
       Object.freeze({ slug: 'rls-check', href: '/docs/rls-check', title: 'RLS exposure check' }),
+    ]),
+  }),
+  Object.freeze({
+    label: 'Recovery',
+    items: Object.freeze([
+      Object.freeze({ slug: 'restore-targets', href: '/docs/restore-targets', title: 'Restore targets' }),
+      Object.freeze({ slug: 'disaster-recovery', href: '/docs/disaster-recovery', title: 'Disaster recovery' }),
+      Object.freeze({ slug: 'auth-cutover', href: '/docs/auth-cutover', title: 'Auth cutover' }),
     ]),
   }),
   Object.freeze({
@@ -42,6 +49,8 @@ export const DOCS_TITLES = Object.freeze({
   quickstart: 'Quickstart',
   keepalive: 'Keepalive',
   'restore-targets': 'Restore targets',
+  'disaster-recovery': 'Disaster recovery',
+  'auth-cutover': 'Auth cutover',
   'rls-check': 'RLS exposure check',
   cloud: 'Cloud',
   'threat-model': 'Threat model',
@@ -60,6 +69,8 @@ export function resolveDocsSlug(pathname = '', hash = '') {
   if (path === '/docs/quickstart') return 'quickstart';
   if (path === '/docs/keepalive') return 'keepalive';
   if (path === '/docs/restore-targets') return 'restore-targets';
+  if (path === '/docs/disaster-recovery') return 'disaster-recovery';
+  if (path === '/docs/auth-cutover') return 'auth-cutover';
   if (path === '/docs/rls-check') return 'rls-check';
   if (path === '/docs/cloud') return 'cloud';
   if (path === '/docs/threat-model' || path === '/docs/keys') return 'threat-model';
