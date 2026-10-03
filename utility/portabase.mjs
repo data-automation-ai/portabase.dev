@@ -621,7 +621,7 @@ export function cleanSchemaLine(line) {
   if (/^CREATE SEQUENCE "/.test(line)) line = line.replace('CREATE SEQUENCE "', 'CREATE SEQUENCE IF NOT EXISTS "');
   if (/^CREATE VIEW "/.test(line)) line = line.replace('CREATE VIEW "', 'CREATE OR REPLACE VIEW "');
   if (/^CREATE FUNCTION "/.test(line)) line = line.replace('CREATE FUNCTION "', 'CREATE OR REPLACE FUNCTION "');
-  if (/^CREATE TRIGGER "/.test(line)) line = line.replace('CREATE TRIGGER "', 'CREATE OR REPLACE TRIGGER "');
+  // No CREATE OR REPLACE TRIGGER in PostgreSQL: CREATE TRIGGER lines pass through unchanged.
   if (/^CREATE PUBLICATION "supabase_realtime/.test(line)) return `-- ${line}`;
   if (/^(CREATE EVENT TRIGGER |         WHEN TAG IN |   EXECUTE FUNCTION |ALTER EVENT TRIGGER |ALTER PUBLICATION "supabase_realtime_|ALTER FOREIGN DATA WRAPPER )/.test(line)) return `-- ${line}`;
   if (/^ALTER DEFAULT PRIVILEGES FOR ROLE "supabase_admin"/.test(line)) return `-- ${line}`;

@@ -194,6 +194,11 @@ test('schema cleanup preserves PL/pgSQL function definitions and bodies', () => 
   assert.equal(cleanSchemaLine('CREATE FUNCTION "public"."touch"() RETURNS trigger'), 'CREATE OR REPLACE FUNCTION "public"."touch"() RETURNS trigger');
 });
 
+test('schema cleanup leaves CREATE TRIGGER untouched (no CREATE OR REPLACE TRIGGER in PostgreSQL)', () => {
+  const line = 'CREATE TRIGGER "public"."touch" BEFORE INSERT ON "public"."orders" FOR EACH ROW EXECUTE FUNCTION "public"."touch"();';
+  assert.equal(cleanSchemaLine(line), line);
+});
+
 test('schema cleanup filters grants only when they reference an excluded schema', () => {
   assert.match(cleanSchemaLine('GRANT SELECT ON TABLE "auth"."users" TO "reader";'), /^-- /);
   assert.match(cleanSchemaLine('GRANT USAGE ON SCHEMA "storage" TO "reader";'), /^-- /);
@@ -403,6 +408,9 @@ test('encrypted capsules authenticate and reject the wrong passphrase', async ()
       decryptFile(encrypted, join(root, 'wrong.tar.gz'), 'this passphrase is definitely wrong', metadata),
       /authenticate|Unsupported state/i,
     );
+    const tampered = { ...metadata, kdf: { ...metadata.kdf, N: 1024, r: 1, p: 1 } };
+    await decryptFile(encrypted, join(root, 'pinned.tar.gz'), 'correct horse battery staple', tampered);
+    assert.deepEqual(await readFile(join(root, 'pinned.tar.gz')), await readFile(source));
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -148,10 +148,11 @@ export async function decryptFile(inputPath, outputPath, passphrase, encryption)
     throw new Error('Encrypted capsule checksum does not match capsule metadata.');
   }
   const salt = Buffer.from(encryption.kdf.salt, 'base64');
+  // KDF cost parameters are pinned: capsule metadata must never influence key derivation.
   const key = await scrypt(passphrase, salt, CAPSULE_SCRYPT.keylen, {
-    N: encryption.kdf.N,
-    r: encryption.kdf.r,
-    p: encryption.kdf.p,
+    N: CAPSULE_SCRYPT.N,
+    r: CAPSULE_SCRYPT.r,
+    p: CAPSULE_SCRYPT.p,
     maxmem: CAPSULE_SCRYPT.maxmem,
   });
   const decipher = createDecipheriv(
