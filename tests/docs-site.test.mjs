@@ -40,6 +40,11 @@ test('recovery pages stay honest: real replay commands, Google callback, no Auth
   // Honest boundary: password hashes never exported, AUTH-CUTOVER.md is the manual layer.
   assert.match(src, /AUTH-CUTOVER\.md/);
   assert.match(src, /Password hashes — users reset instead/);
+  // Honest NOT-COVERED list: Vault root key, function secret values, Vector Buckets.
+  assert.match(src, /What the capsule does not cover/);
+  assert.match(src, /root key lives outside the database/);
+  assert.match(src, /plaintext is unrecoverable by design/);
+  assert.match(src, /Vector Buckets/);
   // Both pages exist and are routed.
   assert.match(src, /function DisasterRecovery\(\)/);
   assert.match(src, /function AuthCutover\(\)/);

@@ -535,6 +535,51 @@ portabase replay --capsule ./portabase-capsules/<id> --confirm-target newproject
         OAuth redirect URIs at each provider, and any mobile or desktop build that pinned the old
         URL — that one ships as an app update, so start it early.
       </p>
+      <h2>What the capsule does not cover — the honest list</h2>
+      <p>
+        The capsule is database, Storage object bytes, Edge Function source, and the Auth
+        inventory. Supabase keeps adding services that live outside those layers, and pretending
+        otherwise would be the exact overclaim this product exists to fight:
+      </p>
+      <div className="docs-table-wrap">
+        <table className="docs-table">
+          <thead>
+            <tr><th>Outside the capsule</th><th>Why</th><th>What to do</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Vault secrets</strong> (pgsodium)</td>
+              <td>The dump carries ciphertext only; the per-project root key lives outside the database</td>
+              <td>Fetch the root key while the project is healthy (Management API <code>/pgsodium</code>) and store it in your own vault, next to the capsule passphrase</td>
+            </tr>
+            <tr>
+              <td><strong>Edge Function secret values</strong></td>
+              <td>The API returns names and digests only — plaintext is unrecoverable by design</td>
+              <td>Keep your own copy of each value; the capsule's manifest lists the names you must re-enter</td>
+            </tr>
+            <tr>
+              <td><strong>Vector Buckets</strong> (Storage vector indexes)</td>
+              <td>Vectors live in a separate vector store, not in Postgres and not in ordinary Storage objects</td>
+              <td>If you use them, keep your own export or be able to re-embed from source data</td>
+            </tr>
+            <tr>
+              <td><strong>Analytics Buckets</strong> (Iceberg, alpha)</td>
+              <td>Parquet files in a separate analytics store; only a catalog row sits in Postgres</td>
+              <td>Usually re-derivable from the database the capsule does capture — verify for your case</td>
+            </tr>
+            <tr>
+              <td><strong>Replication / ETL destinations</strong></td>
+              <td>Publications ride along in the dump; pipeline and destination credentials do not</td>
+              <td>Re-create pipelines by hand; destination creds come from your own records</td>
+            </tr>
+            <tr>
+              <td><strong>Project settings</strong> — custom domains, network restrictions, SSL, PITR, log drains, read replicas</td>
+              <td>Control-plane config, not data</td>
+              <td>Re-create on the lifeboat project; screenshot these pages today so cutover is transcription, not archaeology</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <h2>7 · Post-mortem — while it's fresh</h2>
       <p>
         Write it within a day and store it next to the capsule: the timeline (detected → lifeboat
