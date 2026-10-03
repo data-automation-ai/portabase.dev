@@ -67,6 +67,14 @@ Replace any "hot replica" language with:
 2. Praise Supabase as the platform; recommend paid tier for production.
 3. Every incident claim keeps its exact href. No invented stats.
 4. Time zones, not jurisdiction. Defaults, not users, are the villain.
+5. **"Fire insurance" is a repeated refrain, not a one-time tagline.** Work it
+   into the hero, the pricing section, and any lockout-story framing —
+   nobody shops for it after the fire.
+6. **Never offer retroactive rescue.** Both lockout archetypes (full lockout,
+   no recourse at all; console-locked but DB still reachable, recoverable but
+   only with effort/luck) are cautionary evidence for signing up *before* an
+   incident — never "contact us now, we'll get you out." Consistent with
+   rule 5: an insurer does not sell a policy to a house already on fire.
 
 ## Out of scope for this pass
 

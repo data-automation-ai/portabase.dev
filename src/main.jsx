@@ -200,9 +200,10 @@ function Hero() {
         <p className="hero-risk-headline"><strong>No API. No Auth. No dashboard. No reachable backups.</strong></p>
         </div>
         <div className="hero-copy-rest">
-        <p className="hero-lead">Supabase is a world-class product. It took millions of developers from idea to a real business. Now picture the morning you cannot log in. No dashboard, no API, and the backups you counted on are locked in the same console. Portabase snapshots your whole project into an encrypted capsule you own, ready to restore in a different account.</p>
+        <p className="hero-lead">Supabase is a world-class product. It took millions of developers from idea to a real business. Now picture the morning you cannot log in. No dashboard, no API, and the backups you counted on are locked in the same console. <strong>Supabase's official SLA is 48 hours — by email. Can your business or project wait that long?</strong> Portabase snapshots your whole project into an encrypted capsule you own, ready to restore in a different account.</p>
+        <p className="hero-lead hero-lead-cloud">On the hosted Portabase Cloud, restore is the key benefit: it rebuilds your database into a <strong>brand-new Supabase account</strong> — in many cases even a <strong>free</strong> one, as long as you are under 500&nbsp;MB of storage total (tables, objects, and edge functions).</p>
         <div className="hero-analogy"><span aria-hidden="true">⌂</span><p><b>Your landlord changed the locks.</b> The backup inside the building is not an Escape. Portabase keeps your way out in another building—tested, current, and under your control.</p></div>
-        <div className="incident-factline"><b>MY INCIDENT · 95+ HOURS</b><span>“Billing dispute” cited</span><span>No details or paperwork</span><span>Card issuer found nothing identifiable</span><span>Singapore payment entity</span><span>No response from Supabase</span></div>
+        <div className="incident-factline"><b>MY INCIDENT · 95+ HOURS</b><span>“Billing dispute” cited</span><span>No details or paperwork</span><span>Card issuer found nothing identifiable</span><span>No response from Supabase</span></div>
         <div className="hero-actions">
           <a className="button button-primary" href="#escape">Build your Escape <Arrow /></a>
           <a className="text-link" href="#stories">See what lockout looks like <span>↓</span></a>
@@ -471,7 +472,7 @@ function WhyNow() {
       <div className="love-note"><span>Let’s be clear</span><h2>Supabase is great.</h2><p>That is why so many prototypes quietly became real companies on it. But loving the building does not mean leaving your only exit key with the landlord.</p></div>
       <aside className="founder-note">
         <div className="founder-note-label"><span>FOUNDER’S NOTE</span><small>WHY THIS ISN’T AN ATTACK</small></div>
-        <div className="founder-note-copy"><h3>I almost gave this product an angry name.</h3><p>“Supabase Sucks.” “Not So Supa.” Something that captured exactly how it felt to be locked out and unable to reach the business behind the screen.</p><div className="founder-incident"><span>THIS IS MY CURRENT SITUATION</span><p>Supabase cited a billing dispute. I received no transaction details, paperwork, or other explanation my credit-card company could identify. I contacted support. At the time of writing, <strong>95 hours have passed with absolutely no response from Supabase.</strong></p><p>Supabase’s own billing documentation says payments may appear from Singapore because its payment entity is there. There is nothing inherently wrong with that. But when a U.S. or other overseas customer is already disputing a vague billing claim, cross-border payment records, time zones, and remedies can add friction to an emergency that is already costing the business.</p><p>The business did not stop needing its database while the ticket waited. That is the danger Portabase exists to make visible.</p></div><p>But an angry name still would not have been fair—or true. <strong>Supabase is an excellent product.</strong> It has introduced millions of people to databases, Auth, Storage, Functions, and the possibility of building a real application without first becoming a backend engineer.</p><p>Portabase is not here to tell you to leave Supabase. It is here to point out one danger many builders never see: <strong>when the application, dashboard, support path, and backup all depend on the same account, one lock can stand between you and your entire business.</strong></p><b>Keep the platform. Remove the single point of failure.</b></div>
+        <div className="founder-note-copy"><h3>I almost gave this product an angry name.</h3><p>“Supabase Sucks.” “Not So Supa.” Something that captured exactly how it felt to be locked out and unable to reach the business behind the screen.</p><div className="founder-incident"><span>THIS IS MY CURRENT SITUATION</span><p>Supabase cited a billing dispute. I received no transaction details, paperwork, or other explanation my credit-card company could identify. I contacted support. At the time of writing, <strong>95 hours have passed with absolutely no response from Supabase.</strong></p><p>But when you are already disputing a vague billing claim, payment records, time zones, and remedies can add friction to an emergency that is already costing the business.</p><p>The business did not stop needing its database while the ticket waited. That is the danger Portabase exists to make visible.</p></div><p>But an angry name still would not have been fair—or true. <strong>Supabase is an excellent product.</strong> It has introduced millions of people to databases, Auth, Storage, Functions, and the possibility of building a real application without first becoming a backend engineer.</p><p>Portabase is not here to tell you to leave Supabase. It is here to point out one danger many builders never see: <strong>when the application, dashboard, support path, and backup all depend on the same account, one lock can stand between you and your entire business.</strong></p><b>Keep the platform. Remove the single point of failure.</b></div>
       </aside>
       <div className="growth-grid">
         <div className="growth-stat"><strong>~10M</strong><span>developers building on Supabase—and every one may need help someday</span><a href="https://supabase.com/blog/supabase-series-f" target="_blank" rel="noreferrer">Supabase, June 2026 <Arrow /></a></div>
@@ -479,15 +480,15 @@ function WhyNow() {
           <div className="section-kicker green">SUCCESS CREATED A NEW REALITY</div>
           <h3>The weekend prototype became a real business before anyone wrote the disaster plan.</h3>
           <p>Lovable, Bolt, v0 and other tools can put a production database behind an idea in minutes. Then the prototype gets customers, payments, years of records, and employees who need it tomorrow morning. The technical shortcut becomes the heart of a business long before anyone asks the brutal question: what happens if the owner cannot log in?</p>
-          <div className="scale-warning"><span>NEARLY 10 MILLION DEVELOPERS. ONE SUPPORT QUEUE.</span><h4>Extraordinary for Supabase. Terrifying when your company is the one that needs help now.</h4><p>Mass adoption proves the product works. It also means your business emergency enters a platform operating at enormous scale. On Pro, the published offering lists email support—but no support SLA, phone line, live chat, designated support contact, or dedicated urgent-outage escalation lane. Those protections begin appearing on higher tiers.</p><b>Your outage may be existential to you. To a platform serving millions, it is still a ticket.</b></div>
+          <div className="scale-warning"><span>NEARLY 10 MILLION DEVELOPERS. ONE SUPPORT QUEUE.</span><h4>Extraordinary for Supabase. Terrifying when your company is the one that needs help now.</h4><p>Mass adoption proves the product works. It also means your business emergency enters a platform operating at enormous scale. On Pro, the published offering lists email support—but no support SLA, phone line, live chat, designated support contact, or dedicated urgent-outage escalation lane. Those protections begin appearing on higher tiers.</p><p>Maybe success broke the queue. Ten million builders, one published email path for Pro, a 48-hour target. Your emergency lands wherever it lands.</p><b>Your outage may be existential to you. To a platform serving millions, it is still a ticket.</b></div>
           <div className="support-gap">
             <div><small>PRO · FROM $25/MO</small><b>Email support</b><span>No guaranteed support SLA</span></div>
             <div><small>TEAM · FROM $599/MO</small><b>Priority email</b><span>Support SLAs begin here</span></div>
             <div><small>ENTERPRISE</small><b>Private Slack</b><span>Premium 24×7 support</span></div>
           </div>
-          <p className="gap-close">If your production site is down on Pro, the published path is email. There is no published Pro phone number or private live-support channel. Supabase’s current legal materials name Supabase Pte. Ltd., and its billing guide identifies a Singapore payment entity. For customers elsewhere, that distance can matter when billing records, business hours, and escalation all collide. A Supabase representative has said the target is 24–48 hours and can run longer under volume; public reports on this page describe outages and support waits stretching far beyond that. Can your company afford to lose tomorrow’s orders, customers, and reputation while the inbox stays silent? When your business goes down at 10am, it can be 10pm where your ticket gets read.</p>
+          <p className="gap-close">If your production site is down on Pro, the published path is email. There is no published Pro phone number or private live-support channel. A Supabase representative has said the target is 24–48 hours and can run longer under volume; public reports on this page describe outages and support waits stretching far beyond that. Can your company afford to lose tomorrow’s orders, customers, and reputation while the inbox stays silent? When your business goes down at 10am, it can be 10pm where your ticket gets read.</p>
           <aside className="escalation-reality"><span>THIS IS NOT A BUSINESS CONTINUITY PLAN</span><blockquote>“See if you can find a GitHub maintainer. Maybe they can escalate it.”</blockquote><p>When the best remaining idea is to find a stranger on the internet who might know someone inside, you do not control the recovery of your business. You are asking for a favor while the clock runs.</p><b>Portabase turns “please answer” into “restore the capsule.”</b></aside>
-          <div className="source-links"><a href="https://supabase.com/solutions/vibe-coders" target="_blank" rel="noreferrer">Supabase for Vibe Coders <Arrow /></a><a href="https://supabase.com/pricing" target="_blank" rel="noreferrer">Published support tiers <Arrow /></a><a href="https://supabase.com/docs/guides/platform/billing-faq" target="_blank" rel="noreferrer">Singapore billing disclosure <Arrow /></a><a href="https://www.reddit.com/r/Supabase/comments/1kbj0sh/supabase_threatened_to_delete_all_my_work_after/" target="_blank" rel="noreferrer">24–48 hour support statement <Arrow /></a></div>
+          <div className="source-links"><a href="https://supabase.com/solutions/vibe-coders" target="_blank" rel="noreferrer">Supabase for Vibe Coders <Arrow /></a><a href="https://supabase.com/pricing" target="_blank" rel="noreferrer">Published support tiers <Arrow /></a><a href="https://supabase.com/docs/guides/platform/billing-faq" target="_blank" rel="noreferrer">Billing FAQ <Arrow /></a><a href="https://www.reddit.com/r/Supabase/comments/1kbj0sh/supabase_threatened_to_delete_all_my_work_after/" target="_blank" rel="noreferrer">24–48 hour support statement <Arrow /></a></div>
         </div>
       </div>
       <figure className="danger-zone-figure">
@@ -513,7 +514,7 @@ function Reality() {
       <div className="ban-reasons">
         <div className="ban-reasons-head"><div><span>IT CAN START WITH SOMETHING ORDINARY</span><h3>Restriction does not require a reckless business owner.</h3></div><p>A payment descriptor is questioned. A card expires. A customer uploads disputed material. A traffic spike looks abusive. The result may be a billing restriction, project suspension, investigation, or account-level lockout—different mechanisms with the same immediate problem: your business can no longer depend on normal access.</p></div>
         <div className="ban-reason-grid">
-          <div><b>01</b><strong>Foreign payment questioned</strong><p>A bookkeeper, accountant, bank, or fraud system may not recognize “SUPABASE PTE. LTD. · SINGAPORE.” A chargeback inquiry is not documented as an automatic ban, but it can become a payment or fraud review.</p></div>
+          <div><b>01</b><strong>Foreign payment questioned</strong><p>A bookkeeper, accountant, bank, or fraud system may not recognize an unfamiliar foreign payment descriptor. A chargeback inquiry is not documented as an automatic ban, but it can become a payment or fraud review.</p></div>
           <div><b>02</b><strong>Routine card failure</strong><p>An expired card, bank decline, insufficient funds, missing card, overdue invoice, or incorrect billing address can restrict services or pause projects.</p></div>
           <div><b>03</b><strong>Quota or runaway usage</strong><p>Repeated plan overages, spend-cap limits, viral traffic, bot traffic, reconnection loops, uncontrolled channels, or a load test pointed at production can trigger restrictions.</p></div>
           <div><b>04</b><strong>Someone reports hosted content</strong><p>A copyright, privacy, harassment, fraud, or other abuse complaint may trigger investigation. The owner can face the operational consequence before the underlying dispute is resolved.</p></div>
@@ -756,6 +757,112 @@ function EscapeVsSupabaseDiagram() {
         Portabase exists so the way out is already in <em>your</em> building.
       </p>
     </div>
+  );
+}
+
+/** Two lockout archetypes: severe (no recourse) vs inconvenient (recoverable, barely). Neither offers retroactive rescue. */
+function TwoScenarios() {
+  return (
+    <section className="section" id="lockout-types">
+      <div className="shell">
+        <div className="section-kicker red">TWO WAYS THIS HAPPENS</div>
+        <div className="split-heading">
+          <h2>Not every lockout looks the same.</h2>
+          <p>Both end the same way without a capsule already in place: you're the one who needed the insurance, and it's too late to buy it.</p>
+        </div>
+        <div className="esc-cmp-panels">
+          <article className="esc-cmp-panel esc-cmp-panel-locked">
+            <header>
+              <small>SEVERE · NO RECOURSE</small>
+              <h3>The account is gone</h3>
+            </header>
+            <div className="esc-cmp-lock" aria-hidden="true">
+              <div className="esc-cmp-lock-door">
+                <i />
+                <b>BANNED</b>
+                <span>No login · no API · no dashboard</span>
+              </div>
+              <div className="esc-cmp-lock-arrow">⇢</div>
+              <div className="esc-cmp-lock-vault esc-cmp-lock-vault-dead">
+                <b>Nothing left to reach</b>
+                <span>Database, backups, support — all behind the same wall</span>
+              </div>
+            </div>
+            <ul className="esc-cmp-bullets">
+              <li>No connection string works — the project itself is unreachable</li>
+              <li>A pre-incident capsule is the only way out</li>
+              <li>Without one, there is nothing left to do</li>
+            </ul>
+          </article>
+
+          <article className="esc-cmp-panel">
+            <header>
+              <small>INCONVENIENT · BARELY RECOVERABLE</small>
+              <h3>The console is gone, the database isn't</h3>
+            </header>
+            <div className="esc-cmp-lock" aria-hidden="true">
+              <div className="esc-cmp-lock-door">
+                <i />
+                <b>MFA / IDENTITY LOCKED</b>
+                <span>Dashboard login fails</span>
+              </div>
+              <div className="esc-cmp-lock-arrow">⇢</div>
+              <div className="esc-cmp-lock-vault">
+                <b>DB connection string still works</b>
+                <span>If you kept it somewhere else — most people don't</span>
+              </div>
+            </div>
+            <ul className="esc-cmp-bullets">
+              <li>Source keys are separate from console login — sometimes that saves you</li>
+              <li>Recovery depends on having saved a credential you probably didn't think to save</li>
+              <li>Effort, luck, and technical comfort required — not a plan</li>
+            </ul>
+          </article>
+        </div>
+        <p className="esc-cmp-foot">
+          Neither panel is a pitch to call us mid-incident — we don't do retroactive rescue.
+          Both are the reason to already have a capsule before you need one.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/** Conceptual runner architecture: sealed isolated container, keys decrypted only inside it, tunnel is break-glass access only. */
+function RunnerArchitectureDiagram() {
+  const box = { border: '1px solid var(--paper-line-strong)', borderRadius: 'var(--radius)', background: 'var(--paper-raised)', padding: '16px 18px' };
+  return (
+    <section className="section" id="how-the-runner-works" style={{ background: 'var(--paper)' }}>
+      <div className="shell">
+        <div className="section-kicker green">CONCEPTUAL · HOW MANAGED ESCAPE IS DESIGNED TO WORK</div>
+        <div className="split-heading">
+          <h2>A sealed container, not a shared server.</h2>
+          <p>Conceptual illustration of the managed-runner design — not a live dashboard. Your source credentials are sealed to a container built only for your job, run in an isolated cloud environment, and never decrypted anywhere Portabase's own systems can read them.</p>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20, alignItems: 'stretch', marginTop: 24 }}>
+          <div style={box}>
+            <b>1. You seal your keys</b>
+            <p style={{ color: 'var(--ink-muted)', fontSize: 14, marginTop: 8 }}>Your browser encrypts your Supabase credentials to a key only your job's container can unwrap. Portabase's servers see ciphertext only.</p>
+          </div>
+          <div style={box}>
+            <b>2. An isolated container runs, then disappears</b>
+            <p style={{ color: 'var(--ink-muted)', fontSize: 14, marginTop: 8 }}>A short-lived, per-customer container spins up in an isolated cloud environment, decrypts your keys <em>inside itself only</em>, runs the capture, and is destroyed. Nothing persists.</p>
+          </div>
+          <div style={box}>
+            <b>3. The capsule goes to your vault</b>
+            <p style={{ color: 'var(--ink-muted)', fontSize: 14, marginTop: 8 }}>The encrypted capsule lands in storage you own — Dropbox, S3, NAS. Portabase never holds a copy.</p>
+          </div>
+          <div style={box}>
+            <b>4. Break-glass access is yours alone</b>
+            <p style={{ color: 'var(--ink-muted)', fontSize: 14, marginTop: 8 }}>An encrypted tunnel lets <em>you</em> reach your own container for debugging (e.g. <code>portabase doctor</code>) — never a bypass of capsule encryption, and never a path in for Portabase.</p>
+          </div>
+        </div>
+        <p className="esc-cmp-foot">
+          This describes the managed-runner design, not a claim that automatic scheduled runs are live today —
+          check the Cloud page for what's currently shipped versus what's on the roadmap.
+        </p>
+      </div>
+    </section>
   );
 }
 
@@ -2119,7 +2226,7 @@ function UseCases() {
 
 function HomePage() {
   useEffect(() => { document.title = 'Portabase — Your Supabase Escape'; }, []);
-  return <><Header /><main><Hero /><HeroConcept /><NeverHoldKeys /><Faq /><CliVsCloud /><WhatIsThis /><WhyNow /><Reality /><ClosureRisk /><Stories /><Escape /><InstallCta Arrow={Arrow} /><Audit /><Cutover /><PublicDeal /><CloudTeaser /><UseCases /></main><Footer /></>;
+  return <><Header /><main><Hero /><HeroConcept /><NeverHoldKeys /><Faq /><CliVsCloud /><WhatIsThis /><WhyNow /><Reality /><ClosureRisk /><Stories /><TwoScenarios /><RunnerArchitectureDiagram /><Escape /><InstallCta Arrow={Arrow} /><Audit /><Cutover /><PublicDeal /><CloudTeaser /><UseCases /></main><Footer /></>;
 }
 
 function App() {

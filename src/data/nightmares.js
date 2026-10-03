@@ -334,5 +334,29 @@ export const nightmares = [
     source: 'Supabase Status · Jun 17, 2026',
     href: 'https://status.supabase.com/incidents/dj3n11rv8q6h',
     verified: 'Official infrastructure incident'
+  },
+  {
+    id: 'N43', kind: 'firsthand', tag: 'IDENTITY LOCKOUT',
+    title: 'An MFA lockout with no recovery codes left a two-week-old ticket unanswered.',
+    body: 'The poster said their credentials were correct but login required a TOTP code that never appeared in their authenticator app. Two support tickets went unanswered, and the in-dashboard support form itself required MFA to submit.',
+    source: 'GitHub Discussions · Jul 7, 2026',
+    href: 'https://github.com/orgs/supabase/discussions/47670',
+    verified: 'Firsthand report · zero replies, unresolved publicly'
+  },
+  {
+    id: 'N44', kind: 'firsthand', tag: 'IDENTITY LOCKOUT',
+    title: 'A lost authenticator and no recovery codes met a support form that itself required MFA to open.',
+    body: 'The poster lost their authenticator and had no recovery codes, so they could not pass the TOTP screen; the in-dashboard support form was inaccessible without completing MFA first. A collaborator confirmed Supabase policy generally cannot help in this situation.',
+    source: 'GitHub Discussions · Jul 8, 2026',
+    href: 'https://github.com/orgs/supabase/discussions/47749',
+    verified: 'Firsthand report · community response only, no confirmed resolution'
+  },
+  {
+    id: 'N45', kind: 'firsthand', tag: 'PHANTOM BILLING',
+    title: 'Regaining a lost production project only revealed a storage lock that rejected every delete attempt.',
+    body: 'The poster reported losing access to a production project and regained it via a community workaround. The project then turned out to be restricted for exceeding its storage quota, and every attempt to delete the old files needed to clear the block returned HTTP 402, even using the project secret key.',
+    source: 'GitHub Discussions · Sep 17, 2026',
+    href: 'https://github.com/orgs/supabase/discussions/50494',
+    verified: 'Firsthand report · self-help workaround for access, storage block unresolved at close'
   }
 ];
