@@ -45,3 +45,15 @@ Capture (especially Storage) needs temporary disk. That disk must be **cloud run
 - `docs/SECURITY-TRUST.md`
 - `docs/REPLAY.md`
 - `docs/BILLING.md`
+
+## npm publish
+
+Default publish is 2FA-elevated: `npm login` alone is not enough.
+
+```powershell
+npm publish --otp=<fresh-6-digit-code>
+```
+
+- The code comes from the owner's authenticator app, never email; it dies in ~30s, so request it fresh and publish immediately.
+- Alternative: an npm **Automation** token (`npm config set //registry.npmjs.org/:_authToken=<token>` in the operator's own terminal) bypasses OTP entirely.
+- Never print, commit, or checkpoint a token or OTP.
