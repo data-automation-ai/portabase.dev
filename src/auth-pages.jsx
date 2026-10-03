@@ -16,6 +16,8 @@ import { sessionUser, isSignedIn } from './lib/session.js';
 import { ensureSessionForVersion } from './lib/cloud-api.js';
 import { ConsoleApp } from './console/ConsoleApp.jsx';
 import { KEYS_COPY } from './data/never-hold-keys.js';
+import { isRecoveryAckComplete } from './data/recovery-acknowledgments.js';
+import { RecoveryAcknowledgments, recordRecoveryAck } from './recovery-ack.jsx';
 
 const Arrow = () => <span aria-hidden="true">↗</span>;
 
@@ -110,7 +112,7 @@ function AuthShell({ children, title, lead, version, cardLabel }) {
   );
 }
 
-function GoogleButton({ version, next, label }) {
+function GoogleButton({ version, next, label, blocked = false, onStart }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   return (
@@ -118,9 +120,11 @@ function GoogleButton({ version, next, label }) {
       <button
         type="button"
         className="button oauth-btn oauth-btn-google"
-        disabled={busy}
+        disabled={busy || blocked}
         aria-label={label}
         onClick={async () => {
+          if (blocked) return;
+          onStart?.();
           setBusy(true);
           setError('');
           try {
@@ -154,7 +158,7 @@ function GoogleButton({ version, next, label }) {
   );
 }
 
-function GitHubButton({ version, next, label }) {
+function GitHubButton({ version, next, label, blocked = false, onStart }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   if (version === 'aws') return null;
@@ -163,9 +167,11 @@ function GitHubButton({ version, next, label }) {
       <button
         type="button"
         className="button oauth-btn oauth-btn-github"
-        disabled={busy}
+        disabled={busy || blocked}
         aria-label={label}
         onClick={async () => {
+          if (blocked) return;
+          onStart?.();
           setBusy(true);
           setError('');
           try {
@@ -207,6 +213,13 @@ export function LoginPage() {
   const [magicSent, setMagicSent] = useState(false);
   const [checking, setChecking] = useState(!isSignedIn());
   const [showPassword, setShowPassword] = useState(false);
+  const [acks, setAcks] = useState(() => new Set());
+  const toggleAck = (key) => setAcks((prev) => {
+    const nextSet = new Set(prev);
+    if (nextSet.has(key)) nextSet.delete(key); else nextSet.add(key);
+    return nextSet;
+  });
+  const ackComplete = mode !== 'signup' || isRecoveryAckComplete(acks);
 
   const selectVersion = (v) => {
     const nextV = normalizeCloudVersion(v);
@@ -312,16 +325,29 @@ export function LoginPage() {
         <button type="button" role="tab" aria-selected={mode === 'signup'} className={mode === 'signup' ? 'is-active' : ''} onClick={() => setMode('signup')}>Create account</button>
       </div>
 
+      {mode === 'signup' && !awaitingConfirm && (
+        <>
+          <RecoveryAcknowledgments checked={acks} onToggle={toggleAck} />
+          {!ackComplete && (
+            <p className="ack-hint">Acknowledge every red and amber item above to enable sign-up.</p>
+          )}
+        </>
+      )}
+
       <div className="auth-oauth">
         <GoogleButton
           version={version}
           next={next}
           label={mode === 'signup' ? 'Sign up with Google' : 'Continue with Google'}
+          blocked={!ackComplete}
+          onStart={() => { if (mode === 'signup') recordRecoveryAck(acks); }}
         />
         <GitHubButton
           version={version}
           next={next}
           label={mode === 'signup' ? 'Sign up with GitHub' : 'Continue with GitHub'}
+          blocked={!ackComplete}
+          onStart={() => { if (mode === 'signup') recordRecoveryAck(acks); }}
         />
       </div>
       <div className="auth-divider"><span>or email</span></div>
@@ -332,6 +358,8 @@ export function LoginPage() {
           onSubmit={e => {
             e.preventDefault();
             if (mode === 'signup') {
+              if (!ackComplete) return;
+              recordRecoveryAck(acks);
               go(async () => {
                 if (version === 'aws') {
                   await awsAuth.signUpWithEmail({ email, password, name });
@@ -381,7 +409,7 @@ export function LoginPage() {
               </button>
             </span>
           </label>
-          <button className="button button-primary" type="submit" disabled={busy} aria-busy={busy}>
+          <button className="button button-primary" type="submit" disabled={busy || !ackComplete} aria-busy={busy}>
             {busy ? 'Working…' : mode === 'signup' ? 'Create account' : 'Sign in with password'}
           </button>
           {mode === 'signin' && (
