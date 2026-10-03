@@ -10,7 +10,9 @@ export function InstallCta({ Arrow }) {
           <h2>Install the CLI. Keep the keys.</h2>
           <p>
             Full Escape engine on your runner. Cloud is optional GUI and telemetry —
-            never custody of passphrases or capsule bytes.
+            never custody of passphrases or capsule bytes. Like fire insurance, it
+            only counts if it exists before the fire: snapshot now, while you can
+            still log in.
           </p>
           <pre className="docs-code" tabIndex={0}><code>{CLI_INSTALL.npmCommand}</code></pre>
           <div className="docs-cta-row">

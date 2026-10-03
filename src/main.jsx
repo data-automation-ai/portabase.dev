@@ -1256,6 +1256,7 @@ function CloudTeaser() {
         <div className="section-kicker green">USP · ESCAPE OPS</div>
         <h2>Open source is the Escape.<br />Cloud keeps the Escape running.</h2>
         <p><strong>Supabase only.</strong> GitHub = free Escape engine. <strong>This site</strong> = hosted <strong>GUI</strong>, guided configuration, <strong>telemetry</strong>, and optional SMS on $17 — so the Escape is not a forgotten cron job. <strong>Cloud Free</strong> is 100 MB, manual only. Paid: <strong>$7</strong> (one database, 10 GB, 1 capsule / 24h) or <strong>$17</strong> (unlimited databases, 25 GB, 3 capsules / day). You provide capsule storage. Zero knowledge of your encryption keys. Restore into your <strong>contingency account</strong> — a free second Supabase account that the incident cannot touch. Refunds are self-serve: full within 8 days, prorated after, one button, no email required.</p>
+        <p className="cloud-insurance"><strong>Both versions are fire insurance — and insurance only works before the fire.</strong> The free CLI is the policy you write yourself: one snapshot, taken before any lockout, that the incident cannot reach. Cloud is the premium: a few dollars a month to keep that policy current, tested, and watched. A proven restore is the payout — your business rebuilt in a new account while the old one is still locked. Nobody is glad they paid the premium. Everyone is glad they had the policy.</p>
         <div className="cloud-teaser-actions">
           <a className="button button-primary" href="/login?mode=signup&next=/app">Start free trial <Arrow /></a>
           <a className="button button-ghost" href="/backend">Backend · how it talks <Arrow /></a>
@@ -2231,7 +2232,7 @@ function MidPageCta() {
       <div>
         <div className="section-kicker green">THE OTHER ENDING</div>
         <h2>Every story above ends the same way without a capsule.</h2>
-        <p>With one, it ends in a restore: your encrypted capsule rebuilds into a brand-new Supabase account — often a free one — while the original account is still locked.</p>
+        <p>With one, it ends in a restore: your encrypted capsule rebuilds into a brand-new Supabase account — often a free one — while the original account is still locked. That is fire insurance for your Supabase account: the CLI is the policy you write once for free; Cloud is the premium that keeps it current, watched, and ready to pay out.</p>
         <div className="hero-actions">
           <a className="button button-primary" href="#escape">Build your Escape <Arrow /></a>
           <a className="button button-ghost" href="/login?mode=signup&next=/app">Start free Cloud trial <Arrow /></a>
