@@ -1,7 +1,9 @@
 import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
+import './recovery-home.css';
 import { nightmares as stories } from './data/nightmares.js';
+import { sortIncidents, incidentKey } from './lib/incident-order.js';
 import { diagrams, modelLayers, trustBoundary } from './data/diagrams.js';
 import { HOMEPAGE_FAQ } from './data/faq.js';
 import { KEYS_COPY } from './data/never-hold-keys.js';
@@ -197,50 +199,29 @@ function Header() {
 }
 
 function Hero() {
-  return <section className="hero" id="top">
-    <div className="hero-noise" />
-    <div className="shell hero-shell">
-      <div className="hero-brandline"><SupabaseMark /><span>Like fire insurance for your Supabase ACCOUNT. Nobody shops for it AFTER the fire.</span></div>
-      <div className="hero-grid">
-       <div className="hero-copy">
-        <div className="hero-copy-top">
-        <p className="hero-usp"><span>USP</span><strong>Your Supabase Escape</strong> — a customer-owned way out when the dashboard is locked.</p>
-        <h1>A Supabase lockout can freeze your <em>entire business.</em></h1>
-
-        <p className="hero-risk-headline"><strong>No API. No Auth. No dashboard. No reachable backups.</strong></p>
+  return <section className="hero recovery-hero" id="top">
+    <div className="shell recovery-layout">
+      <div className="recovery-copy">
+        <p className="recovery-intro">You built it with Supabase. Now people depend on it.</p>
+        <h1>Could your business survive 48 hours offline?</h1>
+        <p className="recovery-question">What if you lost your Supabase account for good?</p>
+        <p className="recovery-lead">Your side project has real customers now. A locked account could put their data, your app, and the backups you need out of reach.</p>
+        <p className="recovery-answer">Portabase helps you keep an encrypted recovery copy outside Supabase, in storage you control—so you can rebuild in a separate account.</p>
+        <div className="recovery-actions">
+          <a className="button button-primary" href="#escape">See how recovery works <Arrow /></a>
+          <a className="recovery-evidence-link" href="#stories">Read the real cases <span aria-hidden="true">↓</span></a>
         </div>
-        <div className="hero-copy-rest">
-        <p className="hero-lead">Supabase is a world-class product. It took millions of developers from idea to a real business. Now picture the morning you cannot log in. No dashboard, no API, and the backups you counted on are locked in the same console. <strong>Supabase's published support target is 48 hours — by email. Can your business or project wait that long?</strong> <a className="text-link" href="https://www.reddit.com/r/Supabase/comments/1kbj0sh/supabase_threatened_to_delete_all_my_work_after/" target="_blank" rel="noreferrer">Source <Arrow /></a> Portabase snapshots your whole project into an encrypted capsule you own, ready to restore in a different account.</p>
-        <p className="hero-lead hero-lead-cloud">Hosted Portabase Cloud rebuilds your capsule into a <strong>brand-new Supabase account</strong> — often even a <strong>free</strong> one, under 500&nbsp;MB total (tables, objects, edge functions).</p>
-        <div className="incident-factline"><b>MY INCIDENT · 95+ HOURS</b><span>“Billing dispute” cited</span><span>No details or paperwork</span><span>Card issuer found nothing identifiable</span><span>No response from Supabase</span></div>
-        <div className="hero-actions">
-          <a className="button button-primary hero-cta-cli" href="#escape">Build your Escape <Arrow /></a>
-          <a className="button button-primary hero-cta-cloud" href="/login?mode=signup&next=/app">Start free Cloud trial <Arrow /></a>
-          <a className="text-link" href="#stories">See what lockout looks like <span>↓</span></a>
-        </div>
-        <div className="hero-proof"><span>USP · Escape</span><span>Supabase only</span><a href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">Open source free · Cloud = GUI &amp; telemetry <Arrow /></a></div>
-        </div>
+        <p className="recovery-note">Set it up before a lockout. Keep the copy. Test the restore.</p>
       </div>
-      <img
-        className="lockout-arrow"
-        src="/images/arrow3.png"
-        alt="This is the actual login screenshot from the Founder, it is the reason Portabase.dev came to be"
-        width="320"
-        height="160"
-      />
-      <div className="lockout-stage">
-        <figure className="lockout-evidence">
-          <div className="evidence-label"><span><i /> Actual lockout</span><b>Not a mockup</b></div>
+      <figure className="recovery-evidence">
+          <div className="recovery-evidence-heading">Why Portabase exists</div>
           <picture>
             <source srcSet="/images/banned.webp" type="image/webp" />
-            <img className="lockout-shot" src="/images/banned.png" alt="Annotated screenshot of the founder Supabase sign-in showing Error: User is banned" />
+            <img src="/images/banned.png" width="1376" height="1143" alt="The founder’s Supabase sign-in screen showing Error: User is banned, circled in red." />
           </picture>
-          <figcaption><span>Account locked. Business frozen. Backups unreachable.</span><small>Actual founder scenario · identifying details redacted</small></figcaption>
-        </figure>
-      </div>
-      </div>
+          <figcaption>The founder’s actual lockout. The reason we built a way to keep a recovery copy outside the account.</figcaption>
+      </figure>
     </div>
-    <div className="reality-ticker"><div><span>PROJECT DELETED</span><span>OWNER LOCKED OUT</span><span>PAYMENT FAILED</span><span>STORAGE NOT IN BACKUP</span><span>API KEYS REVOKED</span><span>SUPPORT TICKET OPEN</span><span>PROJECT DELETED</span><span>OWNER LOCKED OUT</span></div></div>
   </section>;
 }
 
@@ -553,62 +534,27 @@ function Reality() {
   </section>;
 }
 
-function hrefKey(href) {
-  try {
-    const url = new URL(href);
-    return `${url.hostname}${url.pathname}`.replace(/\/$/, '');
-  } catch {
-    return href;
-  }
-}
-
-function storySeverity(story) {
-  const t = `${story.tag} ${story.title}`.toLowerCase();
-  if (t.includes('banned')) return 10;
-  if (t.includes('takeover')) return 11;
-  if (t.includes('project deleted')) return 12;
-  if (t.includes('identity')) return 13;
-  if (t.includes('billing freeze')) return 14;
-  if (t.includes('missing files')) return 20;
-  if (t.includes('export blocked')) return 21;
-  if (t.includes('empty restore')) return 22;
-  if (t.includes('table deleted')) return 23;
-  if (t.includes('restore')) return 24;
-  if (t.includes('expired')) return 25;
-  if (t.includes('production')) return 30;
-  if (t.includes('database unreachable')) return 31;
-  if (t.includes('multi-service') || t.includes('platform outage')) return 32;
-  if (t.includes('critical')) return 33;
-  if (t.includes('ten days')) return 34;
-  if (t.includes('self-lockout')) return 40;
-  if (t.includes('restricted')) return 41;
-  if (t.includes('stuck')) return 42;
-  if (t.includes('disputed')) return 43;
-  if (t.includes('login') || t.includes('dashboard')) return 50;
-  if (t.includes('official')) return 60;
-  if (t.includes('billing') || t.includes('phantom')) return 70;
-  return 80;
-}
-
 function homepageIncidents() {
-  const known = new Set(stories.map(story => hrefKey(story.href)));
+  const known = new Set(stories.map(story => incidentKey(story.href)));
   const extras = retiredStories
-    .filter(story => !known.has(hrefKey(story.href)))
+    .filter(story => story.verified !== 'Documented platform behavior' && !known.has(incidentKey(story.href)))
     .map((story, index) => ({ ...story, id: `R${index + 1}`, kind: 'firsthand' }));
-  return [...stories, ...extras].sort((a, b) => {
-    const rank = storySeverity(a) - storySeverity(b);
-    return rank !== 0 ? rank : String(a.id).localeCompare(String(b.id));
-  });
+  return [...stories, ...extras];
 }
 
 function Stories() {
-  const homepageStories = useMemo(() => homepageIncidents(), []);
+  const [order, setOrder] = useState('recent');
+  const homepageStories = useMemo(() => sortIncidents(homepageIncidents(), order), [order]);
   return <section className="section stories" id="stories">
     <div className="shell">
-      <div className="section-kicker red">DOCUMENTED REAL-LIFE INCIDENTS · ZERO HYPOTHETICALS</div>
+      <div className="section-kicker">The evidence</div>
       <div className="split-heading">
-        <h2>These actually<br />happened.</h2>
-        <p>Public reports with source links. Account loss, bans, backup holes, and production-down cases first. A report is what the poster said — not independent proof of cause.</p>
+        <h2>Real projects.<br />Real consequences.</h2>
+        <p>Account lockouts, interrupted businesses, and difficult recoveries. Read the public reports and Supabase’s own incident records.</p>
+      </div>
+      <div className="story-controls">
+        <p>{order === 'recent' ? 'Newest month first; higher impact first within each month.' : 'Newest year first; higher impact first within each year.'} Dates refer to the original report or official incident.</p>
+        <label>Sort cases <select value={order} onChange={event => setOrder(event.target.value)}><option value="recent">Recency + impact</option><option value="impact">Impact within each year</option></select></label>
       </div>
       <div className="story-list" role="list">
         {homepageStories.map((story, index) => (
@@ -2226,7 +2172,7 @@ function UseCases() {
 
 function HomePage() {
   useEffect(() => { document.title = 'Portabase — Your Supabase Escape'; }, []);
-  return <><Header /><main><Hero /><HeroConcept /><NeverHoldKeys /><WhatIsThis /><CliVsCloud /><WhyNow /><Reality /><ClosureRisk /><Stories /><TwoScenarios /><MidPageCta /><RunnerArchitectureDiagram /><Escape /><InstallCta Arrow={Arrow} /><Faq /><Audit /><Cutover /><PublicDeal /><CloudTeaser /><UseCases /></main><Footer /></>;
+  return <><Header /><main><Hero /><Stories /><WhyNow /><Reality /><ClosureRisk /><TwoScenarios /><MidPageCta /><WhatIsThis /><NeverHoldKeys /><CliVsCloud /><HeroConcept /><RunnerArchitectureDiagram /><Escape /><InstallCta Arrow={Arrow} /><Faq /><Audit /><Cutover /><PublicDeal /><CloudTeaser /><UseCases /></main><Footer /></>;
 }
 
 /** Mid-page conversion point placed at the emotional peak, after Stories + TwoScenarios. */
