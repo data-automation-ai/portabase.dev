@@ -394,6 +394,10 @@ $('download').addEventListener('click', () => {
 $('openSealInfo').addEventListener('click', () => $('sealInfo').showModal());
 $('closeSealInfo').addEventListener('click', () => $('sealInfo').close());
 $('sealInfo').addEventListener('click', event => { if (event.target === $('sealInfo')) $('sealInfo').close(); });
+$('openTechnicalInfo').addEventListener('click', () => { $('sealInfo').close(); $('technicalInfo').showModal(); });
+$('closeTechnicalInfo').addEventListener('click', () => $('technicalInfo').close());
+$('backToSealInfo').addEventListener('click', () => { $('technicalInfo').close(); $('sealInfo').showModal(); });
+$('technicalInfo').addEventListener('click', event => { if (event.target === $('technicalInfo')) $('technicalInfo').close(); });
 
 function showHelpPrompt(field) {
   if (Date.now() < helpSuppressedUntil || !HELP_TOPICS[field.dataset.help]

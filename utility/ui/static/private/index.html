@@ -229,8 +229,87 @@
         <article><span>PORTABASE CANNOT</span><strong>Open or run it while sealed</strong><p>Without your key, we cannot open its private state, read Supabase credentials, start a backup or replay, or decrypt a capsule.</p></article>
       </div>
       <div class="modal-warning"><strong>Why the warning is shown now</strong><p>This development build has the isolated loopback interface and private storage boundary, but its stored credential file is not encrypted by a customer key yet. An infrastructure administrator could still read it. The runner must not display “Sealed” until customer key encryption and denial checks pass.</p></div>
+      <button id="openTechnicalInfo" class="technical-link" type="button">A deeper technical explanation of the runner.</button>
       <p class="modal-foot">If the recovery key is lost, PortaBase cannot recreate it. Keep the recovery copy outside the runner.</p>
       <button id="closeSealInfo" type="button">I understand the current status</button>
+    </div>
+  </dialog>
+  <dialog id="technicalInfo" class="technical-dialog" aria-labelledby="technical-title">
+    <div class="modal-rule"></div>
+    <div class="modal-body">
+      <p class="eyebrow">Technical boundary</p>
+      <h2 id="technical-title">How the customer-controlled runner works</h2>
+      <p class="modal-lead">This view exposes the engineering detail intentionally hidden from the guided setup. It distinguishes the current development build from the controls the sealed Linux runner must prove before release.</p>
+
+      <section class="technical-section">
+        <h3>Execution path</h3>
+        <div class="technical-flow" aria-label="Runner execution path">
+          <div><span>1</span><strong>Browser</strong><p>Renders a page served by the runner, accepts the four setup values, filters inventory, and displays progress. It does not perform the backup.</p></div>
+          <div><span>2</span><strong>Linux runner</strong><p>Connects to Supabase, inventories data, captures selected content, builds the archive, encrypts the capsule, and performs recovery.</p></div>
+          <div><span>3</span><strong>Customer vault</strong><p>Receives the encrypted capsule in customer-controlled storage. Recovery requires the capsule and its separate passphrase.</p></div>
+        </div>
+      </section>
+
+      <section class="technical-section">
+        <h3>Where sensitive values exist</h3>
+        <div class="technical-table" role="table" aria-label="Sensitive value locations">
+          <div class="technical-row heading" role="row"><span>Material</span><span>Location</span><span>PortaBase account service</span></div>
+          <div class="technical-row" role="row"><strong>Supabase credentials</strong><span>Runner private state and process memory</span><span>Not sent</span></div>
+          <div class="technical-row" role="row"><strong>Capsule passphrase</strong><span>Runner private state and process memory</span><span>Not sent</span></div>
+          <div class="technical-row" role="row"><strong>Inventory names</strong><span>Runner SQLite database</span><span>Not sent</span></div>
+          <div class="technical-row" role="row"><strong>Raw backup bytes</strong><span>Runner scratch volume during a job</span><span>Not sent</span></div>
+          <div class="technical-row" role="row"><strong>Encrypted capsule</strong><span>Customer-selected vault</span><span>Opaque ciphertext only if explicitly routed there</span></div>
+        </div>
+        <p class="technical-caveat"><strong>Current build:</strong> the credential file has restrictive file permissions, but it is not yet encrypted with a customer-held recovery key. A host administrator could read it. That limitation is why the runner is marked <em>Seal not verified</em>.</p>
+      </section>
+
+      <section class="technical-section split">
+        <div>
+          <h3>Network boundary</h3>
+          <ul>
+            <li>The current development dashboard binds to <code>127.0.0.1</code> and requires a random launch token.</li>
+            <li>The production design permits runner-originated connections to the bound Supabase project, the customer vault, and PortaBase subscription and status endpoints.</li>
+            <li>Supabase credentials, passphrases, inventory names, object paths, and diagnostic logs are excluded from PortaBase telemetry.</li>
+            <li>Outbound-only production networking remains a deployment requirement and is not proven by this Windows preview.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Storage boundary</h3>
+          <ul>
+            <li><strong>Durable:</strong> configuration, SQLite inventory, selection history, and local evidence.</li>
+            <li><strong>Scratch:</strong> captured data, archive construction, and encrypted-output overlap during a job.</li>
+            <li>The UI reports capacity only from the Linux runner filesystem. It refuses to present the operator workstation disk as runner capacity.</li>
+            <li>Scratch deletion does not replace capsule encryption or durable-state protection.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="technical-section split">
+        <div>
+          <h3>Evidence and provability</h3>
+          <ul>
+            <li>Runner-local SQLite records inventory revisions, selections, and operational events.</li>
+            <li>Capsule hashes and byte counts can prove which encrypted artifact was produced and delivered.</li>
+            <li>A fixed telemetry allowlist limits outbound status to job state, phase, duration, counts, verification results, and capsule hashes.</li>
+            <li>Provider logs, network-flow evidence, immutable audit retention, and negative access tests are needed to support stronger administrative-access claims.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Release proof still required</h3>
+          <ol>
+            <li>Encrypt credentials and private SQLite state with a customer-held recovery key.</li>
+            <li>Demonstrate that PortaBase administration cannot unlock state or start a job without that key.</li>
+            <li>Deploy the real Linux runner with durable state and bounded scratch storage.</li>
+            <li>Prove outbound network restrictions and subscription-key refusal behavior.</li>
+            <li>Complete a backup, capsule verification, isolated restore, cutover, and rollback drill.</li>
+          </ol>
+        </div>
+      </section>
+
+      <div class="technical-actions">
+        <button id="backToSealInfo" class="quiet" type="button">Back to simple explanation</button>
+        <button id="closeTechnicalInfo" type="button">Close</button>
+      </div>
     </div>
   </dialog>
   <dialog id="helpPrompt" class="help-dialog help-prompt" aria-labelledby="help-prompt-title">
