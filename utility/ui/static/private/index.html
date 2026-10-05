@@ -260,9 +260,12 @@
       <h2 id="inspection-title">Connecting to Supabase</h2>
       <p id="inspectionStatus" class="inspection-status" aria-live="polite">Saving your four values inside the runner…</p>
       <div class="probe-graphic" aria-hidden="true">
+        <div class="probe-node runner-node"><span class="runner-mark"><i></i><i></i><i></i></span><strong>PortaBase runner</strong></div>
+        <div class="probe-exchange">
+          <div class="probe-route outbound"><span>Request</span><i></i></div>
+          <div class="probe-route inbound"><span>Response</span><i></i></div>
+        </div>
         <div class="probe-node supabase-node"><i></i><strong>Supabase</strong></div>
-        <div class="probe-line"><i></i></div>
-        <div class="probe-node runner-node"><span class="runner-mark"><i></i><i></i><i></i></span><strong>Your runner</strong></div>
       </div>
       <ol class="probe-stages" aria-label="Connection progress">
         <li id="probeAccess"><span>1</span><div><strong>Secure access</strong><small>Waiting</small></div></li>
