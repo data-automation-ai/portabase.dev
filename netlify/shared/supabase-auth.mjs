@@ -90,7 +90,11 @@ export async function verifySupabaseUser(authorizationHeader) {
     throw err;
   }
 
-  const user = data.user;
+  return verifiedSupabaseClaims(data.user);
+}
+
+/** Map only a user returned by the authenticated Supabase getUser call above. */
+export function verifiedSupabaseClaims(user) {
   const email = String(user.email || '').toLowerCase();
   if (!user.id || !email) throw new Error('invalid_claims');
 
@@ -98,7 +102,8 @@ export async function verifySupabaseUser(authorizationHeader) {
     id: user.id,
     email,
     name: user.user_metadata?.full_name || user.user_metadata?.name || '',
-    emailVerified: Boolean(user.email_confirmed_at || user.confirmed_at),
+    // confirmed_at also covers PHONE confirmation and cannot verify an email.
+    emailVerified: typeof user.email_confirmed_at === 'string' && Number.isFinite(Date.parse(user.email_confirmed_at)),
     provider: user.app_metadata?.provider || 'email',
     authProvider: 'supabase',
   };

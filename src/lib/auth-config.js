@@ -21,13 +21,12 @@ import {
  *   SUPABASE_ANON_KEY
  *   SUPABASE_SERVICE_ROLE_KEY
  *
- * Google OAuth client ID/secret are configured on the hosted Supabase Auth
- * project (Authentication → Providers → Google), not stored by Portabase:
- *   GOOGLE_OAUTH_CLIENT_ID          (placeholder — set in Supabase dashboard)
- *   GOOGLE_OAUTH_CLIENT_SECRET      (placeholder — set in Supabase dashboard)
- *
- * Optional GIS (not used at launch; Supabase OAuth is the path):
- *   VITE_GOOGLE_CLIENT_ID
+ * Google Auth uses a Web OAuth client ID in the browser and exchanges the
+ * returned Google ID token with the dedicated Supabase Auth project. The same
+ * client ID must be configured under Authentication → Providers → Google.
+ * The client secret stays in Supabase; only the public client ID is built into
+ * the site:
+ *   VITE_GOOGLE_OAUTH_CLIENT_ID
  */
 
 /** Shared product pricing (both auth versions). */

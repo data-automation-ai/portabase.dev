@@ -14,6 +14,7 @@ import * as googleAuth from './lib/google-gis-auth.js';
 import * as awsAuth from './lib/cognito.js';
 import { sessionUser, isSignedIn } from './lib/session.js';
 import { ensureSessionForVersion } from './lib/cloud-api.js';
+import { safeAuthReturnPath } from './lib/auth-return.js';
 import { ConsoleApp } from './console/ConsoleApp.jsx';
 import { KEYS_COPY } from './data/never-hold-keys.js';
 import { isRecoveryAckComplete } from './data/recovery-acknowledgments.js';
@@ -32,7 +33,7 @@ function VersionPicker({ version, onChange }) {
       <div className="version-callout" style={{ marginBottom: 18, maxWidth: 'none' }}>
         <span>LAUNCH SCOPE</span>
         <b>Supabase only</b>
-        <p>Portabase protects Supabase projects (database, Auth, Storage, Edge Functions). Sign in with Supabase Auth — email, Google, or GitHub.</p>
+        <p>Portabase protects Supabase projects (database, Auth, Storage, Edge Functions). Sign in with Supabase Auth — email or Google.</p>
       </div>
     );
   }
@@ -82,7 +83,7 @@ function AuthShell({ children, title, lead, version, cardLabel }) {
               <p>{meta.description}</p>
             </div>
             <ul className="auth-bullets">
-              <li><span aria-hidden="true">1</span> Sign in with email, Google, or GitHub</li>
+              <li><span aria-hidden="true">1</span> Sign in with email or Google</li>
               <li><span aria-hidden="true">2</span> 7-day trial · card required · then {productConfig.priceRangeLabel}/mo</li>
               <li><span aria-hidden="true">3</span> You own the capsule vault. Keys are never posted to Portabase servers.</li>
             </ul>
@@ -158,52 +159,18 @@ function GoogleButton({ version, next, label, blocked = false, onStart }) {
   );
 }
 
-function GitHubButton({ version, next, label, blocked = false, onStart }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  if (version === 'aws') return null;
-  return (
-    <>
-      <button
-        type="button"
-        className="button oauth-btn oauth-btn-github"
-        disabled={busy || blocked}
-        aria-label={label}
-        onClick={async () => {
-          if (blocked) return;
-          onStart?.();
-          setBusy(true);
-          setError('');
-          try {
-            setStoredCloudVersion(version);
-            sessionStorage.setItem('portabase.auth.next', next);
-            sessionStorage.setItem('portabase.auth.version', version);
-            await supabaseAuth.signInWithGitHub({ next });
-          } catch (err) {
-            setError(supabaseAuth.describeAuthError(err));
-            setBusy(false);
-          }
-        }}
-      >
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-          <path fill="currentColor" d="M12 2C6.48 2 2 6.58 2 12.26c0 4.52 2.87 8.36 6.84 9.71.5.1.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.36 1.12 2.94.86.09-.67.35-1.12.63-1.38-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05A9.3 9.3 0 0 1 12 6.84c.85 0 1.71.12 2.51.35 1.9-1.32 2.74-1.05 2.74-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.8-4.57 5.06.36.32.68.94.68 1.9 0 1.38-.01 2.49-.01 2.83 0 .27.18.6.69.49A10.03 10.03 0 0 0 22 12.26C22 6.58 17.52 2 12 2Z" />
-        </svg>
-        {busy ? 'Redirecting…' : label}
-      </button>
-      {error && <p className="auth-error" role="alert">{error}</p>}
-    </>
-  );
-}
-
 export function LoginPage() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const fromUrl = versionFromSearch(window.location.search);
   const [version, setVersion] = useState(fromUrl || getStoredCloudVersion());
-  const initialMode = params.get('mode') === 'signup' ? 'signup' : params.get('mode') === 'forgot' ? 'forgot' : 'signin';
-  const next = params.get('next') || '/dashboard';
+  const requestedMode = params.get('mode');
+  const initialMode = requestedMode === 'signup' || (!params.has('mode') && window.location.pathname.replace(/\/$/, '') === '/signup')
+    ? 'signup' : requestedMode === 'forgot' ? 'forgot' : requestedMode === 'update-password' ? 'update-password' : 'signin';
+  const next = safeAuthReturnPath(params.get('next') || '/dashboard');
   const [mode, setMode] = useState(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [message, setMessage] = useState('');
@@ -259,7 +226,7 @@ export function LoginPage() {
   };
 
   const afterLogin = () => {
-    const dest = next.startsWith('/') ? next : '/dashboard';
+    const dest = safeAuthReturnPath(next);
     window.location.assign(dest.includes('version=') ? dest : `${dest}${dest.includes('?') ? '&' : '?'}version=${version}`);
   };
 
@@ -281,7 +248,7 @@ export function LoginPage() {
     );
   }
 
-  if (isSignedIn()) {
+  if (isSignedIn() && mode !== 'update-password') {
     return (
       <AuthShell
         version={version}
@@ -293,7 +260,7 @@ export function LoginPage() {
           <div className="auth-signed-in-avatar">{(signedInUser?.email || 'U').slice(0, 1).toUpperCase()}</div>
           <strong>{signedInUser?.name || signedInUser?.email || 'Operator'}</strong>
           <span>{signedInUser?.email}</span>
-          <a className="button button-primary" href={`/dashboard?version=${version}`}>Open dashboard</a>
+          <a className="button button-primary" href={next.includes('version=') ? next : `${next}${next.includes('?') ? '&' : '?'}version=${version}`}>Continue to your account</a>
           <button
             type="button"
             className="button button-ghost auth-signout"
@@ -314,16 +281,18 @@ export function LoginPage() {
   return (
     <AuthShell
       version={version}
-      title={mode === 'signup' ? 'Create your Cloud account' : mode === 'forgot' ? 'Reset password' : 'Sign in to Cloud'}
-      lead="Email, magic link, Google, or GitHub. Cloud Free 100 MB, then $7 or $17 via Square. You bring capsule storage. Keys are never posted to Portabase servers."
-      cardLabel={mode === 'signup' ? 'Create account' : mode === 'forgot' ? 'Reset password' : 'Sign in'}
+      title={mode === 'signup' ? 'Create your Cloud account' : mode === 'forgot' ? 'Reset password' : mode === 'update-password' ? 'Choose a new password' : 'Sign in to Cloud'}
+      lead="Email, magic link, or Google. Cloud Free 100 MB, then $7 or $17 via Square. You bring capsule storage. Keys are never posted to Portabase servers."
+      cardLabel={mode === 'signup' ? 'Create account' : mode === 'forgot' || mode === 'update-password' ? 'Reset password' : 'Sign in'}
     >
       <VersionPicker version={version} onChange={selectVersion} />
 
-      <div className="auth-tabs" role="tablist" aria-label="Account mode">
-        <button type="button" role="tab" aria-selected={mode === 'signin'} className={mode === 'signin' ? 'is-active' : ''} onClick={() => { setMode('signin'); setAwaitingConfirm(false); }}>Sign in</button>
-        <button type="button" role="tab" aria-selected={mode === 'signup'} className={mode === 'signup' ? 'is-active' : ''} onClick={() => setMode('signup')}>Create account</button>
-      </div>
+      {mode !== 'update-password' && (
+        <div className="auth-tabs" role="tablist" aria-label="Account mode">
+          <button type="button" role="tab" aria-selected={mode === 'signin'} className={mode === 'signin' ? 'is-active' : ''} onClick={() => { setMode('signin'); setAwaitingConfirm(false); }}>Sign in</button>
+          <button type="button" role="tab" aria-selected={mode === 'signup'} className={mode === 'signup' ? 'is-active' : ''} onClick={() => setMode('signup')}>Create account</button>
+        </div>
+      )}
 
       {mode === 'signup' && !awaitingConfirm && (
         <>
@@ -334,23 +303,20 @@ export function LoginPage() {
         </>
       )}
 
-      <div className="auth-oauth">
-        <GoogleButton
-          version={version}
-          next={next}
-          label={mode === 'signup' ? 'Sign up with Google' : 'Continue with Google'}
-          blocked={!ackComplete}
-          onStart={() => { if (mode === 'signup') recordRecoveryAck(acks); }}
-        />
-        <GitHubButton
-          version={version}
-          next={next}
-          label={mode === 'signup' ? 'Sign up with GitHub' : 'Continue with GitHub'}
-          blocked={!ackComplete}
-          onStart={() => { if (mode === 'signup') recordRecoveryAck(acks); }}
-        />
-      </div>
-      <div className="auth-divider"><span>or email</span></div>
+      {(mode === 'signin' || mode === 'signup') && (
+        <>
+          <div className="auth-oauth">
+            <GoogleButton
+              version={version}
+              next={next}
+              label={mode === 'signup' ? 'Sign up with Google' : 'Continue with Google'}
+              blocked={!ackComplete}
+              onStart={() => { if (mode === 'signup') recordRecoveryAck(acks); }}
+            />
+          </div>
+          <div className="auth-divider"><span>or email</span></div>
+        </>
+      )}
 
       {(mode === 'signin' || mode === 'signup') && !awaitingConfirm && (
         <form
@@ -360,13 +326,15 @@ export function LoginPage() {
             if (mode === 'signup') {
               if (!ackComplete) return;
               recordRecoveryAck(acks);
+              sessionStorage.setItem('portabase.auth.next', next);
+              sessionStorage.setItem('portabase.auth.version', version);
               go(async () => {
                 if (version === 'aws') {
                   await awsAuth.signUpWithEmail({ email, password, name });
                   setAwaitingConfirm(true);
                   setMessage('Check your email for a Cognito confirmation code.');
                 } else {
-                  const result = await supabaseAuth.signUpWithEmail({ email, password, name });
+                  const result = await supabaseAuth.signUpWithEmail({ email, password, name, next });
                   if (result.needsEmailConfirmation) {
                     setAwaitingConfirm(true);
                     setMessage('Check your email for a Supabase confirmation link, then sign in.');
@@ -437,7 +405,7 @@ export function LoginPage() {
         <div className="auth-form">
           <p className="auth-hint">Confirmation email sent to <strong>{email}</strong>. Open the link, then sign in.</p>
           <button type="button" className="button button-primary" disabled={busy} onClick={() => go(async () => {
-            await supabaseAuth.resendSignupEmail({ email });
+            await supabaseAuth.resendSignupEmail({ email, next });
             setMessage('Confirmation email resent.');
           })}>Resend confirmation email</button>
           <button type="button" className="auth-text-btn" onClick={() => { setAwaitingConfirm(false); setMode('signin'); }}>Back to sign in</button>
@@ -509,11 +477,58 @@ export function LoginPage() {
         </form>
       )}
 
+      {mode === 'update-password' && (
+        <form className="auth-form" onSubmit={e => {
+          e.preventDefault();
+          if (password !== confirmPassword) {
+            setError('The passwords do not match.');
+            return;
+          }
+          go(async () => {
+            await supabaseAuth.updatePassword({ password });
+            setMessage('Password updated. Returning to your account…');
+            afterLogin();
+          });
+        }}>
+          <p className="auth-hint">Your recovery link is valid. Set the password you will use for email sign-in.</p>
+          <label htmlFor="auth-new-password">New password
+            <span className="auth-password-row">
+              <input
+                id="auth-new-password"
+                required
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                minLength={8}
+                autoComplete="new-password"
+              />
+              <button type="button" className="auth-reveal" onClick={() => setShowPassword((v) => !v)} aria-pressed={showPassword}>
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </span>
+          </label>
+          <label htmlFor="auth-confirm-password">Confirm new password
+            <input
+              id="auth-confirm-password"
+              required
+              type={showPassword ? 'text' : 'password'}
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              minLength={8}
+              autoComplete="new-password"
+            />
+          </label>
+          <button className="button button-primary" type="submit" disabled={busy}>
+            {busy ? 'Updating…' : 'Update password'}
+          </button>
+        </form>
+      )}
+
       {message && <p className="auth-ok" role="status">{message}</p>}
       {error && <p className="auth-error" id="auth-error" role="alert">{error}</p>}
       <p className="auth-legal">
         Launch scope: <strong>Supabase projects only</strong> (database, Auth, Storage, Edge Functions).
-        Identity: hosted Supabase Auth (email, magic link, Google, GitHub). Trial requires a card and becomes {productConfig.priceRangeLabel}/mo after {productConfig.trialDays} days unless canceled.
+        Identity: hosted Supabase Auth (email, magic link, Google). Trial requires a card and becomes {productConfig.priceRangeLabel}/mo after {productConfig.trialDays} days unless canceled.
         Keys are never posted to Portabase servers. Telemetry is status and hashes only — designed and tested in this repo, not a third-party audit.
         {AWS_CLOUD_VERSION_ENABLED ? '' : ' AWS Cognito Cloud is not offered yet.'}
       </p>
@@ -542,7 +557,7 @@ export function AuthCallbackPage() {
       supabaseAuth.completeGoogleRedirectSignIn()
         .then((session) => {
           if (!session) throw new Error('Google sign-in did not return a session.');
-          const dest = sessionStorage.getItem('portabase.auth.next') || '/app?version=supabase';
+          const dest = safeAuthReturnPath(sessionStorage.getItem('portabase.auth.next') || '/app?version=supabase');
           sessionStorage.removeItem('portabase.auth.next');
           sessionStorage.removeItem('portabase.auth.version');
           window.location.replace(dest);
@@ -557,7 +572,7 @@ export function AuthCallbackPage() {
     let version = versionFromSearch(window.location.search)
       || sessionStorage.getItem('portabase.auth.version')
       || getStoredCloudVersion();
-      let next = sessionStorage.getItem('portabase.auth.next') || `/dashboard?version=${version}`;
+    let next = safeAuthReturnPath(params.get('next') || sessionStorage.getItem('portabase.auth.next') || `/dashboard?version=${version}`);
 
     if (state.includes('version:aws')) version = 'aws';
     if (state.includes('version:supabase')) version = 'supabase';
@@ -579,7 +594,16 @@ export function AuthCallbackPage() {
         .then(() => {
           sessionStorage.removeItem('portabase.auth.next');
           sessionStorage.removeItem('portabase.auth.version');
-          const dest = next.includes('version=') ? next : (next.startsWith('/app') || next.startsWith('/dashboard') ? `${next}${next.includes('?') ? '&' : '?'}version=${version}` : next);
+          if (params.get('type') === 'recovery') {
+            const reset = new URL('/login', window.location.origin);
+            reset.searchParams.set('mode', 'update-password');
+            reset.searchParams.set('version', 'supabase');
+            reset.searchParams.set('next', safeAuthReturnPath(next));
+            window.location.replace(`${reset.pathname}${reset.search}`);
+            return;
+          }
+          const safeNext = safeAuthReturnPath(next);
+          const dest = safeNext.includes('version=') ? safeNext : (safeNext.startsWith('/app') || safeNext.startsWith('/dashboard') ? `${safeNext}${safeNext.includes('?') ? '&' : '?'}version=${version}` : safeNext);
           window.location.replace(dest);
         })
         .catch(e => setError(version === 'aws' ? awsAuth.describeCognitoError(e) : supabaseAuth.describeAuthError(e)));

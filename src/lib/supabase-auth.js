@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { authCallbackUrl, productConfig, supabasePublicDefaults } from './auth-config.js';
 import { consumeStoredGoogleIdToken, requestGoogleIdToken } from './google-gis-auth.js';
 import { clearSession, isTokenExpired, loadSession, saveSession } from './session.js';
+import { safeAuthReturnPath } from './auth-return.js';
 
 let client;
 let bootstrappedConfig;
@@ -113,13 +114,19 @@ export async function ensureFreshSession() {
   return null;
 }
 
-export async function signUpWithEmail({ email, password, name }) {
+function emailConfirmationRedirect(next) {
+  const callback = new URL(authCallbackUrl('supabase'));
+  callback.searchParams.set('next', safeAuthReturnPath(next));
+  return callback.toString();
+}
+
+export async function signUpWithEmail({ email, password, name, next = '/dashboard' }) {
   const supabase = await getSupabase();
   const { data, error } = await supabase.auth.signUp({
     email: email.trim().toLowerCase(),
     password,
     options: {
-      emailRedirectTo: authCallbackUrl('supabase'),
+      emailRedirectTo: emailConfirmationRedirect(next),
       data: name ? { full_name: name, name } : undefined,
     },
   });
@@ -216,12 +223,22 @@ export async function requestPasswordReset({ email }) {
   if (error) throw error;
 }
 
-export async function resendSignupEmail({ email }) {
+export async function updatePassword({ password }) {
+  if (typeof password !== 'string' || password.length < 8) {
+    throw new Error('Choose a password with at least 8 characters.');
+  }
+  const supabase = await getSupabase();
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) throw error;
+  return syncSessionFromSupabase();
+}
+
+export async function resendSignupEmail({ email, next = '/dashboard' }) {
   const supabase = await getSupabase();
   const { error } = await supabase.auth.resend({
     type: 'signup',
     email: email.trim().toLowerCase(),
-    options: { emailRedirectTo: authCallbackUrl('supabase') },
+    options: { emailRedirectTo: emailConfirmationRedirect(next) },
   });
   if (error) throw error;
 }
@@ -229,6 +246,13 @@ export async function resendSignupEmail({ email }) {
 export async function completeOAuthCallback() {
   const supabase = await getSupabase();
   const url = new URL(window.location.href);
+  const tokenHash = url.searchParams.get('token_hash');
+  const type = url.searchParams.get('type');
+  if (tokenHash && type) {
+    const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
+    if (error) throw error;
+    return persistFromSupabaseSession(data.session);
+  }
   const code = url.searchParams.get('code');
   if (code) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
