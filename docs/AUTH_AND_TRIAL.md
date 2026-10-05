@@ -95,3 +95,13 @@ The site uses `@supabase/supabase-js` PKCE for email links and exchanges a Googl
 3. [x] Netlify build/runtime env has Google client ID, Supabase URL, and public key (presence-only check, 2026-10-05)
 4. [ ] Square secrets for trial/subscription
 5. [ ] Confirm `AWS_CLOUD_VERSION_ENABLED` stays `false` until AWS product path ships
+
+## Production evidence — 2026-10-05
+
+- Auth source release: `deab157` (`2894318` flow implementation plus the refund-window bundling repair in `1533f3f`).
+- Netlify production deploy: `6ac3a402beda80e0c96f4654`, state `ready`.
+- Every deployed JavaScript asset matched the local release artifact by SHA-256.
+- Live `/api/auth/config` resolves to dedicated project `eoiqvdmvgaurlecdzqkp`; signup, email, and Google are enabled; email confirmation is required; GitHub is disabled.
+- The deployed Google client ID matches the active Portabase record in AWS `secrets-bundle`. The active Google client secret is absent from the public bundle.
+- Google accepted `https://portabase.dev/auth/callback` without `invalid_client` or `redirect_uri_mismatch`.
+- Final signed-in proof still requires a customer-controlled Google account and email inbox. No consent was granted and no live customer account was created during the release check.
