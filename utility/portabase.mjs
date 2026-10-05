@@ -2825,7 +2825,30 @@ const UI_DATABASE_SQL = `SELECT json_build_object(
 )::text;`;
 
 /** Read-only snapshot for `portabase ui`: names, counts and sizes — never credential values. */
-export async function collectUiSnapshot(config, trial) {
+async function uiDatabaseUrl(config) {
+  const current = process.env.SUPABASE_DB_URL;
+  if (!current) throw new Error('SUPABASE_DB_URL is not set.');
+  let direct;
+  try { direct = new URL(current); } catch { return current; }
+  if (direct.hostname !== `db.${config.projectRef}.supabase.co`) return current;
+  try {
+    const pooler = await managementApiJson(`/v1/projects/${config.projectRef}/config/database/pgbouncer`);
+    const connectionString = pooler?.connection_string;
+    const host = typeof connectionString === 'string'
+      ? /@([a-z0-9-]+\.pooler\.supabase\.com)(?::\d+)?(?:\/|$)/i.exec(connectionString)?.[1]
+      : null;
+    if (!host) return current;
+    const resolved = new URL('postgresql://placeholder/postgres');
+    resolved.username = `postgres.${config.projectRef}`;
+    resolved.password = decodeURIComponent(direct.password);
+    resolved.hostname = host;
+    resolved.port = '5432';
+    resolved.searchParams.set('sslmode', 'require');
+    return resolved.toString();
+  } catch { return current; }
+}
+
+export async function collectUiSnapshot(config, trial, onProgress = null) {
   const layer = async (fn) => {
     try { return { ok: true, data: await fn() }; } catch (error) { return { ok: false, error: error.message }; }
   };
@@ -2841,12 +2864,27 @@ export async function collectUiSnapshot(config, trial) {
     },
     tools: Object.fromEntries(['pg_dump', 'pg_dumpall', 'psql', 'supabase', 'tar'].map(name => [name, Boolean(resolveTool(name))])),
   };
-  const [database, storage, functions] = await Promise.all([
-    layer(async () => {
-      if (!process.env.SUPABASE_DB_URL) throw new Error('SUPABASE_DB_URL is not set.');
-      return JSON.parse(psqlValue(process.env.SUPABASE_DB_URL, UI_DATABASE_SQL));
-    }),
-    layer(async () => {
+  const { buildChecklist, classifyTable, schemaMatches } = await import('./ui/checklist.mjs');
+  const emit = (type, result) => {
+    if (typeof onProgress === 'function') {
+      try { onProgress({ type, result }); } catch { /* progress delivery cannot change probe outcome */ }
+    }
+    return result;
+  };
+  const databasePromise = layer(async () => {
+      return JSON.parse(psqlValue(await uiDatabaseUrl(config), UI_DATABASE_SQL));
+    }).then(result => {
+      if (result.ok) {
+        for (const table of result.data.tables) {
+          const verdict = classifyTable(table.schema, table.name, { trial });
+          table.platform = schemaMatches(table.schema, PLATFORM_SCHEMA_EXCLUDES);
+          table.capsule = verdict.structure.keep && verdict.rows.keep ? 'structure + rows'
+            : verdict.structure.keep ? 'structure' : verdict.rows.keep ? 'rows' : 'recreated';
+        }
+      }
+      return emit('database', result);
+    });
+  const storagePromise = layer(async () => {
       const buckets = await (await checkedSourceFetch('/storage/v1/bucket')).json();
       const rows = await mapPool(buckets, 8, async (bucket) => {
         const objects = await listBucketObjects(bucket.id);
@@ -2859,23 +2897,14 @@ export async function collectUiSnapshot(config, trial) {
         };
       });
       return { buckets: rows, objectCount: rows.reduce((t, b) => t + b.objectCount, 0), totalBytes: rows.reduce((t, b) => t + b.totalBytes, 0) };
-    }),
-    layer(async () => {
+    }).then(result => emit('storage', result));
+  const functionsPromise = layer(async () => {
       const list = await managementApiJson(`/v1/projects/${config.projectRef}/functions`);
       return (Array.isArray(list) ? list : list?.functions || []).map(fn => ({
         slug: fn.slug, name: fn.name, status: fn.status, version: fn.version, verifyJwt: fn.verify_jwt !== false, updatedAt: fn.updated_at ?? null,
       }));
-    }),
-  ]);
-  const { buildChecklist, classifyTable, schemaMatches } = await import('./ui/checklist.mjs');
-  if (database.ok) {
-    for (const table of database.data.tables) {
-      const verdict = classifyTable(table.schema, table.name, { trial });
-      table.platform = schemaMatches(table.schema, PLATFORM_SCHEMA_EXCLUDES);
-      table.capsule = verdict.structure.keep && verdict.rows.keep ? 'structure + rows'
-        : verdict.structure.keep ? 'structure' : verdict.rows.keep ? 'rows' : 'recreated';
-    }
-  }
+    }).then(result => emit('functions', result));
+  const [database, storage, functions] = await Promise.all([databasePromise, storagePromise, functionsPromise]);
   return {
     generatedAt: new Date().toISOString(),
     portabaseVersion: VERSION,
@@ -2895,13 +2924,26 @@ function openInBrowser(url) {
 }
 
 async function ui() {
-  const { config } = await loadConfig();
+  const { config, path: configPath } = await loadConfig();
   const trial = hasFlag('trial');
   const { startUiServer } = await import('./ui/server.mjs');
   const port = Number(flag('port', 0));
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('--port must be 0-65535.');
-  const session = await startUiServer({ port, collect: () => collectUiSnapshot(config, trial) });
-  console.log(`Portabase UI (read-only) for ${config.projectRef}\n\n  ${session.url}\n\nListening on ${session.address.address}:${session.address.port} only. The page can reach this process and nothing else.\nThe #t= part is a one-launch session token; it never leaves your machine. Ctrl+C to stop.`);
+  const privateSetup = hasFlag('private-setup') ? {
+    directory: process.env.PORTABASE_RUNNER_CONFIG_DIR,
+    runnerId: process.env.PORTABASE_RUNNER_ID,
+    projectRef: process.env.PORTABASE_PROJECT_REF,
+    engineConfigPath: configPath,
+  } : undefined;
+  if (privateSetup && (trial || process.env.PORTABASE_RUNTIME_CONFIG)) throw new Error('Private setup requires the exact engine config file and a full inventory.');
+  const session = await startUiServer({ port, privateSetup,
+    collect: (validatedConfig, onProgress) => collectUiSnapshot(validatedConfig || config, trial, onProgress) });
+  console.log(`Portabase UI (${privateSetup ? 'private selection authoring; no job execution' : 'read-only'}) for ${config.projectRef}
+
+  ${session.url}
+
+Listening on ${session.address.address}:${session.address.port} only. The page can reach this process and nothing else.
+The #t= part is a one-launch session token; it never leaves your machine. Ctrl+C to stop.`);
   if (!hasFlag('no-open')) openInBrowser(session.url);
   await new Promise(resolveStop => process.once('SIGINT', resolveStop));
   await session.close();

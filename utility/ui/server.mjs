@@ -31,7 +31,7 @@ export const UI_CSP = [
   "frame-ancestors 'none'",
 ].join('; ');
 
-const SECURITY_HEADERS = Object.freeze({
+export const SECURITY_HEADERS = Object.freeze({
   'Content-Security-Policy': UI_CSP,
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'no-referrer',
@@ -58,7 +58,11 @@ function tokenMatches(expected, received) {
  * @param {{ collect: () => Promise<object>, port?: number, token?: string }} options
  * collect() returns the snapshot JSON; it is called on first load and on refresh.
  */
-export async function startUiServer({ collect, port = 0, token = randomBytes(24).toString('hex') }) {
+export async function startUiServer({ collect, privateSetup, port = 0, token = randomBytes(24).toString('hex') }) {
+  if (privateSetup !== undefined) {
+    const { startPrivateSetupUiServer } = await import('./private-server.mjs');
+    return startPrivateSetupUiServer({ collect, privateSetup, port, token });
+  }
   let snapshot = null;
   let pending = null;
   const refresh = () => {

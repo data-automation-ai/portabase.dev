@@ -3,6 +3,8 @@ dist/
 release/
 desktop/vendor/
 private/
+!utility/ui/static/private/
+!utility/ui/static/private/**
 .env
 .env.local
 .env.*.local

@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Portabase · Private recovery runner</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body class="setup-pending">
+  <header class="runner-header">
+    <a class="runner-brand" href="#top" aria-label="Private runner home">
+      <span class="runner-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span><strong>PORTABASE</strong><small>PRIVATE RECOVERY RUNNER</small></span>
+    </a>
+    <div class="header-actions">
+      <div class="header-state"><span class="pulse" aria-hidden="true"></span> Customer controlled boundary</div>
+      <button id="openSealInfo" class="seal-button" type="button">How the seal works</button>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">Private runner setup</p>
+        <h1 id="page-title">Connect your Supabase project</h1>
+        <p class="intro">Enter four values. The runner will privately inspect and protect your Database, Auth, Storage, and Edge Functions.</p>
+      </div>
+      <dl class="binding" aria-label="Runner binding">
+        <div><dt>Source project</dt><dd><code id="project">Loading…</code></dd></div>
+        <div><dt>Runner</dt><dd><code id="runner">—</code></dd></div>
+        <div><dt>Runtime</dt><dd id="runtimeStatus">Checking…</dd></div>
+        <div><dt>Private state</dt><dd id="localStateStatus">Checking…</dd></div>
+      </dl>
+    </section>
+
+    <div class="boundary-strip" role="note">
+      <strong>Private boundary</strong>
+      <span>No inventory names, credentials, passphrases, or diagnostic logs are sent to the PortaBase account service.</span>
+    </div>
+
+    <section class="execution-map" aria-labelledby="execution-heading">
+      <div class="section-heading">
+        <div><p class="eyebrow">Execution boundary</p><h2 id="execution-heading">What runs in your browser, runner, and PortaBase</h2></div>
+        <span class="private-chip">SAME ORIGIN UI</span>
+      </div>
+      <div class="execution-grid">
+        <article><span class="execution-number">01</span><div><strong>Your browser</strong><p>Displays this runner-provided page, filters the inventory, calculates your selection, and opens help. Values you type exist briefly in browser memory, travel only to this runner’s origin, and are cleared from the form after saving.</p></div></article>
+        <article><span class="execution-number">02</span><div><strong>Your Linux runner</strong><p>Holds Supabase credentials and the passphrase, probes Supabase, persists private SQLite history, captures data, encrypts capsules, and performs recovery.</p></div></article>
+        <article><span class="execution-number">03</span><div><strong>PortaBase account service</strong><p>Validates subscription access and receives an opaque job reference plus fixed safe telemetry. It does not receive inventory names, credentials, passphrases, or diagnostic logs.</p></div></article>
+      </div>
+      <p class="execution-note"><strong>The backup does not run in the browser.</strong> Closing this page does not move sensitive work to PortaBase. An admitted job runs in the customer-bound Linux runner.</p>
+    </section>
+
+    <p id="error" class="error" role="alert" hidden></p>
+
+    <section class="data-path" aria-labelledby="path-heading">
+      <div class="section-heading">
+        <div><p class="eyebrow">Data path</p><h2 id="path-heading">Source to recovery target</h2></div>
+        <span class="section-note">Outbound connections only</span>
+      </div>
+      <ol class="path-rail">
+        <li><span class="stage-number">01</span><div><strong>Source Supabase</strong><small id="sourceStatus">Needs configuration</small></div></li>
+        <li><span class="stage-number">02</span><div><strong>Scratch volume</strong><small id="scratchStatus">Checking capacity</small></div></li>
+        <li><span class="stage-number">03</span><div><strong>Encrypted capsule</strong><small id="capsuleStatus">Passphrase required</small></div></li>
+        <li><span class="stage-number">04</span><div><strong>Recovery target</strong><small id="targetStatus">Configure when restoring</small></div></li>
+      </ol>
+      <div class="runner-storage-summary">
+        <span>Runner storage</span>
+        <strong id="runnerStorageAvailable">Checking…</strong>
+        <small id="runnerStorageNeeded">Working space for the encrypted backup.</small>
+        <div id="runnerStorageMeter" class="runner-storage-meter" role="progressbar" aria-label="Runner storage percentage free" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="runnerStorageBar"></i></div>
+      </div>
+    </section>
+
+    <div class="connections-only">
+      <section class="connections" aria-labelledby="connections-heading">
+        <div class="section-heading">
+          <div><p class="eyebrow">One-time setup</p><h2 id="connections-heading">Four values to start</h2></div>
+          <span class="private-chip">RUNNER ONLY</span>
+        </div>
+        <p class="setup-reassurance">These values stay inside this runner. They are never sent to your PortaBase account.</p>
+        <p class="field-help-hint">Double-click on a field for help.</p>
+        <form id="sourceConnectionsForm" autocomplete="off">
+          <label class="mask-control"><input id="maskValues" type="checkbox" checked><span>Mask values</span></label>
+          <fieldset>
+            <legend>Required</legend>
+            <label><span><b>1</b> Database password</span><input id="sourceDatabasePassword" data-help="source-database-password" type="password" autocomplete="new-password" placeholder="The password chosen when this project was created"></label>
+            <label><span><b>2</b> Secret or service role key</span><input id="sourceServiceRoleKey" data-help="source-key" type="password" autocomplete="new-password" placeholder="Usually begins sb_secret_… or legacy eyJ…"></label>
+            <label><span><b>3</b> Management access token</span><input id="sourceAccessToken" data-help="source-token" type="password" autocomplete="new-password" placeholder="Usually begins sbp_…"></label>
+            <label><span><b>4</b> Capsule passphrase</span><input id="capsulePassphrase" data-help="capsule-passphrase" type="password" autocomplete="new-password" minlength="16" placeholder="Create your own — at least 16 characters"></label>
+          </fieldset>
+          <details class="setup-help">
+            <summary>Get Help</summary>
+            <p>Open your Supabase dashboard, choose the project you want to protect, then double-click the field where you need help.</p>
+            <a class="button-link" href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer">Open Supabase dashboard</a>
+          </details>
+          <div class="form-action"><button id="saveSourceConnections" type="submit">Connect</button><span id="connectionMessage" role="status">Enter the four values, then connect.</span></div>
+        </form>
+
+        <div id="sourceConfiguredPanel" class="connection-saved" hidden>
+          <div class="saved-check" aria-hidden="true">✓</div>
+          <div>
+            <h3>All four values saved securely</h3>
+            <p id="sourceSavedMessage">They are stored inside this runner. You will not need to enter them again.</p>
+          </div>
+          <div class="saved-actions">
+            <button id="inspectSavedSource" type="button">Inspect project</button>
+            <button id="editSourceConnections" class="quiet" type="button">Change saved values</button>
+          </div>
+        </div>
+
+        <details class="recovery-fields">
+          <summary>Configure a recovery target <span>Only needed when restoring</span></summary>
+          <p>Create a separate blank hosted Supabase project. The runner derives its API and database endpoints from its project reference.</p>
+          <form id="targetConnectionsForm" autocomplete="off">
+            <fieldset>
+              <legend>Blank recovery Supabase</legend>
+              <label><span>Target project reference</span><input id="targetRef" data-help="target-ref" type="text" pattern="[a-z0-9]{20}" maxlength="20" placeholder="Exactly 20 lowercase letters and numbers"></label>
+              <label><span>Target database password</span><input id="targetDatabasePassword" data-help="target-database-password" type="password" autocomplete="new-password" placeholder="The password chosen for the blank target"></label>
+              <label><span>Target secret or service role key</span><input id="targetServiceRoleKey" data-help="target-key" type="password" autocomplete="new-password" placeholder="Usually begins sb_secret_… or legacy eyJ…"></label>
+            </fieldset>
+            <div class="form-action"><button id="saveTargetConnections" type="submit">Save recovery access</button><span id="targetConnectionMessage" role="status">Can be completed later.</span></div>
+          </form>
+        </details>
+      </section>
+
+      <section class="capacity" aria-labelledby="capacity-heading" hidden aria-hidden="true">
+        <div class="section-heading">
+          <div><p class="eyebrow">Scratch planning</p><h2 id="capacity-heading">Capture workspace</h2></div>
+          <span id="capacityBadge" class="status-chip neutral">Waiting</span>
+        </div>
+        <p>The current engine keeps the selected raw capture while it creates the archive and encrypted capsule. Plan for the full selection, not only the largest object.</p>
+        <div class="capacity-numbers">
+          <div><span>Selected source</span><strong id="selectedSize">—</strong></div>
+          <div><span>Planning reserve</span><strong id="requiredSize">—</strong></div>
+          <div><span>Free scratch</span><strong id="freeSize">—</strong></div>
+        </div>
+        <div class="meter" role="progressbar" aria-label="Scratch planning usage" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="capacityBar"></i></div>
+        <p id="capacityDetail" class="fine-print">Reading the configured runner volume.</p>
+        <div class="storage-split">
+          <div><strong>Durable</strong><span>SQLite, configuration, journals, history</span></div>
+          <div><strong>Ephemeral</strong><span>Raw capture, archive, encrypted output overlap</span></div>
+        </div>
+      </section>
+    </div>
+
+    <section class="inventory" aria-labelledby="inventory-heading">
+      <div class="section-heading inventory-heading">
+        <div><p class="eyebrow">Source probe</p><h2 id="inventory-heading">Backup inventory</h2></div>
+        <button id="refresh" type="button">Probe source now</button>
+      </div>
+      <p id="loaded">Configure the source connection, then run a read only probe.</p>
+
+      <div class="metric-grid" aria-label="Source inventory totals">
+        <article><span>Database tables</span><strong id="tableCount">—</strong><small id="databaseSize">No probe</small></article>
+        <article><span>Estimated rows</span><strong id="estimatedRows">—</strong><small>Postgres statistics</small></article>
+        <article><span>Storage buckets</span><strong id="bucketCount">—</strong><small id="storageSize">No probe</small></article>
+        <article><span>Storage objects</span><strong id="objectCount">—</strong><small>Objects enumerated</small></article>
+        <article><span>Edge Functions</span><strong id="functionCount">—</strong><small>Management token scope</small></article>
+      </div>
+
+      <div class="filter-bar" aria-label="Inventory filters">
+        <label class="search-field"><span class="sr-only">Filter by keyword</span><input id="keyword" type="search" placeholder="Filter by table or bucket keyword"></label>
+        <label><span class="sr-only">Filter tables by schema</span><select id="schema"><option value="">All schemas</option></select></label>
+        <button id="selectVisible" class="secondary" type="button">Select visible</button>
+        <button id="clearVisible" class="quiet" type="button">Clear visible</button>
+        <span id="visibleCount" class="filter-count">No inventory</span>
+      </div>
+
+      <div class="inventory-grid">
+        <div class="inventory-panel">
+          <div class="panel-title"><h3>Database tables</h3><span>schema · rows · total size</span></div>
+          <div class="column-head table-columns" aria-hidden="true"><span></span><span>Table</span><span>Rows</span><span>Size</span></div>
+          <div id="tables" class="choices"></div>
+        </div>
+        <div class="inventory-panel">
+          <div class="panel-title"><h3>Storage buckets</h3><span>objects · total size</span></div>
+          <div class="column-head bucket-columns" aria-hidden="true"><span></span><span>Bucket</span><span>Objects</span><span>Size</span></div>
+          <div id="buckets" class="choices"></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="two-column lower-grid">
+      <section class="review" aria-labelledby="review-heading">
+        <p class="eyebrow">Backup job</p>
+        <h2 id="review-heading">Prepare this selection</h2>
+        <p id="summary" class="selection-summary" role="status">No inventory loaded.</p>
+        <p class="fine-print">Sizes are source estimates. Scratch planning is conservative and does not prove final capsule size or restore success.</p>
+        <label class="check-row"><input id="incremental" type="checkbox"><span>Reuse unchanged binary files when the runner has a matching private cache</span></label>
+        <label class="check-row"><input id="empty" type="checkbox"><span>I intend to save with no table rows or bucket files selected</span></label>
+        <button id="save" type="button" disabled>Create private job reference</button>
+      </section>
+
+      <section class="telemetry" aria-labelledby="telemetry-heading">
+        <p class="eyebrow">Evidence boundary</p>
+        <h2 id="telemetry-heading">Local detail, safe status outside</h2>
+        <p>Detailed events stay in the runner SQLite database. PortaBase receives only fixed operational fields used for subscription enforcement, job state, and proof of delivery.</p>
+        <div class="telemetry-fields" aria-label="Allowed outbound telemetry fields">
+          <span>status</span><span>phase</span><span>duration</span><span>byte counts</span><span>object counts</span><span>verification</span><span>capsule hashes</span>
+        </div>
+        <h3>Recent private activity</h3>
+        <ol id="events" class="event-list"><li><span>No local events yet</span></li></ol>
+      </section>
+    </div>
+
+    <section id="saved" class="saved" aria-labelledby="saved-heading" hidden>
+      <div><p class="eyebrow">Immutable runner configuration</p><h2 id="saved-heading">Private job reference created</h2></div>
+      <p>The selection remains inside this runner. The opaque reference contains no table names, bucket names, credentials, or passphrase and can be submitted through the PortaBase account console.</p>
+      <pre id="intent" aria-label="Opaque job reference"></pre>
+      <button id="download" type="button">Download job reference</button>
+    </section>
+
+    <footer>
+      <strong>Loopback runner interface</strong>
+      <span>This screen is served by the runner at 127.0.0.1. Protect the durable volume with customer controlled disk encryption and operating system access controls.</span>
+    </footer>
+  </main>
+  <dialog id="sealInfo" class="seal-dialog" aria-labelledby="seal-title">
+    <div class="modal-rule"></div>
+    <div class="modal-body">
+      <div class="modal-status bad"><span aria-hidden="true">!</span> CURRENT BUILD · SEAL NOT VERIFIED</div>
+      <h2 id="seal-title">How the private runner seal works</h2>
+      <p class="modal-lead">The finished seal gives you the only secret key that can unlock this runner. PortaBase keeps administrative control of the cloud service so we can maintain billing and terminate the runner, but the key is never stored in the PortaBase account system.</p>
+      <div class="plain-grid">
+        <article><span>YOU CAN</span><strong>Unlock and operate it</strong><p>Use your recovery key to open the private dashboard, release a scheduled job, review local history, and recover a capsule.</p></article>
+        <article><span>PORTABASE CAN</span><strong>Stop or terminate it</strong><p>We can validate the subscription, receive safe status, and terminate the cloud resource. Those controls do not provide the customer key.</p></article>
+        <article><span>PORTABASE CANNOT</span><strong>Open or run it while sealed</strong><p>Without your key, we cannot open its private state, read Supabase credentials, start a backup or replay, or decrypt a capsule.</p></article>
+      </div>
+      <div class="modal-warning"><strong>Why the warning is shown now</strong><p>This development build has the isolated loopback interface and private storage boundary, but its stored credential file is not encrypted by a customer key yet. An infrastructure administrator could still read it. The runner must not display “Sealed” until customer key encryption and denial checks pass.</p></div>
+      <p class="modal-foot">If the recovery key is lost, PortaBase cannot recreate it. Keep the recovery copy outside the runner.</p>
+      <button id="closeSealInfo" type="button">I understand the current status</button>
+    </div>
+  </dialog>
+  <dialog id="helpPrompt" class="help-dialog help-prompt" aria-labelledby="help-prompt-title">
+    <div class="modal-rule"></div>
+    <div class="modal-body">
+      <p class="eyebrow" id="helpTopicName">Supabase field</p>
+      <h2 id="help-prompt-title">Do you need help?</h2>
+      <p>We can show where this value appears in Supabase and how to copy the correct one.</p>
+      <div class="modal-actions"><button id="acceptHelp" type="button">Yes, show me</button><button id="declineHelp" class="quiet" type="button">Not now</button></div>
+    </div>
+  </dialog>
+  <dialog id="helpDetail" class="help-dialog" aria-labelledby="help-detail-title">
+    <div class="modal-rule"></div>
+    <div class="modal-body">
+      <p class="eyebrow">Supabase field help</p>
+      <h2 id="help-detail-title">Find this value</h2>
+      <p id="help-detail-intro" class="modal-lead"></p>
+      <ol id="help-detail-steps" class="help-steps"></ol>
+      <div id="help-detail-note" class="help-note"></div>
+      <div class="modal-actions"><a id="help-detail-link" class="button-link" target="_blank" rel="noopener noreferrer">Open official Supabase guide</a><button id="closeHelpDetail" class="quiet" type="button">Close</button></div>
+    </div>
+  </dialog>
+  <dialog id="inspectionProgress" class="inspection-dialog" aria-labelledby="inspection-title">
+    <div class="modal-rule"></div>
+    <div class="modal-body">
+      <p class="eyebrow">Private connection</p>
+      <h2 id="inspection-title">Connecting to Supabase</h2>
+      <p id="inspectionStatus" class="inspection-status" aria-live="polite">Saving your four values inside the runner…</p>
+      <div class="probe-graphic" aria-hidden="true">
+        <div class="probe-node supabase-node"><i></i><strong>Supabase</strong></div>
+        <div class="probe-line"><i></i></div>
+        <div class="probe-node runner-node"><span class="runner-mark"><i></i><i></i><i></i></span><strong>Your runner</strong></div>
+      </div>
+      <ol class="probe-stages" aria-label="Connection progress">
+        <li id="probeAccess"><span>1</span><div><strong>Secure access</strong><small>Waiting</small></div></li>
+        <li id="probeDatabase"><span>2</span><div><strong>Database tables</strong><small>Waiting</small></div></li>
+        <li id="probeStorage"><span>3</span><div><strong>Storage files</strong><small>Waiting</small></div></li>
+        <li id="probeFunctions"><span>4</span><div><strong>Edge Functions</strong><small>Waiting</small></div></li>
+      </ol>
+      <div id="probeTablePreview" class="probe-preview" hidden>
+        <strong id="probeTableCount">Tables found</strong>
+        <div id="probeTableList" aria-live="polite"></div>
+      </div>
+      <div class="modal-actions inspection-actions">
+        <button id="viewInventory" type="button" hidden>View inventory</button>
+        <button id="closeInspection" class="quiet" type="button" hidden>Close</button>
+      </div>
+    </div>
+  </dialog>
+</body>
+</html>

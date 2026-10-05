@@ -31,11 +31,13 @@ runtime implementation:
 - source Supabase inventory by schema, table, row estimate and bytes;
 - Storage inventory by bucket, object count and bytes;
 - schema and keyword filtering plus immutable selection references;
-- separate recovery-target configuration;
+- minimal hosted-Supabase intake that derives API/database endpoints from the
+  runner-bound project reference, with recovery-target credentials deferred
+  until restore preparation;
 - persistent runner-local SQLite inventory, selection and event state;
 - private runtime credential storage with redacted status responses;
 - orange/red runner UI with a beginner Supabase guide;
-- three-second hover or keyboard-focus help for all nine configuration fields;
+- double-click help for every displayed configuration field, with no hover timer;
 - an execution-boundary explanation covering browser, runner and PortaBase;
 - capsule review, persistent supervisor, claim/completion journals, safe result
   projection and opaque private configuration references.
@@ -111,3 +113,34 @@ The next implementation sequence is:
 
 Until those steps pass, the runner is implemented locally and previewable but is
 not provisioned, sealed, deployed or complete.
+
+## Novice connection flow recovered later on 2026-10-05
+
+The source setup is now one guided action: enter the database password, source
+secret key, scoped management token and capsule passphrase, then press
+**Connect**. Successful submission persists those four values in the private
+runner, clears the browser fields, and begins the read-only inventory without a
+second setup decision. Refreshing the page no longer loses the loopback session
+token in the same browser tab.
+
+The connection dialog reports Database, Storage and Edge Functions separately
+and displays discovered table names as soon as the database portion returns.
+Temporary inspection failure does not erase the four saved values. The saved
+panel offers retry and an explicit **Change saved values** action.
+
+Hosted Supabase direct database hosts commonly require IPv6. For the local
+inventory check, the runner now uses the saved management token to read the
+project's pooler configuration, then constructs the session-pooler URL with
+`postgres.<project-ref>` and the URL-encoded saved database password. The user
+does not enter another value. If pooler discovery is unavailable, the existing
+direct URL remains the fallback for a network that supports it.
+
+The former large scratch-planning card is hidden from the customer path. A
+compact runner-storage line reports available bytes and percentage free with a
+single gauge. This Windows preview reports **Linux runner not connected** and
+never presents workstation disk capacity as runner storage.
+
+The restarted preview process listens at `127.0.0.1:52383`. Its current token is
+again omitted here and can be recovered from the ignored preview stdout file.
+Safe bootstrap status confirms source access, management access and the capsule
+passphrase remain stored. No provider probe was performed during the restart.
