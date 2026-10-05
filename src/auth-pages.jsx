@@ -337,7 +337,7 @@ export function LoginPage() {
                   const result = await supabaseAuth.signUpWithEmail({ email, password, name, next });
                   if (result.needsEmailConfirmation) {
                     setAwaitingConfirm(true);
-                    setMessage('Check your email for a Supabase confirmation link, then sign in.');
+                    setMessage('Check your email for a Supabase confirmation link. Open it to finish creating your account.');
                   } else {
                     afterLogin();
                   }

@@ -147,7 +147,7 @@ export async function signInWithMagicLink({ email, next = '/dashboard' } = {}) {
     email: email.trim().toLowerCase(),
     options: {
       emailRedirectTo: authCallbackUrl('supabase'),
-      shouldCreateUser: true,
+      shouldCreateUser: false,
     },
   });
   if (error) throw error;
