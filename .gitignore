@@ -13,6 +13,8 @@ private/
 .secrets-map*.json
 .env.cloudflare.local
 portabase.config.json
+runtime-secrets.json
+.local-runner-state/
 portabase-capsules/
 portabase-status/
 portabase-evidence/
