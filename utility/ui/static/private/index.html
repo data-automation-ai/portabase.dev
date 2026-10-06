@@ -16,6 +16,7 @@
     <div class="header-actions">
       <div class="header-state"><span class="pulse" aria-hidden="true"></span> Customer controlled boundary</div>
       <button id="openSealInfo" class="seal-button" type="button">How the seal works</button>
+      <button id="openVerifiability" class="seal-button" type="button">Verifiability</button>
     </div>
   </header>
 
@@ -76,27 +77,11 @@
     <div class="connections-only">
       <section class="connections" aria-labelledby="connections-heading">
         <div class="section-heading">
-          <div><p class="eyebrow">One-time setup</p><h2 id="connections-heading">Four values to start</h2></div>
+          <div><p class="eyebrow">One-time setup</p><h2 id="connections-heading">Connect your Supabase project</h2></div>
           <span class="private-chip">RUNNER ONLY</span>
         </div>
-        <p class="setup-reassurance">These values stay inside this runner. They are never sent to your PortaBase account.</p>
-        <p class="field-help-hint">Double-click on a field for help.</p>
-        <form id="sourceConnectionsForm" autocomplete="off">
-          <label class="mask-control"><input id="maskValues" type="checkbox" checked><span>Mask values</span></label>
-          <fieldset>
-            <legend>Required</legend>
-            <label><span><b>1</b> Database password</span><input id="sourceDatabasePassword" data-help="source-database-password" type="password" autocomplete="new-password" placeholder="The password chosen when this project was created"></label>
-            <label><span><b>2</b> Project secret key</span><input id="sourceServiceRoleKey" data-help="source-key" type="password" autocomplete="new-password" placeholder="Usually begins sb_secret_…"></label>
-            <label><span><b>3</b> Management access token</span><input id="sourceAccessToken" data-help="source-token" type="password" autocomplete="new-password" placeholder="Usually begins sbp_…"></label>
-            <label><span><b>4</b> Capsule passphrase</span><input id="capsulePassphrase" data-help="capsule-passphrase" type="password" autocomplete="new-password" minlength="16" placeholder="Create your own — at least 16 characters"></label>
-          </fieldset>
-          <details class="setup-help">
-            <summary>Get Help</summary>
-            <p>Open your Supabase dashboard, choose the project you want to protect, then double-click the field where you need help.</p>
-            <a class="button-link" href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer">Open Supabase dashboard</a>
-          </details>
-          <div class="form-action"><button id="saveSourceConnections" type="submit">Connect</button><span id="connectionMessage" role="status">Enter the four values, then connect.</span></div>
-        </form>
+        <p class="setup-reassurance">Everything you enter stays inside this runner. It is never sent to your PortaBase account.</p>
+        <div class="form-action"><button id="openConnectModal" type="button">Connect your Supabase project</button><span id="connectionMessage" role="status">Opens one step-by-step window for the URL and four values.</span></div>
 
         <div id="sourceConfiguredPanel" class="connection-saved" hidden>
           <div class="saved-check" aria-hidden="true">✓</div>
@@ -111,17 +96,22 @@
         </div>
 
         <details class="recovery-fields">
-          <summary>Configure a recovery target <span>Only needed when restoring</span></summary>
-          <p>Create a separate blank hosted Supabase project. The runner derives its API and database endpoints from its project reference.</p>
-          <form id="targetConnectionsForm" autocomplete="off">
-            <fieldset>
-              <legend>Blank recovery Supabase</legend>
-              <label><span>Target project reference</span><input id="targetRef" data-help="target-ref" type="text" pattern="[a-z0-9]{20}" maxlength="20" placeholder="Exactly 20 lowercase letters and numbers"></label>
-              <label><span>Target database password</span><input id="targetDatabasePassword" data-help="target-database-password" type="password" autocomplete="new-password" placeholder="The password chosen for the blank target"></label>
-              <label><span>Target secret or service role key</span><input id="targetServiceRoleKey" data-help="target-key" type="password" autocomplete="new-password" placeholder="Usually begins sb_secret_… or legacy eyJ…"></label>
-            </fieldset>
-            <div class="form-action"><button id="saveTargetConnections" type="submit">Save recovery access</button><span id="targetConnectionMessage" role="status">Can be completed later.</span></div>
-          </form>
+          <summary>What happens if I don't set a target project? <span>Capsule-only restore</span></summary>
+          <p>Uncheck "Also restore automatically into a target project" above and the destination boxes disappear — the encrypted capsule still goes to your configured storage destination (S3, Dropbox, local disk, etc.) every time, you just restore it yourself when needed:</p>
+          <div class="technical-table" role="table" aria-label="What's inside the capsule">
+            <div class="technical-row heading" role="row"><span>Contains</span><span>What it is</span><span>Where it lands</span></div>
+            <div class="technical-row" role="row"><strong>Database backup file</strong><span>A full dump of your Postgres database</span><span>Inside the capsule</span></div>
+            <div class="technical-row" role="row"><strong>Edge Function DDLs</strong><span>The source/definition of every captured Edge Function</span><span>Inside the capsule</span></div>
+            <div class="technical-row" role="row"><strong>Binary objects</strong><span>Every file from the selected Storage buckets</span><span>Inside the capsule</span></div>
+          </div>
+          <h3>How to get it back out, later, yourself</h3>
+          <ol class="help-steps">
+            <li>Find the finished capsule at your configured destination — for example, an object in your S3 bucket (under the prefix set in this runner's config), or a file in the Dropbox/Google Drive folder you pointed it at. It is a single opaque, encrypted file; nothing about it is readable without your capsule passphrase.</li>
+            <li>Download that file to any machine with this runner's CLI installed (it does not have to be this runner — the capsule and the passphrase are enough).</li>
+            <li>Run the CLI's restore command against it with your capsule passphrase. That decrypts the capsule and unpacks the database backup file, the Edge Function DDLs, and the binary objects into plain files on disk.</li>
+            <li>From there: load the database backup file into any Postgres instance (a new Supabase project, or your own server), redeploy the Edge Functions from their DDLs, and copy the binary objects into whatever Storage/bucket you want them in. None of this requires PortaBase or an internet connection — it's your data, your passphrase, your choice of destination.</li>
+          </ol>
+          <p class="fine-print">Choosing this means PortaBase never automates the restore step for you. That's the trade-off for not configuring a live target project.</p>
         </details>
       </section>
 
@@ -295,6 +285,32 @@
         </div>
       </section>
 
+      <section class="technical-section">
+        <h3>Technology used: AWS</h3>
+        <p>When the destination for an encrypted capsule is configured as Amazon S3, here is exactly what that means and doesn't mean:</p>
+        <div class="technical-table" role="table" aria-label="AWS technology boundaries">
+          <div class="technical-row heading" role="row"><span>Piece</span><span>What it does</span><span>What reaches your browser</span></div>
+          <div class="technical-row" role="row"><strong>Amazon S3</strong><span>Durable object storage that holds the finished, already-encrypted capsule file(s). S3 itself never sees plaintext — it stores opaque ciphertext bytes like any other object.</span><span>Nothing; uploads happen runner-to-S3 directly</span></div>
+          <div class="technical-row" role="row"><strong>AWS access keys</strong><span>Used only by the Linux runner process to authenticate the upload (<code>PutObject</code>) to the configured bucket/prefix.</span><span>Not sent; keys live in runner environment variables only</span></div>
+          <div class="technical-row" role="row"><strong>Bucket ownership</strong><span>Either a bucket in your own AWS account (you hold the keys and the bill) or a PortaBase-managed bucket, depending on how this runner's destination is configured.</span><span>Shown as a destination kind only — bucket name/prefix stay private to the runner's config</span></div>
+        </div>
+        <p class="technical-caveat">S3 provides durability and access control for the stored object; it is not itself what keeps the data private — the AES-256-GCM encryption performed by the runner before upload is what does that. A party with only S3 read access, lacking your capsule passphrase, holds unreadable ciphertext.</p>
+      </section>
+
+      <section class="technical-section">
+        <h3>Owning the runner vs. seeing inside it</h3>
+        <p>PortaBase's cloud account is the one that provisions, bills, and can start, stop, or terminate this runner's compute resource. That is a real, meaningful form of ownership — and it is deliberately kept separate from the ability to read anything running on it.</p>
+        <p>Think of it like renting a tent at a campground. We — the campground — own the land and own the tent itself. We can see the tent standing there, bill you for the site, and take the tent down once you check out. But once you're inside with the flap zipped shut, that's it: we have no window, no second key, no way to see what you brought in or what you're doing in there. Owning the tent and the ground it sits on is not the same thing as being able to see inside it once it's zipped.</p>
+        <div class="technical-table" role="table" aria-label="Ownership versus visibility">
+          <div class="technical-row heading" role="row"><span>Control</span><span>PortaBase account</span><span>You</span></div>
+          <div class="technical-row" role="row"><strong>Provision / bill / terminate the compute resource</strong><span>Yes — this is infrastructure ownership, same as any cloud bill</span><span>No</span></div>
+          <div class="technical-row" role="row"><strong>Start or stop the runner process</strong><span>Yes, via the subscription/control plane</span><span>Yes, from this private interface</span></div>
+          <div class="technical-row" role="row"><strong>Read Supabase credentials, the capsule passphrase, or inventory names</strong><span>No — these never leave this runner's private state</span><span>Yes — you entered them here</span></div>
+          <div class="technical-row" role="row"><strong>Decrypt a capsule or read its contents</strong><span>No — requires your passphrase, which PortaBase does not hold</span><span>Yes</span></div>
+        </div>
+        <p class="technical-caveat"><strong>Current build caveat:</strong> right now, the zipper doesn't actually lock. This development build's private state file is not yet encrypted with a customer-held key, so campground staff with direct access to the tent pole — a host administrator with direct machine access — could currently still unzip the flap and read what's inside. The separation described above is the architecture we are building toward, not yet a proven guarantee. That's exactly why this runner is marked "Seal not verified": we won't call the tent "zipped and sealed" until that customer-held-key encryption, and the denial checks in the release-proof list below, actually pass.</p>
+      </section>
+
       <section class="technical-section split">
         <div>
           <h3>Evidence and provability</h3>
@@ -323,6 +339,58 @@
       </div>
     </div>
   </dialog>
+  <dialog id="verifiabilityInfo" class="technical-dialog" aria-labelledby="verifiability-title">
+    <div class="modal-rule"></div>
+    <div class="modal-body">
+      <p class="eyebrow">Verify it yourself</p>
+      <h2 id="verifiability-title">Verifiability</h2>
+      <p class="modal-lead">This page is the only code running in your browser for this runner. You do not have to take that on faith — you can check it yourself with tools already built into your browser.</p>
+
+      <p class="modal-lead">Think of it like watching a restaurant kitchen through a glass wall instead of being told "trust us, it's clean back there." You don't need to be a chef to look through the glass and see for yourself that nothing shady is happening — you can watch exactly what goes in and what comes out. The sections below are that glass wall: a quick look tells most people what they need to know, and if you do know how to cook, the same glass wall lets you check the actual technique, not just the vibe.</p>
+
+      <section class="technical-section">
+        <h3>What the hash proves</h3>
+        <p>Every asset this page loads (<code>/app.js</code>, <code>/app.css</code>, this HTML) can be hashed and compared against the published source so you can confirm the bytes you downloaded match a specific, reviewable version. A matching hash tells you <strong>which exact code you received</strong>; it does not by itself prove that code is safe or bug-free — that still requires reading it or trusting a review of it.</p>
+      </section>
+
+      <section class="technical-section">
+        <h3>Check it with your browser's developer tools</h3>
+        <p>If you just want to glance and move on:</p>
+        <ol class="help-steps">
+          <li>Open developer tools (<code>F12</code>, or <code>Ctrl+Shift+I</code> / <code>Cmd+Option+I</code> on Mac) before or while this page is open.</li>
+          <li><strong>Network tab:</strong> reload this page, then look at every request this tab makes. Every single one should go to <code>127.0.0.1</code> (this runner, on your own machine) — none should go to <code>portabase.dev</code>, Supabase, or any other external host. That is the "no leakage" claim, directly observable, not asserted.</li>
+          <li><strong>Sources / Debugger tab:</strong> open <code>app.js</code> as served to this tab and read it, or save it from there, to see exactly what executed — not a summary of it.</li>
+          <li><strong>Application / Storage tab:</strong> confirm nothing is written to third-party cookies, external storage, or cross-origin <code>localStorage</code> — this page only talks to itself.</li>
+        </ol>
+        <p>If you want to actually verify rather than eyeball it:</p>
+        <ul class="help-steps">
+          <li><strong>The browser enforces this, it's not just a promise.</strong> Check the Network tab's response headers for this document and you'll find <code>Content-Security-Policy: connect-src 'self'; script-src 'self'; default-src 'none'</code>. That header is read and enforced by the browser engine itself — if this page's own code tried to call any host other than this runner, or run an inline/injected script, the browser would block it and log a CSP violation to the Console tab. You're not trusting our claim; you're trusting your browser's CSP implementation, which you can audit independently of us.</li>
+          <li><strong>Filter the Network tab by type</strong> (XHR/Fetch, WS, Other) rather than just eyeballing the list — a quiet background <code>WebSocket</code>, <code>fetch(..., {keepalive:true})</code>, or <code>navigator.sendBeacon()</code> call is easy to miss in an unfiltered waterfall. The CSP above blocks all three to non-`self` origins regardless, but filtering lets you confirm there are zero such calls at all, even to this runner.</li>
+          <li><strong>Hash what's actually running, from the Console tab, without trusting any hash we show you:</strong>
+            <pre class="code-block">crypto.subtle.digest('SHA-256', await (await fetch('/app.js')).arrayBuffer())
+  .then(b => [...new Uint8Array(b)].map(x => x.toString(16).padStart(2,'0')).join(''))
+  .then(console.log)</pre>
+            Paste that into the Console, compare the printed hex digest against the hash published alongside a tagged release/commit of this file in the public repository. A match proves this tab is running that exact reviewed source, byte for byte — independent of anything this page itself displays.
+          </li>
+          <li><strong>View source vs. rendered DOM:</strong> <code>Ctrl+U</code> (view-source) shows what the server sent; the Elements/Inspector tab shows what's rendered now. Because <code>script-src 'self'</code> forbids inline <code>&lt;script&gt;</code> and <code>onclick="…"</code>-style handlers, every behavior on this page must live in the external <code>app.js</code> you can hash and read — there's no hidden inline code path to miss.</li>
+        </ul>
+      </section>
+
+      <section class="technical-section">
+        <h3>Download the client-side code</h3>
+        <p>These are the exact files this browser tab is currently running — not a separate copy that could drift from what executed. Downloading gives you a local copy to diff against the public repository's source offline, outside the browser.</p>
+        <div class="modal-actions">
+          <a id="downloadAppJs" class="button-link" href="/app.js" download="portabase-runner-app.js">Download app.js</a>
+          <a id="downloadAppCss" class="button-link" href="/app.css" download="portabase-runner-app.css">Download app.css</a>
+        </div>
+        <p class="fine-print">This download only includes the browser-side setup page. The runner's own backend code (Supabase capture, encryption, and recovery logic) runs on the Linux runner, not in this tab; see “How the seal works” → the deeper technical explanation for that boundary.</p>
+      </section>
+
+      <div class="technical-actions">
+        <button id="closeVerifiabilityInfo" type="button">Close</button>
+      </div>
+    </div>
+  </dialog>
   <dialog id="helpPrompt" class="help-dialog help-prompt" aria-labelledby="help-prompt-title">
     <div class="modal-rule"></div>
     <div class="modal-body">
@@ -343,12 +411,40 @@
       <div class="modal-actions"><a id="help-detail-link" class="button-link" target="_blank" rel="noopener noreferrer">Open official Supabase guide</a><button id="closeHelpDetail" class="quiet" type="button">Close</button></div>
     </div>
   </dialog>
-  <dialog id="inspectionProgress" class="inspection-dialog" aria-labelledby="inspection-title">
+  <dialog id="inspectionProgress" class="inspection-dialog connect-modal" aria-labelledby="inspection-title">
     <div class="modal-rule"></div>
     <div class="modal-body">
-      <p class="eyebrow">Private connection</p>
-      <h2 id="inspection-title">Connecting to Supabase</h2>
-      <p id="inspectionStatus" class="inspection-status" aria-live="polite">Saving your four values inside the runner…</p>
+      <p class="eyebrow">One-time setup · Private connection</p>
+      <h2 id="inspection-title">Connect your Supabase project</h2>
+      <p class="setup-reassurance">These values stay inside this runner. They are never sent to your PortaBase account.</p>
+      <p class="field-help-hint">Double-click on a field for help.</p>
+      <form id="sourceConnectionsForm" autocomplete="off">
+        <label class="mask-control"><input id="maskValues" type="checkbox" checked><span>Mask values</span></label>
+        <label class="mask-control"><input id="capsuleOnly" type="checkbox"><span>Create the capsule only (no automatic restore)</span></label>
+        <fieldset>
+          <legend>Required</legend>
+          <label><span><b>1</b> Project URL or reference</span><input id="sourceProjectRef" data-help="source-project-ref" type="text" autocomplete="off" placeholder="https://abcdefghijklmnopqrst.supabase.co or just the 20-character ref">
+            <div class="dest-box"><span>Destination — target project URL or reference</span><input id="targetRef" data-help="target-ref" type="text" autocomplete="off" placeholder="A separate, blank hosted Supabase project"></div>
+          </label>
+          <label><span><b>2</b> Database password</span><input id="sourceDatabasePassword" data-help="source-database-password" type="password" autocomplete="new-password" placeholder="The password chosen when this project was created">
+            <div class="dest-box"><span>Destination — target database password</span><input id="targetDatabasePassword" data-help="target-database-password" type="password" autocomplete="new-password" placeholder="The password chosen for the blank target"></div>
+          </label>
+          <label><span><b>3</b> Project secret key</span><input id="sourceServiceRoleKey" data-help="source-key" type="password" autocomplete="new-password" placeholder="Usually begins sb_secret_…">
+            <div class="dest-box"><span>Destination — target secret or service role key</span><input id="targetServiceRoleKey" data-help="target-key" type="password" autocomplete="new-password" placeholder="Usually begins sb_secret_… or legacy eyJ…"></div>
+          </label>
+          <label><span><b>4</b> Management access token</span><input id="sourceAccessToken" data-help="source-token" type="password" autocomplete="new-password" placeholder="Usually begins sbp_…"></label>
+          <label><span><b>5</b> Capsule passphrase</span><input id="capsulePassphrase" data-help="capsule-passphrase" type="password" autocomplete="new-password" minlength="16" placeholder="Create your own — at least 16 characters"></label>
+        </fieldset>
+        <p id="capsuleOnlyNote" class="fine-print" hidden>No target project configured: the encrypted capsule is written only to your configured storage destination (S3, Dropbox, local disk, etc.). Restore is manual — download the capsule and run the CLI restore command with your passphrase when you need it.</p>
+        <details class="setup-help">
+          <summary>Get Help</summary>
+          <p>Open your Supabase dashboard, choose the project you want to protect, then double-click the field where you need help.</p>
+          <a class="button-link" href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer">Open Supabase dashboard</a>
+        </details>
+        <div class="form-action"><button id="saveSourceConnections" type="submit">Connect</button><span id="formConnectionMessage" role="status">Enter the five values, then connect.</span></div>
+      </form>
+
+      <p id="inspectionStatus" class="inspection-status" aria-live="polite" hidden></p>
       <div class="probe-graphic" aria-hidden="true">
         <div class="probe-node runner-node"><span class="runner-mark"><i></i><i></i><i></i></span><strong>PortaBase runner</strong></div>
         <div class="probe-exchange">
@@ -357,11 +453,20 @@
         </div>
         <div class="probe-node supabase-node"><i></i><strong>Supabase</strong></div>
       </div>
-      <ol class="probe-stages" aria-label="Connection progress">
-        <li id="probeAccess"><span>1</span><div><strong>Secure access</strong><small>Waiting</small></div></li>
-        <li id="probeDatabase"><span>2</span><div><strong>Database tables</strong><small>Waiting</small></div></li>
-        <li id="probeStorage"><span>3</span><div><strong>Storage files</strong><small>Waiting</small></div></li>
-        <li id="probeFunctions"><span>4</span><div><strong>Edge Functions</strong><small>Waiting</small></div></li>
+      <ol class="probe-stages four-step" aria-label="Connection progress">
+        <li id="probeUrl"><span>1</span><div><strong>URL</strong><small>Waiting</small></div></li>
+        <li id="probeAccess"><span>2</span><div><strong>Project</strong><small>Waiting</small></div></li>
+        <li id="probeDatabase"><span>3</span><div><strong>Database</strong><small>Waiting</small></div></li>
+        <li id="probeApiGroup" class="probe-api-group">
+          <span>4</span>
+          <div>
+            <strong>API</strong><small>Waiting</small>
+            <div class="probe-api-sub">
+              <div id="probeStorage" class="probe-api-item"><small>Storage: Waiting</small></div>
+              <div id="probeFunctions" class="probe-api-item"><small>Edge Functions: Waiting</small></div>
+            </div>
+          </div>
+        </li>
       </ol>
       <div id="probeSchemaProgress" class="schema-progress" hidden>
         <div class="schema-progress-heading"><strong>Cataloging database schemas</strong><span id="probeSchemaCount">0 schemas</span></div>

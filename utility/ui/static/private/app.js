@@ -8,6 +8,14 @@ history.replaceState(null, '', location.pathname);
 let inventory = null, bootstrap = null, csrf = '', busy = false, savedIntent = null, selectionSaveVersion = 0;
 let selectionSaveChain = Promise.resolve();
 const sourceFieldIds = ['sourceDatabasePassword', 'sourceServiceRoleKey', 'sourceAccessToken', 'capsulePassphrase'];
+const PROJECT_REF_RE = /^[a-z0-9]{20}$/;
+/** Accepts a bare 20-char ref or a full https://<ref>.supabase.co URL; returns the ref or null. */
+function parseProjectRef(raw) {
+  const value = String(raw || '').trim().toLowerCase();
+  if (PROJECT_REF_RE.test(value)) return value;
+  const match = value.match(/^(?:https?:\/\/)?([a-z0-9]{20})\.supabase\.co\/?$/);
+  return match ? match[1] : null;
+}
 const selected = { tables: new Set(), buckets: new Set() };
 const sorting = { tables: { key: 'bytes', direction: 'desc' }, buckets: { key: 'bytes', direction: 'desc' } };
 const size = value => {
@@ -103,6 +111,15 @@ const HELP_TOPICS = {
 let activeHelpKey = null, helpSuppressedUntil = 0;
 function showError(message) { $('error').textContent = message; $('error').hidden = false; $('error').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
 function clearError() { $('error').hidden = true; }
+function clearFieldErrors() { for (const id of sourceFieldIds) $(id).classList.remove('field-error'); }
+function flagFieldError(id) {
+  clearFieldErrors();
+  const field = $(id);
+  field.classList.add('field-error');
+  field.closest('label')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  field.addEventListener('input', () => field.classList.remove('field-error'), { once: true });
+}
+const PROBE_STAGE_FIELD = { probeUrl: 'sourceProjectRef', probeDatabase: 'sourceDatabasePassword', probeStorage: 'sourceServiceRoleKey', probeFunctions: 'sourceAccessToken' };
 async function api(path, options = {}) {
   const response = await fetch(path, { redirect: 'error', ...options, headers: { 'X-Portabase-Session': token, ...(options.headers || {}) } });
   let body = {}; try { body = await response.json(); } catch { /* fixed fallback */ }
@@ -306,14 +323,18 @@ async function loadBootstrap() {
 }
 function setProbeStage(id, state, detail) {
   const item = $(id), note = item.querySelector('small');
-  item.className = state;
-  note.textContent = detail;
+  item.classList.remove('active', 'done', 'bad');
+  if (state) item.classList.add(state);
+  if (note) note.textContent = detail;
 }
 function resetInspection({ accessReady = false } = {}) {
   $('inspection-title').textContent = accessReady ? 'Inspecting your project' : 'Connecting to Supabase';
-  $('inspectionStatus').textContent = accessReady ? 'The runner is checking your project now.' : 'Saving your four values inside the runner…';
-  setProbeStage('probeAccess', accessReady ? 'done' : 'active', accessReady ? 'Saved in runner' : 'Saving…');
+  $('inspectionStatus').hidden = false;
+  $('inspectionStatus').textContent = accessReady ? 'The runner is checking your project now.' : 'Checking the project URL…';
+  setProbeStage('probeUrl', accessReady ? 'done' : 'active', accessReady ? 'Valid' : 'Checking…');
+  setProbeStage('probeAccess', accessReady ? 'done' : '', accessReady ? 'Saved in runner' : 'Waiting');
   for (const id of ['probeDatabase', 'probeStorage', 'probeFunctions']) setProbeStage(id, '', 'Waiting');
+  $('probeApiGroup').classList.remove('active', 'done', 'bad');
   $('probeSchemaProgress').hidden = true; $('probeSchemaList').replaceChildren();
   $('probeSchemaCount').textContent = '0 schemas'; $('probeSchemaBar').style.width = '0%';
   $('probeSchemaMeter').setAttribute('aria-valuenow', '0');
@@ -321,6 +342,7 @@ function resetInspection({ accessReady = false } = {}) {
 }
 function showInspection(options) {
   resetInspection(options);
+  $('sourceConnectionsForm').hidden = true;
   if (!$('inspectionProgress').open) $('inspectionProgress').showModal();
 }
 function probeFailed(message) {
@@ -329,10 +351,23 @@ function probeFailed(message) {
   $('closeInspection').hidden = false;
 }
 function inspectionFailureMessage() {
-  if ($('probeDatabase').classList.contains('bad')) return 'The database did not accept the connection. Your four values remain saved; use Change saved values if the database password needs correction.';
-  if ($('probeStorage').classList.contains('bad')) return 'The database connected, but the runner could not read Storage. Your four values remain saved.';
-  if ($('probeFunctions').classList.contains('bad')) return 'The database and Storage connected, but the runner could not read Edge Functions with the management token. Your four values remain saved.';
-  return 'The inspection did not finish. Your four values remain saved, so you can retry without entering them again.';
+  for (const [stageId, fieldId] of Object.entries(PROBE_STAGE_FIELD)) {
+    if ($(stageId).classList.contains('bad')) { flagFieldError(fieldId); break; }
+  }
+  if ($('probeDatabase').classList.contains('bad')) return 'The database did not accept the connection. This is most likely the database password, highlighted in red below — check it and try Connect again. Your other values were kept so you do not have to retype them.';
+  if ($('probeStorage').classList.contains('bad')) return 'The database connected, but the runner could not read Storage. This is most likely the project secret key, highlighted in red below. Your other values were kept.';
+  if ($('probeFunctions').classList.contains('bad')) return 'The database and Storage connected, but the runner could not read Edge Functions. This is most likely the management access token, highlighted in red below. Your other values were kept.';
+  return 'The inspection did not finish. Your values were kept, so you can retry without entering them again.';
+}
+function syncApiGroup() {
+  const states = ['probeStorage', 'probeFunctions'].map(id => $(id).classList.contains('bad') ? 'bad'
+    : $(id).classList.contains('done') ? 'done' : $(id).classList.contains('active') ? 'active' : '');
+  const group = $('probeApiGroup');
+  group.classList.remove('active', 'done', 'bad');
+  const label = group.querySelector('strong + small');
+  if (states.includes('bad')) { group.classList.add('bad'); if (label) label.textContent = 'Attention needed'; }
+  else if (states.every(state => state === 'done')) { group.classList.add('done'); if (label) label.textContent = 'Ready'; }
+  else { group.classList.add('active'); if (label) label.textContent = 'Checking…'; }
 }
 function renderProbeSchema(event) {
   const completed = Math.max(0, Number(event.completed) || 0), total = Math.max(completed, Number(event.total) || 0);
@@ -362,9 +397,11 @@ async function streamInspection() {
         $('inspectionStatus').textContent = 'Your values are locked inside the runner. Inventory is now underway.';
       }
     } else if (event.type === 'storage') {
-      setProbeStage('probeStorage', event.ok ? 'done' : 'bad', event.ok ? `${number(event.buckets.length)} buckets found` : 'Could not read');
+      setProbeStage('probeStorage', event.ok ? 'done' : 'bad', event.ok ? `Storage: ${number(event.buckets.length)} buckets found` : 'Storage: could not read');
+      syncApiGroup();
     } else if (event.type === 'functions') {
-      setProbeStage('probeFunctions', event.ok ? 'done' : 'bad', event.ok ? `${number(event.functionCount)} found` : 'Could not read');
+      setProbeStage('probeFunctions', event.ok ? 'done' : 'bad', event.ok ? `Edge Functions: ${number(event.functionCount)} found` : 'Edge Functions: could not read');
+      syncApiGroup();
     } else if (event.type === 'complete') completed = event.inventory;
     else if (event.type === 'error') throw new Error(messages[event.error] || 'The inspection did not finish.');
   };
@@ -420,7 +457,6 @@ async function saveConnections({ fields, buttonId, messageId, requireFields = []
   $(buttonId).disabled = true; $(messageId).textContent = 'Saving inside runner…';
   try {
     const result = await api('/api/connections', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Portabase-CSRF': csrf }, body: JSON.stringify(body) });
-    for (const id of fields) $(id).value = '';
     bootstrap = await api('/api/bootstrap'); csrf = bootstrap.csrf; renderEvents(bootstrap.state);
     renderConnections(result.connections); $(messageId).textContent = 'Saved securely inside this runner.';
     return true;
@@ -429,35 +465,84 @@ async function saveConnections({ fields, buttonId, messageId, requireFields = []
 }
 $('sourceConnectionsForm').addEventListener('submit', async event => {
   event.preventDefault();
+  clearFieldErrors(); clearError();
+  const refInput = $('sourceProjectRef').value;
+  const parsedRef = parseProjectRef(refInput);
   showInspection({ accessReady: false });
-  const fields = sourceFieldIds;
+  if (!parsedRef) {
+    setProbeStage('probeUrl', 'bad', 'Not a valid project URL or reference');
+    flagFieldError('sourceProjectRef');
+    $('sourceConnectionsForm').hidden = false;
+    return probeFailed('Enter the full https://<ref>.supabase.co URL or the bare 20-character project reference, highlighted in red below.');
+  }
+  if (bootstrap?.projectRef && parsedRef !== bootstrap.projectRef) {
+    setProbeStage('probeUrl', 'bad', 'Does not match this runner’s bound project');
+    flagFieldError('sourceProjectRef');
+    $('sourceConnectionsForm').hidden = false;
+    return probeFailed(`This runner is bound to project ${bootstrap.projectRef} and cannot connect to a different project yet. Enter that reference, highlighted in red below.`);
+  }
+  setProbeStage('probeUrl', 'done', 'Valid');
+  const fields = [...sourceFieldIds];
   const required = [];
   if (!bootstrap?.connections?.sourceConfigured) required.push('sourceDatabasePassword', 'sourceServiceRoleKey', 'sourceAccessToken');
   if (!bootstrap?.connections?.passphraseConfigured) required.push('capsulePassphrase');
-  const saved = await saveConnections({ fields, requireFields: required, buttonId: 'saveSourceConnections', messageId: 'connectionMessage' });
-  if (!saved) return probeFailed('The values were not saved. Correct the highlighted setup information and try Connect again.');
+  if (!$('capsuleOnly').checked) {
+    const parsedTargetRef = parseProjectRef($('targetRef').value);
+    const anyTargetField = $('targetRef').value || $('targetDatabasePassword').value || $('targetServiceRoleKey').value;
+    if (anyTargetField && !parsedTargetRef) {
+      flagFieldError('targetRef');
+      $('sourceConnectionsForm').hidden = false;
+      return probeFailed('The target project URL or reference is not valid. Correct it, highlighted in red below, or uncheck "Also restore automatically into a target project."');
+    }
+    if (parsedTargetRef) {
+      $('targetRef').value = parsedTargetRef;
+      fields.push('targetRef', 'targetDatabasePassword', 'targetServiceRoleKey');
+      if (!bootstrap?.connections?.targetConfigured) required.push('targetDatabasePassword', 'targetServiceRoleKey');
+    }
+  }
+  $('inspectionStatus').textContent = 'URL confirmed. Saving your values inside the runner…';
+  const saved = await saveConnections({ fields, requireFields: required, buttonId: 'saveSourceConnections', messageId: 'formConnectionMessage' });
+  if (!saved) {
+    $('sourceConnectionsForm').hidden = false; $('sourceConfiguredPanel').hidden = true;
+    return probeFailed('The values were not saved. Correct the highlighted setup information and try Connect again.');
+  }
   setProbeStage('probeAccess', 'done', 'Saved in runner');
   $('inspectionStatus').textContent = 'Values saved. Validating the Supabase connection…';
-  await inspect({ keepModal: true });
+  const ok = await inspect({ keepModal: true });
+  if (ok) {
+    for (const id of fields) $(id).value = '';
+  } else {
+    // Live connectivity failed after a format-valid save: return to the entry
+    // screen with values intact so the customer can fix the one field at
+    // fault instead of retyping all four blind (see inspectionFailureMessage).
+    $('sourceConnectionsForm').hidden = false; $('sourceConfiguredPanel').hidden = true;
+  }
 });
 $('maskValues').addEventListener('change', event => {
   const type = event.currentTarget.checked ? 'password' : 'text';
-  for (const id of sourceFieldIds) $(id).type = type;
+  for (const id of [...sourceFieldIds, 'targetDatabasePassword', 'targetServiceRoleKey']) $(id).type = type;
+});
+$('openConnectModal').addEventListener('click', () => {
+  if ($('sourceProjectRef') && bootstrap?.projectRef && !$('sourceProjectRef').value) $('sourceProjectRef').value = bootstrap.projectRef;
+  showInspection({ accessReady: false });
+  $('inspectionStatus').hidden = true;
+  setProbeStage('probeUrl', '', 'Waiting'); setProbeStage('probeAccess', '', 'Waiting');
 });
 $('inspectSavedSource').addEventListener('click', async event => {
   event.currentTarget.disabled = true; event.currentTarget.textContent = 'Inspecting project…';
-  const ok = await inspect();
+  showInspection({ accessReady: true });
+  $('sourceConnectionsForm').hidden = true;
+  const ok = await inspect({ keepModal: true });
   event.currentTarget.disabled = false; event.currentTarget.textContent = ok ? 'Inspect again' : 'Try inspection again';
 });
 $('editSourceConnections').addEventListener('click', () => {
+  showInspection({ accessReady: false });
   $('sourceConfiguredPanel').hidden = true; $('sourceConnectionsForm').hidden = false;
   $('connectionMessage').textContent = 'Saved values remain in the runner. Enter only the values you want to replace.';
 });
-$('targetConnectionsForm').addEventListener('submit', async event => {
-  event.preventDefault();
-  const fields = ['targetRef', 'targetDatabasePassword', 'targetServiceRoleKey'];
-  await saveConnections({ fields, requireFields: fields,
-    buttonId: 'saveTargetConnections', messageId: 'targetConnectionMessage' });
+$('capsuleOnly').addEventListener('change', event => {
+  $('capsuleOnlyNote').hidden = !event.currentTarget.checked;
+  for (const id of ['targetRef', 'targetDatabasePassword', 'targetServiceRoleKey']) $(id).disabled = event.currentTarget.checked;
 });
 $('refresh').addEventListener('click', () => inspect()); $('keyword').addEventListener('input', renderFilters); $('schema').addEventListener('change', renderFilters); $('empty').addEventListener('change', updateSummary); $('incremental').addEventListener('change', () => { updateSummary(); void persistSelectionDefaults(); });
 for (const button of document.querySelectorAll('.sort-header')) button.addEventListener('click', () => {
@@ -489,10 +574,13 @@ $('openTechnicalInfo').addEventListener('click', () => { $('sealInfo').close(); 
 $('closeTechnicalInfo').addEventListener('click', () => $('technicalInfo').close());
 $('backToSealInfo').addEventListener('click', () => { $('technicalInfo').close(); $('sealInfo').showModal(); });
 $('technicalInfo').addEventListener('click', event => { if (event.target === $('technicalInfo')) $('technicalInfo').close(); });
+$('openVerifiability').addEventListener('click', () => $('verifiabilityInfo').showModal());
+$('closeVerifiabilityInfo').addEventListener('click', () => $('verifiabilityInfo').close());
+$('verifiabilityInfo').addEventListener('click', event => { if (event.target === $('verifiabilityInfo')) $('verifiabilityInfo').close(); });
 
 function showHelpPrompt(field) {
   if (Date.now() < helpSuppressedUntil || !HELP_TOPICS[field.dataset.help]
-    || $('sealInfo').open || $('helpPrompt').open || $('helpDetail').open) return;
+    || $('sealInfo').open || $('verifiabilityInfo').open || $('helpPrompt').open || $('helpDetail').open) return;
   activeHelpKey = field.dataset.help;
   $('helpTopicName').textContent = HELP_TOPICS[activeHelpKey].title;
   $('helpPrompt').showModal();
