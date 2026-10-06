@@ -585,6 +585,33 @@ $('openVerifiability').addEventListener('click', () => $('verifiabilityInfo').sh
 $('closeVerifiabilityInfo').addEventListener('click', () => $('verifiabilityInfo').close());
 $('verifiabilityInfo').addEventListener('click', event => { if (event.target === $('verifiabilityInfo')) $('verifiabilityInfo').close(); });
 
+function resetZipperModal() {
+  $('zipperConfirmInput').value = '';
+  $('zipperConfirmSubmit').disabled = true;
+  $('zipperConfirmScene').hidden = false;
+  $('zipperStageScene').hidden = true;
+  $('zipperStageActions').hidden = true;
+  $('zipperStageScene').classList.remove('flap-down', 'zip-up', 'sealed');
+}
+$('openCloseZipper').addEventListener('click', () => { resetZipperModal(); $('closeZipperModal').showModal(); });
+$('zipperConfirmInput').addEventListener('input', () => {
+  $('zipperConfirmSubmit').disabled = $('zipperConfirmInput').value.trim().toLowerCase() !== 'i confirm';
+});
+$('zipperConfirmCancel').addEventListener('click', () => $('closeZipperModal').close());
+$('zipperConfirmSubmit').addEventListener('click', () => {
+  $('zipperConfirmScene').hidden = true;
+  $('zipperStageScene').hidden = false;
+  const stage = $('zipperStageScene');
+  requestAnimationFrame(() => {
+    stage.classList.add('flap-down');
+    setTimeout(() => stage.classList.add('zip-up'), 500);
+    setTimeout(() => { stage.classList.add('sealed'); $('zipperStageActions').hidden = false; }, 1500);
+  });
+});
+$('closeZipperStage').addEventListener('click', () => $('closeZipperModal').close());
+$('closeZipperModal').addEventListener('click', event => { if (event.target === $('closeZipperModal')) $('closeZipperModal').close(); });
+$('closeZipperModal').addEventListener('close', resetZipperModal);
+
 function showHelpPrompt(field) {
   if (Date.now() < helpSuppressedUntil || !HELP_TOPICS[field.dataset.help]
     || $('sealInfo').open || $('verifiabilityInfo').open || $('helpPrompt').open || $('helpDetail').open) return;

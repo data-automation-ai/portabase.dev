@@ -17,6 +17,7 @@
       <div class="header-state"><span class="pulse" aria-hidden="true"></span> Customer controlled boundary</div>
       <button id="openSealInfo" class="seal-button" type="button">How the seal works</button>
       <button id="openVerifiability" class="seal-button" type="button">Verifiability</button>
+      <button id="openCloseZipper" class="seal-button" type="button">Close the zipper</button>
     </div>
   </header>
 
@@ -388,6 +389,29 @@
 
       <div class="technical-actions">
         <button id="closeVerifiabilityInfo" type="button">Close</button>
+      </div>
+    </div>
+  </dialog>
+  <dialog id="closeZipperModal" class="help-dialog zipper-modal" aria-labelledby="close-zipper-title">
+    <div class="modal-rule"></div>
+    <div class="modal-body">
+      <div id="zipperConfirmScene">
+        <p class="eyebrow">Seal this runner</p>
+        <h2 id="close-zipper-title">Close the zipper</h2>
+        <p>Once closed, you will need your recovery key to open this runner again. Type <strong>I confirm</strong> to seal it.</p>
+        <input id="zipperConfirmInput" type="text" autocomplete="off" placeholder="Type: I confirm" aria-label="Type I confirm to seal the runner">
+        <div class="modal-actions">
+          <button id="zipperConfirmSubmit" type="button" disabled>Seal it</button>
+          <button id="zipperConfirmCancel" class="quiet" type="button">Cancel</button>
+        </div>
+      </div>
+      <div id="zipperStageScene" class="zipper-stage" hidden aria-hidden="true">
+        <div class="zipper-flap"></div>
+        <div class="zipper-curtain"><div class="zipper-seam"><span class="zipper-pull"></span></div></div>
+        <div class="zipper-label">Sealed Secure</div>
+      </div>
+      <div id="zipperStageActions" class="modal-actions" hidden>
+        <button id="closeZipperStage" type="button">Close</button>
       </div>
     </div>
   </dialog>
