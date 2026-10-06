@@ -2832,8 +2832,11 @@ async function uiDatabaseUrl(config) {
   try { direct = new URL(current); } catch { return current; }
   if (direct.hostname !== `db.${config.projectRef}.supabase.co`) return current;
   try {
-    const pooler = await managementApiJson(`/v1/projects/${config.projectRef}/config/database/pgbouncer`);
-    const connectionString = pooler?.connection_string;
+    const response = await managementApiJson(`/v1/projects/${config.projectRef}/config/database/pooler`);
+    const pooler = Array.isArray(response)
+      ? response.find(value => value?.database_type === 'PRIMARY') || response[0]
+      : response;
+    const connectionString = pooler?.connection_string || pooler?.connectionString;
     const host = typeof connectionString === 'string'
       ? /@([a-z0-9-]+\.pooler\.supabase\.com)(?::\d+)?(?:\/|$)/i.exec(connectionString)?.[1]
       : null;
