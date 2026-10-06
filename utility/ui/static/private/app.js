@@ -8,6 +8,7 @@ history.replaceState(null, '', location.pathname);
 let inventory = null, bootstrap = null, csrf = '', busy = false, savedIntent = null;
 const sourceFieldIds = ['sourceDatabasePassword', 'sourceServiceRoleKey', 'sourceAccessToken', 'capsulePassphrase'];
 const selected = { tables: new Set(), buckets: new Set() };
+const sorting = { tables: { key: 'bytes', direction: 'desc' }, buckets: { key: 'bytes', direction: 'desc' } };
 const size = value => {
   const bytes = Number(value) || 0;
   if (bytes < 1024) return `${bytes} B`;
@@ -193,22 +194,46 @@ function matches(row, kind) {
   const keyword = $('keyword').value.trim().toLocaleLowerCase();
   return (!keyword || row.key.toLocaleLowerCase().includes(keyword)) && (kind !== 'tables' || !$('schema').value || row.schema === $('schema').value);
 }
+function sortedRows(kind, rows) {
+  const { key, direction } = sorting[kind], factor = direction === 'asc' ? 1 : -1;
+  const value = row => key === 'selected' ? Number(selected[kind].has(row.key))
+    : key === 'name' ? row.key
+      : key === 'count' ? Number(kind === 'tables' ? row.rows : row.objectCount) || 0
+        : Number(row.bytes) || 0;
+  return [...rows].sort((left, right) => {
+    const a = value(left), b = value(right);
+    const compared = typeof a === 'string' ? a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }) : a - b;
+    return compared ? compared * factor : left.key.localeCompare(right.key);
+  });
+}
+function updateSortHeaders(kind) {
+  for (const button of document.querySelectorAll(`.sort-header[data-sort-kind="${kind}"]`)) {
+    const active = button.dataset.sortKey === sorting[kind].key;
+    button.dataset.direction = active ? sorting[kind].direction : '';
+    button.setAttribute('aria-sort', active ? (sorting[kind].direction === 'asc' ? 'ascending' : 'descending') : 'none');
+  }
+}
 function renderChoices(kind) {
   const parent = $(kind); parent.replaceChildren();
   if (!inventory) { parent.textContent = 'Run a source probe to load this inventory.'; return; }
-  const rows = inventory[kind].filter(row => matches(row, kind));
+  const rows = sortedRows(kind, inventory[kind].filter(row => matches(row, kind)));
   if (!rows.length) { parent.textContent = 'No items match the current filters.'; return; }
   for (const row of rows) {
     const label = document.createElement('label'), checkbox = document.createElement('input'), name = document.createElement('code'), count = document.createElement('span'), bytes = document.createElement('span');
     label.className = `choice ${kind === 'tables' ? 'table-columns' : 'bucket-columns'}`; checkbox.type = 'checkbox'; checkbox.checked = selected[kind].has(row.key); checkbox.disabled = row.selectable === false;
     checkbox.setAttribute('aria-label', `Include ${kind === 'tables' ? 'table' : 'complete bucket'} ${row.key}`);
-    checkbox.addEventListener('change', () => { if (checkbox.checked) selected[kind].add(row.key); else selected[kind].delete(row.key); updateSummary(); });
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) selected[kind].add(row.key); else selected[kind].delete(row.key);
+      if (sorting[kind].key === 'selected') renderChoices(kind);
+      updateSummary();
+    });
     name.textContent = row.key; count.textContent = number(kind === 'tables' ? row.rows : row.objectCount); bytes.textContent = size(row.bytes);
     label.append(checkbox, name, count, bytes); parent.append(label);
   }
 }
 function renderFilters() {
   renderChoices('tables'); renderChoices('buckets');
+  updateSortHeaders('tables'); updateSortHeaders('buckets');
   if (!inventory) { $('visibleCount').textContent = 'No inventory'; return; }
   $('visibleCount').textContent = `${number(inventory.tables.filter(row => matches(row, 'tables')).length)} tables · ${number(inventory.buckets.filter(row => matches(row, 'buckets')).length)} buckets visible`;
 }
@@ -383,6 +408,13 @@ $('targetConnectionsForm').addEventListener('submit', async event => {
     buttonId: 'saveTargetConnections', messageId: 'targetConnectionMessage' });
 });
 $('refresh').addEventListener('click', () => inspect()); $('keyword').addEventListener('input', renderFilters); $('schema').addEventListener('change', renderFilters); $('empty').addEventListener('change', updateSummary);
+for (const button of document.querySelectorAll('.sort-header')) button.addEventListener('click', () => {
+  const kind = button.dataset.sortKind, key = button.dataset.sortKey, current = sorting[kind];
+  sorting[kind] = current.key === key
+    ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+    : { key, direction: key === 'name' ? 'asc' : 'desc' };
+  renderChoices(kind); updateSortHeaders(kind);
+});
 $('selectVisible').addEventListener('click', () => { if (!inventory) return; for (const kind of ['tables', 'buckets']) for (const row of inventory[kind]) if (matches(row, kind) && row.selectable !== false) selected[kind].add(row.key); renderFilters(); updateSummary(); });
 $('clearVisible').addEventListener('click', () => { if (!inventory) return; for (const kind of ['tables', 'buckets']) for (const row of inventory[kind]) if (matches(row, kind)) selected[kind].delete(row.key); renderFilters(); updateSummary(); });
 $('save').addEventListener('click', async () => {

@@ -171,12 +171,22 @@
       <div class="inventory-grid">
         <div class="inventory-panel">
           <div class="panel-title"><h3>Database tables</h3><span>schema · rows · total size</span></div>
-          <div class="column-head table-columns" aria-hidden="true"><span></span><span>Table</span><span>Rows</span><span>Size</span></div>
+          <div class="column-head table-columns" aria-label="Sortable database columns">
+            <button class="sort-header" type="button" data-sort-kind="tables" data-sort-key="selected">Included</button>
+            <button class="sort-header" type="button" data-sort-kind="tables" data-sort-key="name">Table</button>
+            <button class="sort-header" type="button" data-sort-kind="tables" data-sort-key="count">Rows</button>
+            <button class="sort-header" type="button" data-sort-kind="tables" data-sort-key="bytes">Size</button>
+          </div>
           <div id="tables" class="choices"></div>
         </div>
         <div class="inventory-panel">
           <div class="panel-title"><h3>Storage buckets</h3><span>Include or exclude the whole bucket</span></div>
-          <div class="column-head bucket-columns" aria-hidden="true"><span></span><span>Bucket</span><span>Objects</span><span>Bucket total</span></div>
+          <div class="column-head bucket-columns" aria-label="Sortable Storage columns">
+            <button class="sort-header" type="button" data-sort-kind="buckets" data-sort-key="selected">Included</button>
+            <button class="sort-header" type="button" data-sort-kind="buckets" data-sort-key="name">Bucket</button>
+            <button class="sort-header" type="button" data-sort-kind="buckets" data-sort-key="count">Objects</button>
+            <button class="sort-header" type="button" data-sort-kind="buckets" data-sort-key="bytes">Bucket total</button>
+          </div>
           <div id="buckets" class="choices"></div>
         </div>
       </div>
