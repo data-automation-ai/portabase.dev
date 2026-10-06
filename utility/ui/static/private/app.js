@@ -27,7 +27,7 @@ const messages = {
   incomplete_target_configuration: 'Enter the target project reference, database password, and secret key together.',
   invalid_runtime_secrets: 'The connection update was refused. Check the supplied fields.',
   invalid_source_database_password: 'Enter the database password for the protected project.',
-  invalid_source_service_key: 'The source service role key is missing or invalid.',
+  invalid_source_service_key: 'The project secret key is missing or invalid.',
   invalid_source_access_token: 'The source management token is invalid.',
   invalid_capsule_passphrase: 'Use a capsule passphrase of at least 16 characters.',
   invalid_target_project: 'Use a different, valid 20 character target project ref.',
@@ -55,10 +55,10 @@ const HELP_TOPICS = {
     url: 'https://supabase.com/docs/guides/database/connecting-to-postgres',
   },
   'source-key': {
-    title: 'Source secret key',
-    intro: 'The runner needs a server-side key to inventory Auth and Storage while bypassing Row Level Security for backup.',
-    steps: [...SOURCE_START, 'In the source project, open Settings, then API Keys.', 'Copy a Secret key beginning with sb_secret_.', 'If the project still uses legacy keys, its service_role key is also accepted.', 'Paste the key here. Never use the publishable or anon key for this field.'],
-    note: 'A secret key has elevated access. Do not place it in public website code, chat, email, or a URL. This private form sends it only to the runner origin and clears the field after saving.',
+    title: 'Project secret key',
+    intro: 'The runner uses the current project secret key to read Auth and Storage for backup.',
+    steps: [...SOURCE_START, 'In the source project, open Settings, then API Keys.', 'Reveal and copy a Secret key beginning with sb_secret_.', 'Paste it here. You do not need a legacy JWT.', 'Do not use the anon or publishable key.'],
+    note: 'The secret key has elevated access. This form sends it only to the private runner and clears the field after saving.',
     url: 'https://supabase.com/docs/guides/getting-started/api-keys',
   },
   'source-token': {

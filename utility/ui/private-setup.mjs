@@ -15,7 +15,7 @@ function projectDatabase(database) {
   const keys = new Set();
   for (const table of tables) {
     if (!table || typeof table.schema !== 'string' || typeof table.name !== 'string'
-      || !/^[A-Za-z_][A-Za-z0-9_$]*$/.test(table.schema) || !/^[A-Za-z_][A-Za-z0-9_$]*$/.test(table.name)
+      || !table.schema || !table.name || /[\0-\x1f\x7f]/.test(table.schema) || /[\0-\x1f\x7f]/.test(table.name)
       || `${table.schema}.${table.name}`.length > 256 || !count(table.bytes)
       || !['structure + rows', 'rows', 'structure', 'recreated'].includes(table.capsule)) fail('invalid_inventory', 409);
     const key = `${table.schema}.${table.name}`;
