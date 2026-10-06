@@ -61,7 +61,7 @@ export async function startPrivateSetupUiServer({ collect, privateSetup, port = 
         return;
       }
       if (request.method === 'GET' && url.pathname === '/api/setup') return send(200, { ...await setup.inspect(), csrf });
-      if (request.method !== 'POST' || !['/api/configurations', '/api/connections'].includes(url.pathname)) return send(405, { error: 'method_refused' });
+      if (request.method !== 'POST' || !['/api/configurations', '/api/connections', '/api/selection-defaults'].includes(url.pathname)) return send(405, { error: 'method_refused' });
       if (request.headers.origin !== origin || !matches(csrf, request.headers['x-portabase-csrf'])
         || request.headers['sec-fetch-site'] && request.headers['sec-fetch-site'] !== 'same-origin') return send(403, { error: 'csrf_refused' });
       if (!/^application\/json(?:;\s*charset=utf-8)?$/i.test(request.headers['content-type'] || '')) return send(415, { error: 'json_required' });
@@ -83,6 +83,7 @@ export async function startPrivateSetupUiServer({ collect, privateSetup, port = 
         });
         return send(201, { saved: true, connections: saved.status });
       }
+      if (url.pathname === '/api/selection-defaults') return send(200, setup.saveDefaults(body));
       return send(201, await setup.save(body));
     } catch (error) {
       const code = safeError(error);

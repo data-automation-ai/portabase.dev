@@ -5,7 +5,8 @@ if (suppliedToken) sessionStorage.setItem(sessionKey, suppliedToken);
 const token = suppliedToken || sessionStorage.getItem(sessionKey) || '';
 history.replaceState(null, '', location.pathname);
 
-let inventory = null, bootstrap = null, csrf = '', busy = false, savedIntent = null;
+let inventory = null, bootstrap = null, csrf = '', busy = false, savedIntent = null, selectionSaveVersion = 0;
+let selectionSaveChain = Promise.resolve();
 const sourceFieldIds = ['sourceDatabasePassword', 'sourceServiceRoleKey', 'sourceAccessToken', 'capsulePassphrase'];
 const selected = { tables: new Set(), buckets: new Set() };
 const sorting = { tables: { key: 'bytes', direction: 'desc' }, buckets: { key: 'bytes', direction: 'desc' } };
@@ -154,6 +155,29 @@ function selectedBytes() {
   if (!inventory) return 0;
   return ['tables', 'buckets'].reduce((total, kind) => total + inventory[kind].filter(row => selected[kind].has(row.key)).reduce((sum, row) => sum + row.bytes, 0), 0);
 }
+function selectedTotals() {
+  if (!inventory) return null;
+  const tables = inventory.tables.filter(row => selected.tables.has(row.key));
+  const buckets = inventory.buckets.filter(row => selected.buckets.has(row.key));
+  return {
+    tableCount: tables.length,
+    estimatedRows: tables.reduce((total, row) => total + (Number(row.rows) || 0), 0),
+    databaseBytes: tables.reduce((total, row) => total + (Number(row.bytes) || 0), 0),
+    bucketCount: buckets.length,
+    objectCount: buckets.reduce((total, row) => total + (Number(row.objectCount) || 0), 0),
+    objectBytes: buckets.reduce((total, row) => total + (Number(row.bytes) || 0), 0),
+  };
+}
+function renderSelectedTotals() {
+  const totals = selectedTotals();
+  if (!totals) return;
+  $('tableCount').textContent = number(totals.tableCount);
+  $('estimatedRows').textContent = number(totals.estimatedRows);
+  $('databaseSize').textContent = `${size(totals.databaseBytes)} selected`;
+  $('bucketCount').textContent = number(totals.bucketCount);
+  $('objectCount').textContent = number(totals.objectCount);
+  $('storageSize').textContent = `${size(totals.objectBytes)} selected`;
+}
 function renderCapacity() {
   const scratch = inventory?.scratch || bootstrap?.scratch, chosen = selectedBytes();
   $('selectedSize').textContent = inventory ? size(chosen) : '—';
@@ -226,6 +250,7 @@ function renderChoices(kind) {
       if (checkbox.checked) selected[kind].add(row.key); else selected[kind].delete(row.key);
       if (sorting[kind].key === 'selected') renderChoices(kind);
       updateSummary();
+      void persistSelectionDefaults();
     });
     name.textContent = row.key; count.textContent = number(kind === 'tables' ? row.rows : row.objectCount); bytes.textContent = size(row.bytes);
     label.append(checkbox, name, count, bytes); parent.append(label);
@@ -241,7 +266,27 @@ function updateSummary() {
   const ready = Boolean(inventory) && !busy;
   $('save').disabled = !ready || (!selected.tables.size && !selected.buckets.size && !$('empty').checked); $('refresh').disabled = busy;
   if (inventory) $('summary').textContent = `${number(selected.tables.size)} tables · ${number(selected.buckets.size)} buckets · ${size(selectedBytes())} estimated source data`;
+  renderSelectedTotals();
   renderCapacity();
+}
+function persistSelectionDefaults() {
+  if (!inventory) return Promise.resolve();
+  const version = ++selectionSaveVersion;
+  const payload = { inventoryRevision: inventory.inventoryRevision, selectedTables: [...selected.tables],
+    selectedBuckets: [...selected.buckets], incrementalBinary: $('incremental').checked };
+  $('selectionPersistence').textContent = 'Saving selection in this runner…';
+  selectionSaveChain = selectionSaveChain.catch(() => {}).then(async () => {
+    try {
+      await api('/api/selection-defaults', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Portabase-CSRF': csrf }, body: JSON.stringify(payload) });
+      if (version === selectionSaveVersion) $('selectionPersistence').textContent = 'Selection saved in this runner.';
+    } catch (failure) {
+      if (version === selectionSaveVersion) $('selectionPersistence').textContent = 'Selection could not be saved.';
+      showError(failure.message);
+      return false;
+    }
+    return true;
+  });
+  return selectionSaveChain;
 }
 function renderInventory() {
   const schemas = [...new Set(inventory.tables.map(row => row.schema))].sort((a, b) => a.localeCompare(b));
@@ -344,7 +389,14 @@ async function inspect({ keepModal = false } = {}) {
   setProbeStage('probeDatabase', 'active', 'Connecting…');
   $('tables').textContent = 'Reading database catalog…'; $('buckets').textContent = 'Enumerating Storage objects…'; $('summary').textContent = 'Reading source inventory…'; updateSummary();
   try {
-    inventory = await streamInspection(); csrf = inventory.csrf; selected.tables = new Set(inventory.tables.filter(row => row.selectable).map(row => row.key)); selected.buckets = new Set(inventory.buckets.map(row => row.key));
+    inventory = await streamInspection(); csrf = inventory.csrf;
+    const defaults = inventory.selectionDefaults;
+    const allowedTables = new Set(inventory.tables.filter(row => row.selectable).map(row => row.key));
+    const allowedBuckets = new Set(inventory.buckets.map(row => row.key));
+    selected.tables = new Set(defaults ? defaults.selectedTables.filter(key => allowedTables.has(key)) : allowedTables);
+    selected.buckets = new Set(defaults ? defaults.selectedBuckets.filter(key => allowedBuckets.has(key)) : allowedBuckets);
+    $('incremental').checked = Boolean(defaults?.incrementalBinary);
+    $('selectionPersistence').textContent = defaults ? 'Previous selection loaded from this runner.' : 'All available data selected. Changes save automatically.';
     $('loaded').textContent = `Read only probe completed ${new Date(inventory.generatedAt).toLocaleString()}.`; renderInventory();
     renderConnections(bootstrap.connections);
     $('inspection-title').textContent = 'Inventory ready';
@@ -407,7 +459,7 @@ $('targetConnectionsForm').addEventListener('submit', async event => {
   await saveConnections({ fields, requireFields: fields,
     buttonId: 'saveTargetConnections', messageId: 'targetConnectionMessage' });
 });
-$('refresh').addEventListener('click', () => inspect()); $('keyword').addEventListener('input', renderFilters); $('schema').addEventListener('change', renderFilters); $('empty').addEventListener('change', updateSummary);
+$('refresh').addEventListener('click', () => inspect()); $('keyword').addEventListener('input', renderFilters); $('schema').addEventListener('change', renderFilters); $('empty').addEventListener('change', updateSummary); $('incremental').addEventListener('change', () => { updateSummary(); void persistSelectionDefaults(); });
 for (const button of document.querySelectorAll('.sort-header')) button.addEventListener('click', () => {
   const kind = button.dataset.sortKind, key = button.dataset.sortKey, current = sorting[kind];
   sorting[kind] = current.key === key
@@ -415,8 +467,8 @@ for (const button of document.querySelectorAll('.sort-header')) button.addEventL
     : { key, direction: key === 'name' ? 'asc' : 'desc' };
   renderChoices(kind); updateSortHeaders(kind);
 });
-$('selectVisible').addEventListener('click', () => { if (!inventory) return; for (const kind of ['tables', 'buckets']) for (const row of inventory[kind]) if (matches(row, kind) && row.selectable !== false) selected[kind].add(row.key); renderFilters(); updateSummary(); });
-$('clearVisible').addEventListener('click', () => { if (!inventory) return; for (const kind of ['tables', 'buckets']) for (const row of inventory[kind]) if (matches(row, kind)) selected[kind].delete(row.key); renderFilters(); updateSummary(); });
+$('selectVisible').addEventListener('click', () => { if (!inventory) return; for (const kind of ['tables', 'buckets']) for (const row of inventory[kind]) if (matches(row, kind) && row.selectable !== false) selected[kind].add(row.key); renderFilters(); updateSummary(); void persistSelectionDefaults(); });
+$('clearVisible').addEventListener('click', () => { if (!inventory) return; for (const kind of ['tables', 'buckets']) for (const row of inventory[kind]) if (matches(row, kind)) selected[kind].delete(row.key); renderFilters(); updateSummary(); void persistSelectionDefaults(); });
 $('save').addEventListener('click', async () => {
   if (busy || !inventory || $('save').disabled) return; busy = true; clearError(); updateSummary();
   try {

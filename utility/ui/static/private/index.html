@@ -152,11 +152,11 @@
       </div>
       <p id="loaded">Configure the source connection, then run a read only probe.</p>
 
-      <div class="metric-grid" aria-label="Source inventory totals">
-        <article><span>Database tables</span><strong id="tableCount">—</strong><small id="databaseSize">No probe</small></article>
-        <article><span>Estimated rows</span><strong id="estimatedRows">—</strong><small>Postgres statistics</small></article>
-        <article><span>Storage buckets</span><strong id="bucketCount">—</strong><small id="storageSize">No probe</small></article>
-        <article><span>Storage objects</span><strong id="objectCount">—</strong><small>Objects enumerated</small></article>
+      <div class="metric-grid" aria-label="Selected inventory totals" aria-live="polite">
+        <article><span>Selected tables</span><strong id="tableCount">—</strong><small id="databaseSize">No probe</small></article>
+        <article><span>Selected rows</span><strong id="estimatedRows">—</strong><small>Postgres estimate</small></article>
+        <article><span>Selected buckets</span><strong id="bucketCount">—</strong><small id="storageSize">No probe</small></article>
+        <article><span>Selected objects</span><strong id="objectCount">—</strong><small>Whole buckets</small></article>
         <article><span>Edge Functions</span><strong id="functionCount">—</strong><small>Management token scope</small></article>
       </div>
 
@@ -197,6 +197,7 @@
         <p class="eyebrow">Backup job</p>
         <h2 id="review-heading">Prepare this selection</h2>
         <p id="summary" class="selection-summary" role="status">No inventory loaded.</p>
+        <p id="selectionPersistence" class="fine-print" aria-live="polite">Selection defaults will be saved in this runner.</p>
         <p class="fine-print">Sizes are source estimates. Scratch planning is conservative and does not prove final capsule size or restore success.</p>
         <label class="check-row"><input id="incremental" type="checkbox"><span>Reuse unchanged binary files when the runner has a matching private cache</span></label>
         <label class="check-row"><input id="empty" type="checkbox"><span>I intend to save with no table rows or bucket files selected</span></label>

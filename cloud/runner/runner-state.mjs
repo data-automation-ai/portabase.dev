@@ -61,6 +61,13 @@ export async function openRunnerState({ directory, runnerId, projectRef }) {
       selected_bytes INTEGER NOT NULL,
       incremental_binary INTEGER NOT NULL CHECK (incremental_binary IN (0, 1))
     );
+    CREATE TABLE IF NOT EXISTS selection_defaults (
+      singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+      updated_at TEXT NOT NULL,
+      selected_tables_json TEXT NOT NULL,
+      selected_buckets_json TEXT NOT NULL,
+      incremental_binary INTEGER NOT NULL CHECK (incremental_binary IN (0, 1))
+    );
     CREATE TABLE IF NOT EXISTS runner_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       occurred_at TEXT NOT NULL,
@@ -115,6 +122,25 @@ export async function openRunnerState({ directory, runnerId, projectRef }) {
         VALUES(?, ?, ?, ?, ?, ?, ?)`).run(new Date().toISOString(), inventoryId, configRef, tableCount, bucketCount,
         selectedBytes, incrementalBinary ? 1 : 0);
       recordEvent('selection.saved', 'ready', { tableCount, bucketCount, selectedBytes, incrementalBinary });
+    },
+    persistSelectionDefaults({ selectedTables, selectedBuckets, incrementalBinary }) {
+      const updatedAt = new Date().toISOString();
+      db.prepare(`INSERT INTO selection_defaults(singleton, updated_at, selected_tables_json, selected_buckets_json, incremental_binary)
+        VALUES(1, ?, ?, ?, ?)
+        ON CONFLICT(singleton) DO UPDATE SET updated_at = excluded.updated_at,
+          selected_tables_json = excluded.selected_tables_json,
+          selected_buckets_json = excluded.selected_buckets_json,
+          incremental_binary = excluded.incremental_binary`)
+        .run(updatedAt, JSON.stringify(selectedTables), JSON.stringify(selectedBuckets), incrementalBinary ? 1 : 0);
+      return { updatedAt };
+    },
+    selectionDefaults() {
+      const row = db.prepare(`SELECT updated_at AS updatedAt, selected_tables_json AS selectedTables,
+        selected_buckets_json AS selectedBuckets, incremental_binary AS incrementalBinary
+        FROM selection_defaults WHERE singleton = 1`).get();
+      if (!row) return null;
+      return { updatedAt: row.updatedAt, selectedTables: JSON.parse(row.selectedTables),
+        selectedBuckets: JSON.parse(row.selectedBuckets), incrementalBinary: Boolean(row.incrementalBinary) };
     },
     recordEvent,
     summary() {

@@ -144,8 +144,22 @@ export async function createPrivateSetup({ directory, runnerId, projectRef, engi
         current = { ...inventory, inventoryRevision: randomUUID(), configDigest: config.digest };
         stateStore?.persistInventory(current);
         return { runnerId, projectRef, ...inventory, inventoryRevision: current.inventoryRevision,
-          scratch: await scratchStatus(config), state: stateStore?.summary() || { persistent: false } };
+          scratch: await scratchStatus(config), selectionDefaults: stateStore?.selectionDefaults?.() || null,
+          state: stateStore?.summary() || { persistent: false } };
       } catch { current = null; fail('inventory_unavailable', 409); }
+    },
+    saveDefaults(body) {
+      const keys = ['inventoryRevision', 'selectedTables', 'selectedBuckets', 'incrementalBinary'];
+      if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !keys.includes(key))
+        || typeof body.incrementalBinary !== 'boolean') fail('invalid_selection');
+      if (!current || body.inventoryRevision !== current.inventoryRevision) fail('inventory_changed', 409);
+      const tables = current.tables.filter(row => row.selectable).map(row => row.key);
+      const buckets = current.buckets.map(row => row.key);
+      const selectedTables = [...chosen(body.selectedTables, tables)].sort();
+      const selectedBuckets = [...chosen(body.selectedBuckets, buckets)].sort();
+      const saved = stateStore?.persistSelectionDefaults({ selectedTables, selectedBuckets,
+        incrementalBinary: body.incrementalBinary });
+      return { saved: true, updatedAt: saved?.updatedAt || null };
     },
     async save(body) {
       const keys = ['inventoryRevision', 'selectedTables', 'selectedBuckets', 'incrementalBinary', 'confirmEmpty'];
