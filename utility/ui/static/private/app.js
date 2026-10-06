@@ -201,7 +201,7 @@ function renderChoices(kind) {
   for (const row of rows) {
     const label = document.createElement('label'), checkbox = document.createElement('input'), name = document.createElement('code'), count = document.createElement('span'), bytes = document.createElement('span');
     label.className = `choice ${kind === 'tables' ? 'table-columns' : 'bucket-columns'}`; checkbox.type = 'checkbox'; checkbox.checked = selected[kind].has(row.key); checkbox.disabled = row.selectable === false;
-    checkbox.setAttribute('aria-label', `Include ${kind === 'tables' ? 'table' : 'bucket'} ${row.key}`);
+    checkbox.setAttribute('aria-label', `Include ${kind === 'tables' ? 'table' : 'complete bucket'} ${row.key}`);
     checkbox.addEventListener('change', () => { if (checkbox.checked) selected[kind].add(row.key); else selected[kind].delete(row.key); updateSummary(); });
     name.textContent = row.key; count.textContent = number(kind === 'tables' ? row.rows : row.objectCount); bytes.textContent = size(row.bytes);
     label.append(checkbox, name, count, bytes); parent.append(label);

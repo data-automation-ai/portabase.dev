@@ -60,6 +60,14 @@ function rejectForbiddenDrive(value) {
   if (typeof value === 'string' && (/^[fF]:/.test(value) || /^[\\/]{2}/.test(value))) fail('private_config_path_refused');
   if (value && typeof value === 'object') for (const child of Object.values(value)) rejectForbiddenDrive(child);
 }
+function rejectPartialBucketCapture(config) {
+  const capture = config?.capture;
+  if (!capture || typeof capture !== 'object' || Array.isArray(capture)) return;
+  if (capture.storageInventoryOnly === true
+    || (capture.storageSample !== undefined && capture.storageSample !== null && capture.storageSample !== '')) {
+    fail('private_partial_bucket_capture_refused');
+  }
+}
 async function checkPrivateOutput(root, value) {
   const path = inside(root, value);
   let current = root;
@@ -81,6 +89,7 @@ export async function loadPrivateEngineConfig({ directory, projectRef, engineCon
   const config = await readJson(configPath);
   if (!REF.test(projectRef || '') || !config.value || config.value.projectRef !== projectRef) fail('project_ref_mismatch');
   rejectForbiddenDrive(config.value);
+  rejectPartialBucketCapture(config.value);
   for (const field of ['backupDirectory', 'statusDirectory']) await checkPrivateOutput(root, config.value[field]);
   return { root, configPath, ...config };
 }
@@ -132,6 +141,7 @@ export async function resolvePrivateJob(job, { directory, runnerId, projectRef, 
     if (config.digest !== record.engineConfigSha256) fail('engine_config_changed');
     if (!config.value || config.value.projectRef !== projectRef) fail('project_ref_mismatch');
     rejectForbiddenDrive(config.value);
+    rejectPartialBucketCapture(config.value);
     // No implicit working-directory defaults for private runner staging or status.
     for (const field of ['backupDirectory', 'statusDirectory']) {
       await checkPrivateOutput(root, config.value[field]);
