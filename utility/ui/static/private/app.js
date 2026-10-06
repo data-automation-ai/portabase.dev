@@ -244,7 +244,9 @@ function resetInspection({ accessReady = false } = {}) {
   $('inspectionStatus').textContent = accessReady ? 'The runner is checking your project now.' : 'Saving your four values inside the runner…';
   setProbeStage('probeAccess', accessReady ? 'done' : 'active', accessReady ? 'Saved in runner' : 'Saving…');
   for (const id of ['probeDatabase', 'probeStorage', 'probeFunctions']) setProbeStage(id, '', 'Waiting');
-  $('probeTablePreview').hidden = true; $('probeTableList').replaceChildren();
+  $('probeSchemaProgress').hidden = true; $('probeSchemaList').replaceChildren();
+  $('probeSchemaCount').textContent = '0 schemas'; $('probeSchemaBar').style.width = '0%';
+  $('probeSchemaMeter').setAttribute('aria-valuenow', '0');
   $('viewInventory').hidden = true; $('closeInspection').hidden = true;
 }
 function showInspection(options) {
@@ -262,16 +264,15 @@ function inspectionFailureMessage() {
   if ($('probeFunctions').classList.contains('bad')) return 'The database and Storage connected, but the runner could not read Edge Functions with the management token. Your four values remain saved.';
   return 'The inspection did not finish. Your four values remain saved, so you can retry without entering them again.';
 }
-function renderProbeTables(tables = []) {
-  $('probeTablePreview').hidden = false;
-  $('probeTableCount').textContent = `${number(tables.length)} database table${tables.length === 1 ? '' : 's'} found`;
-  const list = $('probeTableList'); list.replaceChildren();
-  for (const table of tables.slice(0, 8)) {
-    const name = document.createElement('span'); name.textContent = table.key; list.append(name);
-  }
-  if (tables.length > 8) {
-    const more = document.createElement('span'); more.textContent = `+ ${number(tables.length - 8)} more`; more.className = 'more'; list.append(more);
-  }
+function renderProbeSchema(event) {
+  const completed = Math.max(0, Number(event.completed) || 0), total = Math.max(completed, Number(event.total) || 0);
+  const percent = total ? Math.round(completed / total * 100) : 0;
+  $('probeSchemaProgress').hidden = false;
+  $('probeSchemaCount').textContent = `${number(completed)} of ${number(total)} schemas`;
+  $('probeSchemaBar').style.width = `${percent}%`; $('probeSchemaMeter').setAttribute('aria-valuenow', String(percent));
+  const item = document.createElement('li'), name = document.createElement('code'), detail = document.createElement('span'), mark = document.createElement('b');
+  name.textContent = event.schema; detail.textContent = `${number(event.tableCount)} table${event.tableCount === 1 ? '' : 's'} · ${size(event.bytes)}`; mark.textContent = '✓';
+  item.append(name, detail, mark); $('probeSchemaList').append(item);
 }
 async function streamInspection() {
   const response = await fetch('/api/setup-stream', { redirect: 'error', headers: { 'X-Portabase-Session': token } });
@@ -280,12 +281,15 @@ async function streamInspection() {
   const reader = response.body.getReader(), decoder = new TextDecoder();
   let buffer = '', completed = null;
   const accept = event => {
-    if (event.type === 'database') {
+    if (event.type === 'database-schema') {
+      setProbeStage('probeDatabase', 'active', `${number(event.completed)} of ${number(event.total)} schemas`);
+      $('inspectionStatus').textContent = `Cataloging ${event.schema}…`;
+      renderProbeSchema(event);
+    } else if (event.type === 'database') {
       setProbeStage('probeDatabase', event.ok ? 'done' : 'bad', event.ok ? `${number(event.tables.length)} tables found` : 'Could not connect');
       if (event.ok) {
         $('inspection-title').textContent = 'Connected';
         $('inspectionStatus').textContent = 'Your values are locked inside the runner. Inventory is now underway.';
-        renderProbeTables(event.tables);
       }
     } else if (event.type === 'storage') {
       setProbeStage('probeStorage', event.ok ? 'done' : 'bad', event.ok ? `${number(event.buckets.length)} buckets found` : 'Could not read');

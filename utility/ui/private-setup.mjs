@@ -27,6 +27,16 @@ function projectDatabase(database) {
   return { tables: projected, databaseBytes: count(database.data?.databaseBytes) ? database.data.databaseBytes
     : projected.reduce((sum, row) => sum + row.bytes, 0), estimatedRows: projected.reduce((sum, row) => sum + row.rows, 0) };
 }
+function schemaCatalog(tables) {
+  const schemas = new Map();
+  for (const table of tables) {
+    const current = schemas.get(table.schema) || { schema: table.schema, tableCount: 0, bytes: 0 };
+    current.tableCount += 1;
+    current.bytes += table.bytes;
+    schemas.set(table.schema, current);
+  }
+  return [...schemas.values()].sort((a, b) => a.schema.localeCompare(b.schema));
+}
 function projectStorage(storage) {
   if (storage?.ok !== true) fail('inventory_unavailable', 409);
   const buckets = storage.data?.buckets;
@@ -112,6 +122,9 @@ export async function createPrivateSetup({ directory, runnerId, projectRef, engi
           if (event.result?.ok !== true) return onProgress({ type: event.type, ok: false });
           if (event.type === 'database') {
             const database = projectDatabase(event.result);
+            const schemas = schemaCatalog(database.tables);
+            schemas.forEach((schema, offset) => onProgress({ type: 'database-schema', ok: true, ...schema,
+              completed: offset + 1, total: schemas.length }));
             return onProgress({ type: 'database', ok: true, tables: database.tables,
               overview: { databaseBytes: database.databaseBytes, estimatedRows: database.estimatedRows } });
           }

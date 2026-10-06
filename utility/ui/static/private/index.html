@@ -352,9 +352,10 @@
         <li id="probeStorage"><span>3</span><div><strong>Storage files</strong><small>Waiting</small></div></li>
         <li id="probeFunctions"><span>4</span><div><strong>Edge Functions</strong><small>Waiting</small></div></li>
       </ol>
-      <div id="probeTablePreview" class="probe-preview" hidden>
-        <strong id="probeTableCount">Tables found</strong>
-        <div id="probeTableList" aria-live="polite"></div>
+      <div id="probeSchemaProgress" class="schema-progress" hidden>
+        <div class="schema-progress-heading"><strong>Cataloging database schemas</strong><span id="probeSchemaCount">0 schemas</span></div>
+        <div id="probeSchemaMeter" class="schema-meter" role="progressbar" aria-label="Database schema catalog progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="probeSchemaBar"></i></div>
+        <ol id="probeSchemaList" aria-live="polite"></ol>
       </div>
       <div class="modal-actions inspection-actions">
         <button id="viewInventory" type="button" hidden>View inventory</button>
