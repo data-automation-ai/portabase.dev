@@ -591,7 +591,7 @@ function resetZipperModal() {
   $('zipperConfirmScene').hidden = false;
   $('zipperStageScene').hidden = true;
   $('zipperStageActions').hidden = true;
-  $('zipperStageScene').classList.remove('flap-down', 'zip-up', 'sealed');
+  $('zipperStageScene').classList.remove('doors-closed', 'sealed');
 }
 $('openCloseZipper').addEventListener('click', () => { resetZipperModal(); $('closeZipperModal').showModal(); });
 $('zipperConfirmInput').addEventListener('input', () => {
@@ -601,11 +601,11 @@ $('zipperConfirmCancel').addEventListener('click', () => $('closeZipperModal').c
 $('zipperConfirmSubmit').addEventListener('click', () => {
   $('zipperConfirmScene').hidden = true;
   $('zipperStageScene').hidden = false;
+  $('zipperStickerId').textContent = bootstrap?.runnerId || $('runner').textContent;
   const stage = $('zipperStageScene');
   requestAnimationFrame(() => {
-    stage.classList.add('flap-down');
-    setTimeout(() => stage.classList.add('zip-up'), 500);
-    setTimeout(() => { stage.classList.add('sealed'); $('zipperStageActions').hidden = false; }, 1500);
+    stage.classList.add('doors-closed');
+    setTimeout(() => { stage.classList.add('sealed'); $('zipperStageActions').hidden = false; }, 900);
   });
 });
 $('closeZipperStage').addEventListener('click', () => $('closeZipperModal').close());
