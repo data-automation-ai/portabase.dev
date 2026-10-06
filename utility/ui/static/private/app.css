@@ -63,7 +63,16 @@ body.setup-connected main{width:min(760px,calc(100% - 32px));padding-top:28px}bo
 .radio-row strong{display:block;font-size:13px}
 .radio-row small{display:block;color:var(--muted);font-size:11px}
 .radio-row:has(input:checked){border-color:var(--orange)}
-.dest-box{display:grid;gap:3px;margin-top:6px;padding:8px 10px;background:#fff3e7;border-left:3px solid var(--orange);border-radius:0 6px 6px 0}
-.dest-box>span{color:var(--orange2);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
-body:has(#capsuleOnly:checked) .dest-box{opacity:.4;filter:grayscale(1)}
-body:has(#capsuleOnly:checked) .dest-box input{pointer-events:none;background:#eee}
+.dual-grid{display:grid;grid-column:1/-1;grid-template-columns:150px 1fr 1fr;gap:8px 12px;align-items:center;margin-bottom:4px}
+.dual-head{padding-bottom:2px;border-bottom:1px solid var(--line)}
+.dual-head strong{display:block;font-size:11px;color:var(--orange2);text-transform:uppercase;letter-spacing:.06em}
+.dual-head small{display:block;color:var(--muted);font-size:10px}
+.dual-row-label{margin:0;color:var(--muted);font-size:12px;font-weight:650}
+.dual-grid input{min-height:36px}
+.dual-fieldset label span small{display:inline;color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0}
+body:has(#capsuleOnly:checked) .dual-grid input:nth-of-type(2n)[id^="target"]{opacity:.4;filter:grayscale(1);pointer-events:none;background:#eee}
+@media(max-width:600px){.dual-grid{grid-template-columns:1fr}.dual-head:first-child{display:none}}
+.probe-graphic.three-node{grid-template-columns:auto minmax(90px,1fr) auto minmax(90px,1fr) auto}
+.probe-node small{display:block;color:var(--muted);font-size:9px;text-transform:none;letter-spacing:0}
+.target-exchange,.target-node{transition:opacity .2s}
+@media(max-width:600px){.probe-graphic.three-node{grid-template-columns:auto minmax(40px,1fr) auto minmax(40px,1fr) auto}.probe-node strong{font-size:10px}}

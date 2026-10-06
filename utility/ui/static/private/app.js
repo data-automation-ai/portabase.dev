@@ -540,10 +540,17 @@ $('editSourceConnections').addEventListener('click', () => {
   $('sourceConfiguredPanel').hidden = true; $('sourceConnectionsForm').hidden = false;
   $('connectionMessage').textContent = 'Saved values remain in the runner. Enter only the values you want to replace.';
 });
+function syncTargetNode() {
+  const show = !$('capsuleOnly').checked;
+  $('targetNode').hidden = !show;
+  $('targetExchange').hidden = !show;
+}
 $('capsuleOnly').addEventListener('change', event => {
   $('capsuleOnlyNote').hidden = !event.currentTarget.checked;
   for (const id of ['targetRef', 'targetDatabasePassword', 'targetServiceRoleKey']) $(id).disabled = event.currentTarget.checked;
+  syncTargetNode();
 });
+syncTargetNode();
 $('refresh').addEventListener('click', () => inspect()); $('keyword').addEventListener('input', renderFilters); $('schema').addEventListener('change', renderFilters); $('empty').addEventListener('change', updateSummary); $('incremental').addEventListener('change', () => { updateSummary(); void persistSelectionDefaults(); });
 for (const button of document.querySelectorAll('.sort-header')) button.addEventListener('click', () => {
   const kind = button.dataset.sortKind, key = button.dataset.sortKey, current = sorting[kind];
@@ -608,5 +615,14 @@ $('closeHelpDetail').addEventListener('click', () => { helpSuppressedUntil = Dat
 $('helpPrompt').addEventListener('click', event => { if (event.target === $('helpPrompt')) $('helpPrompt').close(); });
 $('helpDetail').addEventListener('click', event => { if (event.target === $('helpDetail')) $('helpDetail').close(); });
 $('closeInspection').addEventListener('click', () => $('inspectionProgress').close());
+$('cancelInspection').addEventListener('click', () => {
+  // Closes the dialog and restores the entry screen. This does not abort an
+  // in-flight probe request on the wire; a response arriving after cancel is
+  // silently applied to local state (connections/inventory), it just will
+  // not reopen this modal to show it.
+  busy = false;
+  $('inspectionProgress').close();
+  renderConnections(bootstrap?.connections || {});
+});
 $('viewInventory').addEventListener('click', () => { $('inspectionProgress').close(); $('inventory-heading').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
 loadBootstrap();
