@@ -302,7 +302,10 @@ async function streamInspection() {
     const { value, done } = await reader.read();
     buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
     const lines = buffer.split('\n'); buffer = lines.pop() || '';
-    for (const line of lines) if (line.trim()) accept(JSON.parse(line));
+    for (const line of lines) if (line.trim()) {
+      const event = JSON.parse(line); accept(event);
+      if (event.type === 'database-schema') await new Promise(resolve => requestAnimationFrame(resolve));
+    }
     if (done) break;
   }
   if (buffer.trim()) accept(JSON.parse(buffer));
