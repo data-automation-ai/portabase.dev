@@ -310,6 +310,7 @@
           <div class="technical-row" role="row"><strong>Decrypt a capsule or read its contents</strong><span>No — requires your passphrase, which PortaBase does not hold</span><span>Yes</span></div>
         </div>
         <p class="technical-caveat"><strong>Current build caveat:</strong> right now, the zipper doesn't actually lock. This development build's private state file is not yet encrypted with a customer-held key, so campground staff with direct access to the tent pole — a host administrator with direct machine access — could currently still unzip the flap and read what's inside. The separation described above is the architecture we are building toward, not yet a proven guarantee. That's exactly why this runner is marked "Seal not verified": we won't call the tent "zipped and sealed" until that customer-held-key encryption, and the denial checks in the release-proof list below, actually pass.</p>
+        <p class="bottom-line-claim">Bottom line: once customer-held-key encryption ships, portabase.dev — and anyone else — will be unable to read or access your Supabase secrets. The runner itself will not even run without your key: it can sit anywhere, but its credentials and everything in its internal storage will be encrypted with that key, so execution requires it too.</p>
       </section>
 
       <section class="technical-section split">
@@ -332,6 +333,14 @@
             <li>Complete a backup, capsule verification, isolated restore, cutover, and rollback drill.</li>
           </ol>
         </div>
+      </section>
+
+      <section class="technical-section">
+        <h3>What if I lose the encryption key for my runner?</h3>
+        <p>There is no recovery option. Nobody — including PortaBase — can get back into a runner once its key is lost.</p>
+        <p>You can always create a new runner from your portabase.dev account. On the new runner you will need to re-enter your Supabase credentials and run a fresh inventory probe.</p>
+        <p>The manifests and logs kept inside the old runner are lost along with it — they live only in that runner's own encrypted local state. In practice this means your next backup starts over as a full backup: an incremental backup depends on the old runner's local history to know what changed, and that history no longer exists.</p>
+        <p class="technical-caveat">Keep your key somewhere durable outside the runner. There is no password-reset flow for it.</p>
       </section>
 
       <div class="technical-actions">
