@@ -3219,7 +3219,48 @@ export async function collectUiSnapshot(config, trial, onProgress = null) {
   };
 }
 
+function primaryScreenSize() {
+  if (process.platform === 'win32') {
+    try {
+      const result = spawnSync('powershell', ['-NoProfile', '-Command',
+        'Add-Type -AssemblyName System.Windows.Forms; $b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; "$($b.Width)x$($b.Height)"'],
+        { encoding: 'utf8', windowsHide: true, timeout: 4000 });
+      const match = (result.stdout || '').trim().match(/^(\d+)x(\d+)$/);
+      if (match) return { width: Number(match[1]), height: Number(match[2]) };
+    } catch { /* fall through to default */ }
+  }
+  return { width: 1920, height: 1080 };
+}
+function findChromiumBinary() {
+  const env = process.env;
+  const candidates = process.platform === 'win32' ? [
+    `${env['PROGRAMFILES(X86)']}\\Microsoft\\Edge\\Application\\msedge.exe`,
+    `${env.PROGRAMFILES}\\Microsoft\\Edge\\Application\\msedge.exe`,
+    `${env.LOCALAPPDATA}\\Microsoft\\Edge\\Application\\msedge.exe`,
+    `${env.PROGRAMFILES}\\Google\\Chrome\\Application\\chrome.exe`,
+    `${env['PROGRAMFILES(X86)']}\\Google\\Chrome\\Application\\chrome.exe`,
+    `${env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`,
+  ] : process.platform === 'darwin' ? [
+    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  ] : [
+    '/usr/bin/microsoft-edge', '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium', '/usr/bin/chromium-browser',
+  ];
+  return candidates.find(candidate => candidate && existsSync(candidate)) || null;
+}
 function openInBrowser(url) {
+  const binary = findChromiumBinary();
+  if (binary) {
+    const screen = primaryScreenSize();
+    const width = Math.round(screen.width / 2), height = Math.round(screen.height / 2);
+    const left = Math.round((screen.width - width) / 2), top = Math.round((screen.height - height) / 2);
+    try {
+      spawn(binary, [`--app=${url}`, `--window-size=${width},${height}`, `--window-position=${left},${top}`],
+        { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+      return;
+    } catch { /* fall through to the default handler below */ }
+  }
   const [cmd, args] = process.platform === 'win32' ? ['rundll32', ['url.dll,FileProtocolHandler', url]]
     : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
   try { spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true }).unref(); } catch { /* URL is printed anyway */ }
