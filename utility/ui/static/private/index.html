@@ -8,7 +8,10 @@
   <script src="/app.js" defer></script>
 </head>
 <body class="setup-pending">
-  <header class="runner-header">
+  <div class="float-backdrop">
+  <div id="floatWindow" class="float-window">
+  <button id="floatClose" class="float-close" type="button" aria-label="Close">&times;</button>
+  <header class="runner-header" id="floatDragHandle">
     <a class="runner-brand" href="#top" aria-label="Private runner home">
       <span class="runner-mark" aria-hidden="true"><i></i><i></i><i></i></span>
       <span><strong>PORTABASE</strong><small>PRIVATE RECOVERY RUNNER</small></span>
@@ -219,6 +222,8 @@
       <span>This screen is served by the runner at 127.0.0.1. Protect the durable volume with customer controlled disk encryption and operating system access controls.</span>
     </footer>
   </main>
+  </div>
+  </div>
   <dialog id="sealInfo" class="seal-dialog" aria-labelledby="seal-title">
     <div class="modal-rule"></div>
     <div class="modal-body">
@@ -414,10 +419,22 @@
           <button id="zipperConfirmCancel" class="quiet" type="button">Cancel</button>
         </div>
       </div>
-      <div id="zipperStageScene" class="zipper-stage" hidden aria-hidden="true">
-        <div class="zipper-door zipper-door-left"></div>
-        <div class="zipper-door zipper-door-right"></div>
-        <div class="zipper-sticker"><span>SEALED</span><small>Do not tamper with <code id="zipperStickerId">—</code></small></div>
+      <div id="zipperStageScene" class="vault-stage" hidden aria-hidden="true">
+        <div class="vault-lcd"><span id="vaultLcdText">&nbsp;</span></div>
+        <svg class="vault-door" viewBox="0 0 200 200" focusable="false">
+          <circle class="vault-plate" cx="100" cy="100" r="92"></circle>
+          <circle class="vault-ring" cx="100" cy="100" r="74"></circle>
+          <rect class="vault-bolt vault-bolt-top" x="92" y="4" width="16" height="16" rx="3"></rect>
+          <rect class="vault-bolt vault-bolt-bottom" x="92" y="180" width="16" height="16" rx="3"></rect>
+          <rect class="vault-bolt vault-bolt-left" x="4" y="92" width="16" height="16" rx="3"></rect>
+          <rect class="vault-bolt vault-bolt-right" x="180" y="92" width="16" height="16" rx="3"></rect>
+          <g class="vault-handle">
+            <rect x="97" y="40" width="6" height="48" rx="3"></rect>
+            <rect x="97" y="40" width="6" height="48" rx="3" transform="rotate(120 100 100)"></rect>
+            <rect x="97" y="40" width="6" height="48" rx="3" transform="rotate(240 100 100)"></rect>
+          </g>
+          <circle class="vault-hub" cx="100" cy="100" r="18"></circle>
+        </svg>
       </div>
       <div id="zipperStageActions" class="modal-actions" hidden>
         <button id="closeZipperStage" type="button">Close</button>

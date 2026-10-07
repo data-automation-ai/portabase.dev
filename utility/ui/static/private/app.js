@@ -1,4 +1,42 @@
 const $ = id => document.getElementById(id);
+(function initFloatWindowDrag() {
+  const win = $('floatWindow'), handle = $('floatDragHandle');
+  if (!win || !handle) return;
+  let dragging = false, startX = 0, startY = 0, startLeft = 0, startTop = 0;
+  handle.addEventListener('mousedown', event => {
+    if (event.target.closest('button, a')) return;
+    const rect = win.getBoundingClientRect();
+    win.style.position = 'fixed';
+    win.style.left = `${rect.left}px`;
+    win.style.top = `${rect.top}px`;
+    win.style.margin = '0';
+    dragging = true;
+    win.classList.add('dragging');
+    startX = event.clientX; startY = event.clientY;
+    startLeft = rect.left; startTop = rect.top;
+    event.preventDefault();
+  });
+  window.addEventListener('mousemove', event => {
+    if (!dragging) return;
+    const maxLeft = window.innerWidth - win.offsetWidth;
+    const maxTop = window.innerHeight - win.offsetHeight;
+    win.style.left = `${Math.min(Math.max(0, startLeft + event.clientX - startX), maxLeft)}px`;
+    win.style.top = `${Math.min(Math.max(0, startTop + event.clientY - startY), maxTop)}px`;
+  });
+  window.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    win.classList.remove('dragging');
+  });
+  const closeBtn = $('floatClose');
+  if (closeBtn) closeBtn.addEventListener('click', () => {
+    window.close();
+    setTimeout(() => {
+      closeBtn.setAttribute('title', 'Close this browser tab to exit.');
+      closeBtn.setAttribute('aria-label', 'Close this browser tab to exit');
+    }, 150);
+  });
+})();
 const sessionKey = `portabase-private-session:${location.port}`;
 const suppliedToken = new URLSearchParams(location.hash.slice(1)).get('t') || '';
 if (suppliedToken) sessionStorage.setItem(sessionKey, suppliedToken);
@@ -726,7 +764,8 @@ function resetZipperModal() {
   $('zipperConfirmScene').hidden = false;
   $('zipperStageScene').hidden = true;
   $('zipperStageActions').hidden = true;
-  $('zipperStageScene').classList.remove('doors-closed', 'sealed');
+  $('zipperStageScene').classList.remove('sealed');
+  $('vaultLcdText').textContent = ' ';
 }
 $('openCloseZipper').addEventListener('click', () => { resetZipperModal(); $('closeZipperModal').showModal(); });
 $('zipperConfirmInput').addEventListener('input', () => {
@@ -736,11 +775,11 @@ $('zipperConfirmCancel').addEventListener('click', () => $('closeZipperModal').c
 $('zipperConfirmSubmit').addEventListener('click', () => {
   $('zipperConfirmScene').hidden = true;
   $('zipperStageScene').hidden = false;
-  $('zipperStickerId').textContent = bootstrap?.runnerId || $('runner').textContent;
   const stage = $('zipperStageScene');
   requestAnimationFrame(() => {
-    stage.classList.add('doors-closed');
-    setTimeout(() => { stage.classList.add('sealed'); $('zipperStageActions').hidden = false; }, 900);
+    stage.classList.add('sealed');
+    $('vaultLcdText').textContent = bootstrap?.runnerId || $('runner').textContent;
+    setTimeout(() => { $('zipperStageActions').hidden = false; }, 650);
   });
 });
 $('closeZipperStage').addEventListener('click', () => $('closeZipperModal').close());
