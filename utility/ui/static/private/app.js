@@ -624,6 +624,17 @@ function generatePassphraseValue() {
   for (let i = chars.length - 1; i > 0; i--) { const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1);[chars[i], chars[j]] = [chars[j], chars[i]]; }
   return chars.join('');
 }
+$('copyPassphrase').addEventListener('click', async () => {
+  const value = $('capsulePassphrase').value;
+  if (!value) return;
+  try {
+    await navigator.clipboard.writeText(value);
+    const btn = $('copyPassphrase');
+    const original = btn.textContent;
+    btn.textContent = '✓';
+    setTimeout(() => { btn.textContent = original; }, 1200);
+  } catch { /* clipboard permission denied; nothing to fall back to safely */ }
+});
 $('generatePassphrase').addEventListener('click', () => {
   $('capsulePassphrase').value = generatePassphraseValue();
   $('capsulePassphrase').classList.remove('field-error');

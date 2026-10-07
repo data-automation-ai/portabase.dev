@@ -469,12 +469,14 @@
       <form id="sourceConnectionsForm" autocomplete="off">
         <div class="passkey-row">
           <label><span>Passkey</span><input id="capsulePassphrase" data-help="capsule-passphrase" type="password" autocomplete="new-password" minlength="16" placeholder="16+ chars, letter, number, symbol"></label>
+          <button id="copyPassphrase" type="button" class="secondary passkey-copy-btn" aria-label="Copy passkey to clipboard" title="Copy passkey">⧉</button>
           <button id="generatePassphrase" type="button" class="secondary">Generate passkey</button>
         </div>
         <div class="grid-controls">
           <label class="mask-control"><input id="maskValues" type="checkbox" checked><span>Mask values</span></label>
           <label class="mask-control"><input id="capsuleOnly" type="checkbox"><span>Create capsule only (no destination)</span></label>
         </div>
+        <p class="fine-print">Saved credentials are never sent back to this screen for display. Fields below are blank until you type a new or replacement value.</p>
         <div class="quad-grid">
           <div class="dual-head"></div>
           <div class="dual-head">Supabase URL</div>
