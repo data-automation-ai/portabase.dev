@@ -13,15 +13,15 @@ const safeErrors = new Set(['inventory_unavailable', 'inventory_changed', 'priva
   'invalid_runtime_secrets', 'invalid_source_url', 'invalid_source_database_url', 'invalid_source_database_password', 'invalid_source_service_key',
   'invalid_source_access_token', 'invalid_capsule_passphrase', 'invalid_target_project', 'invalid_target_url',
   'invalid_target_service_key', 'invalid_target_database_url', 'invalid_target_database_password', 'incomplete_target_configuration',
-  'runtime_secrets_too_large']);
+  'runtime_secrets_too_large', 'bucket_objects_unavailable', 'invalid_bucket']);
 const safeError = error => safeErrors.has(error?.code) ? error.code : 'private_setup_unavailable';
 const matches = (expected, value) => typeof value === 'string' && Buffer.byteLength(value) === Buffer.byteLength(expected)
   && timingSafeEqual(Buffer.from(expected), Buffer.from(value));
-export async function startPrivateSetupUiServer({ collect, privateSetup, port = 0, token = randomBytes(24).toString('hex') }) {
+export async function startPrivateSetupUiServer({ collect, collectBucketObjects, privateSetup, port = 0, token = randomBytes(24).toString('hex') }) {
   const stateStore = await openRunnerState(privateSetup);
   const stored = await loadPrivateRuntimeSecrets(privateSetup);
   Object.assign(process.env, stored.env);
-  const setup = await createPrivateSetup({ ...privateSetup, collect, stateStore });
+  const setup = await createPrivateSetup({ ...privateSetup, collect, collectBucketObjects, stateStore });
   const csrf = randomBytes(24).toString('hex');
   const server = createServer(async (request, response) => {
     const send = (status, body, type = 'application/json') => {
@@ -61,6 +61,11 @@ export async function startPrivateSetupUiServer({ collect, privateSetup, port = 
         return;
       }
       if (request.method === 'GET' && url.pathname === '/api/setup') return send(200, { ...await setup.inspect(), csrf });
+      if (request.method === 'GET' && url.pathname === '/api/bucket-objects') {
+        const bucketId = url.searchParams.get('bucket') || '';
+        if (!bucketId || bucketId.length > 100) return send(400, { error: 'invalid_bucket' });
+        return send(200, await setup.objects(bucketId));
+      }
       if (request.method !== 'POST' || !['/api/configurations', '/api/connections', '/api/selection-defaults'].includes(url.pathname)) return send(405, { error: 'method_refused' });
       if (request.headers.origin !== origin || !matches(csrf, request.headers['x-portabase-csrf'])
         || request.headers['sec-fetch-site'] && request.headers['sec-fetch-site'] !== 'same-origin') return send(403, { error: 'csrf_refused' });

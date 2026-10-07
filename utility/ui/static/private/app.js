@@ -18,6 +18,25 @@ function parseProjectRef(raw) {
 }
 const selected = { tables: new Set(), buckets: new Set() };
 const sorting = { tables: { key: 'bytes', direction: 'desc' }, buckets: { key: 'bytes', direction: 'desc' } };
+const excludedObjects = new Map(); // bucketKey -> Set<objectName>, only entries the user unchecked
+const bucketObjectsCache = new Map(); // bucketKey -> {name,bytes,updatedAt}[] | null (null = load failed)
+const expandedBuckets = new Set();
+const objectSorting = new Map(); // bucketKey -> { key, direction }
+function bucketStats(row) {
+  const cached = bucketObjectsCache.get(row.key);
+  if (!Array.isArray(cached)) return { bytes: row.bytes, objectCount: row.objectCount };
+  const excluded = excludedObjects.get(row.key) || new Set();
+  const included = cached.filter(object => !excluded.has(object.name));
+  return { bytes: included.reduce((sum, object) => sum + (object.bytes || 0), 0), objectCount: included.length };
+}
+function excludedObjectsPayload() {
+  const payload = {};
+  for (const bucketKey of selected.buckets) {
+    const set = excludedObjects.get(bucketKey);
+    if (set && set.size) payload[bucketKey] = [...set];
+  }
+  return payload;
+}
 const size = value => {
   const bytes = Number(value) || 0;
   if (bytes < 1024) return `${bytes} B`;
@@ -170,7 +189,9 @@ function renderEvents(state = {}) {
 }
 function selectedBytes() {
   if (!inventory) return 0;
-  return ['tables', 'buckets'].reduce((total, kind) => total + inventory[kind].filter(row => selected[kind].has(row.key)).reduce((sum, row) => sum + row.bytes, 0), 0);
+  const tableBytes = inventory.tables.filter(row => selected.tables.has(row.key)).reduce((sum, row) => sum + row.bytes, 0);
+  const bucketBytes = inventory.buckets.filter(row => selected.buckets.has(row.key)).reduce((sum, row) => sum + bucketStats(row).bytes, 0);
+  return tableBytes + bucketBytes;
 }
 function selectedTotals() {
   if (!inventory) return null;
@@ -181,8 +202,8 @@ function selectedTotals() {
     estimatedRows: tables.reduce((total, row) => total + (Number(row.rows) || 0), 0),
     databaseBytes: tables.reduce((total, row) => total + (Number(row.bytes) || 0), 0),
     bucketCount: buckets.length,
-    objectCount: buckets.reduce((total, row) => total + (Number(row.objectCount) || 0), 0),
-    objectBytes: buckets.reduce((total, row) => total + (Number(row.bytes) || 0), 0),
+    objectCount: buckets.reduce((total, row) => total + bucketStats(row).objectCount, 0),
+    objectBytes: buckets.reduce((total, row) => total + bucketStats(row).bytes, 0),
   };
 }
 function renderSelectedTotals() {
@@ -260,18 +281,108 @@ function renderChoices(kind) {
   const rows = sortedRows(kind, inventory[kind].filter(row => matches(row, kind)));
   if (!rows.length) { parent.textContent = 'No items match the current filters.'; return; }
   for (const row of rows) {
+    if (kind === 'buckets') { renderBucketChoice(row, parent); continue; }
     const label = document.createElement('label'), checkbox = document.createElement('input'), name = document.createElement('code'), count = document.createElement('span'), bytes = document.createElement('span');
-    label.className = `choice ${kind === 'tables' ? 'table-columns' : 'bucket-columns'}`; checkbox.type = 'checkbox'; checkbox.checked = selected[kind].has(row.key); checkbox.disabled = row.selectable === false;
-    checkbox.setAttribute('aria-label', `Include ${kind === 'tables' ? 'table' : 'complete bucket'} ${row.key}`);
+    label.className = 'choice table-columns'; checkbox.type = 'checkbox'; checkbox.checked = selected.tables.has(row.key); checkbox.disabled = row.selectable === false;
+    checkbox.setAttribute('aria-label', `Include table ${row.key}`);
     checkbox.addEventListener('change', () => {
-      if (checkbox.checked) selected[kind].add(row.key); else selected[kind].delete(row.key);
-      if (sorting[kind].key === 'selected') renderChoices(kind);
+      if (checkbox.checked) selected.tables.add(row.key); else selected.tables.delete(row.key);
+      if (sorting.tables.key === 'selected') renderChoices('tables');
       updateSummary();
       void persistSelectionDefaults();
     });
-    name.textContent = row.key; count.textContent = number(kind === 'tables' ? row.rows : row.objectCount); bytes.textContent = size(row.bytes);
+    name.textContent = row.key; count.textContent = number(row.rows); bytes.textContent = size(row.bytes);
     label.append(checkbox, name, count, bytes); parent.append(label);
   }
+}
+function renderBucketChoice(row, parent) {
+  const wrap = document.createElement('div'); wrap.className = 'bucket-row';
+  const label = document.createElement('label'), checkbox = document.createElement('input'), expandBtn = document.createElement('button'),
+    name = document.createElement('code'), count = document.createElement('span'), bytes = document.createElement('span');
+  label.className = 'choice bucket-columns';
+  checkbox.type = 'checkbox'; checkbox.checked = selected.buckets.has(row.key); checkbox.disabled = row.selectable === false;
+  checkbox.setAttribute('aria-label', `Include complete bucket ${row.key}`);
+  checkbox.addEventListener('change', () => {
+    if (checkbox.checked) selected.buckets.add(row.key); else selected.buckets.delete(row.key);
+    if (sorting.buckets.key === 'selected') renderChoices('buckets');
+    updateSummary();
+    void persistSelectionDefaults();
+  });
+  const expanded = expandedBuckets.has(row.key);
+  expandBtn.type = 'button'; expandBtn.className = 'bucket-expand'; expandBtn.textContent = expanded ? '▾' : '▸';
+  expandBtn.setAttribute('aria-label', `${expanded ? 'Hide' : 'Show'} files in ${row.key}`);
+  expandBtn.addEventListener('click', () => toggleBucketExpand(row.key));
+  const stats = bucketStats(row);
+  name.textContent = row.key; count.textContent = number(stats.objectCount); bytes.textContent = size(stats.bytes);
+  label.append(checkbox, name, count, bytes);
+  wrap.append(expandBtn, label);
+  const panel = document.createElement('div'); panel.className = 'bucket-objects-panel'; panel.hidden = !expanded;
+  wrap.append(panel);
+  parent.append(wrap);
+  if (expanded) renderBucketObjectsPanel(row, panel);
+}
+async function toggleBucketExpand(bucketKey) {
+  if (expandedBuckets.has(bucketKey)) { expandedBuckets.delete(bucketKey); renderChoices('buckets'); return; }
+  expandedBuckets.add(bucketKey);
+  renderChoices('buckets');
+  if (!bucketObjectsCache.has(bucketKey)) {
+    try {
+      const body = await api(`/api/bucket-objects?bucket=${encodeURIComponent(bucketKey)}`);
+      bucketObjectsCache.set(bucketKey, body.objects);
+    } catch { bucketObjectsCache.set(bucketKey, null); }
+    renderChoices('buckets');
+    updateSummary();
+  }
+}
+function renderBucketObjectsPanel(row, panel) {
+  const cached = bucketObjectsCache.get(row.key);
+  if (cached === undefined) { panel.textContent = 'Loading files…'; return; }
+  if (cached === null) { panel.textContent = 'Could not load the file list for this bucket.'; return; }
+  if (!cached.length) { panel.textContent = 'This bucket has no files.'; return; }
+  panel.replaceChildren();
+  const sortState = objectSorting.get(row.key) || { key: 'name', direction: 'asc' };
+  objectSorting.set(row.key, sortState);
+  const head = document.createElement('div'); head.className = 'column-head object-columns';
+  for (const [key, label] of [['selected', 'Included'], ['name', 'File'], ['bytes', 'Size'], ['updatedAt', 'Last modified']]) {
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'sort-header'; btn.textContent = label;
+    btn.dataset.sortKey = key; btn.dataset.direction = sortState.key === key ? sortState.direction : '';
+    btn.addEventListener('click', () => {
+      if (sortState.key === key) sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+      else { sortState.key = key; sortState.direction = (key === 'bytes' || key === 'updatedAt') ? 'desc' : 'asc'; }
+      renderBucketObjectsPanel(row, panel);
+    });
+    head.append(btn);
+  }
+  panel.append(head);
+  const excluded = excludedObjects.get(row.key) || new Set();
+  const factor = sortState.direction === 'asc' ? 1 : -1;
+  const sorted = [...cached].sort((a, b) => {
+    const value = object => sortState.key === 'selected' ? Number(!excluded.has(object.name))
+      : sortState.key === 'bytes' ? (object.bytes || 0)
+        : sortState.key === 'updatedAt' ? (object.updatedAt ? Date.parse(object.updatedAt) : 0)
+          : object.name;
+    const left = value(a), right = value(b);
+    const compared = typeof left === 'string' ? left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' }) : left - right;
+    return compared ? compared * factor : a.name.localeCompare(b.name);
+  });
+  const list = document.createElement('div'); list.className = 'object-list';
+  for (const object of sorted) {
+    const line = document.createElement('label'), checkbox = document.createElement('input'),
+      name = document.createElement('code'), bytes = document.createElement('span'), when = document.createElement('span');
+    line.className = 'object-row object-columns'; checkbox.type = 'checkbox'; checkbox.checked = !excluded.has(object.name);
+    checkbox.setAttribute('aria-label', `Include file ${object.name}`);
+    checkbox.addEventListener('change', () => {
+      const set = excludedObjects.get(row.key) || new Set(); excludedObjects.set(row.key, set);
+      if (checkbox.checked) set.delete(object.name); else set.add(object.name);
+      renderChoices('buckets');
+      updateSummary();
+      void persistSelectionDefaults();
+    });
+    name.textContent = object.name; bytes.textContent = size(object.bytes || 0);
+    when.textContent = object.updatedAt ? new Date(object.updatedAt).toLocaleString() : '—';
+    line.append(checkbox, name, bytes, when); list.append(line);
+  }
+  panel.append(list);
 }
 function renderFilters() {
   renderChoices('tables'); renderChoices('buckets');
@@ -564,7 +675,7 @@ $('clearVisible').addEventListener('click', () => { if (!inventory) return; for 
 $('save').addEventListener('click', async () => {
   if (busy || !inventory || $('save').disabled) return; busy = true; clearError(); updateSummary();
   try {
-    const body = await api('/api/configurations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Portabase-CSRF': csrf }, body: JSON.stringify({ inventoryRevision: inventory.inventoryRevision, selectedTables: [...selected.tables], selectedBuckets: [...selected.buckets], incrementalBinary: $('incremental').checked, confirmEmpty: $('empty').checked }) });
+    const body = await api('/api/configurations', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Portabase-CSRF': csrf }, body: JSON.stringify({ inventoryRevision: inventory.inventoryRevision, selectedTables: [...selected.tables], selectedBuckets: [...selected.buckets], excludeObjects: excludedObjectsPayload(), incrementalBinary: $('incremental').checked, confirmEmpty: $('empty').checked }) });
     savedIntent = body.intent; $('intent').textContent = JSON.stringify(savedIntent, null, 2); $('saved').hidden = false; $('loaded').textContent = 'Selection saved privately. Probe again to create another revision.';
     bootstrap = await api('/api/bootstrap'); csrf = bootstrap.csrf; renderEvents(bootstrap.state); $('saved').scrollIntoView({ behavior: 'smooth', block: 'center' });
   } catch (failure) { showError(failure.message); }

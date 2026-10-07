@@ -3,8 +3,10 @@ import { lstat, mkdir, statfs, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { RUNNER_ID_RE } from '../../cloud/runner/config-reference.mjs';
 import { loadPrivateEngineConfig, resolvePrivateJob } from '../../cloud/runner/private-config.mjs';
+import { storageObjectIdentity } from '../portabase-core.mjs';
 
 export const PRIVATE_SETUP_MAX_BYTES = 256 * 1024;
+const MAX_PROBED_OBJECTS = 20000;
 const fail = (code, status = 400) => { throw Object.assign(new Error(code), { code, status }); };
 const count = value => Number.isSafeInteger(value) && value >= 0;
 function projectDatabase(database) {
@@ -72,6 +74,19 @@ function chosen(value, allowed) {
     || value.some(item => typeof item !== 'string' || !allowed.includes(item))) fail('invalid_selection');
   return new Set(value);
 }
+/** `{ [bucketKey]: objectName[] }` — the per-object files to leave out of an otherwise-included bucket. */
+function excludedObjectsMap(value, selectedBucketKeys) {
+  if (value === undefined) return {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) fail('invalid_selection');
+  const result = {};
+  for (const [bucketKey, names] of Object.entries(value)) {
+    if (!selectedBucketKeys.has(bucketKey) || !Array.isArray(names) || names.length > MAX_PROBED_OBJECTS
+      || new Set(names).size !== names.length
+      || names.some(name => typeof name !== 'string' || !name || name.length > 1024 || /[\0-\x1f\x7f]/.test(name))) fail('invalid_selection');
+    if (names.length) result[bucketKey] = [...names].sort();
+  }
+  return result;
+}
 
 /** No network, queue or engine execution. Each save creates a new immutable ref. */
 async function scratchStatus(config) {
@@ -101,7 +116,7 @@ async function scratchStatus(config) {
   };
 }
 
-export async function createPrivateSetup({ directory, runnerId, projectRef, engineConfigPath, collect, stateStore }) {
+export async function createPrivateSetup({ directory, runnerId, projectRef, engineConfigPath, collect, collectBucketObjects, stateStore }) {
   if (typeof runnerId !== 'string' || !RUNNER_ID_RE.test(runnerId) || typeof collect !== 'function') fail('private_setup_required');
   const options = { directory, projectRef, engineConfigPath };
   await loadPrivateEngineConfig(options);
@@ -148,6 +163,19 @@ export async function createPrivateSetup({ directory, runnerId, projectRef, engi
           state: stateStore?.summary() || { persistent: false } };
       } catch { current = null; fail('inventory_unavailable', 409); }
     },
+    async objects(bucketId) {
+      if (typeof collectBucketObjects !== 'function') fail('bucket_objects_unavailable', 409);
+      if (!current || !current.buckets.some(row => row.key === bucketId)) fail('inventory_changed', 409);
+      let raw;
+      try { raw = await collectBucketObjects(bucketId); } catch { fail('bucket_objects_unavailable', 409); }
+      if (!Array.isArray(raw) || raw.length > MAX_PROBED_OBJECTS) fail('invalid_inventory', 409);
+      const objects = raw.map(item => {
+        const identity = storageObjectIdentity(item);
+        return { name: item.fullName ?? item.name, bytes: identity.size, updatedAt: identity.updatedAt };
+      }).filter(object => typeof object.name === 'string' && object.name && object.name.length <= 1024
+        && !/[\0-\x1f\x7f]/.test(object.name));
+      return { bucket: bucketId, objects };
+    },
     saveDefaults(body) {
       const keys = ['inventoryRevision', 'selectedTables', 'selectedBuckets', 'incrementalBinary'];
       if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !keys.includes(key))
@@ -162,13 +190,14 @@ export async function createPrivateSetup({ directory, runnerId, projectRef, engi
       return { saved: true, updatedAt: saved?.updatedAt || null };
     },
     async save(body) {
-      const keys = ['inventoryRevision', 'selectedTables', 'selectedBuckets', 'incrementalBinary', 'confirmEmpty'];
+      const keys = ['inventoryRevision', 'selectedTables', 'selectedBuckets', 'excludeObjects', 'incrementalBinary', 'confirmEmpty'];
       if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !keys.includes(key))
         || typeof body.incrementalBinary !== 'boolean' || typeof body.confirmEmpty !== 'boolean') fail('invalid_selection');
       if (!current || body.inventoryRevision !== current.inventoryRevision) fail('inventory_changed', 409);
       const snapshot = current;
       const tables = snapshot.tables.filter(row => row.selectable).map(row => row.key), buckets = snapshot.buckets.map(row => row.key);
       const selectedTables = chosen(body.selectedTables, tables), selectedBuckets = chosen(body.selectedBuckets, buckets);
+      const excludeObjects = excludedObjectsMap(body.excludeObjects, selectedBuckets);
       if (!selectedTables.size && !selectedBuckets.size && !body.confirmEmpty) fail('empty_selection_confirmation_required');
       current = null; // consume before any await; one inspected selection authorizes one revision
       saving = true;
@@ -181,6 +210,7 @@ export async function createPrivateSetup({ directory, runnerId, projectRef, engi
       const record = { ...reference, operation: 'backup', projectRef, engineConfigPath: `${configRef}/engine-1.json`,
         engineConfigSha256: createHash('sha256').update(engineBytes).digest('hex'),
         excludeTables: tables.filter(key => !selectedTables.has(key)), excludeBuckets: buckets.filter(key => !selectedBuckets.has(key)),
+        excludeObjects,
         incrementalBinary: body.incrementalBinary };
       const recordBytes = `${JSON.stringify(record, null, 2)}\n`;
       if (Buffer.byteLength(recordBytes) > PRIVATE_SETUP_MAX_BYTES || Buffer.byteLength(engineBytes) > PRIVATE_SETUP_MAX_BYTES) fail('private_config_too_large', 413);

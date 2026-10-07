@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { sharedManifestSummary } from './shared-manifest-export.mjs';
 import { createReadStream, createWriteStream, existsSync } from 'node:fs';
 import {
   cp,
@@ -50,8 +51,6 @@ import {
   computeTombstones,
   partitionChanged,
   findProtectedBaselines,
-  mergeStorageManifests,
-  mergeFunctionManifests,
   generateFunctionRedeployScripts,
   PINNED_SUPABASE_CLI,
   schemaExcludePattern,
@@ -95,7 +94,16 @@ import {
 } from './portabase-core.mjs';
 import { resolveEdition } from './license.mjs';
 import { emitTelemetry } from './telemetry.mjs';
+import { createCaptureLog } from './capture-log.mjs';
+import { enforceJobCapsuleLimit } from './job-capsule-limit.mjs';
 import { runAwsCli } from './aws/cli.mjs';
+import {
+  captureOptions, inventoryObject, payloadStorage, targetDatabaseUrl, databaseIdentity,
+  assertDatabaseTarget, verifiedCachePath,
+  verifyStoragePayloads, readStorageManifest, assembleDeltaPayload, validateRecoveryArgs,
+} from './recovery-options.mjs';
+import { parseStorageDestination, preflightStorageS3, restoreStorageS3 } from './storage-s3-restore.mjs';
+import { applicationSchema, validateOverwrite, overwriteSql, rolesForOverwrite } from './overwrite-target.mjs';
 
 export {
   providerCommand,
@@ -113,7 +121,9 @@ const command = argv[0] || 'help';
 
 function flag(name, fallback) {
   const index = argv.indexOf(`--${name}`);
-  return index >= 0 && argv[index + 1] ? argv[index + 1] : fallback;
+  if (index < 0) return fallback;
+  if (!argv[index + 1] || argv[index + 1].startsWith('--')) throw new Error(`--${name} requires a value.`);
+  return argv[index + 1];
 }
 
 function hasFlag(name) {
@@ -435,7 +445,7 @@ function postgresEnvironment(dbUrl) {
     PGPORT: url.port || '5432',
     PGUSER: decodeURIComponent(url.username),
     PGPASSWORD: decodeURIComponent(url.password),
-    PGDATABASE: url.pathname.replace(/^\//, '') || 'postgres',
+    PGDATABASE: decodeURIComponent(url.pathname.replace(/^\//, '')) || 'postgres',
     PGSSLMODE: url.searchParams.get('sslmode') || 'require',
   };
 }
@@ -643,24 +653,26 @@ function cleanRoleLine(line) {
   return line.startsWith('-- ') ? null : line;
 }
 
-async function captureDatabaseNative(dbUrl, dbDir, limits = null, excludeTables = []) {
+export async function captureDatabaseNative(dbUrl, dbDir, limits = null, excludeTables = [], {
+  resolveExecutable = resolveTool, dumpToFile = runDumpToFile, inventoryFor = captureDatabaseInventory,
+} = {}) {
   const env = postgresEnvironment(dbUrl);
-  const pgDump = resolveTool('pg_dump');
-  const pgDumpAll = resolveTool('pg_dumpall');
+  const pgDump = resolveExecutable('pg_dump');
+  const pgDumpAll = resolveExecutable('pg_dumpall');
   const rawRoles = join(dbDir, '.roles.raw.sql');
   const rawSchema = join(dbDir, '.schema.raw.sql');
   const rawData = join(dbDir, '.data.raw.sql');
   announceApplicationTables(dbUrl);
   try {
     progress({ phase: 'database', item: 'roles' });
-    await runDumpToFile(pgDumpAll, ['--roles-only', '--role', 'postgres', '--quote-all-identifiers', '--no-role-passwords', '--no-comments'], rawRoles, { env });
+    await dumpToFile(pgDumpAll, ['--roles-only', '--role', 'postgres', '--quote-all-identifiers', '--no-role-passwords', '--no-comments'], rawRoles, { env });
     await transformSql(rawRoles, join(dbDir, 'roles.sql'), cleanRoleLine, '', 'RESET ALL;\n');
     progress({ phase: 'database', item: 'schema' });
-    await runDumpToFile(pgDump, ['--schema-only', '--quote-all-identifiers', '--role', 'postgres', '--exclude-schema', SCHEMA_EXCLUDES], rawSchema, { env });
+    await dumpToFile(pgDump, ['--schema-only', '--quote-all-identifiers', '--role', 'postgres', '--exclude-schema', SCHEMA_EXCLUDES], rawSchema, { env });
     await transformSql(rawSchema, join(dbDir, 'schema.sql'), cleanSchemaLine);
     if (!limits?.databaseSchemaOnly) {
       progress({ phase: 'database', item: 'table rows' });
-      await runDumpToFile(pgDump, ['--data-only', '--quote-all-identifiers', '--role', 'postgres', '--exclude-schema', DATA_EXCLUDES, ...DATA_TABLE_EXCLUDES.flatMap(table => ['--exclude-table', table]), ...buildExcludeTableDataArgs(excludeTables), '--schema', '*'], rawData, { env });
+      await dumpToFile(pgDump, ['--data-only', '--quote-all-identifiers', '--role', 'postgres', '--exclude-schema', DATA_EXCLUDES, ...DATA_TABLE_EXCLUDES.flatMap(table => ['--exclude-table', table]), ...buildExcludeTableDataArgs(excludeTables), '--schema', '*'], rawData, { env });
       await transformSql(rawData, join(dbDir, 'data.sql'), line => /^\\(un)?restrict /.test(line) ? `-- ${line}` : line, 'SET session_replication_role = replica;\n', 'RESET ALL;\n');
     }
   } finally {
@@ -668,7 +680,7 @@ async function captureDatabaseNative(dbUrl, dbDir, limits = null, excludeTables 
     await rm(rawSchema, { force: true });
     await rm(rawData, { force: true });
   }
-  const inventory = resolveTool('psql') ? await captureDatabaseInventory(dbUrl, join(dbDir, 'database-inventory.json'), { estimateRows: Boolean(limits) }) : null;
+  const inventory = resolveExecutable('psql') ? await inventoryFor(dbUrl, join(dbDir, 'database-inventory.json'), { estimateRows: Boolean(limits) }) : null;
   const files = [
     'roles.sql',
     'schema.sql',
@@ -696,7 +708,7 @@ async function captureDatabaseNative(dbUrl, dbDir, limits = null, excludeTables 
   };
 }
 
-async function listBucketObjects(bucketId, prefix = '') {
+export async function listBucketObjects(bucketId, prefix = '') {
   const objects = [];
   let offset = 0;
   while (true) {
@@ -726,6 +738,7 @@ async function loadPriorStorageIndex(config) {
     const priorPath = lastStorageManifestPath(config);
     if (!existsSync(priorPath)) return new Map();
     const prior = JSON.parse(await readFile(priorPath, 'utf8'));
+    if (prior.projectRef !== config.projectRef) return new Map();
     const map = new Map();
     for (const bucket of prior.buckets || []) {
       for (const object of bucket.objects || []) {
@@ -738,11 +751,12 @@ async function loadPriorStorageIndex(config) {
   }
 }
 
-async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets = [], includeBuckets = [], deltaBaseline = null) {
+export async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets = [], includeBuckets = [], deltaBaseline = null) {
+  const inventoryOnly = captureOptions(config, argv).storageInventoryOnly;
   const storageDir = join(rawDir, 'storage');
   const cacheRoot = resolve(config.backupDirectory || './portabase-capsules', '.storage-object-cache');
   await mkdir(storageDir, { recursive: true });
-  await mkdir(cacheRoot, { recursive: true });
+  if (!inventoryOnly) await mkdir(cacheRoot, { recursive: true });
   const allBuckets = await (await checkedSourceFetch('/storage/v1/bucket')).json();
   const buckets = filterIncludedBuckets(filterExcludedBuckets(allBuckets, excludeBuckets), includeBuckets);
   if (excludeBuckets.length) {
@@ -752,6 +766,7 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
   const manifest = {
     capturedAt: new Date().toISOString(),
     formatVersion: 3,
+    projectRef: config.projectRef,
     buckets: [],
     objectCount: 0,
     totalBytes: 0,
@@ -762,6 +777,9 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
     incrementalReused: 0,
     incrementalDifferential: 0,
     concurrency,
+    inventoryOnly,
+    omittedObjectCount: 0,
+    omittedBytes: 0,
   };
   const inventory = { bucketCount: buckets.length, objectCount: 0, totalBytes: 0, buckets: [] };
   const listedObjects = new Map();
@@ -864,6 +882,7 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
     const identity = storageObjectIdentity(object);
     const key = `${bucket.id}/${object.fullName}`;
     seenKeys.add(key);
+    if (inventoryOnly) return { bucketId: bucket.id, entry: inventoryObject(object.fullName, identity) };
     const deltaHit = deltaBaseline?.size ? deltaBaseline.get(key) : null;
     if (deltaHit && baselineObjectUnchanged(deltaHit, identity)) {
       completed += 1;
@@ -882,6 +901,8 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
           downloaded: false,
           reused: true,
           incremental: 'delta-reused',
+          includedInCapsule: false,
+          payloadLocation: 'baseline',
         },
       };
     }
@@ -890,18 +911,14 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
     const prior = priorIndex.get(key) || null;
     let skipped = false;
     let fromCache = false;
-    const tentativeCache = storageCacheKey(identity, prior?.sha256 || '');
-    const identityOnlyKey = storageCacheKey(identity, '');
-
-    // Cache is best-effort: never fail the backup because of cache I/O races on Windows.
+    const cacheDecision = shouldFetchStorageObject({ incrementalBinary: manifest.incrementalBinary,
+      name: object.fullName, contentType: identity.contentType, listing: identity, prior, bytesAlreadyLocal: true });
+    // Cache reuse is path-specific and content-verified; identity-only keys can alias
+    // unrelated files with the same size and date. A newer file always downloads.
     try {
-      const lookupKeys = [prior?.sha256, tentativeCache, identityOnlyKey].filter(Boolean);
-      for (const keyHash of lookupKeys) {
-        if (fromCache) break;
-        const candidate = join(cacheRoot, String(keyHash).slice(0, 2), String(keyHash));
-        if (!existsSync(candidate)) continue;
-        const cached = await stat(candidate);
-        if (Number(identity.size) > 0 && Number(cached.size) !== Number(identity.size)) continue;
+      const candidate = cacheDecision.reason === 'binary-differential' ? null
+        : await verifiedCachePath(cacheRoot, prior, identity, !cacheDecision.fetch);
+      if (candidate) {
         await copyBestEffort(candidate, target);
         fromCache = true;
         skipped = true;
@@ -949,7 +966,7 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
     const sha256 = await hashFile(target);
     // Dual-key cache promote — best-effort only
     try {
-      const cacheKeys = new Set([storageCacheKey(identity, sha256), identityOnlyKey].filter(Boolean));
+      const cacheKeys = new Set([storageCacheKey(identity, sha256)].filter(Boolean));
       for (const keyHash of cacheKeys) {
         const destCache = join(cacheRoot, keyHash.slice(0, 2), keyHash);
         if (existsSync(destCache)) continue;
@@ -991,6 +1008,8 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
         downloaded: !skipped && !fromCache,
         incremental: decision.reason,
         wholeFile: decision.wholeFile === true,
+        includedInCapsule: true,
+        payloadLocation: 'capsule',
       },
     };
   });
@@ -1011,6 +1030,11 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
     const record = byBucket.get(result.bucketId);
     if (!record) continue;
     record.objects.push(result.entry);
+    if (result.entry.payloadLocation === 'not-captured') {
+      manifest.omittedObjectCount += 1;
+      manifest.omittedBytes += result.entry.size;
+      continue;
+    }
     if (result.entry.cacheHit) manifest.cacheHits += 1;
     else if (result.entry.resumed) manifest.skippedUnchanged += 1;
     else if (result.entry.downloaded) manifest.downloaded += 1;
@@ -1032,7 +1056,7 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
     if (manifest.tombstones.length) console.log(`Delta storage: ${manifest.tombstones.length} object(s) deleted since baseline (tombstones).`);
   }
   // Capsule-side fingerprint: only objects actually written into this capsule
-  const capsuleObjectKeys = storageObjectKeysFromBuckets(manifest.buckets);
+  const capsuleObjectKeys = storageObjectKeysFromBuckets(payloadStorage(manifest).buckets);
   manifest.capsuleNamesFingerprintMd5 = fingerprintSortedKeys(capsuleObjectKeys, 'md5');
   manifest.capsuleNamesFingerprintSha256 = fingerprintSortedKeys(capsuleObjectKeys, 'sha256');
   // Source-side fingerprint: full listing snapshot from backup start (may be larger when sampling)
@@ -1051,7 +1075,7 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
   let limitation = null;
   if (limits?.firstObjectPerBucket) {
     limitation = `first object per bucket (${manifest.objectCount} of ${inventory.objectCount} source objects; ${inventory.bucketCount} buckets)`;
-  } else if (limits) {
+  } else if (limits?.maxStorageObjects != null) {
     limitation = `first ${limits.maxStorageObjects} objects across ${limits.maxStorageBuckets} buckets`;
   }
   console.log(
@@ -1067,7 +1091,12 @@ async function captureStorage(rawDir, limits = null, config = {}, excludeBuckets
   );
   return {
     complete: true,
-    limited: Boolean(limits?.firstObjectPerBucket || limits?.maxStorageObjects != null),
+    limited: inventoryOnly || Boolean(limits?.firstObjectPerBucket || limits?.maxStorageObjects != null),
+    inventoryOnly,
+    omittedObjectCount: manifest.omittedObjectCount,
+    omittedBytes: manifest.omittedBytes,
+    deltaReused: manifest.deltaReused || 0,
+    tombstones: manifest.tombstones || [],
     limitation,
     bucketCount: manifest.buckets.length,
     objectCount: manifest.objectCount,
@@ -1401,6 +1430,12 @@ async function sendAlert(config, state) {
         capsuleId: state.capsule || null,
         status: state.state,
         destinationKind: config.provider?.type || null,
+        capsuleHash: state.capsuleHash || null,
+        manifestHash: state.manifestHash || null,
+        sizeBytes: state.sizeBytes,
+        objectCount: state.objectCount,
+        durationMs: state.durationMs,
+        destinationVerified: state.destinationVerified === true,
         verified: Boolean(state.verified),
         errorCount: Array.isArray(state.errors) ? state.errors.length : (state.error ? 1 : 0),
         errorClass: state.error ? 'backup_error' : null,
@@ -1415,6 +1450,7 @@ async function sendAlert(config, state) {
 }
 
 export async function transferCapsule(config, capsuleDir) {
+  await enforceJobCapsuleLimit(capsuleDir);
   if (config.provider.type === 'local') {
     const bytes = await directoryByteSize(capsuleDir);
     const allowLargeLocal = Boolean(config.provider.allowLargeLocal) || hasFlag('allow-large-local');
@@ -1554,7 +1590,9 @@ async function loadDeltaBaseline(baselinePath, passphrase) {
 }
 
 async function backup() {
+  validateRecoveryArgs('backup', argv);
   const { config } = await loadConfig();
+  const options = captureOptions(config, argv);
   const entitlement = await resolveEdition({ forceTrial: hasFlag('trial'), licensePath: flag('license') });
   const trial = entitlement.edition === 'trial';
   const firstPerBucket = !trial && (
@@ -1571,11 +1609,12 @@ async function backup() {
   } else {
     console.log('Portabase community edition: full open-source capture. No license required.');
   }
-  const limits = trial
+  let limits = trial
     ? TRIAL_LIMITS
     : firstPerBucket
       ? FIRST_PER_BUCKET_STORAGE
       : null;
+  if (options.ddlOnly) limits = { ...limits, databaseSchemaOnly: true };
   const excludeTables = validateExcludeTableData(
     resolveSelectionOption('exclude-table-data', config.capture?.excludeTableData),
   );
@@ -1613,7 +1652,14 @@ async function backup() {
   let baseline = null;
   if (deltaMode) {
     baseline = await loadDeltaBaseline(baselineFlag, passphrase);
-    console.log(`Delta baseline: ${baseline.capsuleId} (manifest only — contents never opened).`);
+    if (baseline.manifest.projectRef !== config.projectRef) throw new Error('Baseline belongs to another source project.');
+    if (baseline.manifest.status !== 'COMPLETE' || Object.values(baseline.manifest.contents || {}).some(item => item.limited || !item.complete)) {
+      throw new Error('Delta requires a complete, unsampled full baseline.');
+    }
+    if (trial || firstPerBucket || options.ddlOnly || options.storageInventoryOnly || excludeTables.length || excludeBuckets.length || includeTableData.length || includeBuckets.length) {
+      throw new Error('Delta currently requires full capture selection; partial selections cannot inherit baseline bytes safely.');
+    }
+    console.log(`Delta baseline: ${baseline.capsuleId}`);
   }
   const id = capsuleName(config.projectRef);
   const root = resolve(config.backupDirectory || './portabase-capsules');
@@ -1639,10 +1685,13 @@ async function backup() {
     projectRef: config.projectRef,
     createdAt: new Date().toISOString(),
     status: 'RUNNING',
+    sourceDatabaseIdentity: process.env.SUPABASE_DB_URL ? databaseIdentity(process.env.SUPABASE_DB_URL) : null,
     contents: {},
     errors: [],
-    selection: { excludeTables, excludeBuckets, includeTableData, includeBuckets },
+    selection: { excludeTables, excludeBuckets, includeTableData, includeBuckets, ...options },
+    exclusions: [{ capability: 'supabase-vector-buckets', status: 'NOT_CAPTURED', reason: 'Separate vector storage is outside Portabase scope.' }],
   };
+  const captureLog = createCaptureLog();
   try {
     for (const [name, enabled, capture] of [
       ['database', config.capture?.database !== false, () => captureDatabase(rawDir, limits, excludeTables)],
@@ -1652,13 +1701,17 @@ async function backup() {
     ]) {
       if (!enabled) {
         manifest.contents[name] = { complete: false, skipped: true, reason: 'disabled in config' };
+        captureLog.skip(name);
         continue;
       }
       try {
+        captureLog.start(name);
         console.log(`Capturing ${name}...`);
         progress({ phase: 'capture', item: name });
         manifest.contents[name] = await capture();
+        captureLog.complete(name, manifest.contents[name]);
       } catch (error) {
+        captureLog.fail(name);
         manifest.contents[name] = { complete: false, error: error.message };
         manifest.errors.push(`${name}: ${error.message}`);
         console.error(`PARTIAL ${name}: ${error.message}`);
@@ -1677,7 +1730,7 @@ async function backup() {
       const dbPart = partitionChanged(currentDbHashes, baseline.dbHashes || {});
       if (!baseline.dbHashes) console.log('Delta database: baseline has no layer hashes — storing the full database layer.');
       for (const reused of dbPart.reused) await rm(join(dbDir, reused.path), { force: true });
-      manifest.delta.database = { changed: dbPart.changed, reused: dbPart.reused, baselineWithoutHashes: !baseline.dbHashes };
+      manifest.delta.database = { changed: dbPart.changed, reused: dbPart.reused, missing: dbPart.missing, baselineWithoutHashes: !baseline.dbHashes };
       const fnManifestPath = join(rawDir, 'functions', 'functions-manifest.json');
       const currentFnHashes = {};
       const fnEntries = [];
@@ -1698,13 +1751,16 @@ async function backup() {
         const entry = fnEntries.find(item => `${item.name}/${item.path}` === reused.path);
         if (entry) await rm(join(rawDir, 'functions', entry.name, entry.path), { force: true });
       }
-      manifest.delta.functions = { changed: fnPart.changed, reused: fnPart.reused };
+      manifest.delta.functions = { changed: fnPart.changed, reused: fnPart.reused, missing: fnPart.missing };
       const changedCount = dbPart.changed.length + fnPart.changed.length + (manifest.contents.storage?.downloaded || 0);
       const reusedCount = dbPart.reused.length + fnPart.reused.length + (manifest.contents.storage?.deltaReused || 0);
       console.log(`Delta capsule: ${changedCount} new/changed item(s) stored, ${reusedCount} referenced from baseline ${baseline.capsuleId}.`);
     }
     manifest.deltaHashes = { database: currentDbHashes };
-    manifest.status = manifest.errors.length || Object.values(manifest.contents).some(item => !item.complete) ? 'PARTIAL' : trial ? 'TRIAL' : 'COMPLETE';
+    manifest.status = manifest.errors.length || Object.values(manifest.contents).some(item => !item.complete) ? 'PARTIAL'
+      : trial ? 'TRIAL' : Object.values(manifest.contents).some(item => item.limited) || excludeTables.length || excludeBuckets.length || includeBuckets.length ? 'SELECTIVE' : 'COMPLETE';
+    // This file is inside the encrypted archive; later packaging/transfer outcomes cannot be included here.
+    manifest.captureLog = await captureLog.write(rawDir, manifest.status);
     await writeFile(join(rawDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
     // Persist storage object identity for next-run resume (metadata only; lives outside capsule)
     try {
@@ -1729,6 +1785,11 @@ async function backup() {
       '',
       'After decrypting the capsule, see `functions/REDEPLOY-ALL.ps1` and `functions/redeploy-all.sh`.',
       'Secret values are never exported — recreate them on the target before cutover.',
+      '',
+      '## Private capture log',
+      '',
+      'After decrypting, see `logs/capture.json` for component outcomes, timestamps, and counts.',
+      'This bounded log ends before archive packaging. It does not contain encryption, upload, or destination verification results.',
       '',
       '```bash',
       'portabase restore --capsule <directory>           # dry-run plan',
@@ -1758,6 +1819,7 @@ async function backup() {
       id,
       kind: manifest.kind === 'delta' ? 'delta' : 'full',
       baselineCapsuleId: manifest.baseline?.capsuleId || null,
+      exclusions: manifest.exclusions,
       edition: manifest.edition,
       licenseId: entitlement.license.valid ? entitlement.license.payload.licenseId : null,
       projectRef: config.projectRef,
@@ -1773,14 +1835,26 @@ async function backup() {
     await writeFile(join(capsuleDir, 'RECOVER.txt'), 'This capsule is encrypted. Keep PORTABASE_ENCRYPTION_PASSPHRASE outside the backup destination. Use Portabase restore without --execute to inspect the recovery plan.\n');
     if (trial) await writeTrialReport(capsuleDir, capsuleMetadata);
     await writeChecksums(capsuleDir);
+    const capsuleHash = await hashFile(join(capsuleDir, 'capsule.pbase'));
+    const manifestHash = await hashFile(join(capsuleDir, 'capsule.json'));
+    const sizeBytes = await directoryByteSize(capsuleDir);
     progress({ phase: 'transfer', item: config.provider.type });
     const transfer = await transferCapsule(config, capsuleDir);
     const state = {
       state: manifest.status,
       capsule: id,
+      projectRef: config.projectRef,
       completedAt: new Date().toISOString(),
       destination: transfer.destination,
-      verified: transfer.verified,
+      destinationKind: config.provider.type,
+      destinationVerified: Boolean(transfer.verified),
+      verified: Boolean(transfer.verified),
+      capsuleHash,
+      manifestHash,
+      sizeBytes,
+      objectCount: Number.isSafeInteger(manifest.contents.storage?.objectCount)
+        ? manifest.contents.storage.objectCount
+        : 0,
       errors: manifest.errors,
       durationMs: Date.now() - startedAt,
     };
@@ -1799,7 +1873,7 @@ async function backup() {
     console.log('NEXT: prove recovery with  portabase replay --capsule <dir> --confirm-target <NEW_REF>');
     progress({ phase: 'done', status: manifest.status });
     if (hasFlag('json')) console.log(JSON.stringify({ ...state, contents: manifest.contents }));
-    if (!['COMPLETE', 'TRIAL'].includes(manifest.status)) process.exitCode = 3;
+    if (!['COMPLETE', 'SELECTIVE', 'TRIAL'].includes(manifest.status)) process.exitCode = 3;
   } catch (error) {
     const state = { state: 'FAILED', capsule: id, failedAt: new Date().toISOString(), error: error.message };
     await writeStatus(config, state);
@@ -1925,7 +1999,7 @@ async function simulate() {
         pass('status', manifest.status || outer.status);
       }
 
-      if (['PARTIAL', 'TRIAL'].includes(manifest.status) || ['PARTIAL', 'TRIAL'].includes(outer.status)) {
+      if (['PARTIAL', 'SELECTIVE', 'TRIAL'].includes(manifest.status) || ['PARTIAL', 'SELECTIVE', 'TRIAL'].includes(outer.status)) {
         warn(
           'capture-completeness',
           `${manifest.status || outer.status} — not a full production Escape; gaps expected`,
@@ -1988,6 +2062,7 @@ async function simulate() {
             let missingObj = 0;
             for (const bucket of storage.buckets || []) {
               for (const object of bucket.objects || []) {
+                if (object.payloadLocation === 'not-captured') continue;
                 const source = join(
                   extracted,
                   'storage',
@@ -2024,7 +2099,7 @@ async function simulate() {
             }
             // Recompute names fingerprint from capsule contents vs stored snapshot
             if (storage.capsuleNamesFingerprintMd5) {
-              const recomputed = fingerprintSortedKeys(storageObjectKeysFromBuckets(storage.buckets), 'md5');
+              const recomputed = fingerprintSortedKeys(storageObjectKeysFromBuckets(payloadStorage(storage).buckets), 'md5');
               if (fingerprintsMatch(storage.capsuleNamesFingerprintMd5, recomputed)) {
                 pass(
                   'storage-names-fingerprint',
@@ -2190,37 +2265,87 @@ async function materializeCapsule(value) {
   return { capsuleDir, cleanup: temp };
 }
 
+async function prepareOverwrite(capture, restorePlan, targetRef, identity) {
+  if (!flag('rollback-capsule') || !flag('rollback-evidence')) throw new Error('Overwrite requires --rollback-capsule and --rollback-evidence from an isolated successful restore drill.');
+  const materialized = await materializeCapsule(flag('rollback-capsule'));
+  let opened;
+  try {
+    opened = await openCapsule(materialized.capsuleDir, process.env.PORTABASE_ENCRYPTION_PASSPHRASE);
+    const proof = JSON.parse(await readFile(flag('rollback-evidence'), 'utf8'));
+    const rollbackInventory = JSON.parse(await readFile(join(opened.extracted, 'database', 'database-inventory.json'), 'utf8'));
+    const currentInventory = await captureDatabaseInventory(process.env.PORTABASE_TARGET_DB_URL);
+    validateOverwrite({ sourceRef: capture.projectRef, targetRef, confirmation: flag('confirm-overwrite'), scope: flag('overwrite-scope'),
+      restorePlan, capture, rollback: opened.manifest, rollbackId: opened.metadata.id,
+      rollbackHash: await hashFile(join(materialized.capsuleDir, 'capsule.pbase')), proof, identity, currentInventory, rollbackInventory });
+    const query = sql => JSON.parse(psqlValue(process.env.PORTABASE_TARGET_DB_URL, sql));
+    const schemas = query("SELECT COALESCE(json_agg(nspname),'[]')::text FROM pg_namespace;").filter(applicationSchema);
+    const authTables = query("SELECT COALESCE(json_agg(tablename),'[]')::text FROM pg_tables WHERE schemaname='auth' AND tablename <> 'schema_migrations';");
+    const extensionSchemas = query("SELECT COALESCE(json_agg(n.nspname),'[]')::text FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace;");
+    const existingRoles = query("SELECT COALESCE(json_agg(rolname),'[]')::text FROM pg_roles;");
+    // CASCADE must not silently delete platform triggers pointing into app schemas.
+    const platformTriggerFunctions = query("SELECT COALESCE(json_agg(pn.nspname),'[]')::text FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_proc p ON p.oid=t.tgfoid JOIN pg_namespace pn ON pn.oid=p.pronamespace WHERE n.nspname IN ('auth','storage') AND NOT t.tgisinternal;");
+    if (platformTriggerFunctions.some(name => schemas.includes(name))) throw new Error('Platform triggers depend on application functions. A reviewed migration is required before overwrite.');
+    return { sql: overwriteSql({ schemas, authTables, extensionSchemas }), existingRoles };
+  } finally {
+    if (opened) await rm(opened.temp, { recursive: true, force: true });
+    if (materialized.cleanup) await rm(materialized.cleanup, { recursive: true, force: true });
+  }
+}
+
 function targetFetch(path, options = {}) {
   const url = projectBaseUrl(process.env.PORTABASE_TARGET_SUPABASE_URL);
-  const key = process.env.PORTABASE_TARGET_SERVICE_ROLE_KEY;
+  const key = process.env.PORTABASE_TARGET_SERVICE_ROLE_KEY || process.env.PORTABASE_TARGET_SECRET_KEY;
   if (!url || !key) throw new Error('PORTABASE_TARGET_SUPABASE_URL and PORTABASE_TARGET_SERVICE_ROLE_KEY are required.');
   return fetch(`${url}${path}`, { ...options, headers: supabaseHeaders(key, options.headers || {}) });
 }
 
-async function restoreDatabase(extracted, plan = null) {
-  const psql = resolveTool('psql');
+export async function restoreDatabase(extracted, plan = null, overwrite = null, { runCommand = run, resolveExecutable = resolveTool, scratchRoot } = {}) {
+  let staging = tmpdir();
+  if (scratchRoot !== undefined) {
+    const { validatePrivateDirectory } = await import('../cloud/runner/private-config.mjs');
+    staging = await validatePrivateDirectory(scratchRoot);
+  }
+  const psql = resolveExecutable('psql');
   const targetDb = process.env.PORTABASE_TARGET_DB_URL;
   if (!psql || !targetDb) throw new Error('psql and PORTABASE_TARGET_DB_URL are required for database restore.');
   const applied = [];
   // Dirty-target drills: continue past "already exists" / duplicate object errors.
-  const stopOnError = hasFlag('allow-occupied-target') ? '0' : '1';
+  const stopOnError = '1';
   let filteredDataDir = null;
+  const paths = [];
+  try {
+  if (overwrite) {
+    const resetPath = join(extracted, 'overwrite-target.sql');
+    await writeFile(resetPath, overwrite.sql, { mode: 0o600 });
+    paths.push(resetPath);
+  }
   for (const file of ['roles.sql', 'schema.sql', 'data.sql']) {
     let path = join(extracted, 'database', file);
+    if (overwrite && file === 'roles.sql' && existsSync(path)) {
+      const safeRoles = join(extracted, 'overwrite-roles.sql');
+      await writeFile(safeRoles, rolesForOverwrite(await readFile(path, 'utf8'), overwrite.existingRoles), { mode: 0o600 });
+      path = safeRoles;
+    }
     if (file === 'data.sql' && plan && existsSync(path)) {
       // Schema always applies in full (structure is small and required); only DATA rows
       // are filtered to the plan's selected tables, so restore stays under the byte budget.
-      filteredDataDir = await mkdtemp(join(tmpdir(), 'portabase-plan-'));
+      filteredDataDir = await mkdtemp(join(staging, 'portabase-plan-'));
       const filteredPath = join(filteredDataDir, 'data.sql');
       await filterDataSqlByTables(path, filteredPath, restorePlanSelectedTableKeys(plan));
       path = filteredPath;
     }
     if (existsSync(path)) {
-      await run(psql, [targetDb, '--set', `ON_ERROR_STOP=${stopOnError}`, '--file', path]);
+      paths.push(path);
       applied.push(file);
     }
   }
-  if (filteredDataDir) await rm(filteredDataDir, { recursive: true, force: true });
+    // One connection/transaction: any SQL failure rolls back every database layer.
+    // Credentials stay in the child environment; SQL errors may contain row data.
+    await runCommand(psql, ['--no-psqlrc', '--quiet', '--single-transaction', '--set', `ON_ERROR_STOP=${stopOnError}`,
+      ...paths.flatMap(path => ['--file', path])], { env: postgresEnvironment(targetDb), stdio: 'ignore' });
+  } finally {
+    if (filteredDataDir) await rm(filteredDataDir, { recursive: true, force: true });
+  }
   return { applied, plan: plan ? { selectedTables: [...restorePlanSelectedTableKeys(plan)] } : null };
 }
 
@@ -2228,7 +2353,10 @@ async function restoreStorage(extracted, plan = null) {
   const manifestPath = join(extracted, 'storage', 'storage-manifest.json');
   if (!existsSync(manifestPath)) return { verified: false, reason: 'Storage manifest is missing.', bucketCount: 0, objectCount: 0, hashesVerified: 0 };
   const fullStorage = JSON.parse(await readFile(manifestPath, 'utf8'));
-  const storage = plan ? filterStorageManifestByPlan(fullStorage, plan) : fullStorage;
+  const storage = payloadStorage(plan ? filterStorageManifestByPlan(fullStorage, plan) : fullStorage);
+  await verifyStoragePayloads(extracted, storage);
+  if (fullStorage.inventoryOnly) return { verified: true, destination: 'inventory-only', storageServingRestored: false,
+    hashesVerified: 0, objectCount: 0, omittedObjectCount: fullStorage.omittedObjectCount, reason: 'Object presence recorded; no payload was captured or restored.' };
   let hashesVerified = 0;
   const restoredKeys = [];
   for (const bucket of storage.buckets) {
@@ -2359,31 +2487,48 @@ async function listTargetBucketObjects(bucketId, prefix = '') {
   return objects;
 }
 
-async function restoreFunctions(extracted, manifest, targetRef, plan = null) {
-  const functions = manifest.contents.functions;
-  if (!functions?.complete) return { verified: false, reason: functions?.reason || functions?.error || 'Function capture was incomplete.', expected: [], active: [] };
+export async function restoreFunctions(extracted, manifest, targetRef, plan = null, {
+  runCommand = run, runSync = spawnSync, resolveExecutable = resolveTool, env = process.env,
+} = {}) {
+  const { prepareFunctionReplayWorkspace, verifyFunctionListing, isReplayFunctionName } = await import('./function-replay-workspace.mjs');
   const selectedNames = plan ? restorePlanSelectedFunctionNames(plan) : null;
-  const names = plan ? (functions.names || []).filter(name => selectedNames.has(name)) : (functions.names || []);
+  if (selectedNames?.size === 0) return { verified: true, skipped: true, limited: true, expected: [], active: [] };
+  const functions = manifest?.contents?.functions;
+  if (functions?.complete !== true) return { verified: false, reason: 'Function capture was incomplete.', expected: [], active: [] };
+  if (!Array.isArray(functions.names) || functions.names.some(name => !isReplayFunctionName(name))
+    || new Set(functions.names.map(name => name.toLowerCase())).size !== functions.names.length
+    || (selectedNames && [...selectedNames].some(name => !functions.names.includes(name)))) throw new Error('function_replay_invalid_selection');
+  const names = selectedNames ? functions.names.filter(name => selectedNames.has(name)) : functions.names;
   if (!names.length) return { verified: true, limited: Boolean(plan), expected: [], active: [] };
-  const supabase = resolveTool('supabase');
-  if (!supabase || !process.env.SUPABASE_ACCESS_TOKEN) throw new Error('Supabase CLI and SUPABASE_ACCESS_TOKEN are required to restore Edge Functions.');
-  const workdir = join(extracted, 'functions');
-  const verifyMap = functions.verifyJwt || {};
-  for (const name of names) {
-    const args = ['functions', 'deploy', name, '--project-ref', targetRef, '--workdir', workdir];
-    if (verifyMap[name] === false) args.push('--no-verify-jwt');
-    await run(supabase, args, { cwd: workdir, env: process.env });
-  }
-  const result = spawnSync(supabase, ['functions', 'list', '--project-ref', targetRef, '--output', 'json'], {
-    encoding: 'utf8', env: process.env, windowsHide: true,
-  });
-  if (result.status !== 0) throw new Error(`Unable to verify restored Edge Functions: ${(result.stderr || '').trim().slice(0, 300)}`);
-  const active = JSON.parse(result.stdout || '[]').map(fn => fn.name || fn.slug);
-  const missing = names.filter(name => !active.includes(name));
-  return { verified: missing.length === 0, limited: Boolean(plan), expected: names, active, missing, redeployScripts: functions.redeployScripts || null };
+  if (typeof targetRef !== 'string' || !/^[a-z0-9]{20}$/.test(targetRef)) throw new Error('function_replay_invalid_target');
+  const verifyMap = Object.fromEntries(names.map(name => {
+    const value = functions.verifyJwt?.[name];
+    if (value !== undefined && typeof value !== 'boolean') throw new Error('function_replay_invalid_jwt');
+    return [name, value !== false];
+  }));
+  const supabase = resolveExecutable('supabase');
+  if (!supabase || !env.SUPABASE_ACCESS_TOKEN) throw new Error('Supabase CLI and SUPABASE_ACCESS_TOKEN are required to restore Edge Functions.');
+  const workspace = await prepareFunctionReplayWorkspace(extracted, names, verifyMap);
+  const { workdir } = workspace;
+  try {
+    for (const name of names) {
+      const args = ['functions', 'deploy', name, '--project-ref', targetRef, '--workdir', workdir];
+      if (verifyMap[name] === false) args.push('--no-verify-jwt');
+      try { await runCommand(supabase, args, { cwd: workdir, env, stdio: 'ignore' }); }
+      catch { throw new Error('function_replay_deploy_failed'); }
+    }
+    let result;
+    try {
+      result = runSync(supabase, ['functions', 'list', '--project-ref', targetRef, '--output', 'json', '--workdir', workdir], {
+        encoding: 'utf8', env, windowsHide: true, cwd: workdir, timeout: 60_000, maxBuffer: 4 * 1024 * 1024,
+      });
+    } catch { throw new Error('function_replay_listing_failed'); }
+    if (result?.status !== 0 || result.error) throw new Error('function_replay_listing_failed');
+    return { ...verifyFunctionListing(result.stdout, names, verifyMap), limited: Boolean(plan), redeployScripts: functions.redeployScripts || null };
+  } finally { await workspace.cleanup(); }
 }
 
-async function verifyRestoredDatabase(extracted, limited = false, plan = null) {
+async function verifyRestoredDatabase(extracted, limited = false, plan = null, selection = {}) {
   const expectedPath = join(extracted, 'database', 'database-inventory.json');
   if (!existsSync(expectedPath)) return { verified: false, reason: 'Source database inventory is missing.' };
   const expectedSource = JSON.parse(await readFile(expectedPath, 'utf8'));
@@ -2391,6 +2536,8 @@ async function verifyRestoredDatabase(extracted, limited = false, plan = null) {
   if (limited) {
     expected = { ...expected, tables: (expected.tables || []).map(table => ({ ...table, rows: 0 })), authUsers: 0 };
   }
+  if (selection.excludeTables?.length) expected = { ...expected, tables: expected.tables.map(table =>
+    selection.excludeTables.includes(`${table.schema}.${table.name}`) ? { ...table, rows: 0 } : table) };
   if (plan) expected = applyRestorePlanToExpectedInventory(expected, plan);
   const actual = await captureDatabaseInventory(process.env.PORTABASE_TARGET_DB_URL);
   return { ...compareDatabaseInventories(expected, actual), limited: limited || Boolean(plan), expected, actual };
@@ -2415,16 +2562,26 @@ function evidenceHtml(report) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Portabase recovery evidence</title><style>body{margin:0;background:#0d0e11;color:#f7f6f1;font-family:Segoe UI,sans-serif}.wrap{width:min(900px,calc(100% - 32px));margin:48px auto}.status{padding:24px;border:1px solid #34353a;background:#17181c}small{font:11px Consolas,monospace;color:#c9ff4a;letter-spacing:.1em}h1{font-size:42px;margin:12px 0}.meta{color:#92938f;line-height:1.7}.checks{display:grid;gap:1px;background:#34353a;margin:28px 0}.check{background:#17181c;padding:20px}.check b{display:block;font-size:18px}.pass{color:#c9ff4a}.fail{color:#ff4b3e}.manual{padding:24px;background:#f2f0e8;color:#17181c}.manual li{margin:10px 0;line-height:1.5}code{word-break:break-all}</style></head><body><main class="wrap"><section class="status"><small>PORTABASE RECOVERY EVIDENCE</small><h1 class="${report.status.includes('VERIFIED') || report.status.includes('PASSED') ? 'pass' : 'fail'}">${escape(report.status)}</h1><div class="meta">Capsule: <code>${escape(report.capsuleId)}</code><br>Source: ${escape(report.sourceProjectRef)}<br>Target: ${escape(report.targetProjectRef || 'Not selected')}<br>Started: ${escape(report.startedAt)}<br>Completed: ${escape(report.completedAt)}</div></section><section class="checks">${checks.map(([name, ok, note]) => `<div class="check"><b class="${ok ? 'pass' : 'fail'}">${ok ? 'PASS' : 'NOT VERIFIED'} · ${escape(name)}</b><span>${escape(note)}</span></div>`).join('')}</section><section class="manual"><h2>Manual work still required</h2><ol>${MANUAL_RECOVERY_ACTIONS.map(item => `<li>${escape(item)}</li>`).join('')}</ol></section></main></body></html>`;
 }
 
-async function writeRecoveryEvidence(report) {
-  const directory = resolve(process.env.PORTABASE_EVIDENCE_DIRECTORY || './portabase-evidence');
-  await mkdir(directory, { recursive: true });
+export async function writeRecoveryEvidence(report, { privateDirectory } = {}) {
+  const capsuleId = report.capsuleId || 'unknown-capsule';
+  if (typeof capsuleId !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(capsuleId)) {
+    throw new Error('Invalid capsule identity for recovery evidence.');
+  }
+  let directory;
+  if (privateDirectory !== undefined) {
+    const { validatePrivateDirectory } = await import('../cloud/runner/private-config.mjs');
+    directory = await validatePrivateDirectory(privateDirectory);
+  } else {
+    directory = resolve(process.env.PORTABASE_EVIDENCE_DIRECTORY || './portabase-evidence');
+    await mkdir(directory, { recursive: true });
+  }
   const stamp = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-');
-  const base = `${report.capsuleId || 'unknown-capsule'}-${stamp}`;
+  const base = `${capsuleId}-${stamp}`;
   const completed = { ...report, completedAt: report.completedAt || new Date().toISOString(), manualActions: MANUAL_RECOVERY_ACTIONS };
   const jsonPath = join(directory, `${base}.json`);
   const htmlPath = join(directory, `${base}.html`);
-  await writeFile(jsonPath, `${JSON.stringify(completed, null, 2)}\n`, { flag: 'wx' });
-  await writeFile(htmlPath, evidenceHtml(completed), { flag: 'wx' });
+  await writeFile(jsonPath, `${JSON.stringify(completed, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+  await writeFile(htmlPath, evidenceHtml(completed), { flag: 'wx', mode: 0o600 });
   console.log(`\nRECOVERY EVIDENCE: ${jsonPath}`);
   console.log(`HUMAN REPORT: ${htmlPath}`);
   return { jsonPath, htmlPath };
@@ -2452,6 +2609,7 @@ async function readTargetInventory(targetRef, opts = {}) {
   if (!usersResponse.ok) throw new Error(`Target Auth inspection failed: HTTP ${usersResponse.status}`);
   const buckets = await bucketsResponse.json();
   const users = await usersResponse.json();
+  if (opts.strict && (!Array.isArray(buckets) || !Array.isArray(users?.users))) throw new Error('Target inspection returned an invalid inventory.');
   let edgeFunctions = 0;
   const functionsResult = spawnSync(supabase, ['functions', 'list', '--project-ref', targetRef, '--output', 'json'], {
     encoding: 'utf8', windowsHide: true, env: process.env,
@@ -2467,6 +2625,7 @@ async function readTargetInventory(targetRef, opts = {}) {
   } else {
     let functions;
     try { functions = JSON.parse(functionsResult.stdout || '[]'); } catch { throw new Error('Target Function inspection returned invalid JSON.'); }
+    if (opts.strict && !Array.isArray(functions)) throw new Error('Target Function inspection returned an invalid inventory.');
     edgeFunctions = Array.isArray(functions) ? functions.length : 0;
   }
   const inventory = {
@@ -2480,6 +2639,145 @@ async function readTargetInventory(targetRef, opts = {}) {
 
 async function inspectRestoreTarget(targetRef, opts = {}) {
   return validateBlankRestoreInventory(await readTargetInventory(targetRef, opts), opts);
+}
+
+/** Execute only a branded, authenticated private preparation. The isolated child
+ * owns process.env and cleanup. No CLI flags or mutable capsule/config/plan paths
+ * are consulted here. Transport seams never replace validation or payload checks. */
+export async function runPreparedPrivateReplay(prepared, options = {}, transportAdapters = {}) {
+  const fail = code => { throw Object.assign(new Error(code), { code }); };
+  const { assertPreparedPrivateReplay } = await import('./private-replay-prepare.mjs');
+  assertPreparedPrivateReplay(prepared);
+  const fields = ['directory', 'targetRef', 'confirmTarget', 'confirmTargetDatabase', 'evidenceDirectory', 'preflight'];
+  if (!options || typeof options !== 'object' || Array.isArray(options) || Object.keys(options).some(key => !fields.includes(key))
+    || options.preflight !== undefined && typeof options.preflight !== 'boolean'
+    || options.confirmTargetDatabase !== undefined && typeof options.confirmTargetDatabase !== 'string'
+    || process.env.PORTABASE_RUNTIME_CONFIG) fail('private_replay_options_refused');
+  const { validatePrivateDirectory } = await import('../cloud/runner/private-config.mjs');
+  const root = await validatePrivateDirectory(options.directory);
+  function below(parent, path) {
+    if (typeof path !== 'string' || !path || !/^(?:[A-Za-z]:[\\/]|\/)/.test(path)) fail('private_replay_path_refused');
+    const rel = relative(parent, path);
+    if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || /^(?:[A-Za-z]:|[\\/])/.test(rel)) fail('private_replay_path_refused');
+    return path;
+  }
+  for (const path of [prepared.temp, prepared.scratchRoot, prepared.extracted, prepared.capsulePath]) await validatePrivateDirectory(below(root, path));
+  below(prepared.temp, prepared.extracted); below(prepared.temp, prepared.capsulePath);
+  if (resolve(prepared.scratchRoot) !== resolve(prepared.temp)) fail('private_replay_path_refused');
+  const evidenceDirectory = await validatePrivateDirectory(below(root, options.evidenceDirectory));
+  for (const scratch of [prepared.temp, prepared.scratchRoot]) {
+    const rel = relative(scratch, evidenceDirectory);
+    if (!rel || rel !== '..' && !rel.startsWith(`..${sep}`) && !/^(?:[A-Za-z]:|[\\/])/.test(rel)) fail('private_replay_path_refused');
+  }
+  const { metadata, manifest, plan, extracted } = prepared;
+  const targetRef = options.targetRef, sourceRef = process.env.PORTABASE_PROJECT_REF;
+  if (!/^[a-z0-9]{20}$/.test(sourceRef || '') || manifest.projectRef !== sourceRef || metadata.projectRef !== sourceRef || plan.projectRef !== sourceRef
+    || !/^[a-z0-9]{20}$/.test(targetRef || '') || targetRef !== process.env.PORTABASE_TARGET_PROJECT_REF
+    || options.confirmTarget !== targetRef || sourceRef === targetRef || plan.capsuleId !== metadata.id
+    || manifest.kind === 'delta' || metadata.kind === 'delta') fail('private_replay_binding_mismatch');
+  if (!process.env.PORTABASE_TARGET_SUPABASE_URL || !(process.env.PORTABASE_TARGET_SERVICE_ROLE_KEY || process.env.PORTABASE_TARGET_SECRET_KEY)
+    || !process.env.PORTABASE_TARGET_DB_URL) fail('private_replay_target_required');
+  const targetUrl = new URL(process.env.PORTABASE_TARGET_SUPABASE_URL);
+  if (targetUrl.protocol !== 'https:' || targetUrl.username || targetUrl.password || targetUrl.search || targetUrl.hash || targetUrl.pathname !== '/') fail('private_replay_target_required');
+  if (!Number.isSafeInteger(prepared.maxBytes) || prepared.maxBytes < 1 || prepared.maxBytes > plan.maxBytes) fail('private_replay_binding_mismatch');
+  const measured = validateRestorePlan(plan, { capsuleId: metadata.id, maxBytesOverride: prepared.maxBytes });
+  if (measured.selectedBytes !== prepared.selectedBytes || measured.maxBytes !== prepared.maxBytes
+    || !/^[a-f0-9]{64}$/.test(prepared.capsuleSha256 || '') || !/^[a-f0-9]{64}$/.test(prepared.bindingSha256 || '')) fail('private_replay_binding_mismatch');
+  const targetIdentity = assertDatabaseTarget({ sourceUrl: process.env.SUPABASE_DB_URL, targetUrl: process.env.PORTABASE_TARGET_DB_URL,
+    targetRef, confirmation: options.confirmTargetDatabase, overwrite: false });
+  if (manifest.sourceDatabaseIdentity === targetIdentity) fail('private_replay_source_target_refused');
+  validateRestoreTarget(sourceRef, targetRef, options.confirmTarget, process.env.PORTABASE_TARGET_SUPABASE_URL);
+  const defaults = {
+    readDatabaseName: async () => psqlValue(process.env.PORTABASE_TARGET_DB_URL, 'SELECT current_database();'),
+    querySelectedTableCount: async sql => psqlValue(process.env.PORTABASE_TARGET_DB_URL, sql),
+    targetFetch,
+    readTargetInventory: ref => readTargetInventory(ref, { strict: true }),
+    restoreDatabase, restoreStorage, restoreFunctions, verifyRestoredDatabase,
+  };
+  if (!transportAdapters || typeof transportAdapters !== 'object' || Array.isArray(transportAdapters)
+    || Object.keys(transportAdapters).some(key => !Object.hasOwn(defaults, key) || typeof transportAdapters[key] !== 'function')) fail('private_replay_options_refused');
+  const transport = { ...defaults, ...transportAdapters };
+  const call = async (name, ...args) => { assertPreparedPrivateReplay(prepared); return transport[name](...args); };
+  const mode = options.preflight ? 'preflight' : 'execute';
+  const evidence = { formatVersion: 1, portabaseVersion: VERSION, mode, startedAt: new Date().toISOString(), status: 'RUNNING',
+    capsuleId: metadata.id, capsuleSha256: prepared.capsuleSha256, bindingSha256: prepared.bindingSha256,
+    sourceProjectRef: sourceRef, targetProjectRef: targetRef, targetDatabase: targetIdentity, captureStatus: manifest.status,
+    captureContents: manifest.contents, captureErrors: manifest.errors, storageDestination: 'supabase', overwriteRequested: false,
+    restorePlan: { maxBytes: measured.maxBytes, selectedBytes: measured.selectedBytes },
+    scope: 'selected-table-rows-buckets-functions; roles-and-schema-apply-in-full',
+    verificationLimits: ['Database checks compare captured inventories and selected row counts, not application behavior.',
+      'Function checks confirm ACTIVE status and JWT settings; deployed source hash and application behavior are not proven.',
+      'Auth configuration, external secrets, routing and application smoke tests remain separate recovery steps.'] };
+  try {
+    // Check every selected layer before contacting or writing the target. Missing
+    // unselected payloads cannot block a deliberately limited recovery.
+    const selectedBuckets = plan.buckets.filter(row => row.selected), selectedFunctions = plan.functions.filter(row => row.selected);
+    if (plan.tables.some(row => row.selected) && !existsSync(join(extracted, 'database', 'data.sql'))) fail('private_replay_selected_data_unavailable');
+    if (selectedBuckets.length) {
+      const storage = await readStorageManifest(extracted);
+      if (storage.inventoryOnly || !Array.isArray(storage.buckets)) fail('private_replay_selected_data_unavailable');
+      const selectedStorage = filterStorageManifestByPlan(storage, plan);
+      if (selectedStorage.buckets.length !== selectedBuckets.length || selectedStorage.buckets.some(bucket => !Array.isArray(bucket.objects)
+        || bucket.objects.some(object => object.includedInCapsule === false || object.payloadLocation === 'baseline'))) fail('private_replay_selected_data_unavailable');
+      await verifyStoragePayloads(extracted, selectedStorage);
+    }
+    if (selectedFunctions.length) {
+      if (manifest.contents.functions?.complete !== true) fail('private_replay_selected_data_unavailable');
+      const { prepareFunctionReplayWorkspace } = await import('./function-replay-workspace.mjs');
+      const names = selectedFunctions.map(row => row.name), verifyMap = {};
+      for (const name of names) {
+        const value = manifest.contents.functions.verifyJwt?.[name];
+        if (value !== undefined && typeof value !== 'boolean') fail('private_replay_selected_data_unavailable');
+        verifyMap[name] = value !== false;
+      }
+      // Validate the same layout/configuration rules used by deployment before
+      // database writes. Deployment stages a fresh workspace from this snapshot.
+      try {
+        const workspace = await prepareFunctionReplayWorkspace(extracted, names, verifyMap);
+        await workspace.cleanup();
+      } catch { fail('private_replay_selected_data_unavailable'); }
+    }
+    const actualName = await call('readDatabaseName');
+    const expectedName = decodeURIComponent(new URL(process.env.PORTABASE_TARGET_DB_URL).pathname.slice(1));
+    if (!expectedName || actualName !== expectedName) fail('private_replay_database_mismatch');
+    const health = await call('targetFetch', '/storage/v1/bucket', { signal: AbortSignal.timeout(10000) });
+    if (health?.ok !== true) fail('private_replay_target_credentials_failed');
+    const inventory = await call('readTargetInventory', targetRef);
+    const counts = ['applicationTables', 'authUsers', 'storageBuckets', 'edgeFunctions'];
+    if (!inventory || typeof inventory !== 'object' || Array.isArray(inventory) || Object.keys(inventory).length !== counts.length
+      || counts.some(key => !Number.isSafeInteger(inventory[key]) || inventory[key] < 0)) fail('private_replay_inventory_invalid');
+    validateBlankRestoreInventory(inventory); // no occupied/source/overwrite bypass exists
+    assertPreparedPrivateReplay(prepared);
+    evidence.preflight = { verified: true, inventory, allowOccupied: false, allowSourceTarget: false };
+    if (options.preflight) {
+      evidence.status = recoveryEvidenceStatus({ mode, captureStatus: manifest.status });
+    } else {
+      // Recheck the capability just before writes; cleanup revokes it.
+      assertPreparedPrivateReplay(prepared);
+      const databaseApplied = await call('restoreDatabase', extracted, plan, null, { scratchRoot: prepared.scratchRoot });
+      const storage = selectedBuckets.length ? await call('restoreStorage', extracted, plan)
+        : { verified: true, skipped: true, scope: 'no-buckets-selected', bucketCount: 0, objectCount: 0, hashesVerified: 0 };
+      const functions = selectedFunctions.length ? await call('restoreFunctions', extracted, manifest, targetRef, plan)
+        : { verified: true, skipped: true, scope: 'no-functions-selected', expected: [], active: [] };
+      const database = await call('verifyRestoredDatabase', extracted,
+        manifest.selection?.ddlOnly === true || manifest.contents.database?.limitation === 'schema only; table rows are not included', plan, manifest.selection || {});
+      const { verifySelectedTableRows } = await import('./selected-table-readback.mjs');
+      const selectedRows = await verifySelectedTableRows({ dataSqlPath: join(extracted, 'database', 'data.sql'), plan,
+        queryCount: sql => call('querySelectedTableCount', sql) });
+      evidence.database = { ...database, selectedRows, verified: database?.verified === true && selectedRows.verified === true, applied: databaseApplied.applied };
+      evidence.storage = storage; evidence.functions = functions;
+      if (evidence.database.verified !== true || storage?.verified !== true || storage.destination === 'inventory-only' || storage.storageServingRestored === false
+        || functions?.verified !== true) fail('private_replay_verification_failed');
+      evidence.status = recoveryEvidenceStatus({ mode, captureStatus: manifest.status, database, storage, functions, restorePlan: plan });
+      if (evidence.status !== 'SELECTIVE_RESTORE_VERIFIED') fail('private_replay_verification_failed');
+    }
+    const paths = await writeRecoveryEvidence(evidence, { privateDirectory: evidenceDirectory });
+    return { status: evidence.status, evidence: paths, report: evidence };
+  } catch (error) {
+    evidence.status = 'FAILED'; evidence.error = error.message;
+    try { await writeRecoveryEvidence(evidence, { privateDirectory: evidenceDirectory }); } catch { /* original failure remains authoritative */ }
+    throw error;
+  }
 }
 
 /**
@@ -2536,6 +2834,13 @@ async function loadRestorePlanFlag(capsuleId) {
 }
 
 async function restore() {
+  validateRecoveryArgs(command, argv);
+  if (hasFlag('fill-missing') || hasFlag('writers')) throw new Error('--fill-missing and --writers are not implemented in this engine; refusing an ordinary restore in their place.');
+  if (process.env.PORTABASE_TARGET_DB_URL) process.env.PORTABASE_TARGET_DB_URL = targetDatabaseUrl(process.env.PORTABASE_TARGET_DB_URL, flag('target-db-name'));
+  const s3Destination = hasFlag('storage-to-s3') ? parseStorageDestination(flag('storage-to-s3'), flag('s3-expected-owner')) : null;
+  if (hasFlag('overwrite-target') && (hasFlag('allow-occupied-target') || hasFlag('allow-source-target') || hasFlag('drill'))) {
+    throw new Error('Overwrite cannot be combined with drill or unsafe-target bypass flags.');
+  }
   const materialized = await materializeCapsule(flag('capsule', argv[1] || '.'));
   let opened;
   const startedAt = new Date().toISOString();
@@ -2549,51 +2854,19 @@ async function restore() {
     if (manifest.kind === 'delta') {
       const baselineFlag = flag('baseline', null);
       if (!baselineFlag) throw new Error(`Capsule ${metadata.id} is a delta capsule: pass --baseline <full capsule directory> (a delta never restores alone).`);
-      const baseMaterialized = await materializeCapsule(resolve(baselineFlag));
+      const baseMaterialized = await materializeCapsule(baselineFlag);
       const baseOpened = await openCapsule(baseMaterialized.capsuleDir, process.env.PORTABASE_ENCRYPTION_PASSPHRASE);
       opened.chainCleanups = [async () => {
         await rm(baseOpened.temp, { recursive: true, force: true });
         if (baseMaterialized.cleanup) await rm(baseMaterialized.cleanup, { recursive: true, force: true });
       }];
-      if (baseOpened.manifest.kind === 'delta') throw new Error('Delta-of-delta restore is not supported: --baseline must be a full capsule.');
-      if (baseOpened.manifest.projectRef !== manifest.projectRef) {
-        throw new Error(`Baseline project ${baseOpened.manifest.projectRef} does not match delta project ${manifest.projectRef}.`);
-      }
       console.log(`Delta chain: assembling baseline ${baseOpened.metadata.id} + delta ${metadata.id}...`);
-      const merged = join(opened.temp, 'merged');
-      await mkdir(merged, { recursive: true });
-      await cp(baseOpened.extracted, merged, { recursive: true, force: true });
-      await cp(extracted, merged, { recursive: true, force: true });
-      for (const tomb of manifest.delta?.storage?.tombstones || []) {
-        const slash = tomb.indexOf('/');
-        if (slash < 0) continue;
-        const bucket = tomb.slice(0, slash);
-        const name = tomb.slice(slash + 1);
-        if (name) await rm(join(merged, 'storage', safeObjectPath(bucket), ...name.split('/').map(safeObjectPath)), { recursive: true, force: true });
-      }
-      const baseStoragePath = join(baseOpened.extracted, 'storage', 'storage-manifest.json');
-      const mergedStoragePath = join(merged, 'storage', 'storage-manifest.json');
-      if (existsSync(baseStoragePath)) {
-        const baseStorage = JSON.parse(await readFile(baseStoragePath, 'utf8'));
-        const deltaStorage = existsSync(mergedStoragePath) ? JSON.parse(await readFile(mergedStoragePath, 'utf8')) : { buckets: [] };
-        const mergedStorage = mergeStorageManifests(baseStorage, deltaStorage, manifest.delta?.storage?.tombstones || []);
-        await mkdir(join(merged, 'storage'), { recursive: true });
-        await writeFile(mergedStoragePath, `${JSON.stringify(mergedStorage, null, 2)}\n`);
-      }
-      const baseFnPath = join(baseOpened.extracted, 'functions', 'functions-manifest.json');
-      const mergedFnPath = join(merged, 'functions', 'functions-manifest.json');
-      if (existsSync(baseFnPath)) {
-        const baseFn = JSON.parse(await readFile(baseFnPath, 'utf8'));
-        const deltaFn = existsSync(mergedFnPath) ? JSON.parse(await readFile(mergedFnPath, 'utf8')) : { functions: [] };
-        const mergedFns = mergeFunctionManifests(baseFn.functions || baseFn || [], deltaFn.functions || deltaFn || []);
-        await mkdir(join(merged, 'functions'), { recursive: true });
-        const outFn = Array.isArray(deltaFn) ? mergedFns : { ...deltaFn, functions: mergedFns };
-        await writeFile(mergedFnPath, `${JSON.stringify(outFn, null, 2)}\n`);
-      }
-      extracted = merged;
+      extracted = await assembleDeltaPayload({ deltaRoot: extracted, baselineRoot: baseOpened.extracted,
+        destination: join(opened.temp, 'merged'), delta: manifest, baseline: baseOpened.manifest, baselineId: baseOpened.metadata.id });
       console.log('Chain assembled at restore time; the baseline capsule was never modified.');
     }
     evidence.capsuleId = metadata.id;
+    evidence.capsuleSha256 = await hashFile(join(materialized.capsuleDir, 'capsule.pbase'));
     const restorePlan = await loadRestorePlanFlag(metadata.id);
     evidence = {
       ...evidence,
@@ -2605,10 +2878,14 @@ async function restore() {
       captureContents: manifest.contents,
       captureErrors: manifest.errors,
       restorePlan: restorePlan ? { maxBytes: restorePlan.maxBytes, selectedBytes: restorePlanSelectedBytes(restorePlan) } : null,
+      storageDestination: s3Destination ? `s3://${s3Destination.bucket}/${s3Destination.prefix}` : 'supabase',
+      targetDatabase: process.env.PORTABASE_TARGET_DB_URL ? databaseIdentity(process.env.PORTABASE_TARGET_DB_URL) : null,
+      overwriteRequested: hasFlag('overwrite-target'),
     };
     console.log(`Portabase guarded recovery plan\n\nSource: ${manifest.projectRef}\nCapsule: ${metadata.id}\nCapture status: ${manifest.status}\n`);
+    console.log(`Database target: ${evidence.targetDatabase || 'not configured'}\nStorage destination: ${evidence.storageDestination}\nOverwrite: ${evidence.overwriteRequested ? 'app-and-auth (rollback proof required)' : 'off'}`);
     if (manifest.edition === 'trial') console.log('TRIAL SAMPLE: database rows and most Storage objects/Functions are intentionally absent. This is not a complete recovery backup.\n');
-    if (restorePlan) console.log(`RESTORE PLAN ACTIVE: only selected tables/buckets/functions will be written to the target (budget ${formatBytes(restorePlan.maxBytes)}).\n`);
+    if (restorePlan) console.log(`RESTORE PLAN ACTIVE: selected table rows/buckets/functions will be written; roles and schema apply in full (selected data budget ${formatBytes(restorePlan.maxBytes)}).\n`);
     for (const name of ['database', 'storage', 'functions']) {
       const item = manifest.contents[name];
       console.log(`${item?.complete ? 'READY' : 'GAP  '}  ${name}${item?.reason ? ` — ${item.reason}` : ''}${item?.error ? ` — ${item.error}` : ''}`);
@@ -2625,6 +2902,12 @@ async function restore() {
       return;
     }
     const targetRef = process.env.PORTABASE_TARGET_PROJECT_REF;
+    const targetIdentity = assertDatabaseTarget({ sourceUrl: process.env.SUPABASE_DB_URL,
+      targetUrl: process.env.PORTABASE_TARGET_DB_URL, targetRef, confirmation: flag('confirm-target-db'), overwrite: hasFlag('overwrite-target') });
+    if (manifest.sourceDatabaseIdentity === targetIdentity) throw new Error('Target database is the capsule source database.');
+    if (psqlValue(process.env.PORTABASE_TARGET_DB_URL, 'SELECT current_database();') !== decodeURIComponent(new URL(process.env.PORTABASE_TARGET_DB_URL).pathname.slice(1))) {
+      throw new Error('Connected database name differs from the intended target.');
+    }
     const allowOccupied = hasFlag('allow-occupied-target');
     const allowSourceTarget = hasFlag('allow-source-target');
     if (allowOccupied) {
@@ -2642,7 +2925,12 @@ async function restore() {
     );
     const health = await targetFetch('/storage/v1/bucket', { signal: AbortSignal.timeout(10000) });
     if (!health.ok) throw new Error(`Target credential check failed: HTTP ${health.status}`);
-    const inventory = await inspectRestoreTarget(targetRef, { allowOccupied });
+    const inventory = await readTargetInventory(targetRef);
+    validateBlankRestoreInventory(hasFlag('overwrite-target') ? { storageBuckets: s3Destination ? 0 : inventory.storageBuckets, edgeFunctions: inventory.edgeFunctions } : inventory, { allowOccupied });
+    let overwrite = null;
+    if (hasFlag('overwrite-target')) overwrite = await prepareOverwrite(manifest, restorePlan, targetRef, targetIdentity);
+    if (s3Destination) evidence.s3Preflight = await preflightStorageS3(s3Destination);
+    await verifyStoragePayloads(extracted, await readStorageManifest(extracted));
     evidence.preflight = { verified: true, inventory, allowOccupied, allowSourceTarget };
     console.log(`\nTARGET PREFLIGHT PASSED: ${targetRef}${allowOccupied ? ' (occupied allowed)' : ' (blank)'}`);
     console.log(`Inventory: ${Object.entries(inventory).map(([name, count]) => `${name}=${count}`).join(', ')}`);
@@ -2653,10 +2941,19 @@ async function restore() {
       return;
     }
     console.log(`${drill ? 'LIMITED DRILL' : 'TARGET WRITE'} CONFIRMED: ${targetRef}`);
-    const databaseApplied = await restoreDatabase(extracted, restorePlan);
-    const storage = await restoreStorage(extracted, restorePlan);
+    // Preserve binary bytes before any database overwrite. If this fails, DB is untouched.
+    let storage;
+    if (s3Destination) {
+      const fullStorage = await readStorageManifest(extracted);
+      storage = await restoreStorageS3({ extracted, storage: restorePlan ? filterStorageManifestByPlan(fullStorage, restorePlan) : fullStorage,
+        destination: s3Destination, capsuleId: metadata.id });
+      evidence.storage = storage;
+      await writeRecoveryEvidence(evidence);
+    }
+    const databaseApplied = await restoreDatabase(extracted, restorePlan, overwrite);
+    if (!s3Destination) storage = await restoreStorage(extracted, restorePlan);
     const functions = await restoreFunctions(extracted, manifest, targetRef, restorePlan);
-    const database = await verifyRestoredDatabase(extracted, drill, restorePlan);
+    const database = await verifyRestoredDatabase(extracted, drill || manifest.selection?.ddlOnly || manifest.contents.database?.limitation === 'schema only; table rows are not included', restorePlan, manifest.selection);
     evidence.database = { ...database, applied: databaseApplied.applied };
     evidence.storage = storage;
     evidence.functions = functions;
@@ -2668,8 +2965,10 @@ async function restore() {
       const proof = await readTargetInventory(targetRef);
       console.log(`\nREAD-BACK PROOF: ${Object.entries(proof).map(([name, count]) => `${name}=${count}`).join(', ')}`);
       console.log('LIMITED RESTORE DRILL COMPLETE. Database structure/API surface, hash-verified sample Storage objects, and sample Functions were written from the trial capsule. This validates the path; it is not a complete recovery.');
-    } else if (restorePlan) {
-      console.log('\nSELECTIVE RESTORE VERIFIED. Only the tables/buckets/functions selected in the restore plan were written — this proves the plan-restore path and the selected data, not a complete recovery. Finish and verify the listed manual configuration before cutover.');
+    } else if (s3Destination) {
+      console.log(`\n${evidence.status}. S3 objects verified; Supabase Storage serving is not restored. Mapping: ${storage.mappingUri}`);
+    } else if (restorePlan || manifest.status === 'SELECTIVE') {
+      console.log('\nSELECTIVE RESTORE VERIFIED. Selected table rows/buckets/functions were restored; roles and schema applied in full. This proves the selected data path, not a complete recovery. Finish and verify the listed manual configuration before cutover.');
     } else {
       console.log('\nRECOVERY DATA PATH VERIFIED. Finish and verify the listed manual configuration before cutover.');
     }
@@ -2722,7 +3021,7 @@ async function status() {
   if (!existsSync(path)) throw new Error('No backup status exists yet.');
   const current = JSON.parse(await readFile(path, 'utf8'));
   console.log(JSON.stringify(current, null, 2));
-  if (!['COMPLETE', 'TRIAL', 'RUNNING'].includes(current.state)) process.exitCode = 5;
+  if (!['COMPLETE', 'SELECTIVE', 'TRIAL', 'RUNNING'].includes(current.state)) process.exitCode = 5;
 }
 
 async function prune() {
@@ -2927,6 +3226,24 @@ function openInBrowser(url) {
 }
 
 async function ui() {
+  if (hasFlag('private-capsule-review')) {
+    if (hasFlag('private-setup')) throw new Error('Choose one private UI mode.');
+    const { startUiServer } = await import('./ui/server.mjs');
+    const port = Number(flag('port', 0));
+    if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('--port must be 0-65535.');
+    const session = await startUiServer({ port, privateReview: {
+      directory: process.env.PORTABASE_RUNNER_CONFIG_DIR, runnerId: process.env.PORTABASE_RUNNER_ID,
+      projectRef: process.env.PORTABASE_PROJECT_REF, capsulePath: flag('capsule'),
+      engineConfigPath: flag('config'),
+      targetRef: process.env.PORTABASE_TARGET_PROJECT_REF,
+      maxCipherBytes: Number(flag('review-max-cipher-bytes')), maxExpandedBytes: Number(flag('review-max-expanded-bytes')),
+      passphrase: process.env.PORTABASE_ENCRYPTION_PASSPHRASE,
+    } });
+    console.log(`Portabase PRIVATE RUNNER: offline capsule review and plan authoring\n\n  ${session.url}\n\nListening on ${session.address.address}:${session.address.port} only. No source request or restore execution. Ctrl+C to stop.`);
+    if (!hasFlag('no-open')) openInBrowser(session.url);
+    await new Promise(resolveStop => process.once('SIGINT', resolveStop));
+    await session.close(); return;
+  }
   const { config, path: configPath } = await loadConfig();
   const trial = hasFlag('trial');
   const { startUiServer } = await import('./ui/server.mjs');
@@ -2940,13 +3257,9 @@ async function ui() {
   } : undefined;
   if (privateSetup && (trial || process.env.PORTABASE_RUNTIME_CONFIG)) throw new Error('Private setup requires the exact engine config file and a full inventory.');
   const session = await startUiServer({ port, privateSetup,
-    collect: (validatedConfig, onProgress) => collectUiSnapshot(validatedConfig || config, trial, onProgress) });
-  console.log(`Portabase UI (${privateSetup ? 'private selection authoring; no job execution' : 'read-only'}) for ${config.projectRef}
-
-  ${session.url}
-
-Listening on ${session.address.address}:${session.address.port} only. The page can reach this process and nothing else.
-The #t= part is a one-launch session token; it never leaves your machine. Ctrl+C to stop.`);
+    collect: (validatedConfig, onProgress) => collectUiSnapshot(validatedConfig || config, trial, onProgress),
+    collectBucketObjects: privateSetup ? bucketId => listBucketObjects(bucketId) : undefined });
+  console.log(`Portabase UI (${privateSetup ? 'private selection authoring; no job execution' : 'read-only'}) for ${config.projectRef}\n\n  ${session.url}\n\nListening on ${session.address.address}:${session.address.port} only. The page can reach this process and nothing else.\nThe #t= part is a one-launch session token; it never leaves your machine. Ctrl+C to stop.`);
   if (!hasFlag('no-open')) openInBrowser(session.url);
   await new Promise(resolveStop => process.once('SIGINT', resolveStop));
   await session.close();
@@ -3032,6 +3345,9 @@ Commands:
   plan                Show the capture and destination plan
   ui                  Local read-only GUI: inventory, sizes, capsule checklist
                       (127.0.0.1 only; --port N, --no-open, --trial)
+                      --private-capsule-review --capsule <private-root/dir>
+                        Offline authenticated review and private restore-plan save
+                        Requires --review-max-cipher-bytes N and --review-max-expanded-bytes N
   backup              Capture, encrypt, transfer, and verify a capsule
                       Default: full community capture (no license)
                       Add --trial for a deliberately limited demo sample
@@ -3040,6 +3356,12 @@ Commands:
                       --exclude-table-data schema.t1,schema.t2
                         Skip row data for these tables (schema DDL still dumped)
                         Config: capture.excludeTableData (array)
+                      --ddl-only
+                        All database DDL, no table rows (including Auth rows).
+                        Config: capture.ddlOnly (boolean)
+                      --storage-inventory-only
+                        Record every selected object name/size, without its bytes.
+                        Config: capture.storageInventoryOnly (boolean)
                       --include-table-data schema.t1,schema.t2
                         Row data ONLY for these tables (DDL still dumped for all;
                         needs psql). Conflicts with --exclude-table-data.
@@ -3054,7 +3376,7 @@ Commands:
                       --delta --baseline <dir>
                         Delta capsule: capture everything, then store only layers
                         changed since the baseline manifest. The baseline is read
-                        from its manifest only — its contents are never opened.
+                        from authenticated manifests (encrypted baselines are opened).
                         Unchanged layers are referenced by hash, never re-stored.
                       --incremental-binary
                         Whole files only, never a partial file. A binary whose
@@ -3085,15 +3407,24 @@ Commands:
                       Add --restore-plan <file> to restore only the plan's selected
                       tables/buckets/functions (hard-stops if the plan is over budget
                       or was generated for a different capsule)
-                      --fill-missing   absent-only Storage/DB fill (not incremental sync)
-                      --writers N      parallel writers (default 1)
+                      --target-db-name <name>  Override the DB name in the target URL
+                      --confirm-target-db <host:port/name>  Required for custom hosts/overwrite
+                      --storage-to-s3 s3://bucket/prefix --s3-expected-owner <account-id>
+                        Preserve Storage bytes with read-back hashes; no Storage API upload.
+                      --overwrite-target --overwrite-scope app-and-auth
+                        --confirm-overwrite <target-ref> --confirm-target-db <host:port/name>
+                        --rollback-capsule <dir> --rollback-evidence <json>
+                        Replace app schemas/Auth data transactionally after rollback proof.
+                      Examples and limitations: docs/CLI-SCENARIOS.md
   replay              Validate a capsule by restoring into a NEW Supabase project
                       (never the source). Requires target env vars + --confirm-target.
                       Same guards as restore --execute; clearer validation report.
                       Dirty-target drill: --allow-occupied-target
                       Same-ref drill:     --allow-source-target (with --confirm-target)
                       Accepts --restore-plan <file> the same as restore
-  export-manifest     Name-only inventory (layers, tables, buckets, checksums — no secrets)
+  export-manifest     Local capsule report
+                      --for-sharing --out <new-file.json> exports a dashboard
+                      summary for local preview and explicit sharing consent.
   capsule-unload      List unloadable layer names for a runner (still ciphertext)
   aws inventory       Scripted vs binary AWS inventory from --fixture <json> (read-only)
   aws doctor          will-copy / will-warn / will-fail (never claims proven; no snapshots)
@@ -3161,6 +3492,7 @@ function namesOnlyCapsuleReport(metadata, mode = 'export-manifest') {
     createdAt: metadata.createdAt || null,
     layers: Object.keys(contents),
     layerComplete: Object.fromEntries(Object.entries(contents).map(([k, v]) => [k, Boolean(v?.complete)])),
+    exclusions: metadata.exclusions || [{ capability: 'supabase-vector-buckets', status: 'NOT_CAPTURED' }],
     errors: Array.isArray(metadata.errors) ? metadata.errors : [],
     hasEncryption: Boolean(metadata.encryption),
     secretsIncluded: false,
@@ -3174,6 +3506,16 @@ async function exportManifest() {
     throw new Error('export-manifest requires --capsule <dir> with capsule.json');
   }
   const metadata = JSON.parse(await readFile(join(capsuleDir, 'capsule.json'), 'utf8'));
+  if (hasFlag('for-sharing')) {
+    const requested = flag('out');
+    if (!requested) throw new Error('--for-sharing requires --out <new-file.json>');
+    const out = resolve(requested);
+    if (/^(?:\\\\\?\\)?F:[\\/]/i.test(out)) throw new Error('F: output is forbidden.');
+    const report = sharedManifestSummary(metadata, await hashFile(join(capsuleDir, 'capsule.pbase')));
+    await writeFile(out, `${JSON.stringify(report, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+    console.log('Sharing summary exported locally. Nothing was uploaded. Preview it in the agent sharing panel before granting consent.');
+    return;
+  }
   const report = namesOnlyCapsuleReport(metadata, 'export-manifest');
   const out = flag('out', join(capsuleDir, 'export-manifest.json'));
   await writeFile(out, `${JSON.stringify(report, null, 2)}\n`);

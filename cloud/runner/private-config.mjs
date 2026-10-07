@@ -56,6 +56,18 @@ function names(value, re, max) {
   if (!Array.isArray(value) || value.length > max || value.some(item => typeof item !== 'string' || item.length > 256 || !re.test(item))) fail('invalid_private_selection');
   return value.slice();
 }
+/** `{ [bucketKey]: objectName[] }` — per-object exclusions within an otherwise-included bucket. */
+function excludeObjectsMap(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) fail('invalid_private_selection');
+  const result = {};
+  for (const [bucketKey, list] of Object.entries(value)) {
+    if (!/^[A-Za-z0-9._-]{1,100}$/.test(bucketKey)) fail('invalid_private_selection');
+    if (!Array.isArray(list) || list.length > 20000
+      || list.some(item => typeof item !== 'string' || !item || item.length > 1024 || /[\0-\x1f\x7f]/.test(item))) fail('invalid_private_selection');
+    result[bucketKey] = list.slice();
+  }
+  return result;
+}
 function rejectForbiddenDrive(value) {
   if (typeof value === 'string' && (/^[fF]:/.test(value) || /^[\\/]{2}/.test(value))) fail('private_config_path_refused');
   if (value && typeof value === 'object') for (const child of Object.values(value)) rejectForbiddenDrive(child);
@@ -124,7 +136,7 @@ export async function resolvePrivateJob(job, { directory, runnerId, projectRef, 
     const path = inside(root, `${reference.configRef}/${reference.configRevision}.json`);
     const { value: record, digest: configRevisionSha256 } = await readJson(path);
     const fields = ['version', 'runnerId', 'configRef', 'configRevision', 'operation', 'projectRef', 'targetRef',
-      'engineConfigPath', 'engineConfigSha256', 'capsulePath', 'excludeTables', 'excludeBuckets', 'incrementalBinary',
+      'engineConfigPath', 'engineConfigSha256', 'capsulePath', 'excludeTables', 'excludeBuckets', 'excludeObjects', 'incrementalBinary',
       'restorePlanRef', 'restorePlanBindingSha256'];
     if (!record || Array.isArray(record) || typeof record !== 'object' || Object.keys(record).some(key => !fields.includes(key))) fail('invalid_private_config');
     configReference(record);
@@ -146,16 +158,17 @@ export async function resolvePrivateJob(job, { directory, runnerId, projectRef, 
     for (const field of ['backupDirectory', 'statusDirectory']) {
       await checkPrivateOutput(root, config.value[field]);
     }
-    const payload = { projectRef, excludeTables: [], excludeBuckets: [], incrementalBinary: false };
+    const payload = { projectRef, excludeTables: [], excludeBuckets: [], excludeObjects: {}, incrementalBinary: false };
     let restorePlan;
     if (job.type === 'backup') {
       if (record.targetRef !== undefined || record.capsulePath !== undefined) fail('invalid_private_config');
       payload.excludeTables = names(record.excludeTables, /^[A-Za-z_][A-Za-z0-9_$]*\.[A-Za-z_][A-Za-z0-9_$]*$/, 5000);
       payload.excludeBuckets = names(record.excludeBuckets, /^[A-Za-z0-9._-]{1,100}$/, 1000);
+      payload.excludeObjects = excludeObjectsMap(record.excludeObjects ?? {});
       if (typeof record.incrementalBinary !== 'boolean') fail('invalid_private_selection');
       payload.incrementalBinary = record.incrementalBinary === true;
     } else {
-      if (['excludeTables', 'excludeBuckets', 'incrementalBinary'].some(key => Object.hasOwn(record, key))) fail('invalid_private_config');
+      if (['excludeTables', 'excludeBuckets', 'excludeObjects', 'incrementalBinary'].some(key => Object.hasOwn(record, key))) fail('invalid_private_config');
       const capsule = inside(root, record.capsulePath);
       await noLinks(capsule, { directory: true });
       const metadata = await readJson(join(capsule, 'capsule.json'));
