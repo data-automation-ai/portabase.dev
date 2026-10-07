@@ -438,45 +438,41 @@
   <dialog id="inspectionProgress" class="inspection-dialog connect-modal" aria-labelledby="inspection-title">
     <div class="modal-rule"></div>
     <div class="modal-body">
-      <p class="eyebrow">One-time setup · Private connection</p>
-      <h2 id="inspection-title">Connect your Supabase project</h2>
-      <p class="setup-reassurance">These values stay inside this runner. They are never sent to your PortaBase account.</p>
-      <p class="field-help-hint">Double-click on a field for help.</p>
+      <h2 id="inspection-title">Connect</h2>
+      <p class="field-help-hint">Double-click a field for help.</p>
       <form id="sourceConnectionsForm" autocomplete="off">
-        <label class="mask-control"><input id="maskValues" type="checkbox" checked><span>Mask values</span></label>
-        <label class="mask-control"><input id="capsuleOnly" type="checkbox"><span>Create the capsule only (no automatic restore)</span></label>
-        <fieldset class="dual-fieldset">
-          <legend>Required</legend>
-          <div class="dual-grid">
-            <div class="dual-head"></div>
-            <div class="dual-head"><strong>Source</strong><small>Read from</small></div>
-            <div class="dual-head"><strong>Destination</strong><small>Restore to (optional)</small></div>
+        <div class="passkey-row">
+          <label><span>Passkey</span><input id="capsulePassphrase" data-help="capsule-passphrase" type="password" autocomplete="new-password" minlength="16" placeholder="16+ chars, letter, number, symbol"></label>
+          <button id="generatePassphrase" type="button" class="secondary">Generate passkey</button>
+        </div>
+        <div class="grid-controls">
+          <label class="mask-control"><input id="maskValues" type="checkbox" checked><span>Mask values</span></label>
+          <label class="mask-control"><input id="capsuleOnly" type="checkbox"><span>Create capsule only (no destination)</span></label>
+        </div>
+        <div class="quad-grid">
+          <div class="dual-head"></div>
+          <div class="dual-head">Supabase URL</div>
+          <div class="dual-head">Database password</div>
+          <div class="dual-head">API key</div>
+          <div class="dual-head">Access token</div>
 
-            <label class="dual-row-label"><b>1</b> Project URL or reference</label>
-            <input id="sourceProjectRef" data-help="source-project-ref" type="text" autocomplete="off" placeholder="https://abcdefghijklmnopqrst.supabase.co or the 20-character ref">
-            <input id="targetRef" data-help="target-ref" type="text" autocomplete="off" placeholder="A separate, blank hosted Supabase project">
+          <div class="dual-row-label">Source</div>
+          <input id="sourceProjectRef" data-help="source-project-ref" type="text" autocomplete="off" placeholder="https://…supabase.co">
+          <input id="sourceDatabasePassword" data-help="source-database-password" type="password" autocomplete="new-password" placeholder="Password">
+          <input id="sourceServiceRoleKey" data-help="source-key" type="password" autocomplete="new-password" placeholder="sb_secret_…">
+          <input id="sourceAccessToken" data-help="source-token" type="password" autocomplete="new-password" placeholder="sbp_…">
 
-            <label class="dual-row-label"><b>2</b> Database password</label>
-            <input id="sourceDatabasePassword" data-help="source-database-password" type="password" autocomplete="new-password" placeholder="Password set when this project was created">
-            <input id="targetDatabasePassword" data-help="target-database-password" type="password" autocomplete="new-password" placeholder="Password set for the blank target">
-
-            <label class="dual-row-label"><b>3</b> Project secret key</label>
-            <input id="sourceServiceRoleKey" data-help="source-key" type="password" autocomplete="new-password" placeholder="Usually begins sb_secret_…">
-            <input id="targetServiceRoleKey" data-help="target-key" type="password" autocomplete="new-password" placeholder="Usually begins sb_secret_… or legacy eyJ…">
-          </div>
-          <label><span><b>4</b> Management access token <small>(source only)</small></span><input id="sourceAccessToken" data-help="source-token" type="password" autocomplete="new-password" placeholder="Usually begins sbp_…"></label>
-          <label><span><b>5</b> Capsule passphrase <small>(shared)</small></span><input id="capsulePassphrase" data-help="capsule-passphrase" type="password" autocomplete="new-password" minlength="16" placeholder="Create your own — at least 16 characters"></label>
-        </fieldset>
-        <p id="capsuleOnlyNote" class="fine-print" hidden>No target project configured: the encrypted capsule is written only to your configured storage destination (S3, Dropbox, local disk, etc.). Restore is manual — download the capsule and run the CLI restore command with your passphrase when you need it.</p>
-        <details class="setup-help">
-          <summary>Get Help</summary>
-          <p>Open your Supabase dashboard, choose the project you want to protect, then double-click the field where you need help.</p>
-          <a class="button-link" href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer">Open Supabase dashboard</a>
-        </details>
-        <div class="form-action"><button id="saveSourceConnections" type="submit">Connect</button><span id="formConnectionMessage" role="status">Enter the five values, then connect.</span></div>
+          <div class="dual-row-label dest-cell">Destination</div>
+          <input id="targetRef" class="dest-cell" data-help="target-ref" type="text" autocomplete="off" placeholder="https://…supabase.co">
+          <input id="targetDatabasePassword" class="dest-cell" data-help="target-database-password" type="password" autocomplete="new-password" placeholder="Password">
+          <input id="targetServiceRoleKey" class="dest-cell" data-help="target-key" type="password" autocomplete="new-password" placeholder="sb_secret_…">
+          <div class="grid-na dest-cell" aria-hidden="true">—</div>
+        </div>
+        <p id="capsuleOnlyNote" class="fine-print" hidden>No destination: the capsule goes only to your configured storage. Restore manually with the CLI and this passkey.</p>
       </form>
 
       <p id="inspectionStatus" class="inspection-status" aria-live="polite" hidden></p>
+      <div class="probe-graphic-row">
       <div class="probe-graphic three-node" aria-hidden="true">
         <div class="probe-node supabase-node"><i></i><strong>Source Supabase</strong><small>Read from</small></div>
         <div class="probe-exchange">
@@ -489,6 +485,18 @@
           <div class="probe-route inbound"><span>Response</span><i></i></div>
         </div>
         <div id="targetNode" class="probe-node supabase-node target-node" hidden><i></i><strong>Target Supabase</strong><small>Restore to — not yet validated</small></div>
+      </div>
+      <button id="saveSourceConnections" form="sourceConnectionsForm" type="submit" class="check-connections-btn">Check Connections</button>
+      </div>
+      <span id="formConnectionMessage" role="status"></span>
+      <div id="capsuleDestination" class="capsule-destination">
+        <p class="capsule-destination-label">Capsule destination</p>
+        <div class="capsule-destination-buttons">
+          <button type="button" class="secondary dest-config-btn" data-dest="S3">Configure S3</button>
+          <button type="button" class="secondary dest-config-btn" data-dest="Dropbox">Configure Dropbox</button>
+          <button type="button" class="secondary dest-config-btn" data-dest="Tailscale Tunnel">Configure Tailscale Tunnel</button>
+        </div>
+        <span id="destConfigMessage" role="status" class="fine-print"></span>
       </div>
       <ol class="probe-stages four-step" aria-label="Connection progress">
         <li id="probeUrl"><span>1</span><div><strong>URL</strong><small>Waiting</small></div></li>

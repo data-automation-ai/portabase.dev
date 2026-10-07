@@ -574,9 +574,33 @@ async function saveConnections({ fields, buttonId, messageId, requireFields = []
   } catch (failure) { showError(failure.message); $(messageId).textContent = 'Connection update was not saved.'; return false; }
   finally { $(buttonId).disabled = false; }
 }
+function validatePassphrase(value) {
+  return value.length >= 16 && /[0-9]/.test(value) && /[A-Za-z]/.test(value) && /[^A-Za-z0-9]/.test(value);
+}
+function generatePassphraseValue() {
+  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz', digits = '23456789', symbols = '!@#$%^&*-_=+?';
+  const all = letters + digits + symbols;
+  const pick = pool => pool[crypto.getRandomValues(new Uint32Array(1))[0] % pool.length];
+  const chars = [pick(letters), pick(digits), pick(symbols)];
+  while (chars.length < 20) chars.push(pick(all));
+  for (let i = chars.length - 1; i > 0; i--) { const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1);[chars[i], chars[j]] = [chars[j], chars[i]]; }
+  return chars.join('');
+}
+$('generatePassphrase').addEventListener('click', () => {
+  $('capsulePassphrase').value = generatePassphraseValue();
+  $('capsulePassphrase').classList.remove('field-error');
+});
+for (const button of document.querySelectorAll('.dest-config-btn')) {
+  button.addEventListener('click', () => { $('destConfigMessage').textContent = `${button.dataset.dest}: Not yet available.`; });
+}
 $('sourceConnectionsForm').addEventListener('submit', async event => {
   event.preventDefault();
   clearFieldErrors(); clearError();
+  const passphrase = $('capsulePassphrase').value;
+  if (passphrase && !validatePassphrase(passphrase)) {
+    flagFieldError('capsulePassphrase');
+    return probeFailed('The passkey needs 16+ characters with a letter, a number, and a symbol, highlighted in red below.');
+  }
   const refInput = $('sourceProjectRef').value;
   const parsedRef = parseProjectRef(refInput);
   showInspection({ accessReady: false });
