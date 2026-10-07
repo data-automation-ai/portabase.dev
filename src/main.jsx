@@ -207,6 +207,7 @@ function Hero() {
         <p className="recovery-question">What if you lost your Supabase account for good?</p>
         <p className="recovery-lead">Your side project has real customers now. A locked account could put their data, your app, and the backups you need out of reach.</p>
         <p className="recovery-answer">Portabase helps you keep an encrypted recovery copy outside Supabase, in storage you control—so you can rebuild in a separate account.</p>
+        <p className="recovery-answer">The runner is open source. Take the code and self-host it yourself, free, forever—no account, no subscription. Or skip the setup and let us handle scheduling and alerts for about the price of a large specialty coffee: $7/month.</p>
         <div className="recovery-actions">
           <a className="button button-primary" href="#escape">See how recovery works <Arrow /></a>
           <a className="recovery-evidence-link" href="#stories">Read the real cases <span aria-hidden="true">↓</span></a>
@@ -221,6 +222,16 @@ function Hero() {
           </picture>
           <figcaption>The founder’s actual lockout. The reason we built a way to keep a recovery copy outside the account.</figcaption>
       </figure>
+    </div>
+  </section>;
+}
+
+function RecoveryOverviewImage() {
+  return <section className="recovery-overview" id="recovery-overview" aria-label="How Portabase recovery works">
+    <div className="shell">
+      <a href="/images/portabase1.png" target="_blank" rel="noreferrer" aria-label="Open the Portabase recovery diagram at full size">
+        <img src="/images/portabase1.png" width="1774" height="887" alt="Portabase recovery diagram: copy the Supabase database, Edge Functions and Storage into a capsule; save it to customer storage and restore into a contingency account. The diagram shows the intended private runner and console reporting flow." />
+      </a>
     </div>
   </section>;
 }
@@ -1114,7 +1125,8 @@ function ClosureRisk({ variant = 'home' } = {}) {
     [providerFilter],
   );
   const cases = useMemo(
-    () => (providerFilter === 'All' ? closureCases : closureCases.filter(c => c.provider === providerFilter)),
+    () => (providerFilter === 'All' ? closureCases : closureCases.filter(c => c.provider === providerFilter))
+      .slice().sort((a, b) => b.date.localeCompare(a.date) || (b.impact || 0) - (a.impact || 0)),
     [providerFilter],
   );
   const filters = ['All', 'Supabase', 'AWS'];
@@ -1169,9 +1181,10 @@ function ClosureRisk({ variant = 'home' } = {}) {
           <h3>Real users. Real lockouts. Click through to the original post.</h3>
         </div>
         <div className="closure-case-grid">
-          {cases.map(c => (
+          {cases.map((c, index) => (
             <a className="closure-case" href={c.href} target="_blank" rel="noreferrer" key={c.id}>
               <div className="closure-case-top">
+                <span className="closure-case-index">{String(index + 1).padStart(2, '0')}</span>
                 <span className={`provider-pill provider-${c.provider.toLowerCase()}`}>{c.provider}</span>
                 <span className="closure-tag">{c.tag}</span>
               </div>
@@ -1519,7 +1532,7 @@ function CloudPage() {
                   <li><span>✓</span> Table + bucket sizer</li>
                   <li><span>✓</span> You provide the vault · zero knowledge of keys</li>
                 </ul>
-                <a className="button button-primary purchase" href={signedIn ? `/app/account?tab=billing` : `/login?mode=signup&next=${encodeURIComponent('/app/account?tab=billing')}`}>
+                <a className="button button-primary purchase" href={signedIn ? `/app/account?tab=billing&plan=${plan.id}` : `/login?mode=signup&next=${encodeURIComponent(`/app/account?tab=billing&plan=${plan.id}`)}`}>
                   {signedIn ? `Start ${plan.title}` : 'Sign in · pick this plan'} <Arrow />
                 </a>
               </article>
@@ -2172,7 +2185,7 @@ function UseCases() {
 
 function HomePage() {
   useEffect(() => { document.title = 'Portabase — Your Supabase Escape'; }, []);
-  return <><Header /><main><Hero /><Stories /><WhyNow /><Reality /><ClosureRisk /><TwoScenarios /><MidPageCta /><WhatIsThis /><NeverHoldKeys /><CliVsCloud /><HeroConcept /><RunnerArchitectureDiagram /><Escape /><InstallCta Arrow={Arrow} /><Faq /><Audit /><Cutover /><PublicDeal /><CloudTeaser /><UseCases /></main><Footer /></>;
+  return <><Header /><main><Hero /><RecoveryOverviewImage /><Stories /><WhyNow /><Reality /><ClosureRisk /><TwoScenarios /><MidPageCta /><WhatIsThis /><NeverHoldKeys /><CliVsCloud /><HeroConcept /><RunnerArchitectureDiagram /><Escape /><InstallCta Arrow={Arrow} /><Faq /><Audit /><Cutover /><PublicDeal /><CloudTeaser /><UseCases /></main><Footer /></>;
 }
 
 /** Mid-page conversion point placed at the emotional peak, after Stories + TwoScenarios. */
