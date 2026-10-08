@@ -84,12 +84,6 @@ body.setup-connected main{width:min(760px,calc(100% - 32px));padding-top:28px}bo
 .passkey-row label span{display:block;margin-bottom:3px;color:var(--muted);font-size:12px;font-weight:650}
 .passkey-row input{width:100%}
 .passkey-copy-btn{flex:0 0 auto;min-height:0;width:38px;padding:0;display:grid;place-items:center;font-size:15px}
-.grid-controls{display:flex;flex-wrap:wrap;gap:6px 18px;margin-bottom:6px}
-.quad-grid{display:grid;grid-template-columns:96px repeat(4,1fr);gap:5px 8px;align-items:center;margin:6px 0}
-.quad-grid .dual-head{font-size:10px;color:var(--orange2);text-transform:uppercase;letter-spacing:.05em}
-.quad-grid .dual-row-label{color:var(--orange2);font-weight:750}
-.quad-grid .dual-row-label.dest-cell{color:var(--green)}
-.quad-grid input{min-height:30px}
 .grid-na{text-align:center;color:var(--muted)}
 body:has(#capsuleOnly:checked) .dest-cell{opacity:.4;filter:grayscale(1)}
 body:has(#capsuleOnly:checked) input.dest-cell{pointer-events:none;background:#eee}
@@ -97,11 +91,8 @@ body:has(#capsuleOnly:checked) input.dest-cell{pointer-events:none;background:#e
 .probe-graphic-row .probe-graphic{flex:1}
 .check-connections-btn{flex:0 0 auto}
 body:has(#capsuleOnly:checked) .target-node,body:has(#capsuleOnly:checked) .target-exchange{opacity:.35;filter:grayscale(1)}
-.capsule-destination{margin-top:8px;padding-top:7px;border-top:1px solid var(--line)}
-.capsule-destination-label{margin:0 0 5px;color:var(--muted);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em}
-.capsule-destination-buttons{display:flex;flex-wrap:wrap;gap:8px}
 #destConfigMessage{display:block;margin-top:8px}
-@media(max-width:680px){.quad-grid{grid-template-columns:1fr}.quad-grid .dual-head:first-child{display:none}.probe-graphic-row{flex-direction:column;align-items:stretch}.passkey-row{flex-wrap:wrap}.passkey-row label{flex:1 1 100%}}
+@media(max-width:680px){.probe-graphic-row{flex-direction:column;align-items:stretch}.passkey-row{flex-wrap:wrap}.passkey-row label{flex:1 1 100%}}
 
 /* Futuristic stainless-steel skin for the connect modal */
 .inspection-dialog{
@@ -180,3 +171,49 @@ body:has(#capsuleOnly:checked) .target-node,body:has(#capsuleOnly:checked) .targ
 .inspection-dialog .runner-node .runner-mark{background:linear-gradient(160deg,#4b545c,#1f252b);border-color:#6b747c}
 .inspection-dialog .runner-node .runner-mark i{background:#8fb8ff}
 .inspection-dialog .probe-stages li{background:rgba(255,255,255,.6)}
+
+/* Calm SaaS console skin for the connect modal, overriding the metallic .inspection-dialog skin above */
+.saas-connect{--saas-teal:#0f766e;--saas-teal-light:#14b8a6;--saas-bg:#ffffff;--saas-surface:#f8fafc;--saas-border:#e2e8f0;--saas-ink:#0f172a;--saas-muted:#64748b;width:min(880px,calc(100% - 28px))!important}
+.saas-connect{background:var(--saas-bg)!important;border:1px solid var(--saas-border)!important;box-shadow:0 24px 70px rgba(15,23,42,.18),inset 0 1px 0 rgba(255,255,255,.9)!important}
+.saas-connect .modal-rule{background:var(--saas-teal)!important;height:4px}
+.saas-connect .modal-body{padding:24px 32px;color:var(--saas-ink)}
+.saas-connect fieldset,.saas-connect input,.saas-connect select{background:var(--saas-bg)!important;border:1px solid var(--saas-border)!important;box-shadow:none!important;color:var(--saas-ink)}
+.saas-connect input{min-height:44px;border-radius:8px!important;padding:9px 12px;font-size:15px}
+.saas-connect button{background:var(--saas-bg)!important;color:var(--saas-ink)!important;border:1px solid var(--saas-border)!important;box-shadow:none!important;min-height:40px;border-radius:8px;font-weight:600}
+.saas-connect button:hover{background:var(--saas-surface)!important}
+.saas-connect button#saveSourceConnections,.saas-connect button[type="submit"]{background:var(--saas-teal)!important;color:#fff!important;border-color:var(--saas-teal)!important}
+.saas-connect button#saveSourceConnections:hover{background:var(--saas-teal-light)!important}
+.saas-connect .probe-graphic{background:var(--saas-surface)!important;border-color:var(--saas-border)!important}
+.saas-connect .runner-node .runner-mark{background:linear-gradient(160deg,#334155,#0f172a)!important;border-color:var(--saas-teal)!important}
+.saas-connect .probe-stages li{background:var(--saas-surface)!important;border-color:var(--saas-border)!important}
+.saas-eyebrow{margin:0 0 4px;color:var(--saas-teal);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.saas-connect h2{margin:0 0 6px;font-size:24px}
+.saas-lead{margin:0 0 16px;color:var(--saas-muted);font-size:15px}
+.saas-section{margin:0 0 24px;padding:16px 0;border-top:1px solid var(--saas-border)}
+.saas-section:first-child{border-top:0;padding-top:0}
+.saas-section-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.saas-step{display:grid;place-items:center;width:22px;height:22px;flex:0 0 auto;color:#fff;background:var(--saas-teal);border-radius:50%;font-size:11px;font-weight:800}
+.saas-section-head h3{margin:0;font-size:15px;color:var(--saas-ink)}
+.saas-section-note{margin:0 0 12px;color:var(--saas-muted);font-size:13px}
+.saas-mode-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.saas-mode-label{color:var(--saas-muted);font-size:12px;font-weight:650}
+.saas-mode-toggle{display:inline-flex;gap:2px;padding:3px;background:var(--saas-surface);border:1px solid var(--saas-border);border-radius:9px}
+.saas-mode-toggle label{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:7px;font-size:13px;font-weight:650;color:var(--saas-muted);cursor:pointer}
+.saas-mode-toggle input{position:absolute;opacity:0;width:0;height:0}
+.saas-mode-toggle input:checked+span{color:var(--saas-ink)}
+.saas-mode-toggle label:has(input:checked){background:#fff;box-shadow:0 1px 3px rgba(15,23,42,.12)}
+.saas-mask-control{display:inline-flex;margin-bottom:16px}
+.saas-columns{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start}
+.saas-column-head{display:flex;align-items:baseline;gap:8px;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--saas-border)}
+.saas-column-head strong{font-size:13px;color:var(--saas-ink)}
+.saas-column-head small{color:var(--saas-muted);font-size:11px}
+.saas-field{display:block;margin-bottom:12px}
+.saas-field span{display:block;margin-bottom:4px;color:var(--saas-muted);font-size:12px;font-weight:650}
+.saas-field input{width:100%}
+.saas-field-na .grid-na{min-height:44px;display:flex;align-items:center;padding:9px 12px;color:var(--saas-muted);background:var(--saas-surface);border:1px dashed var(--saas-border);border-radius:8px;font-size:13px}
+.saas-provider-row{display:flex;gap:12px;margin-bottom:8px}
+.saas-provider-btn{flex:1;min-height:44px}
+.saas-advanced{margin-top:12px}
+.saas-advanced summary{color:var(--saas-muted);font-size:13px;font-weight:650;cursor:pointer}
+.saas-advanced[open] summary{margin-bottom:8px}
+@media(max-width:680px){.saas-columns{grid-template-columns:1fr}}

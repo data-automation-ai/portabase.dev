@@ -735,6 +735,21 @@ $('capsuleOnly').addEventListener('change', event => {
   syncTargetNode();
 });
 syncTargetNode();
+for (const id of ['modeBackupOnly', 'modeBackupRestore']) {
+  $(id).addEventListener('change', () => {
+    $('capsuleOnly').checked = $('modeBackupOnly').checked;
+    $('capsuleOnly').dispatchEvent(new Event('change'));
+  });
+}
+$('togglePassphraseVisibility').addEventListener('click', () => {
+  const field = $('capsulePassphrase');
+  const btn = $('togglePassphraseVisibility');
+  const shown = field.type === 'text';
+  field.type = shown ? 'password' : 'text';
+  btn.setAttribute('aria-pressed', String(!shown));
+  btn.setAttribute('aria-label', shown ? 'Show passkey' : 'Hide passkey');
+  btn.title = shown ? 'Show passkey' : 'Hide passkey';
+});
 $('refresh').addEventListener('click', () => inspect()); $('keyword').addEventListener('input', renderFilters); $('schema').addEventListener('change', renderFilters); $('empty').addEventListener('change', updateSummary); $('incremental').addEventListener('change', () => { updateSummary(); void persistSelectionDefaults(); });
 for (const button of document.querySelectorAll('.sort-header')) button.addEventListener('click', () => {
   const kind = button.dataset.sortKind, key = button.dataset.sortKey, current = sorting[kind];

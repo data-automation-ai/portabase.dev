@@ -461,42 +461,69 @@
       <div class="modal-actions"><a id="help-detail-link" class="button-link" target="_blank" rel="noopener noreferrer">Open official Supabase guide</a><button id="closeHelpDetail" class="quiet" type="button">Close</button></div>
     </div>
   </dialog>
-  <dialog id="inspectionProgress" class="inspection-dialog connect-modal" aria-labelledby="inspection-title">
+  <dialog id="inspectionProgress" class="inspection-dialog connect-modal saas-connect" aria-labelledby="inspection-title">
     <div class="modal-rule"></div>
     <div class="modal-body">
-      <h2 id="inspection-title">Connect</h2>
+      <p class="saas-eyebrow">Private runner setup</p>
+      <h2 id="inspection-title">Set up your backup</h2>
+      <p class="saas-lead">Connect your Supabase project and choose where backup capsules are stored. Everything you enter stays inside this runner.</p>
       <p class="field-help-hint">Double-click a field for help.</p>
       <form id="sourceConnectionsForm" autocomplete="off">
-        <div class="passkey-row">
-          <label><span>Passkey</span><input id="capsulePassphrase" data-help="capsule-passphrase" type="password" autocomplete="new-password" minlength="16" placeholder="16+ chars, letter, number, symbol"></label>
-          <button id="copyPassphrase" type="button" class="secondary passkey-copy-btn" aria-label="Copy passkey to clipboard" title="Copy passkey">⧉</button>
-          <button id="generatePassphrase" type="button" class="secondary">Generate passkey</button>
-        </div>
-        <div class="grid-controls">
-          <label class="mask-control"><input id="maskValues" type="checkbox" checked><span>Mask values</span></label>
-          <label class="mask-control"><input id="capsuleOnly" type="checkbox"><span>Create capsule only (no destination)</span></label>
-        </div>
-        <p class="fine-print">Saved credentials are never sent back to this screen for display. Fields below are blank until you type a new or replacement value.</p>
-        <div class="quad-grid">
-          <div class="dual-head"></div>
-          <div class="dual-head">Supabase URL</div>
-          <div class="dual-head">Database password</div>
-          <div class="dual-head">API key</div>
-          <div class="dual-head">Access token</div>
+        <section class="saas-section">
+          <div class="saas-section-head"><span class="saas-step">1</span><h3>Connections</h3></div>
+          <div class="saas-mode-row">
+            <span class="saas-mode-label">Mode</span>
+            <div class="saas-mode-toggle" role="radiogroup" aria-label="Backup mode">
+              <label><input type="radio" name="backupMode" id="modeBackupOnly" value="backup-only"><span>Back up only</span></label>
+              <label><input type="radio" name="backupMode" id="modeBackupRestore" value="backup-restore" checked><span>Back up and restore</span></label>
+            </div>
+            <input id="capsuleOnly" type="checkbox" hidden aria-hidden="true" tabindex="-1">
+          </div>
+          <p id="capsuleOnlyNote" class="fine-print" hidden>Back up only: the capsule goes to your configured storage below. Restore manually with the CLI and this passkey.</p>
+          <p class="fine-print">Saved credentials are never sent back to this screen for display. Fields below are blank until you type a new or replacement value.</p>
+          <label class="mask-control saas-mask-control"><input id="maskValues" type="checkbox" checked><span>Mask values</span></label>
+          <div class="saas-columns">
+            <div class="saas-column">
+              <div class="saas-column-head"><strong>Source</strong><small>Read from</small></div>
+              <label class="saas-field"><span>Supabase URL</span><input id="sourceProjectRef" data-help="source-project-ref" type="text" autocomplete="off" placeholder="https://…supabase.co"></label>
+              <label class="saas-field"><span>Database password</span><input id="sourceDatabasePassword" data-help="source-database-password" type="password" autocomplete="new-password" placeholder="Password"></label>
+              <label class="saas-field"><span>API key</span><input id="sourceServiceRoleKey" data-help="source-key" type="password" autocomplete="new-password" placeholder="sb_secret_…"></label>
+              <label class="saas-field"><span>Access token</span><input id="sourceAccessToken" data-help="source-token" type="password" autocomplete="new-password" placeholder="sbp_…"></label>
+            </div>
+            <div class="saas-column dest-cell" id="destinationColumn">
+              <div class="saas-column-head"><strong>Destination</strong><small>Contingency Supabase project</small></div>
+              <label class="saas-field"><span>Supabase URL</span><input id="targetRef" class="dest-cell" data-help="target-ref" type="text" autocomplete="off" placeholder="https://…supabase.co"></label>
+              <label class="saas-field"><span>Database password</span><input id="targetDatabasePassword" class="dest-cell" data-help="target-database-password" type="password" autocomplete="new-password" placeholder="Password"></label>
+              <label class="saas-field"><span>API key</span><input id="targetServiceRoleKey" class="dest-cell" data-help="target-key" type="password" autocomplete="new-password" placeholder="sb_secret_…"></label>
+              <div class="saas-field saas-field-na dest-cell" aria-hidden="true"><span>Access token</span><div class="grid-na">Not required</div></div>
+            </div>
+          </div>
+        </section>
 
-          <div class="dual-row-label">Source</div>
-          <input id="sourceProjectRef" data-help="source-project-ref" type="text" autocomplete="off" placeholder="https://…supabase.co">
-          <input id="sourceDatabasePassword" data-help="source-database-password" type="password" autocomplete="new-password" placeholder="Password">
-          <input id="sourceServiceRoleKey" data-help="source-key" type="password" autocomplete="new-password" placeholder="sb_secret_…">
-          <input id="sourceAccessToken" data-help="source-token" type="password" autocomplete="new-password" placeholder="sbp_…">
+        <section class="saas-section">
+          <div class="saas-section-head"><span class="saas-step">2</span><h3>Capsule security</h3></div>
+          <p class="saas-section-note">This passkey encrypts the capsule. PortaBase.dev never sees it. If it is lost, the capsule cannot be recovered.</p>
+          <div class="passkey-row">
+            <label><span>Passkey</span><input id="capsulePassphrase" data-help="capsule-passphrase" type="password" autocomplete="new-password" minlength="16" placeholder="16+ chars, letter, number, symbol"></label>
+            <button id="togglePassphraseVisibility" type="button" class="secondary passkey-copy-btn" aria-label="Show passkey" aria-pressed="false" title="Show passkey">👁</button>
+            <button id="copyPassphrase" type="button" class="secondary passkey-copy-btn" aria-label="Copy passkey to clipboard" title="Copy passkey">⧉</button>
+            <button id="generatePassphrase" type="button" class="secondary">Generate passkey</button>
+          </div>
+        </section>
 
-          <div class="dual-row-label dest-cell">Destination</div>
-          <input id="targetRef" class="dest-cell" data-help="target-ref" type="text" autocomplete="off" placeholder="https://…supabase.co">
-          <input id="targetDatabasePassword" class="dest-cell" data-help="target-database-password" type="password" autocomplete="new-password" placeholder="Password">
-          <input id="targetServiceRoleKey" class="dest-cell" data-help="target-key" type="password" autocomplete="new-password" placeholder="sb_secret_…">
-          <div class="grid-na dest-cell" aria-hidden="true">—</div>
-        </div>
-        <p id="capsuleOnlyNote" class="fine-print" hidden>No destination: the capsule goes only to your configured storage. Restore manually with the CLI and this passkey.</p>
+        <section class="saas-section" id="capsuleDestination">
+          <div class="saas-section-head"><span class="saas-step">3</span><h3>Backup storage</h3></div>
+          <p class="saas-section-note">Choose where backup capsules are stored.</p>
+          <div class="saas-provider-row">
+            <button type="button" class="secondary dest-config-btn saas-provider-btn" data-dest="S3">S3</button>
+            <button type="button" class="secondary dest-config-btn saas-provider-btn" data-dest="Dropbox">Dropbox</button>
+          </div>
+          <span id="destConfigMessage" role="status" class="fine-print"></span>
+          <details class="saas-advanced">
+            <summary>Advanced connectivity</summary>
+            <button type="button" class="secondary dest-config-btn" data-dest="Tailscale Tunnel">Configure Tailscale Tunnel</button>
+          </details>
+        </section>
       </form>
 
       <p id="inspectionStatus" class="inspection-status" aria-live="polite" hidden></p>
@@ -514,18 +541,9 @@
         </div>
         <div id="targetNode" class="probe-node supabase-node target-node" hidden><i></i><strong>Target Supabase</strong><small>Restore to — not yet validated</small></div>
       </div>
-      <button id="saveSourceConnections" form="sourceConnectionsForm" type="submit" class="check-connections-btn">Check Connections</button>
+      <button id="saveSourceConnections" form="sourceConnectionsForm" type="submit" class="check-connections-btn">Check connections</button>
       </div>
       <span id="formConnectionMessage" role="status"></span>
-      <div id="capsuleDestination" class="capsule-destination">
-        <p class="capsule-destination-label">Capsule destination</p>
-        <div class="capsule-destination-buttons">
-          <button type="button" class="secondary dest-config-btn" data-dest="S3">Configure S3</button>
-          <button type="button" class="secondary dest-config-btn" data-dest="Dropbox">Configure Dropbox</button>
-          <button type="button" class="secondary dest-config-btn" data-dest="Tailscale Tunnel">Configure Tailscale Tunnel</button>
-        </div>
-        <span id="destConfigMessage" role="status" class="fine-print"></span>
-      </div>
       <ol class="probe-stages four-step" aria-label="Connection progress">
         <li id="probeUrl"><span>1</span><div><strong>URL</strong><small>Waiting</small></div></li>
         <li id="probeAccess"><span>2</span><div><strong>Project</strong><small>Waiting</small></div></li>
