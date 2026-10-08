@@ -4,11 +4,11 @@ import { DualBarChart, EmptyChart, LineChart, StackedBarChart } from './charts.j
 import { BarGauge } from './gauges.jsx';
 import { formatDuration } from './data/store.js';
 import {
-  ADDON_TRANSFERS_PER_24H,
-  BASE_TRANSFERS_PER_24H,
+  CLOUD_DEFAULT_PLAN_ID,
   TRANSFER_WINDOW_HOURS,
   extraTransfersAddonPriceLabel,
   getCloudPlan,
+  planTransfersPer24h,
 } from '../lib/product.js';
 import { planAllowsOptionalSms } from '../lib/sms-safe.js';
 import { buildDashboardModel, jobsFromConsoleState } from '../lib/dashboard-view.js';
@@ -17,6 +17,7 @@ import { formatGiB, formatHumanSize } from '../lib/human-size.js';
 import { formatOperatorTime } from '../lib/operator-time.js';
 import { JobSetupWizard, TableSizer } from './table-sizer.jsx';
 import { ConnectSupabaseFlow } from './connect-supabase.jsx';
+import { NotificationPreferences } from './notification-preferences.jsx';
 
 function Badge({ tone, children }) {
   const t = tone === 'ok' || tone === 'COMPLETE' || tone === 'green' || tone === 'MATCH'
@@ -200,14 +201,15 @@ export function CustomerDashboardPage({
       {tab === 'charts' && <ChartsSection model={model} plan={plan} />}
       {tab === 'sizer' && (
         <div className="pb-stack">
-          <ConnectSupabaseFlow demo={model.demo} plan={plan} toast={toast} />
+          <ConnectSupabaseFlow demo={model.demo} plan={plan} navigate={navigate} />
           <details className="pb-card">
             <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
               Advanced: sizer from the free-engine doctor report
             </summary>
             <p className="pb-muted">
-              Prefer a live Supabase measurement above. This view uses whatever size inventory
-              already exists in this workspace (doctor / capture report).
+              Measure and choose live backup contents in the private runner workspace.
+              This view displays any size inventory already present in this workspace;
+              changing it does not update a private runner configuration.
             </p>
             <TableSizer
               inventory={model.inventory}
@@ -278,6 +280,8 @@ function AccountStrip({ model, plan, me, state, startTrial, startAddon, busy, na
   const strip = model.billingStrip;
   const square = strip.square;
   const next = strip.nextPlan;
+  const transfers = planTransfersPer24h(plan.id, { extraTransfersAddon: sub.extraTransfersAddon });
+  const checkoutPlan = plan.id === 'cloud-free' ? getCloudPlan(CLOUD_DEFAULT_PLAN_ID) : plan;
   return (
     <div className="pb-card pb-account-strip">
       <div className="pb-grid pb-grid-4 pb-account-grid">
@@ -293,8 +297,8 @@ function AccountStrip({ model, plan, me, state, startTrial, startAddon, busy, na
           <div className="pb-kpi-label">Allowance</div>
           <div className="pb-kpi-value pb-kpi-tight">{strip.allowanceLabel}</div>
           <p className="pb-muted pb-strip-note">
-            {sub.extraTransfersAddon ? ADDON_TRANSFERS_PER_24H : BASE_TRANSFERS_PER_24H} transfer / {TRANSFER_WINDOW_HOURS}h
-            {sub.extraTransfersAddon ? '' : ` · extra ${extraTransfersAddonPriceLabel(plan.id)}`}
+            {transfers} {plan.id === 'cloud-free' ? 'manual backup' : 'transfers'} / {TRANSFER_WINDOW_HOURS}h
+            {plan.id === 'cloud-free' ? ' · no scheduled service' : sub.extraTransfersAddon ? '' : ` · extra ${extraTransfersAddonPriceLabel(plan.id)}`}
           </p>
         </div>
         <div>
@@ -328,9 +332,9 @@ function AccountStrip({ model, plan, me, state, startTrial, startAddon, busy, na
             type="button"
             className="pb-btn pb-btn-primary"
             disabled={busy || strip.checkoutDisabled}
-            onClick={() => startTrial?.(plan.id)}
+            onClick={() => startTrial?.(checkoutPlan.id)}
           >
-            {busy ? 'Opening Square…' : `Start trial · $${plan.priceMonthlyUsd}/mo`}
+            {busy ? 'Opening Square…' : `Start trial · $${checkoutPlan.priceMonthlyUsd}/mo`}
           </button>
         )}
         {next && me?.access?.hasAccess && (
@@ -343,7 +347,7 @@ function AccountStrip({ model, plan, me, state, startTrial, startAddon, busy, na
             Upgrade to {next.shortLabel}
           </button>
         )}
-        {!sub.extraTransfersAddon && (
+        {plan.id !== 'cloud-free' && !sub.extraTransfersAddon && (
           <button type="button" className="pb-btn" disabled={busy || strip.checkoutDisabled} onClick={() => startAddon?.()}>
             Extra transfers
           </button>
@@ -537,8 +541,8 @@ function SizesSection({ model, onOpenJob }) {
       {model.sizes.map((row) => (
         <button type="button" className="pb-card pb-size-card" key={row.jobId} onClick={() => onOpenJob(row.jobId)}>
           <div className="pb-card-head">
-            <h3>Capsule {row.jobId}</h3>
-            <span>{row.destinationKind}</span>
+            <h3>Capsule {row.capsuleId || row.jobId}</h3>
+            <span>{row.destinationKind} · customer-owned vault</span>
           </div>
           <div className="pb-size-hero">
             <div className="pb-kpi-value">{formatGiB(row.totalBytes)}</div>
@@ -609,7 +613,9 @@ function BackupLogSection({ model, onOpenJob }) {
 
 function UtilitiesSection({ model, state, setState, toast, smsAllowed, plan }) {
   const u = model.utilities;
+  const demo = model.demo === true && state.demoMode === true;
   const toggleSms = (key, value) => {
+    if (!demo) return;
     setState?.((s) => {
       s.sms = { ...(s.sms || {}), [key]: value, optIn: key === 'optIn' ? value : (s.sms?.optIn || value) };
       return s;
@@ -617,12 +623,13 @@ function UtilitiesSection({ model, state, setState, toast, smsAllowed, plan }) {
     toast?.('SMS preference saved locally — status only, never keys', 'ok');
   };
   const toggleSchedule = (id) => {
+    if (!demo) return;
     setState?.((s) => {
       const row = (s.schedules || []).find((x) => x.id === id);
       if (row) row.enabled = !row.enabled;
       return s;
     });
-    toast?.('Schedule updated', 'ok');
+    toast?.('Sample schedule changed locally. No runner schedule was saved.', 'ok');
   };
 
   return (
@@ -700,9 +707,10 @@ function UtilitiesSection({ model, state, setState, toast, smsAllowed, plan }) {
       <section className="pb-util-group">
         <h2>Schedules</h2>
         <div className="pb-card">
-          <div className="pb-card-head"><h3>Cadence</h3><span>1 transfer / {TRANSFER_WINDOW_HOURS}h included</span></div>
+          <div className="pb-card-head"><h3>Cadence</h3><span>{demo ? 'SAMPLE' : 'Configuration unavailable'}</span></div>
+          {!demo && <p role="note">Schedule editing is unavailable until runner scheduling is connected. Existing times are reported values; this dashboard does not save a schedule or confirm a future wake.</p>}
           {!u.schedules.length ? (
-            <p className="pb-muted">No schedules yet. Cadence is enforced on the runner; Cloud records expected hours only.</p>
+            <p className="pb-muted">No schedule has been reported.</p>
           ) : (
             <div className="pb-table-wrap" style={{ border: 0 }}>
               <table className="pb-table" style={{ minWidth: 0 }}>
@@ -715,8 +723,8 @@ function UtilitiesSection({ model, state, setState, toast, smsAllowed, plan }) {
                       <td><TimeCell iso={sch.lastRunAt} /></td>
                       <td><TimeCell iso={sch.nextRunAt} /></td>
                       <td>
-                        <button type="button" className="pb-btn pb-btn-sm" onClick={() => toggleSchedule(sch.id)}>
-                          {sch.enabled ? 'On' : 'Off'}
+                        <button type="button" className="pb-btn pb-btn-sm" disabled={!demo} onClick={() => toggleSchedule(sch.id)}>
+                          {demo ? (sch.enabled ? 'Sample on' : 'Sample off') : 'Unavailable'}
                         </button>
                       </td>
                     </tr>
@@ -729,8 +737,8 @@ function UtilitiesSection({ model, state, setState, toast, smsAllowed, plan }) {
       </section>
 
       <section className="pb-util-group">
-        <h2>SMS</h2>
-        <div className="pb-card">
+        <h2>{demo ? 'SMS' : 'Email and SMS'}</h2>
+        {!demo ? <NotificationPreferences embedded /> : <div className="pb-card">
           <div className="pb-card-head"><h3>Status alerts</h3><span>$17 optional</span></div>
           {!smsAllowed ? (
             <p className="pb-muted">SMS is optional on Daily Escape ($17) — not on Cloud Free or $7.</p>
@@ -751,7 +759,7 @@ function UtilitiesSection({ model, state, setState, toast, smsAllowed, plan }) {
               </label>
             </>
           )}
-        </div>
+        </div>}
       </section>
     </div>
   );
@@ -763,6 +771,7 @@ function JobDrawer({ job, demo, proof, onClose }) {
   const fields = [
     ['Type', job.type],
     ['Status', job.status],
+    ['Capsule status', job.capsuleStatus || '—'],
     ['Phase', job.phase || '—'],
     ['Started', started.label],
     ['Finished', finished.label],
@@ -773,7 +782,10 @@ function JobDrawer({ job, demo, proof, onClose }) {
     ['Region', job.region || '—'],
     ['Error', job.errorCode || '—'],
     ['Job id', job.jobId || job.id],
+    ['Capsule id', job.capsuleId || '—'],
     ['Capsule hash', job.capsuleHash ? `${job.capsuleHash.slice(0, 12)}…` : '—'],
+    ['Manifest hash', job.manifestHash ? `${job.manifestHash.slice(0, 12)}…` : '—'],
+    ['Vault delivery', job.destinationVerified ? 'Verified by runner' : 'Not reported'],
   ];
   return (
     <div className="pb-drawer-backdrop" onClick={onClose} role="presentation">

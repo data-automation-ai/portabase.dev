@@ -1,10 +1,13 @@
 import { publicAuthConfigBoth, jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
-import { deriveAccess, getSubscriptionByUserId } from '../shared/subscription-store.mjs';
-import { BASE_TRANSFERS_PER_24H, extraTransfersAddonPublic, transferWindow } from '../shared/product.mjs';
+import { deriveAccess, getSubscriptionForUser } from '../shared/subscription-store.mjs';
+import { extraTransfersAddonPublic, transferWindow } from '../shared/product.mjs';
+import { runnerAdmission } from '../shared/runner-admission.mjs';
 import { inspectSquareCheckoutReady } from '../shared/square-ready.mjs';
 import { publicSquareStatus } from '../../src/lib/square-public.js';
 
-export async function handler(event) {
+export function createMeHandler({ authenticate = verifyCloudUser, subscription = getSubscriptionForUser,
+  authConfig = publicAuthConfigBoth, squareStatus = () => publicSquareStatus(inspectSquareCheckoutReady()), clock = Date.now } = {}) {
+return async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return jsonResponse(204, {}, {
       'Access-Control-Allow-Origin': '*',
@@ -15,12 +18,14 @@ export async function handler(event) {
   if (event.httpMethod !== 'GET') return jsonResponse(405, { error: 'method_not_allowed' });
 
   try {
-    const user = await verifyCloudUser(event);
-    // Namespace subscription by version so the same email on two backends does not collide incorrectly
-    const storeKey = `${user.cloudVersion}:${user.id}`;
-    const record = (await getSubscriptionByUserId(storeKey)) || (await getSubscriptionByUserId(user.id));
-    const access = deriveAccess(record);
-    const product = await publicAuthConfigBoth();
+    const user = await authenticate(event);
+    const record = await subscription(user);
+    const now = clock();
+    const access = deriveAccess(record, now);
+    const admission = runnerAdmission(record, now);
+    // Free includes one manual backup per 24h; it has no scheduled service.
+    const transfers = admission.paid ? transferWindow({ planId: admission.plan.id, extraTransfersAddon: admission.extraTransfersAddon, now }).allowance : 1;
+    const product = await authConfig();
     return jsonResponse(200, {
       ok: true,
       user: {
@@ -32,24 +37,33 @@ export async function handler(event) {
         authProvider: user.authProvider,
         cloudVersion: user.cloudVersion,
       },
-      subscription: record
-        ? {
-          status: record.status,
-          plan: record.plan || null,
-          trialEndsAt: record.trialEndsAt,
-          currentPeriodEnd: record.currentPeriodEnd,
-          priceMonthlyCents: record.priceMonthlyCents || 1700,
-          squareSubscriptionId: record.squareSubscriptionId || null,
-          startedAt: record.startedAt || null,
-          cloudVersion: record.cloudVersion || user.cloudVersion,
-          storageCapGb: record.storageCapGb || null,
-          extraTransfersAddon: Boolean(record.extraTransfersAddon),
-          transfersPer24h: transferWindow({ extraTransfersAddon: Boolean(record.extraTransfersAddon) }).allowance,
-          cyclesPerDay: record.cyclesPerDay || BASE_TRANSFERS_PER_24H,
-        }
-        : null,
+      subscription: {
+          status: record?.status || 'none',
+          plan: admission.plan.id,
+          planId: admission.plan.id,
+          billingPlan: record?.plan || null,
+          hasBillingRecord: Boolean(record),
+          trialEndsAt: record?.trialEndsAt || null,
+          currentPeriodEnd: record?.currentPeriodEnd || null,
+          cancellationEffectiveAt: typeof record?.cancellationEffectiveAt === 'string'
+            && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(record.cancellationEffectiveAt)
+            && Number.isFinite(Date.parse(record.cancellationEffectiveAt))
+            && new Date(record.cancellationEffectiveAt).toISOString() === record.cancellationEffectiveAt
+            ? record.cancellationEffectiveAt : null,
+          priceMonthlyCents: record?.priceMonthlyCents ?? admission.plan.priceMonthlyCents,
+          squareSubscriptionId: record?.squareSubscriptionId || null,
+          startedAt: record?.startedAt || null,
+          cloudVersion: record?.cloudVersion || user.cloudVersion,
+          storageCapGb: admission.plan.storageCapGb,
+          storageCapBytes: admission.plan.storageCapBytes,
+          extraTransfersAddon: admission.extraTransfersAddon,
+          transfersPer24h: transfers,
+          scheduled: admission.paid && admission.plan.scheduled,
+          scheduledTransfersPer24h: admission.paid ? transfers : 0,
+          cyclesPerDay: admission.paid ? transfers : 0,
+        },
       access,
-      square: publicSquareStatus(inspectSquareCheckoutReady()),
+      square: squareStatus(),
       product: {
         provider: 'dual',
         cloudVersion: user.cloudVersion,
@@ -61,7 +75,7 @@ export async function handler(event) {
           supabase: { available: product.versions.supabase.available },
           aws: { available: product.versions.aws.available },
         },
-        extraTransfersAddon: extraTransfersAddonPublic(),
+        extraTransfersAddon: extraTransfersAddonPublic(admission.plan.id),
       },
     });
   } catch (error) {
@@ -72,4 +86,6 @@ export async function handler(event) {
     console.error(`cloud_me_error=${code.replace(/[^a-zA-Z0-9_-]/g, '_')}`);
     return jsonResponse(503, { error: 'unavailable' });
   }
+};
 }
+export const handler = createMeHandler();

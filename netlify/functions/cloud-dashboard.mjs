@@ -4,17 +4,21 @@
  */
 import { getStore } from '@netlify/blobs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
-import { deriveAccess, getSubscriptionByUserId } from '../shared/subscription-store.mjs';
+import { deriveAccess, getSubscriptionForUser } from '../shared/subscription-store.mjs';
 import { findForbiddenField } from '../../cloud/control-plane/forbidden.mjs';
 import { buildDashboardModel, sanitizeJobTelemetry } from '../../src/lib/dashboard-view.js';
 import { inspectSquareCheckoutReady } from '../shared/square-ready.mjs';
 import { publicSquareStatus } from '../../src/lib/square-public.js';
+import { runnerAdmission } from '../shared/runner-admission.mjs';
+import { publicDashboardJob } from '../shared/public-records.mjs';
+import { normalizeJobQueue } from '../shared/job-queue-envelope.mjs';
 
 function jobsStore() {
   return getStore({ name: 'portabase-cloud-jobs', consistency: 'strong' });
 }
 
-export async function handler(event) {
+export function createDashboardHandler({ authenticate = verifyCloudUser, jobsDatabase = jobsStore, subscription = getSubscriptionForUser, squareStatus = () => publicSquareStatus(inspectSquareCheckoutReady()) } = {}) {
+return async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return jsonResponse(204, {}, {
       'Access-Control-Allow-Origin': '*',
@@ -26,7 +30,7 @@ export async function handler(event) {
 
   let user;
   try {
-    user = await verifyCloudUser(event);
+    user = await authenticate(event);
   } catch {
     return jsonResponse(401, { error: 'unauthorized' });
   }
@@ -34,31 +38,35 @@ export async function handler(event) {
   const storeKey = `${user.cloudVersion}:${user.id}`;
   let jobs = [];
   try {
-    jobs = (await jobsStore().get(`jobs:${storeKey}`, { type: 'json' })) || [];
+    jobs = normalizeJobQueue(await jobsDatabase().get(`jobs:${storeKey}`, { type: 'json' })).jobs;
   } catch {
-    jobs = [];
+    return jsonResponse(503, { error: 'dashboard_jobs_unavailable' });
   }
-  if (!Array.isArray(jobs)) jobs = [];
+  if (!Array.isArray(jobs)) return jsonResponse(503, { error: 'dashboard_jobs_unavailable' });
 
   const safeJobs = [];
   for (const job of jobs) {
     if (findForbiddenField(job)) continue;
-    safeJobs.push(sanitizeJobTelemetry(job));
+    const projected = publicDashboardJob(job);
+    if (projected) safeJobs.push(sanitizeJobTelemetry(projected));
   }
 
-  const record = (await getSubscriptionByUserId(storeKey)) || (await getSubscriptionByUserId(user.id)) || null;
+  let record;
+  try { record = await subscription(user); }
+  catch { return jsonResponse(503, { error: 'dashboard_subscription_unavailable' }); }
   const access = deriveAccess(record);
-  const square = publicSquareStatus(inspectSquareCheckoutReady());
+  const admission = runnerAdmission(record);
+  const square = squareStatus();
   const model = buildDashboardModel({
     jobs: safeJobs,
     billing: record
       ? {
-        plan: record.plan,
-        planId: record.plan,
-        extraTransfersAddon: Boolean(record.extraTransfersAddon),
+        plan: admission.plan.id,
+        planId: admission.plan.id,
+        extraTransfersAddon: admission.extraTransfersAddon,
         status: record.status,
       }
-      : {},
+      : { plan: admission.plan.id, planId: admission.plan.id, extraTransfersAddon: false },
     proof: null,
     demoMode: false,
     live: safeJobs.length > 0,
@@ -81,10 +89,12 @@ export async function handler(event) {
       ? {
         status: record.status,
         plan: record.plan || null,
-        extraTransfersAddon: Boolean(record.extraTransfersAddon),
+        extraTransfersAddon: admission.extraTransfersAddon,
         squareSubscriptionId: record.squareSubscriptionId || null,
       }
       : null,
     privacy: 'metadata-and-hashes-only',
   });
 }
+}
+export const handler = createDashboardHandler();

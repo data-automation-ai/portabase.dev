@@ -1,3 +1,4 @@
+import { cloudTelemetryPayload } from './cloud-telemetry-payload.mjs';
 /**
  * Opt-in Portabase Cloud / webhook telemetry.
  * Never include secrets, passphrases, capsule bytes, or connection strings.
@@ -21,7 +22,9 @@ const EVENT_TYPES = new Set([
   'backup.completed',
   'backup.failed',
   'verify.failed',
+  'verify.completed',
   'restore.completed',
+  'restore.failed',
   'schedule.missed',
   'job.started',
   'job.phase',
@@ -106,7 +109,9 @@ export async function emitTelemetry(config, event = {}, options = {}) {
   const webhookEnv = config.alerts?.webhookEnv;
   const webhookUrl = webhookEnv ? process.env[webhookEnv] : null;
   const targets = [];
-  if (cloud) targets.push({ url: `${cloud.endpoint}/api/cloud/telemetry`, token: cloud.token });
+  const serverCompletion = process.env.PORTABASE_JOB_COMPLETION_REPORTER === 'server'
+    && ['backup.completed', 'backup.failed', 'verify.completed', 'verify.failed', 'restore.completed', 'restore.failed'].includes(built.eventType);
+  if (cloud && !serverCompletion) targets.push({ url: `${cloud.endpoint}/api/cloud/telemetry`, token: cloud.token, cloud: true });
   if (webhookUrl) targets.push({ url: webhookUrl, token: null });
   if (!targets.length) return { sent: false, reason: 'telemetry_disabled' };
 
@@ -118,7 +123,14 @@ export async function emitTelemetry(config, event = {}, options = {}) {
       const response = await fetch(target.url, {
         method: 'POST',
         headers,
-        body: JSON.stringify(built),
+        body: JSON.stringify(target.cloud ? {
+          schemaVersion: built.schemaVersion,
+          eventType: built.eventType,
+          occurredAt: built.occurredAt,
+          projectRef: built.projectRef,
+          portabaseVersion: /^\d+\.\d+\.\d+(?:-[a-z0-9.-]{1,20})?$/.test(built.portabaseVersion) ? built.portabaseVersion : 'unknown',
+          payload: cloudTelemetryPayload(built.payload, Date.parse(built.occurredAt)),
+        } : built),
         signal: AbortSignal.timeout(options.timeoutMs || 10000),
       });
       results.push({ url: target.url, ok: response.ok, status: response.status });

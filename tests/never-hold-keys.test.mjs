@@ -6,19 +6,14 @@ import { assertRunnerSealUrl } from '../src/lib/runner-seal.js';
 
 const blob = JSON.stringify(KEYS_COPY);
 
-test('never-hold-keys copy is honest and says paid Cloud is blind', () => {
-  assert.match(KEYS_COPY.headline, /paid service is blind/i);
+test('shared privacy copy discloses unfinished hosting and legacy credential paths', () => {
+  assert.doesNotMatch(blob, /paid service is blind|browser seals keys|This site is blind|never leave that box/i);
   assert.match(KEYS_COPY.lead, /Supabase is an excellent product/);
-  assert.match(KEYS_COPY.paths[0].body, /never leave that box/);
-  assert.match(KEYS_COPY.paths[1].body, /sealed to your Cloud Runner/i);
-  assert.match(KEYS_COPY.paths[2].body, /status and hashes/);
-  assert.match(KEYS_COPY.loginTitle, /never posted to Portabase servers/i);
-  assert.match(KEYS_COPY.dashTitle, /status and hashes only/i);
-  assert.match(KEYS_COPY.sealTitle, /seals to your runner only/i);
-  assert.match(KEYS_COPY.honest, /designed path/i);
-  assert.match(KEYS_COPY.honest, /checks in this repo/i);
+  assert.match(KEYS_COPY.paths[1].body, /not available yet/i);
+  assert.match(KEYS_COPY.paths[2].body, /credentials or inventory through the backend/i);
+  assert.match(KEYS_COPY.sealTitle, /not available yet/i);
+  assert.match(KEYS_COPY.honest, /does not yet provide a verified zero-knowledge service/i);
   assert.doesNotMatch(blob, /proven-green isolation guarantee is complete/);
-  assert.match(KEYS_COPY.honest, /not a third-party audited, proven-green/);
   assert.doesNotMatch(blob, /\bOSS\b/);
 });
 
@@ -46,9 +41,9 @@ test('homepage, login, dashboard, and seal UI use the shared keys copy', () => {
   assert.match(dash, /KEYS_COPY/);
   assert.match(dash, /CONTROL PLANE · BLIND/);
   assert.match(dash, /pb-keys-honest/);
-  assert.match(seal, /assertRunnerSealUrl/);
+  assert.doesNotMatch(seal, /assertRunnerSealUrl/);
   assert.match(seal, /Do not paste service-role keys/);
-  assert.match(seal, /KeysFlow/);
+  assert.doesNotMatch(seal, /KeysFlow/);
   assert.match(agents, /SealKeysPanel/);
   assert.match(agents, /Seal keys/);
   assert.doesNotMatch(home, /provably zero-knowledge of your encryption keys/i);

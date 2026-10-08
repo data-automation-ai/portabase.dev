@@ -1,7 +1,7 @@
 /**
- * Dashboard proof lamp. Stays red until a real dry-run / compare is MATCH.
- * Demo data, mocked gauges, and billed-but-unproven workspaces stay red.
- * Do not fake green.
+ * Comparison reports are evidence about captured data, not proof of recovery.
+ * A future restore-evidence ingestion path must verify target isolation,
+ * read-back checks and critical application flows before asserting recovery.
  */
 
 export const PROOF_RED = 'red';
@@ -23,13 +23,13 @@ function red(reason, detail = '') {
 
 export function deriveProofStatus({ report = null, demoMode = false } = {}) {
   if (demoMode) {
-    return red('demo_is_not_proof', 'Demo / mocked gauges are not a dry-run MATCH.');
+    return red('demo_is_not_proof', 'Demo data does not prove recovery.');
   }
   if (!report || typeof report !== 'object') {
-    return red('no_compare_report', 'No dry-run or compare report has been ingested.');
+    return red('no_compare_report', 'No verified restore evidence has been ingested.');
   }
   if (!PROOF_KINDS.has(String(report.kind || ''))) {
-    return red('not_a_dry_run', 'Only dry-run or compare reports can turn the lamp green.');
+    return red('not_a_dry_run', 'This report does not establish a tested restore.');
   }
   if (!TRUSTED_SOURCES.has(String(report.source || ''))) {
     return red('untrusted_source', 'Report must come from the free CLI or a Cloud Runner.');
@@ -44,11 +44,8 @@ export function deriveProofStatus({ report = null, demoMode = false } = {}) {
     return red('compare_not_match', `Verdict ${report.verdict || 'missing'} is not MATCH.`);
   }
   return {
-    tone: PROOF_GREEN,
-    proven: true,
-    label: 'Dry-run MATCH',
-    reason: 'compare_match',
-    detail: 'A real dry-run/compare from the runner or CLI reported MATCH.',
+    ...red('restore_not_verified', 'The reported comparison matched. Recovery still needs an isolated restore, read-back checks and tested application flows.'),
+    comparisonMatched: true,
     capsuleHash: report.capsuleHash,
     comparedAt: report.comparedAt || report.occurredAt || null,
   };

@@ -36,7 +36,7 @@ try {
     await page.screenshot({ path: resolve(out, `homepage-${width}.png`) });
     await page.getByLabel('Sort cases').selectOption('impact');
     const impactFirst = await page.locator('.story-row-source').first().innerText();
-    if (result.overflow || result.italic !== 'normal' || result.arrowCount || !result.yearsOrdered || result.firstSectionAfterHero !== 'stories' || errors.length) {
+    if (result.overflow || result.italic !== 'normal' || result.arrowCount || !result.yearsOrdered || result.firstSectionAfterHero !== 'recovery-overview' || errors.length) {
       throw new Error(JSON.stringify({ ...result, errors }));
     }
     results.push({ ...result, impactFirst, errors });

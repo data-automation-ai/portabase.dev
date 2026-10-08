@@ -1,5 +1,12 @@
 # Portabase Replay — validate capsule on a new account
 
+For copy-and-paste commands, sizing, DDL-only capture, omitted-object manifests,
+S3 diversion, differently named databases, overwrite safeguards, and baseline/delta
+examples, use [CLI scenarios](CLI-SCENARIOS.md). Those new options still require
+cloud qualification; [PROJECT_STATUS.md](../PROJECT_STATUS.md) tracks the gates.
+Vector Buckets are excluded entirely. The blank-target path below remains the
+default; explicit guarded overwrite has additional requirements in the guide.
+
 **Replay** proves a recovery capsule works by restoring it into a **new, blank Supabase project** (a new org/account is fine). The source project is never written.
 
 This is the same safety model as guarded `restore --execute`, with clearer validation framing.

@@ -78,9 +78,9 @@ test('trial end is seven days after start', () => {
   assert.equal(end, '2026-08-08T00:00:00.000Z');
 });
 
-test('deriveAccess treats trialing as hasAccess', () => {
-  assert.equal(deriveAccess({ status: 'trialing' }).hasAccess, true);
-  assert.equal(deriveAccess({ status: 'active' }).hasAccess, true);
+test('deriveAccess rejects unverified trial and active status strings', () => {
+  assert.equal(deriveAccess({ status: 'trialing' }).hasAccess, false);
+  assert.equal(deriveAccess({ status: 'active' }).hasAccess, false);
   assert.equal(deriveAccess({ status: 'checkout_pending' }).hasAccess, false);
   assert.equal(deriveAccess(null).status, 'none');
 });

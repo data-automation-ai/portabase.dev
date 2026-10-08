@@ -1,159 +1,55 @@
 import { WebhooksHelper } from 'square';
-import { resolveServerSecret } from '../shared/secrets.mjs';
-import {
-  getSubscriptionByUserId,
-  getUserIdBySquareOrder,
-  getUserIdBySquareSubscription,
-  saveSubscription,
-  trialEndsAtFrom,
-} from '../shared/subscription-store.mjs';
-import { PRICE_MONTHLY_CENTS, TRIAL_DAYS } from '../shared/square-cloud.mjs';
+import { getSubscriptionByUserId, getUserIdBySquareOrder, getUserIdBySquareSubscription } from '../shared/subscription-store.mjs';
+import { reconcileSubscription } from '../shared/billing-entitlement.mjs';
+import { squareFetch, resolvePortabaseSquareSecret } from '../shared/square-cloud.mjs';
 
-async function markTrialing({ userId, squareSubscriptionId, squareOrderId, squareCustomerId }) {
-  if (!userId) return;
-  const existing = (await getSubscriptionByUserId(userId)) || {};
-  const now = new Date().toISOString();
-  const startedAt = existing.startedAt && existing.status !== 'checkout_pending' ? existing.startedAt : now;
-  await saveSubscription({
-    ...existing,
-    userId,
-    supabaseUserId: existing.supabaseUserId || userId,
-    authProvider: existing.authProvider || 'supabase',
-    status: 'trialing',
-    trialDays: TRIAL_DAYS,
-    priceMonthlyCents: existing.priceMonthlyCents || PRICE_MONTHLY_CENTS,
-    startedAt,
-    trialEndsAt: existing.trialEndsAt || trialEndsAtFrom(startedAt, TRIAL_DAYS),
-    squareSubscriptionId: squareSubscriptionId || existing.squareSubscriptionId || null,
-    squareOrderId: squareOrderId || existing.squareOrderId || null,
-    squareCustomerId: squareCustomerId || existing.squareCustomerId || null,
-    createdAt: existing.createdAt || now,
-  });
-}
-
-async function markActive(userId, patch = {}) {
-  if (!userId) return;
-  const existing = (await getSubscriptionByUserId(userId)) || {};
-  await saveSubscription({
-    ...existing,
-    userId,
-    status: 'active',
-    ...patch,
-    createdAt: existing.createdAt || new Date().toISOString(),
-  });
-}
-
-async function markCanceled(userId, patch = {}) {
-  if (!userId) return;
-  const existing = (await getSubscriptionByUserId(userId)) || {};
-  await saveSubscription({
-    ...existing,
-    userId,
-    status: 'canceled',
-    ...patch,
-    canceledAt: new Date().toISOString(),
-    createdAt: existing.createdAt || new Date().toISOString(),
-  });
-}
-
-export async function handler(event) {
-  if (event.httpMethod !== 'POST') return { statusCode: 405, headers: { Allow: 'POST' }, body: 'Method not allowed' };
-  try {
-    const signatureKey = await resolveServerSecret('SQUARE_WEBHOOK_SIGNATURE_KEY', { service: 'square', key: 'webhook_signature_key' });
-    const siteUrl = (process.env.PORTABASE_SITE_URL || process.env.URL || 'https://portabase.dev').replace(/\/$/, '');
-    const notificationUrl = `${siteUrl}/api/square/webhook`;
-    const body = event.isBase64Encoded ? Buffer.from(event.body || '', 'base64').toString('utf8') : event.body || '';
-    const valid = await WebhooksHelper.verifySignature({
-      requestBody: body,
-      signatureHeader: event.headers['x-square-hmacsha256-signature'] || '',
-      signatureKey,
-      notificationUrl,
-    });
-    if (!valid) return { statusCode: 403, body: 'Webhook rejected' };
-
-    const squareEvent = JSON.parse(body);
-    const type = squareEvent.type;
-
-    if (['payment.created', 'payment.updated'].includes(type)) {
-      const payment = squareEvent.data?.object?.payment;
-      if (payment?.status === 'COMPLETED') {
-        console.log(`square_fulfillment=payment_confirmed order=${payment.order_id || 'unknown'}`);
-        const userId = await getUserIdBySquareOrder(payment.order_id);
-        if (userId) {
-          const amount = Number(payment.amount_money?.amount) || 0;
-          const existing = (await getSubscriptionByUserId(userId)) || {};
-          await markTrialing({
-            userId,
-            squareOrderId: payment.order_id,
-            squareCustomerId: payment.customer_id,
-          });
-          if (amount > 0) {
-            await saveSubscription({
-              ...existing,
-              userId,
-              status: existing.status === 'checkout_pending' ? 'trialing' : (existing.status || 'active'),
-              lastPaymentId: payment.id,
-              lastPaymentAmountCents: amount,
-              firstPaidAt: existing.firstPaidAt || new Date().toISOString(),
-              squareOrderId: payment.order_id || existing.squareOrderId,
-              squareCustomerId: payment.customer_id || existing.squareCustomerId,
-            });
-          }
-        }
+export function createWebhookHandler({
+  get = getSubscriptionByUserId, findOrder = getUserIdBySquareOrder, findSubscription = getUserIdBySquareSubscription,
+  reconcile = reconcileSubscription, request = squareFetch,
+  secret = () => resolvePortabaseSquareSecret('SQUARE_WEBHOOK_SIGNATURE_KEY', 'webhook_signature_key'),
+  verifySignature = WebhooksHelper.verifySignature,
+  notificationUrl = `${(process.env.PORTABASE_SITE_URL || process.env.URL || 'https://portabase.dev').replace(/\/$/, '')}/api/square/webhook`,
+} = {}) {
+  return async event => {
+    if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method not allowed' };
+    const raw = event.isBase64Encoded ? Buffer.from(event.body || '', 'base64').toString('utf8') : event.body || '';
+    if (Buffer.byteLength(raw) > 256 * 1024) return { statusCode: 413, body: 'Payload too large' };
+    try {
+      const signatureKey = await secret();
+      if (!signatureKey) throw new Error('missing_signature_key');
+      const signatureHeader = Object.entries(event.headers || {}).find(([key]) => key.toLowerCase() === 'x-square-hmacsha256-signature')?.[1] || '';
+      if (!await verifySignature({ requestBody: raw, signatureHeader, signatureKey, notificationUrl })) return { statusCode: 403, body: 'Webhook rejected' };
+    } catch { return { statusCode: 503, body: 'Webhook verification unavailable' }; }
+    let message;
+    try { message = JSON.parse(raw); } catch { return { statusCode: 400, body: 'Invalid JSON' }; }
+    try {
+      const object = message?.data?.object || {};
+      let subscriptionId, orderId;
+      if (message.type?.startsWith('subscription.')) subscriptionId = object.subscription?.id;
+      else if (message.type?.startsWith('invoice.')) subscriptionId = object.invoice?.subscription_id;
+      else if (message.type?.startsWith('payment.')) orderId = object.payment?.order_id;
+      else if (message.type?.startsWith('order.')) orderId = object.order_updated?.order_id || object.order_fulfillment_updated?.order_id || object.order_created?.order_id;
+      else if (['refund.created', 'refund.updated'].includes(message.type) && object.refund?.payment_id) {
+        const { payment } = await request(`/v2/payments/${encodeURIComponent(object.refund.payment_id)}`);
+        orderId = payment?.order_id;
       }
-    }
-
-    if (type === 'subscription.created' || type === 'subscription.updated') {
-      const subscription = squareEvent.data?.object?.subscription
-        || squareEvent.data?.object
-        || {};
-      const subscriptionId = subscription.id;
-      const status = String(subscription.status || '').toUpperCase();
-      const userId = await getUserIdBySquareSubscription(subscriptionId);
-      if (!userId) {
-        console.log(`square_subscription_event type=${type} id=${subscriptionId || 'none'} status=${status} unmapped`);
-      } else if (status === 'ACTIVE' || status === 'PENDING') {
-        const isTrialLike = status === 'PENDING' || (status === 'ACTIVE' && !subscription.charged_through_date);
-        if (isTrialLike) {
-          await markTrialing({
-            userId,
-            squareSubscriptionId: subscriptionId,
-            squareCustomerId: subscription.customer_id,
-          });
-        } else {
-          await markActive(userId, {
-            squareSubscriptionId: subscriptionId,
-            squareCustomerId: subscription.customer_id,
-            currentPeriodEnd: subscription.charged_through_date || null,
-          });
-        }
-        console.log(`square_subscription_mapped id=${subscriptionId} status=${status} user=${userId}`);
-      } else if (['CANCELED', 'DEACTIVATED', 'FAILED'].includes(status)) {
-        await markCanceled(userId, {
-          squareSubscriptionId: subscriptionId,
-          squareStatus: status,
-        });
-      }
-    }
-
-    if (type === 'invoice.payment_made') {
-      const invoice = squareEvent.data?.object?.invoice || {};
-      const subscriptionId = invoice.subscription_id;
-      const userId = await getUserIdBySquareSubscription(subscriptionId);
+      const userId = subscriptionId ? await findSubscription(subscriptionId) : orderId ? await findOrder(orderId) : null;
       if (userId) {
-        await markActive(userId, {
-          squareSubscriptionId: subscriptionId,
-          lastInvoiceId: invoice.id || null,
-          firstPaidAt: new Date().toISOString(),
-          currentPeriodEnd: invoice.period_end || null,
-        });
-        console.log(`square_invoice_paid user=${userId} invoice=${invoice.id || 'unknown'}`);
+        const record = await get(userId);
+        if (!record) throw new Error('missing_billing_record');
+        // Old checkout indexes remain reserved. Their events cannot change a
+        // replacement checkout. Invoice/refund events always re-read current proof.
+        const kind = (subscriptionId && subscriptionId === record.squareAddonSubscriptionId) || (orderId && orderId === record.squareAddonOrderId) ? 'addon' : 'base';
+        const matches = subscriptionId
+          ? subscriptionId === (kind === 'addon' ? record.squareAddonSubscriptionId : record.squareSubscriptionId)
+          : orderId === (kind === 'addon' ? record.squareAddonOrderId : record.squareOrderId);
+        if (matches) {
+          const result = await reconcile(record, { kind });
+          if (!result.verified) return { statusCode: 503, body: 'Billing verification pending' };
+        }
       }
-    }
-
-    return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ received: true }) };
-  } catch {
-    console.error('square_webhook_error=signature_or_configuration');
-    return { statusCode: 400, body: 'Webhook rejected' };
-  }
+      return { statusCode: 200, body: JSON.stringify({ received: true }) };
+    } catch { return { statusCode: 503, body: 'Billing processing unavailable' }; }
+  };
 }
+export const handler = createWebhookHandler();

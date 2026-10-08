@@ -7,11 +7,18 @@ import { ZK_COPY } from '../lib/zero-knowledge.js';
 import { formatBytes, formatDuration, relativeTime } from './data/store.js';
 import { getCloudPlan, storageUsage } from '../lib/product.js';
 
-export function TelemetryPage({ state, navigate }) {
+export function TelemetryPage({ state, navigate, demoMode, telemetryStatus, refreshTelemetry }) {
   const model = useMemo(() => buildTelemetryModel(state), [state]);
   const plan = getCloudPlan(state.billing?.planId || state.billing?.plan);
   const usage = storageUsage(model.totals.encryptedBytes, plan.id);
   const t = model.totals;
+
+  if (!demoMode && telemetryStatus !== 'ready') return <section className="pb-card">
+    <h1>Telemetry</h1>
+    {telemetryStatus === 'error'
+      ? <><p role="alert">Runner reports could not be loaded. Backup health is unknown until the connection recovers.</p><button className="pb-btn" onClick={refreshTelemetry}>Retry</button></>
+      : <p role="status">Loading your runner reports…</p>}
+  </section>;
 
   return (
     <>

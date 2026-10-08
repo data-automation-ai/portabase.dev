@@ -681,6 +681,7 @@ button { font:inherit; }
 .closure-case{display:flex;flex-direction:column;gap:10px;padding:20px 18px;border:1px solid #34353a;background:#121317;color:inherit;text-decoration:none;transition:border-color .15s ease,background .15s ease}
 .closure-case:hover{border-color:rgba(255,112,102,.45);background:#17181c}
 .closure-case-top{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.closure-case-index{color:#ff7066;font:9px var(--mono);letter-spacing:.08em}
 .provider-pill{padding:4px 8px;font:8px var(--mono);letter-spacing:.1em;text-transform:uppercase;border:1px solid #3a3b40;color:#c9c8c1}
 .provider-pill.provider-supabase{border-color:rgba(62,207,142,.4);color:#3ecf8e}
 .provider-pill.provider-aws{border-color:rgba(255,153,0,.45);color:#ff9900}
@@ -698,7 +699,7 @@ button { font:inherit; }
 .closure-disclaimer{margin:28px 0 0;padding:18px 20px;border:1px solid #34353a;background:#121317;color:#8b8c87;font-size:13px;line-height:1.6;max-width:820px}
 .closure-disclaimer strong{color:#c9c8c1}
 @media(max-width:900px){
-  .viz-panel-grid,.closure-reason-grid,.closure-case-grid{grid-template-columns:1fr}
+  .viz-panel-grid,.closure-reason-grid{grid-template-columns:1fr}
   .viz-panel figcaption{flex-direction:column}
   .viz-panel figcaption small{text-align:left}
 }

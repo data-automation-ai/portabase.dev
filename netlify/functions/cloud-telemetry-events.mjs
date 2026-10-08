@@ -1,14 +1,16 @@
 /**
  * GET /api/cloud/telemetry-events — live runner telemetry for the signed-in user.
  * Reads the telemetry blob store written by POST /api/cloud/telemetry, scoped
- * to the projectRefs in the user's own Cloud selection. Never returns keys,
- * capsule bytes, or records outside the user's selection.
+ * to an account namespace derived from the verified identity. Project references
+ * supplied by customers never grant access to another account's reports.
  */
 import { getStore } from '@netlify/blobs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
-import { getSelection } from '../shared/selection-store.mjs';
+import { ownerKey } from '../shared/agent-store.mjs';
 import { findForbiddenField } from '../../cloud/control-plane/forbidden.mjs';
 import { projectAllowedTelemetry } from '../../utility/cloud-telemetry-fields.mjs';
+import { safeCloudEvent } from '../shared/safe-telemetry.mjs';
+import { publicTimestamp } from '../shared/public-records.mjs';
 
 export const TELEMETRY_STORE_NAME = 'portabase-cloud-telemetry';
 const DEFAULT_DAYS = 7;
@@ -32,19 +34,10 @@ export function recentDayStrings(days, now = Date.now()) {
   return out;
 }
 
-/** Blob prefixes to scan, derived ONLY from the user's own selection refs. */
-export function telemetryPrefixesFor(projectRefs, days, now = Date.now()) {
-  const refs = [...new Set(
-    (Array.isArray(projectRefs) ? projectRefs : [projectRefs])
-      .filter(ref => typeof ref === 'string' && /^[a-z0-9]{20}$/.test(ref)),
-  )];
-  const prefixes = [];
-  for (const ref of refs) {
-    for (const day of recentDayStrings(days, now)) {
-      prefixes.push(`${ref}/${day}/`);
-    }
-  }
-  return prefixes;
+/** Blob prefixes to scan, derived ONLY from the verified account identity. */
+export function telemetryPrefixesFor(owner, days, now = Date.now()) {
+  if (typeof owner !== 'string' || !/^[a-f0-9]{64}$/.test(owner)) return [];
+  return recentDayStrings(days, now).map(day => `owners/${owner}/${day}/`);
 }
 
 /**
@@ -52,14 +45,14 @@ export function telemetryPrefixesFor(projectRefs, days, now = Date.now()) {
  * touch Netlify Blobs.
  */
 export async function collectTelemetryEvents({
-  projectRefs,
+  owner,
   days = DEFAULT_DAYS,
   listKeys,
   getRecord,
   now = Date.now(),
 }) {
   const safeDays = Number.isInteger(days) && days >= 1 ? Math.min(days, MAX_DAYS) : DEFAULT_DAYS;
-  const prefixes = telemetryPrefixesFor(projectRefs, safeDays, now);
+  const prefixes = telemetryPrefixesFor(owner, safeDays, now);
   const events = [];
   let truncated = false;
   outer: for (const prefix of prefixes) {
@@ -71,19 +64,19 @@ export async function collectTelemetryEvents({
         truncated = true;
         break outer;
       }
-      let record = null;
-      try {
-        record = await getRecord(key);
-      } catch {
-        continue;
-      }
+      if (!key.startsWith(prefix)) continue;
+      const record = await getRecord(key);
       if (!record || typeof record !== 'object') continue;
+      if (record.owner !== owner) continue;
       if (findForbiddenField(record)) continue;
       const event = record.event && typeof record.event === 'object' ? record.event : null;
       if (!event) continue;
+      let safeEvent;
+      try { safeEvent = safeCloudEvent(event, { projectRef: event.projectRef, id: event.agentId }, now); }
+      catch { continue; }
       events.push({
-        receivedAt: typeof record.receivedAt === 'string' ? record.receivedAt : null,
-        ...projectAllowedTelemetry(event),
+        receivedAt: publicTimestamp(record.receivedAt),
+        ...projectAllowedTelemetry(safeEvent),
       });
     }
   }
@@ -108,28 +101,24 @@ export async function handler(event) {
     return jsonResponse(401, { error: 'unauthorized' });
   }
 
-  const storeKey = `${user.cloudVersion}:${user.id}`;
-  let selection = null;
-  try {
-    selection = (await getSelection(storeKey)) || (await getSelection(user.id));
-  } catch {
-    selection = null;
-  }
-  const projectRefs = selection?.projectRef;
-  if (!projectRefs || (Array.isArray(projectRefs) && !projectRefs.length)) {
-    return jsonResponse(200, { ok: true, source: 'live', events: [], count: 0, truncated: false });
-  }
+  let owner;
+  try { owner = ownerKey(user); } catch { return jsonResponse(401, { error: 'unauthorized' }); }
 
   const params = event.queryStringParameters || {};
   const days = params.days === undefined ? DEFAULT_DAYS : Number(params.days);
 
+  try {
   const store = telemetryStore();
   const { events, truncated, prefixesScanned } = await collectTelemetryEvents({
-    projectRefs,
+    owner,
     days,
     listKeys: async (prefix) => {
-      const page = await store.list({ prefix });
-      return (page?.blobs || []).map(blob => blob.key).filter(Boolean);
+      const keys = [];
+      for await (const page of store.list({ prefix, paginate: true })) {
+        keys.push(...page.blobs.map(blob => blob.key));
+        if (keys.length > MAX_KEYS_PER_PREFIX) break;
+      }
+      return keys;
     },
     getRecord: (key) => store.get(key, { type: 'json' }),
   });
@@ -142,4 +131,5 @@ export async function handler(event) {
     truncated,
     prefixesScanned,
   });
+  } catch { return jsonResponse(503, { error: 'telemetry_store_unavailable' }); }
 }

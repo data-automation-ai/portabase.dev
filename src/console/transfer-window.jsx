@@ -10,7 +10,7 @@ import {
 } from '../lib/product.js';
 
 export function workspaceTransferWindow(state, me) {
-  const billing = { ...me?.subscription, ...state?.billing };
+  const billing = { ...state?.billing, ...me?.subscription };
   const used = countTransfersLast24h(state?.capsules);
   return transferWindow({
     usedLast24h: used,
@@ -42,15 +42,15 @@ export function TransferWindowPanel({
         mocked
       />
       <p className="pb-muted" style={{ margin: '10px 0 0', fontSize: 13, lineHeight: 1.5 }}>
-        Plan allowance: <strong>{tw.allowance}</strong> capsule transfer{tw.allowance === 1 ? '' : 's'} / {TRANSFER_WINDOW_HOURS}h
+        Plan allowance: <strong>{tw.allowance}</strong> {tw.planId === 'cloud-free' ? 'manual backup' : `capsule transfer${tw.allowance === 1 ? '' : 's'}`} / {TRANSFER_WINDOW_HOURS}h
         {' · '}
-        {tw.extraTransfersAddon
+        {tw.planId === 'cloud-free' ? 'No scheduled service.' : tw.extraTransfersAddon
           ? `Extra transfers add-on on (up to ${ADDON_TRANSFERS_PER_24H}).`
           : `$7 includes 1 / ${TRANSFER_WINDOW_HOURS}h. $17 includes 3 / day.`}
         {' '}
         {tw.remaining === 0 ? 'No slots left in this window.' : `${tw.remaining} remaining.`}
       </p>
-      {!tw.extraTransfersAddon && (
+      {tw.planId !== 'cloud-free' && !tw.extraTransfersAddon && (
         <div className="pb-callout warn" style={{ marginTop: 12 }}>
           <Icon name="clock" size={16} />
           <div>

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Portabase private capsule review</title><link rel="stylesheet" href="/app.css"><link rel="stylesheet" href="/review.css"></head>
+<body><header><span class="identity">PORTABASE · PRIVATE RUNNER</span><span>Offline capsule review</span></header>
+<main><h1>Review your recovery capsule</h1><p class="intro">Inspect the capsule configured on this runner, review its capture log and save a restore selection. The capsule, keys and plan stay in this private workspace.</p>
+<div class="binding"><span>Runner <code id="runner">Loading…</code></span><span>Source <code id="project">Loading…</code></span></div>
+<div class="toolbar"><button id="inspect" disabled>Inspect configured capsule</button><span id="progress" role="status">Opening private session…</span></div>
+<p class="error" id="error" role="alert" hidden></p>
+<div id="review" hidden>
+<section><h2>Authenticated capture record</h2><p id="identity"></p><div id="components"></div><p>Decryption and archive parsing succeeded. This does not prove restoration or application recovery. Partial, selective and trial capsules have coverage limits.</p></section>
+<section><h2>Capture log</h2><p>This log ends before archive packaging, encryption and upload.</p><div id="log"></div></section>
+<section><h2>Export a dashboard summary</h2><p>Preview the project reference, capture time, recorded status, encrypted capsule hash and inventory counts. Names, rows, logs, credentials and restore selections are excluded.</p>
+<p>Counts describe complete inventories recorded in this capsule; unavailable or limited counts are omitted. Table count is omitted because this review measures data blocks, not every schema table. These counts do not prove a tested restore or recovered application behavior.</p>
+<button id="preview-sharing" disabled>Preview shareable summary</button>
+<div id="sharing-preview" hidden><h3>Local preview</h3><pre id="sharing-json" aria-label="Shareable summary preview"></pre><button id="download-sharing" disabled>Download shareable summary</button>
+<p>In your dashboard, open Manifest sharing for this runner and import this JSON file. Review the preview there, then explicitly choose whether to share it. Downloading and importing do not upload it.</p></div></section>
+<section><h2>Table rows</h2><p id="data-note"></p><div class="choices" id="tables"></div></section>
+<section><h2>Storage buckets</h2><div class="choices" id="buckets"></div></section>
+<section><h2>Edge Functions</h2><div class="choices" id="functions"></div></section>
+<section class="review"><h2>Save a restore plan</h2><p id="summary"></p><p id="budget-warning" role="status"></p><p>The budget covers selected SQL COPY bytes and storage object sizes, not restored disk usage. Schema, indexes, function code and runtime overhead are additional. Table selection controls rows; roles and schema still restore in full.</p>
+<label for="budget">Selected data budget in bytes</label><input id="budget" type="number" min="1" step="1" value="524288000" inputmode="numeric">
+<label><input id="empty" type="checkbox">I intend to save with no data or functions selected</label>
+<button id="save" disabled>Save private restore plan</button><p>Saving writes a plan on this runner. It does not queue or execute a restore.</p></section>
+</div>
+<section class="saved" id="saved" hidden><h2>Private restore plan saved</h2><p id="saved-detail"></p><pre id="plan-path"></pre><p>No restore has started. You can keep this saved plan, or prepare a separate job reference for the dashboard.</p>
+<p id="replay-unavailable" hidden>To prepare a replay reference, start this view with an explicit engine configuration and a different recovery target configured on this runner.</p>
+<div id="replay-controls" hidden><h3>Prepare a replay job</h3><p>Configured recovery target: <code id="target-ref"></code></p>
+<p>The worker checks that this target is blank before restoring. This view does not connect to the target or verify its readiness.</p>
+<label for="confirm-target">Retype the recovery target reference</label><input id="confirm-target" type="text" autocomplete="off" spellcheck="false" maxlength="20">
+<label><input id="confirm-replay" type="checkbox">I want to prepare a replay job for this saved selection and target</label>
+<button id="create-replay" disabled>Create replay job reference</button><p>This creates a reference only. Import the downloaded file into the dashboard and explicitly queue the replay there.</p></div>
+<div id="replay-reference" hidden><h3>Replay job reference ready</h3><pre id="intent"></pre><button id="download">Download replay job reference</button><p>No job has been queued and no restore has started. The file contains opaque identifiers only; the selection, target and credentials remain on this runner.</p></div></section>
+<footer>Loopback access only. No source-provider request, public backend upload or key transfer occurs in this view.</footer></main><script type="module" src="/app.js"></script></body></html>

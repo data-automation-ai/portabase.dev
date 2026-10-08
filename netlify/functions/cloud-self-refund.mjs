@@ -7,9 +7,9 @@ import {
 } from '../shared/square-cloud.mjs';
 import {
   deriveAccess,
-  getSubscriptionByUserId,
+  getSubscriptionForUser,
   moneyBackEligible,
-  saveSubscription,
+  closeSubscription,
 } from '../shared/subscription-store.mjs';
 
 /**
@@ -34,7 +34,7 @@ export async function handler(event) {
   }
 
   const storeKey = `${user.cloudVersion}:${user.id}`;
-  const record = (await getSubscriptionByUserId(storeKey)) || (await getSubscriptionByUserId(user.id));
+  const record = (await getSubscriptionForUser(user));
   const eligible = moneyBackEligible(record, new Date(), CLOUD_MONEY_BACK_DAYS);
   if (!eligible.ok) {
     return jsonResponse(409, {
@@ -88,16 +88,17 @@ export async function handler(event) {
     });
   }
 
-  const closed = await saveSubscription({
-    ...record,
-    userId: record.userId || storeKey,
+  let closed;
+  try { closed = await closeSubscription(record, {
     status: refund.skipped ? 'closed' : 'refunded',
     closedAt: now,
     refundedAt: refund.skipped ? null : now,
     closeReason: 'customer_self_refund',
     lastPaymentId: paymentId || record.lastPaymentId || null,
     lastPaymentAmountCents: amountCents || record.lastPaymentAmountCents || 0,
-  });
+  }); } catch {
+    return jsonResponse(503, { error: 'billing_closure_pending', message: 'Square processed the request. Account closure needs reconciliation.' });
+  }
 
   return jsonResponse(200, {
     ok: true,

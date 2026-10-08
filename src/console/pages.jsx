@@ -15,6 +15,7 @@ import {
   getCloudPlan,
   minScheduleHours,
   planPriceRangeLabel,
+  planTransfersPer24h,
   publicCloudPlans,
   storageUsage,
 } from '../lib/product.js';
@@ -25,6 +26,12 @@ import { looksLikeStorageObjectPath } from '../lib/zero-knowledge.js';
 import { proofFromConsoleState } from '../lib/proof-status.js';
 import { SealKeysPanel } from './seal-keys.jsx';
 import { KEYS_COPY } from '../data/never-hold-keys.js';
+import { AgentCredentials } from './agent-credentials.jsx';
+import { NotificationPreferences } from './notification-preferences.jsx';
+import { ManagedBackupSchedules } from './managed-backup-schedules.jsx';
+import { checkoutPlanFromSearch } from '../lib/auth-return.js';
+
+const billingDate = value => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(value));
 
 function Badge({ tone, children }) {
   const t = tone === 'ok' || tone === 'online' || tone === 'healthy' || tone === 'COMPLETE' || tone === 'running' || tone === 'completed' || tone === 'active' || tone === 'trialing'
@@ -302,14 +309,13 @@ export function BackupsHubPage(props) {
 
 export function AgentsHubPage(props) {
   const [tab, setTab] = useState(props.tab === 'seal' ? 'seal' : 'agents');
-  const used = props.state?.agents?.length || 0;
   return (
     <>
       <PageHead
         title="Agents"
         subtitle={tab === 'seal'
           ? KEYS_COPY.sealTitle
-          : `Customer-run boxes that report health. Cloud plan: up to ${CLOUD_MAX_AGENTS} agents (${used} in use). Optional managed runners for hosted compute.`}
+          : `Connect runners to your account and manage their reporting credentials. Up to ${CLOUD_MAX_AGENTS} active credentials.`}
       />
       <div className="pb-tabs">
         <button type="button" className={tab === 'agents' ? 'is-active' : ''} onClick={() => setTab('agents')}>Your agents</button>
@@ -318,13 +324,14 @@ export function AgentsHubPage(props) {
       </div>
       {tab === 'seal'
         ? <SealKeysPanel demo={props.demoMode} toast={props.toast} />
-        : tab === 'agents' ? <AgentsPage {...props} embedded /> : <RunnersPage {...props} embedded />}
+        : tab === 'agents' ? (props.demoMode ? <AgentsPage {...props} embedded /> : <AgentCredentials />) : <RunnersPage {...props} embedded />}
     </>
   );
 }
 
 export function AlertsHubPage(props) {
   const [tab, setTab] = useState('sms');
+  if (props.demoMode !== true || props.state?.demoMode !== true) return <AlertsPage {...props} />;
   return (
     <>
       <PageHead title="Alerts" subtitle="SMS on success/failure at run time · escalation chains · channels." />
@@ -353,8 +360,8 @@ export function AccountHubPage(props) {
         <button type="button" className={tab === 'billing' ? 'is-active' : ''} onClick={() => setTab('billing')}>Plan</button>
         <button type="button" className={tab === 'team' ? 'is-active' : ''} onClick={() => setTab('team')}>Team</button>
         <button type="button" className={tab === 'destinations' ? 'is-active' : ''} onClick={() => setTab('destinations')}>Destinations</button>
-        <button type="button" className={tab === 'cloudwatch' ? 'is-active' : ''} onClick={() => setTab('cloudwatch')}>CloudWatch live</button>
-        <button type="button" className={tab === 'audit' ? 'is-active' : ''} onClick={() => setTab('audit')}>CloudTrail live</button>
+        <button type="button" className={tab === 'cloudwatch' ? 'is-active' : ''} onClick={() => setTab('cloudwatch')}>Runner activity</button>
+        <button type="button" className={tab === 'audit' ? 'is-active' : ''} onClick={() => setTab('audit')}>AWS audit history</button>
         <button type="button" className={tab === 'settings' ? 'is-active' : ''} onClick={() => setTab('settings')}>Settings</button>
       </div>
       {tab === 'billing' && <BillingPage {...props} embedded />}
@@ -723,7 +730,8 @@ export function CapsulesPage(props) {
 }
 
 /* ─── SCHEDULES ─── */
-export function SchedulesPage({ state, setState, toast, embedded }) {
+export function SchedulesPage({ state, setState, toast, embedded, demoMode = false, navigate }) {
+  if (!demoMode) return <ManagedBackupSchedules embedded={embedded} navigate={navigate} />;
   const table = (
       <div className="pb-table-wrap">
         <table className="pb-table">
@@ -752,10 +760,10 @@ export function SchedulesPage({ state, setState, toast, embedded }) {
         </table>
       </div>
   );
-  if (embedded) return table;
+  if (embedded) return <><p>Sample schedules only. Changes stay in this demo and do not queue backups.</p>{table}</>;
   return (
     <>
-      <PageHead title="Schedule" subtitle="Expected escape cadence. Misses fire alert chains." />
+      <PageHead title="Schedule" subtitle="Sample schedules only. Changes stay in this demo and do not queue backups." />
       {table}
     </>
   );
@@ -865,7 +873,7 @@ portabase replay --capsule ${capsulePath || './portabase-capsules/<id>'} --confi
 `;
 }
 
-export function RestoresPage({ state, setState, toast }) {
+export function RestoresPage({ state, setState, toast, demoMode = false, navigate }) {
   const verifiedCaps = state.capsules.filter(c => c.status === 'COMPLETE');
   const [wizard, setWizard] = useState(false);
   const [capsuleId, setCapsuleId] = useState(verifiedCaps.find(c => c.verified)?.id || verifiedCaps[0]?.id || '');
@@ -875,6 +883,38 @@ export function RestoresPage({ state, setState, toast }) {
   const [ackNotSource, setAckNotSource] = useState(false);
   const [runningId, setRunningId] = useState(null);
   const [selectedHistory, setSelectedHistory] = useState(null);
+  const simulateDemo = demoMode === true && state.demoMode === true;
+  const demoTimer = React.useRef(null);
+  const demoActive = React.useRef(simulateDemo);
+  demoActive.current = simulateDemo;
+  useEffect(() => {
+    demoActive.current = simulateDemo;
+    return () => { demoActive.current = false; clearTimeout(demoTimer.current); };
+  }, [simulateDemo]);
+
+  // Browser-local history can contain successes generated by the old simulation.
+  // Until authenticated runner execution is wired, none of it is live proof.
+  if (!simulateDemo) {
+    return (
+      <>
+        <PageHead title="Recovery" subtitle="Restore your capsule through your private runner workspace." />
+        <div className="pb-callout warn" role="status">
+          <Icon name="restore" size={18} />
+          <div>
+            <strong>Runner execution required</strong>
+            <p>Guided recovery is not connected to a runner yet. This page cannot start a restore or verify its result.</p>
+            <p>Recovery will require a connected runner, a verified capsule, a confirmed target, and results from the actual restore. Previous browser-local replay records are not verified recovery evidence.</p>
+            {navigate && <button type="button" className="pb-btn" onClick={() => navigate('agents')}>View runners</button>}
+          </div>
+        </div>
+        <div className="pb-card">
+          <div className="pb-card-head"><h3>Available CLI recovery</h3><span>run on your runner</span></div>
+          <p className="pb-muted">The CLI can run recovery while the guided workspace is being connected. Target credentials and capsule contents stay on that runner.</p>
+          <a className="pb-btn" href="/docs#restore-targets">Recovery instructions</a>
+        </div>
+      </>
+    );
+  }
 
   const capsule = state.capsules.find(c => c.id === capsuleId);
   const sourceRef = capsule?.projectRef || state.projects[0]?.ref || '';
@@ -893,6 +933,7 @@ export function RestoresPage({ state, setState, toast }) {
   };
 
   const startReplay = () => {
+    if (!simulateDemo) return;
     if (!canStart) {
       toast('Complete all guards: capsule, matching new ref, not source, blank ack', 'danger');
       return;
@@ -905,7 +946,7 @@ export function RestoresPage({ state, setState, toast }) {
       kind: 'replay',
       projectId: state.projects.find(p => p.ref === sourceRef)?.id || null,
       sourceRef,
-      mode: 'replay',
+      mode: 'demo',
       status: 'running',
       evidenceStatus: null,
       targetRef: targetRef.trim().toLowerCase(),
@@ -918,14 +959,13 @@ export function RestoresPage({ state, setState, toast }) {
     };
     setState(s => {
       s.restores.unshift(record);
-      s.onboarding.steps.drill = true;
       s.events.unshift({
         id: uid('evt'),
         type: 'restore.started',
         projectRef: sourceRef,
         agentId: null,
         occurredAt: startedAt,
-        summary: `Replay started → ${record.targetRef}`,
+        summary: `Demo replay started → ${record.targetRef}`,
         level: 'info',
       });
       return s;
@@ -933,9 +973,9 @@ export function RestoresPage({ state, setState, toast }) {
     setRunningId(id);
     setWizard(false);
     setSelectedHistory(id);
-    toast('Replay running — validating into new project', 'ok');
+    toast('Demo replay running — no project is being changed', 'info');
 
-    // Simulate agent-side pipeline (Cloud only tracks; real work is CLI/agent)
+    // Explicit demo only. These timers never represent runner execution.
     let stepIndex = 0;
     const details = {
       select: `Capsule ${capsule.id.slice(0, 12)}… · ${capsule.verified ? 'verify green' : 'unverified'}`,
@@ -946,6 +986,7 @@ export function RestoresPage({ state, setState, toast }) {
       proof: 'Read-back inventory matches capsule layers',
     };
     const tick = () => {
+      if (!demoActive.current) return;
       stepIndex += 1;
       setState(s => {
         const r = s.restores.find(x => x.id === id);
@@ -957,7 +998,7 @@ export function RestoresPage({ state, setState, toast }) {
         if (stepIndex >= REPLAY_STEPS.length) {
           const finishedAt = new Date().toISOString();
           r.status = 'passed';
-          r.evidenceStatus = capsule.verified ? 'RECOVERY_DATA_PATH_VERIFIED' : 'PARTIAL_OK';
+          r.evidenceStatus = 'DEMO_SIMULATION_ONLY';
           r.finishedAt = finishedAt;
           r.durationMs = new Date(finishedAt) - new Date(r.startedAt);
           s.events.unshift({
@@ -966,20 +1007,20 @@ export function RestoresPage({ state, setState, toast }) {
             projectRef: sourceRef,
             agentId: null,
             occurredAt: finishedAt,
-            summary: `Replay passed → ${record.targetRef}`,
+            summary: `Demo replay finished → ${record.targetRef}`,
             level: 'ok',
           });
         }
         return s;
       });
       if (stepIndex < REPLAY_STEPS.length) {
-        setTimeout(tick, 700);
+        demoTimer.current = setTimeout(tick, 700);
       } else {
         setRunningId(null);
-        toast('Replay passed — capsule validated on new account', 'ok');
+        toast('Demo finished — no restore or validation was performed', 'info');
       }
     };
-    setTimeout(tick, 500);
+    demoTimer.current = setTimeout(tick, 500);
   };
 
   const history = [...state.restores].sort((a, b) => new Date(b.startedAt || 0) - new Date(a.startedAt || 0));
@@ -988,10 +1029,16 @@ export function RestoresPage({ state, setState, toast }) {
   return (
     <>
       <PageHead
-        title="Replay"
-        subtitle="Validate a recovery bundle by restoring it into a brand-new Supabase project (new account is fine). Source is never written."
+        title="Replay demo"
+        subtitle="Simulated recovery workflow. No runner executes and no project is changed."
         actions={<button type="button" className="pb-btn pb-btn-primary" onClick={openWizard}><Icon name="restore" size={14} /> New replay</button>}
       />
+
+      <div className="pb-sample-banner" role="status">
+        <span className="pb-sample-chip">DEMO</span>
+        <strong>Simulated results</strong>
+        <p>Every run and result on this page is sample data, not recovery evidence.</p>
+      </div>
 
       <div className="pb-callout info">
         <Icon name="shield" size={16} />
@@ -1027,7 +1074,7 @@ export function RestoresPage({ state, setState, toast }) {
                         </div>
                       </td>
                       <td><Badge tone={r.status}>{r.status}</Badge></td>
-                      <td className="mono" style={{ fontSize: 11 }}>{r.evidenceStatus || '—'}</td>
+                      <td className="mono" style={{ fontSize: 11 }}>DEMO_SIMULATION_ONLY</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1070,7 +1117,7 @@ export function RestoresPage({ state, setState, toast }) {
                 <div className="pb-inline"><span className="pb-faint">Source</span><span className="pb-mono pb-right">{active.sourceRef || '—'}</span></div>
                 <div className="pb-inline"><span className="pb-faint">New target</span><span className="pb-mono pb-right">{active.targetRef || '—'}</span></div>
                 <div className="pb-inline"><span className="pb-faint">Capsule</span><span className="pb-mono pb-right">{active.capsuleId}</span></div>
-                <div className="pb-inline"><span className="pb-faint">Evidence</span><span className="pb-mono pb-right">{active.evidenceStatus || '—'}</span></div>
+                <div className="pb-inline"><span className="pb-faint">Evidence</span><span className="pb-mono pb-right">DEMO_SIMULATION_ONLY</span></div>
                 <div className="pb-inline"><span className="pb-faint">Duration</span><span className="pb-mono pb-right">{formatDuration(active.durationMs)}</span></div>
               </dl>
               <div className="pb-timeline">
@@ -1091,14 +1138,14 @@ export function RestoresPage({ state, setState, toast }) {
 
       {wizard && (
         <Modal
-          title="New replay — validate on a new account"
+          title="Demo replay — simulated validation"
           large
           onClose={() => setWizard(false)}
           footer={
             <>
               <button type="button" className="pb-btn" onClick={() => setWizard(false)}>Cancel</button>
               <button type="button" className="pb-btn pb-btn-primary" disabled={!canStart} onClick={startReplay}>
-                Start replay validation
+                Start demo replay
               </button>
             </>
           }
@@ -1170,7 +1217,12 @@ export function RestoresPage({ state, setState, toast }) {
 }
 
 /* ─── ALERTS ─── */
-export function AlertsPage({ state, setState, toast, forcedTab, embedded }) {
+export function AlertsPage(props) {
+  if (props.demoMode !== true || props.state?.demoMode !== true) return <NotificationPreferences embedded={props.embedded} />;
+  return <DemoAlertsPage {...props} />;
+}
+
+function DemoAlertsPage({ state, setState, toast, forcedTab, embedded }) {
   const [tab, setTab] = useState(forcedTab || 'sms');
   const active = forcedTab || tab;
   const sms = state.sms || { onFailure: true, onSuccess: true, numbers: [], recent: [] };
@@ -1514,19 +1566,26 @@ export function TeamPage({ state, setState, toast, embedded }) {
   return (<><PageHead title="Team" subtitle="Who can see this workspace." />{body}</>);
 }
 
-export function BillingPage({ state, me, startTrial, startAddon, busy, setState, toast, embedded }) {
+export function BillingPage({ state, me, startTrial, startAddon, cancelSubscription, busy, toast, embedded, demoMode }) {
   const b = { ...state.billing, ...(me?.subscription || {}) };
-  const planId = b.plan && CLOUD_PLANS[b.plan] ? b.plan : (state.billing.planId || CLOUD_DEFAULT_PLAN_ID);
+  const planId = b.planId || b.plan || CLOUD_DEFAULT_PLAN_ID;
   const plan = getCloudPlan(planId);
+  const transfers = planTransfersPer24h(plan.id, { extraTransfersAddon: b.extraTransfersAddon });
+  const [checkoutPlanId, setCheckoutPlanId] = useState(() => checkoutPlanFromSearch(window.location.search) || CLOUD_DEFAULT_PLAN_ID);
+  const checkoutPlan = getCloudPlan(checkoutPlanId);
   const trialDays = b.trialEndsAt ? Math.max(0, Math.ceil((new Date(b.trialEndsAt) - Date.now()) / 86400e3)) : null;
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelError, setCancelError] = useState('');
+  const serverSubscription = me?.subscription || {};
+  const cancellationDate = serverSubscription.cancellationEffectiveAt || serverSubscription.currentPeriodEnd;
+  const cancellationScheduled = Boolean(serverSubscription.cancellationEffectiveAt)
+    || ['canceled', 'closed', 'refunded'].includes(serverSubscription.status);
+  const canCancel = Boolean(serverSubscription.squareSubscriptionId)
+    && ['active', 'trialing'].includes(serverSubscription.status)
+    && !cancellationScheduled;
 
   const selectPlan = (id) => {
-    if (setState) {
-      setState(s => {
-        s.billing = { ...s.billing, planId: id, plan: id };
-        return s;
-      });
-    }
+    setCheckoutPlanId(id);
     toast?.(getCloudPlan(id).shortLabel, 'ok');
   };
 
@@ -1553,18 +1612,19 @@ export function BillingPage({ state, me, startTrial, startAddon, busy, setState,
             style={{
               textAlign: 'left',
               cursor: 'pointer',
-              borderColor: plan.id === p.id ? 'var(--c-acid, #0e7c74)' : undefined,
-              boxShadow: plan.id === p.id ? '0 0 0 1px rgba(14,124,116,.45)' : undefined,
+              borderColor: checkoutPlan.id === p.id ? 'var(--c-acid, #0e7c74)' : undefined,
+              boxShadow: checkoutPlan.id === p.id ? '0 0 0 1px rgba(14,124,116,.45)' : undefined,
             }}
             onClick={() => selectPlan(p.id)}
           >
             <div className="pb-kpi-label">{p.title}</div>
             <div className="pb-kpi-value" style={{ fontSize: 28 }}>${p.priceMonthlyUsd}<span style={{ fontSize: 14 }}>/mo</span></div>
             <div className="pb-kpi-meta">{p.cadenceLabel}</div>
-            {plan.id === p.id && <Badge tone="acid">Selected</Badge>}
+            {checkoutPlan.id === p.id && <Badge tone="acid">Selected for checkout</Badge>}
           </button>
         ))}
       </div>
+      <p className="pb-muted">Selected for checkout: {checkoutPlan.title} · ${checkoutPlan.priceMonthlyUsd}/mo. Paid access starts after Square verifies the subscription.</p>
       <div className="pb-grid pb-grid-2">
         <div className="pb-card">
           <div className="pb-kpi-label">Plan · Square</div>
@@ -1574,10 +1634,24 @@ export function BillingPage({ state, me, startTrial, startAddon, busy, setState,
             <Badge tone={b.status || state.billing.status}>{b.status || state.billing.status}</Badge>
             <Badge tone="acid">Square</Badge>
             <Badge tone="info">up to {plan.storageCapLabel}</Badge>
-            <Badge tone="info">{BASE_TRANSFERS_PER_24H} / {TRANSFER_WINDOW_HOURS}h included</Badge>
+            <Badge tone="info">{transfers} {plan.id === 'cloud-free' ? 'manual backup' : 'transfers'} / {TRANSFER_WINDOW_HOURS}h</Badge>
+            {plan.id === 'cloud-free' && <Badge tone="info">No scheduled service</Badge>}
           </div>
           {(b.status || state.billing.status) === 'trialing' && trialDays != null && (
             <p className="pb-muted" style={{ marginTop: 12 }}>Trial ends in {trialDays} day(s) · then billed on the card on file</p>
+          )}
+          {cancellationScheduled && (
+            <div className="pb-callout info" style={{ marginTop: 16 }} role="status">
+              <div>
+                <strong>Renewal canceled</strong>
+                <p>
+                  {cancellationDate
+                    ? `Square confirms access through ${billingDate(cancellationDate)}.`
+                    : 'Square confirms this subscription is no longer renewing.'}
+                  {' '}Capsules in your vault and private runner configuration are not deleted.
+                </p>
+              </div>
+            </div>
           )}
           {!(me?.access?.hasAccess) && (
             <button
@@ -1585,9 +1659,20 @@ export function BillingPage({ state, me, startTrial, startAddon, busy, setState,
               className="pb-btn pb-btn-primary"
               style={{ marginTop: 16 }}
               disabled={busy}
-              onClick={() => startTrial?.(plan.id)}
+              onClick={() => startTrial?.(checkoutPlan.id)}
             >
-              {busy ? 'Opening Square…' : `Pay with Square · 7-day trial then $${plan.priceMonthlyUsd}/mo`}
+              {busy ? 'Opening Square…' : `Pay with Square · 7-day trial then $${checkoutPlan.priceMonthlyUsd}/mo`}
+            </button>
+          )}
+          {canCancel && (
+            <button
+              type="button"
+              className="pb-btn pb-btn-danger"
+              style={{ marginTop: 16 }}
+              disabled={busy}
+              onClick={() => { setCancelError(''); setCancelOpen(true); }}
+            >
+              Cancel renewal
             </button>
           )}
         </div>
@@ -1598,7 +1683,7 @@ export function BillingPage({ state, me, startTrial, startAddon, busy, setState,
           </p>
           <TransferWindowPanel state={state} me={me} onUpgrade={startAddon} busy={busy} compact />
           <ul className="pb-muted" style={{ margin: '14px 0 0', paddingLeft: 18, lineHeight: 1.55, fontSize: 13 }}>
-            <li>Console · SMS success/failure · ≤{CLOUD_MAX_AGENTS} agents</li>
+            <li>Console · notification preferences · ≤{CLOUD_MAX_AGENTS} agents</li>
             <li>Cloud Free 100 MB · $7 · 10 GB · 1 / 24h · $17 · 25 GB · 3 / day</li>
             <li>Table sizer include/exclude before a job · loud NOT COVERED when omitted</li>
             <li>Not capsule storage (you provide)</li>
@@ -1608,11 +1693,53 @@ export function BillingPage({ state, me, startTrial, startAddon, busy, setState,
             <div>
               <strong>Payment method</strong>
               <p>{state.billing.paymentMethod || 'None yet — complete Square checkout'}</p>
-              <p style={{ marginTop: 6 }}>SMS: Alerts → SMS texts · success + failure at run time</p>
+              <p style={{ marginTop: 6 }}>Email and SMS preferences: <a href="/app/alerts">Alerts</a>. Notification delivery is not connected yet.</p>
             </div>
           </div>
         </div>
       </div>
+      {cancelOpen && (
+        <Modal
+          title="Cancel subscription renewal?"
+          onClose={busy ? undefined : () => setCancelOpen(false)}
+          footer={(
+            <>
+              <button type="button" className="pb-btn" disabled={busy} onClick={() => setCancelOpen(false)}>Keep subscription</button>
+              <button
+                type="button"
+                className="pb-btn pb-btn-danger"
+                disabled={busy}
+                onClick={async () => {
+                  setCancelError('');
+                  if (typeof cancelSubscription !== 'function') {
+                    setCancelError('Cancellation is unavailable in this account view. Reload and try again.');
+                    return;
+                  }
+                  try {
+                    await cancelSubscription();
+                    setCancelOpen(false);
+                  } catch (error) {
+                    setCancelError(error?.message || 'Cancellation could not be confirmed. Refresh and retry.');
+                  }
+                }}
+              >
+                {busy ? 'Confirming with Square…' : 'Confirm cancellation'}
+              </button>
+            </>
+          )}
+        >
+          <p>
+            Square will stop renewal for the base plan and any separately billed transfer add-on.
+            This does not issue a refund or end verified access before the current paid period expires.
+          </p>
+          <p>
+            Your customer-owned capsule vault and private runner configuration are not deleted.
+            A successful screen appears only after Portabase reads the cancellation back from Square.
+          </p>
+          {demoMode && <div className="pb-callout warn"><div><strong>Demo only</strong><p>No Square subscription will be changed.</p></div></div>}
+          {cancelError && <div className="pb-callout danger" role="alert"><div><strong>Cancellation not confirmed</strong><p>{cancelError}</p></div></div>}
+        </Modal>
+      )}
     </>
   );
   if (embedded) return body;
@@ -1647,7 +1774,7 @@ export function SettingsPage({ state, setState, toast, resetDemo, embedded }) {
             ))}
           </div>
           <p style={{ margin: '14px 0 0', color: 'var(--c-muted)', fontSize: 12, lineHeight: 1.5 }}>
-            CloudTrail API events are read live from <em>your</em> AWS account (when connected). See Account → CloudTrail live.
+            Review CloudTrail API events directly in your AWS account. Runner status is available in Telemetry.
           </p>
           <button type="button" className="pb-btn pb-btn-danger" style={{ marginTop: 18 }} onClick={() => {
             if (confirm('Reset console demo data?')) resetDemo();
@@ -1659,489 +1786,32 @@ export function SettingsPage({ state, setState, toast, resetDemo, embedded }) {
   return (<><PageHead title="Settings" subtitle="Workspace prefs. No secrets forms." />{body}</>);
 }
 
-function demoTrailEvents(vaultHint = 'customer vault') {
-  const now = Date.now();
-  const row = (minsAgo, eventName, eventSource, username, resources, errorCode = null) => ({
-    id: `demo_${minsAgo}_${eventName}`,
-    eventTime: new Date(now - minsAgo * 60e3).toISOString(),
-    eventName,
-    eventSource,
-    username,
-    resources,
-    readOnly: /Get|Describe|List|Lookup/i.test(eventName),
-    errorCode,
-    awsRegion: 'us-east-1',
-    sourceIPAddress: 'portabase-runner',
-  });
-  return [
-    row(2, 'PutObject', 's3.amazonaws.com', 'portabase-runner-session', [`${vaultHint} · sealed object (name withheld)`]),
-    row(3, 'Encrypt', 'kms.amazonaws.com', 'portabase-runner-session', ['arn:aws:kms:us-east-1:…:key/cmk-…']),
-    row(4, 'GenerateDataKey', 'kms.amazonaws.com', 'portabase-runner-session', ['arn:aws:kms:us-east-1:…:key/cmk-…']),
-    row(18, 'PutObject', 's3.amazonaws.com', 'portabase-runner-session', [`${vaultHint} · checksum object (name withheld)`]),
-    row(19, 'Decrypt', 'kms.amazonaws.com', 'portabase-runner-session', ['arn:aws:kms:us-east-1:…:key/cmk-…']),
-    row(95, 'LookupEvents', 'cloudtrail.amazonaws.com', 'portabase-audit-session', ['—']),
-    row(120, 'PutObject', 's3.amazonaws.com', 'portabase-runner-session', [`${vaultHint} · manifest object (name withheld)`]),
-  ];
-}
-
-function demoCloudWatchLines(secretId, secretLabel) {
-  const now = Date.now();
-  const line = (secAgo, level, message) => ({
-    id: `cw_${secAgo}_${level}_${Math.random().toString(36).slice(2, 6)}`,
-    timestamp: new Date(now - secAgo * 1000).toISOString(),
-    message: `[${level}] secret=${secretId} ${message}`,
-    logStreamName: `secret/${secretId}/job/job_demo`,
-    ingestionTime: new Date(now - secAgo * 1000).toISOString(),
-  });
-  return [
-    line(8, 'INFO', `job started · label="${secretLabel}" · scope=secret-only`),
-    line(12, 'INFO', 'runner assumed task role · stream secret/' + secretId),
-    line(40, 'INFO', 'capture.database · ok'),
-    line(95, 'INFO', 'capture.storage · objects=… · no secret values logged'),
-    line(120, 'INFO', 'kms.GenerateDataKey · via customer grant (if configured)'),
-    line(140, 'INFO', 's3.PutObject · capsule.pbase · vault prefix only'),
-    line(155, 'INFO', 'job finished · status=COMPLETE · durationMs=…'),
-    line(400, 'INFO', 'heartbeat · secret still registered · no value materialization'),
-  ];
-}
-
-/**
- * Live CloudWatch feed scoped to one workspace secret.
- * Always-on recording; live tail in console; API redacts secret-shaped strings.
- */
-export function CloudWatchLivePage({ state, setState, toast, embedded }) {
-  const secrets = state.secrets || [];
-  const cw = state.cloudWatchLive || { secretId: secrets[0]?.id, livePollSeconds: 8, mode: 'demo' };
-  const [secretId, setSecretId] = useState(cw.secretId || secrets[0]?.id || 'sec_prod_primary');
-  const secretMeta = secrets.find(s => s.id === secretId) || { id: secretId, label: secretId };
-  const [events, setEvents] = useState(() => demoCloudWatchLines(secretId, secretMeta.label));
-  const [live, setLive] = useState(false);
-  const [polling, setPolling] = useState(true);
-  const [status, setStatus] = useState('Demo feed — scoped to selected secret');
-  const [error, setError] = useState('');
-  const [scope, setScope] = useState({
-    logGroupName: `/portabase/tenants/…/secrets/${secretId}`,
-    logStreamNamePrefix: `secret/${secretId}`,
-  });
-
-  const fetchLogs = useCallback(async () => {
-    const sid = secretId;
-    const label = (state.secrets || []).find(s => s.id === sid)?.label || sid;
-    try {
-      const headers = { 'Content-Type': 'application/json' };
-      try {
-        const session = JSON.parse(localStorage.getItem('portabase.session') || 'null');
-        const token = session?.accessToken || session?.idToken;
-        if (token) headers.Authorization = `Bearer ${token}`;
-        if (session?.cloudVersion) headers['X-Portabase-Cloud-Version'] = session.cloudVersion;
-      } catch { /* demo */ }
-      const res = await fetch('/api/cloud/cloudwatch-live', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          secretId: sid,
-          workspaceId: state.workspace?.id || state.cloudWatchLive?.workspaceId,
-          region: state.cloudWatchLive?.region || 'us-east-1',
-          lookbackMinutes: 360,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (data.live && Array.isArray(data.events) && data.events.length) {
-        setLive(true);
-        setEvents(data.events);
-        setScope(data.scope || scope);
-        setStatus(`Live · secret ${sid} · ${data.events.length} lines · ${new Date(data.polledAt || Date.now()).toLocaleTimeString()}`);
-        setError('');
-        setState(st => {
-          st.cloudWatchLive = {
-            ...(st.cloudWatchLive || {}),
-            secretId: sid,
-            lastPolledAt: data.polledAt,
-            mode: 'live',
-          };
-          return st;
-        });
-      } else {
-        setLive(false);
-        setEvents(demoCloudWatchLines(sid, label));
-        setScope({
-          logGroupName: data.scope?.logGroupName || `/portabase/tenants/…/secrets/${sid}`,
-          logStreamNamePrefix: data.scope?.logStreamNamePrefix || `secret/${sid}`,
-        });
-        setStatus(
-          data.mode === 'setup'
-            ? `Demo · log group not yet created for this secret (will appear after first managed job)`
-            : `Demo live · scoped to ${sid}` + (data.error ? ` · API: ${data.error.slice(0, 80)}` : ''),
-        );
-        setError(data.mode === 'error' ? (data.error || '') : '');
-      }
-    } catch (e) {
-      setLive(false);
-      setEvents(demoCloudWatchLines(sid, label));
-      setStatus(`Demo · API offline (${e.message || 'network'})`);
-    }
-  }, [secretId, state.secrets, state.workspace?.id, state.cloudWatchLive, setState, scope]);
-
-  useEffect(() => {
-    setEvents(demoCloudWatchLines(secretId, secretMeta.label));
-    fetchLogs();
-  }, [secretId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!polling) return undefined;
-    const sec = Math.max(5, Number(state.cloudWatchLive?.livePollSeconds) || 8);
-    const id = setInterval(fetchLogs, sec * 1000);
-    return () => clearInterval(id);
-  }, [polling, fetchLogs, state.cloudWatchLive?.livePollSeconds]);
-
-  useEffect(() => {
-    if (live || !polling) return undefined;
-    const id = setInterval(() => {
-      setEvents(prev => {
-        const tick = {
-          id: `cw_tick_${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          message: `[INFO] secret=${secretId} heartbeat · scope=secret-only · no values logged`,
-          logStreamName: `secret/${secretId}/job/job_demo`,
-        };
-        return [tick, ...prev].slice(0, 60);
-      });
-      setStatus(`Demo live · secret ${secretId} · ${new Date().toLocaleTimeString()}`);
-    }, 12000);
-    return () => clearInterval(id);
-  }, [live, polling, secretId]);
-
-  const body = (
-    <div className="pb-stack" style={{ gap: 16 }}>
-      <div className="pb-card">
-        <div className="pb-inline" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <div>
-            <h3 style={{ margin: '0 0 6px' }}>CloudWatch live · secret-scoped</h3>
-            <p style={{ margin: 0, color: 'var(--c-muted)', fontSize: 13, maxWidth: 620, lineHeight: 1.5 }}>
-              Tail Portabase runner logs for <strong>one secret at a time</strong> — not your whole AWS account.
-              Always recorded for managed jobs; open anytime (including retroactively within retention).
-              Secret <em>values</em> are never written to these lines.
-            </p>
-          </div>
-          <div className="pb-inline" style={{ gap: 8 }}>
-            <Badge tone={live ? 'ok' : 'warn'}>{live ? 'LIVE' : 'DEMO'}</Badge>
-            <button type="button" className="pb-btn" onClick={() => setPolling(p => !p)}>{polling ? 'Pause' : 'Resume'}</button>
-            <button type="button" className="pb-btn pb-btn-primary" onClick={() => { fetchLogs(); toast('Refreshed', 'ok'); }}>Refresh</button>
-          </div>
-        </div>
-        <div className="pb-field" style={{ marginTop: 14, maxWidth: 420 }}>
-          <label>Secret scope</label>
-          <select
-            value={secretId}
-            onChange={e => {
-              const id = e.target.value;
-              setSecretId(id);
-              setState(st => {
-                st.cloudWatchLive = { ...(st.cloudWatchLive || {}), secretId: id };
-                return st;
-              });
-            }}
-          >
-            {(secrets.length ? secrets : [{ id: secretId, label: secretId }]).map(s => (
-              <option key={s.id} value={s.id}>{s.label} · {s.id}</option>
-            ))}
-          </select>
-        </div>
-        <p className="mono" style={{ margin: '10px 0 0', fontSize: 11, color: 'var(--c-faint)' }}>{status}</p>
-        {error && <p style={{ margin: '8px 0 0', color: 'var(--c-danger)', fontSize: 12 }}>{error}</p>}
-      </div>
-
-      <div className="pb-grid pb-grid-2">
-        <div className="pb-card">
-          <h3 style={{ marginTop: 0 }}>Scope (this secret only)</h3>
-          <div className="pb-stack" style={{ gap: 8 }}>
-            <div className="pb-inline" style={{ justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--c-muted)' }}>Log group</span>
-              <code className="mono" style={{ fontSize: 11 }}>{scope.logGroupName}</code>
-            </div>
-            <div className="pb-inline" style={{ justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--c-muted)' }}>Stream prefix</span>
-              <code className="mono" style={{ fontSize: 11 }}>{scope.logStreamNamePrefix}</code>
-            </div>
-            <div className="pb-inline" style={{ justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--c-muted)' }}>Secret</span>
-              <code className="mono" style={{ fontSize: 11 }}>{secretId}</code>
-            </div>
-          </div>
-          <p style={{ margin: '14px 0 0', fontSize: 12, color: 'var(--c-faint)', lineHeight: 1.5 }}>
-            Other customers’ secrets and other workspaces are not readable here.
-            Cross-tenant isolation is by log group path + authz on the API.
-          </p>
-        </div>
-        <div className="pb-card">
-          <h3 style={{ marginTop: 0 }}>What you will not see</h3>
-          <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--c-muted)', fontSize: 13, lineHeight: 1.55 }}>
-            <li>Passphrases, service-role keys, or raw secret payloads</li>
-            <li>Other secrets’ log streams</li>
-            <li>Account-wide CloudWatch (use your AWS console for that)</li>
-          </ul>
-          <p style={{ margin: '14px 0 0', fontSize: 12, color: 'var(--c-faint)', lineHeight: 1.5 }}>
-            For AWS API audit of <em>your</em> KMS/S3, use <strong>CloudTrail live</strong>.
-            For “did Portabase run my job?”, use this feed.
-          </p>
-        </div>
-      </div>
-
-      <div className="pb-card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{
-          fontFamily: 'var(--mono)',
-          fontSize: 11.5,
-          lineHeight: 1.55,
-          maxHeight: 420,
-          overflow: 'auto',
-          background: 'var(--c-bg)',
-          padding: '14px 16px',
-        }}
-        >
-          {events.length === 0 && <div style={{ color: 'var(--c-faint)' }}>No log lines in lookback window.</div>}
-          {events.map(ev => (
-            <div key={ev.id} style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: 12, marginBottom: 6 }}>
-              <span style={{ color: 'var(--c-faint)' }}>{ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : '—'}</span>
-              <span style={{ color: /ERROR|FAIL/i.test(ev.message) ? 'var(--c-danger)' : /WARN/i.test(ev.message) ? 'var(--c-warn)' : 'var(--c-acid)' }}>
-                {ev.message}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  if (embedded) return body;
+/** Retained component/route name for existing account bookmarks. */
+export function CloudWatchLivePage({ navigate }) {
   return (
-    <>
-      <PageHead title="CloudWatch live" subtitle="Runner logs scoped to one secret." />
-      {body}
-    </>
+    <section className="pb-card">
+      <h2>Runner activity</h2>
+      <p>View reported job status and health in Telemetry.</p>
+      <p>Detailed diagnostic logs stay with your private runner and recovery capsule.
+        Hosted access to private diagnostics is not available yet.</p>
+      <button type="button" className="pb-btn pb-btn-primary" onClick={() => navigate('telemetry')}>
+        Open telemetry
+      </button>
+    </section>
   );
 }
 
-/**
- * Live CloudTrail feed in hosted console.
- * Demo mode streams sample events; production POSTs to /api/cloud/audit-trail with customer role.
- */
-export function CloudTrailLivePage({ state, setState, toast, embedded }) {
-  const audit = state.auditTrail || {
-    enabled: true, livePollSeconds: 20, region: 'us-east-1', roleArn: '', externalId: '', vaultPrefixHint: '', connected: false, mode: 'demo',
-  };
-  const [events, setEvents] = useState(() => demoTrailEvents(audit.vaultPrefixHint));
-  const [live, setLive] = useState(false);
-  const [polling, setPolling] = useState(true);
-  const [status, setStatus] = useState(audit.mode === 'live' ? 'Live (customer Trail)' : 'Demo feed — connect your role for real Trail');
-  const [error, setError] = useState('');
-  const [draft, setDraft] = useState({
-    roleArn: audit.roleArn || '',
-    externalId: audit.externalId || '',
-    region: audit.region || 'us-east-1',
-    vaultPrefixHint: audit.vaultPrefixHint || '',
-  });
-
-  const saveConnection = () => {
-    setState(st => {
-      st.auditTrail = {
-        ...(st.auditTrail || {}),
-        ...draft,
-        connected: Boolean(draft.roleArn.trim()),
-        mode: draft.roleArn.trim() ? 'live' : 'demo',
-      };
-      return st;
-    });
-    toast(draft.roleArn.trim() ? 'CloudTrail role saved — polling live' : 'Cleared role — demo feed', 'ok');
-  };
-
-  const fetchTrail = useCallback(async () => {
-    const roleArn = (state.auditTrail?.roleArn || draft.roleArn || '').trim();
-    if (!roleArn) {
-      setLive(false);
-      setEvents(demoTrailEvents(state.auditTrail?.vaultPrefixHint || draft.vaultPrefixHint));
-      setStatus('Demo feed — events illustrate what live Trail looks like');
-      setError('');
-      return;
-    }
-    try {
-      const headers = { 'Content-Type': 'application/json' };
-      try {
-        const session = JSON.parse(localStorage.getItem('portabase.session') || 'null');
-        const token = session?.accessToken || session?.idToken;
-        if (token) headers.Authorization = `Bearer ${token}`;
-        if (session?.cloudVersion) headers['X-Portabase-Cloud-Version'] = session.cloudVersion;
-      } catch { /* demo */ }
-      const res = await fetch('/api/cloud/audit-trail', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          roleArn,
-          externalId: state.auditTrail?.externalId || draft.externalId,
-          region: state.auditTrail?.region || draft.region,
-          resourceContains: state.auditTrail?.vaultPrefixHint || draft.vaultPrefixHint,
-          lookbackMinutes: 360,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (data.live && Array.isArray(data.events)) {
-        setLive(true);
-        setEvents(data.events);
-        setStatus(`Live · ${data.events.length} events · polled ${new Date(data.polledAt || Date.now()).toLocaleTimeString()}`);
-        setError('');
-        setState(st => {
-          st.auditTrail = { ...(st.auditTrail || {}), lastPolledAt: data.polledAt, mode: 'live', connected: true };
-          return st;
-        });
-      } else if (data.mode === 'setup' || !roleArn) {
-        setLive(false);
-        setEvents(demoTrailEvents(draft.vaultPrefixHint));
-        setStatus(data.message || 'Connect IAM role for live Trail');
-        setError('');
-      } else {
-        setLive(false);
-        setError(data.error || 'Lookup failed');
-        setStatus('Live lookup failed — showing last demo sample');
-        setEvents(prev => (prev.length ? prev : demoTrailEvents(draft.vaultPrefixHint)));
-      }
-    } catch (e) {
-      setLive(false);
-      setError(e.message || 'Network error');
-      setEvents(demoTrailEvents(draft.vaultPrefixHint));
-      setStatus('Offline / API unavailable — demo feed');
-    }
-  }, [state.auditTrail, draft.roleArn, draft.externalId, draft.region, draft.vaultPrefixHint, setState]);
-
-  useEffect(() => {
-    fetchTrail();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!polling) return undefined;
-    const sec = Math.max(10, Number(state.auditTrail?.livePollSeconds) || 20);
-    const id = setInterval(fetchTrail, sec * 1000);
-    return () => clearInterval(id);
-  }, [polling, fetchTrail, state.auditTrail?.livePollSeconds]);
-
-  // Soft live feel in demo: occasionally prepend a synthetic event
-  useEffect(() => {
-    if (live || !polling) return undefined;
-    const id = setInterval(() => {
-      setEvents(prev => {
-        const next = demoTrailEvents(state.auditTrail?.vaultPrefixHint || draft.vaultPrefixHint);
-        next[0] = {
-          ...next[0],
-          id: `demo_tick_${Date.now()}`,
-          eventTime: new Date().toISOString(),
-          eventName: Math.random() > 0.5 ? 'PutObject' : 'Encrypt',
-        };
-        return [next[0], ...prev].slice(0, 40);
-      });
-      setStatus(`Demo live · updated ${new Date().toLocaleTimeString()}`);
-    }, 22000);
-    return () => clearInterval(id);
-  }, [live, polling, state.auditTrail?.vaultPrefixHint, draft.vaultPrefixHint]);
-
-  const body = (
-    <div className="pb-stack" style={{ gap: 16 }}>
-      <div className="pb-card">
-        <div className="pb-inline" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <div>
-            <h3 style={{ margin: '0 0 6px' }}>CloudTrail live</h3>
-            <p style={{ margin: 0, color: 'var(--c-muted)', fontSize: 13, maxWidth: 560, lineHeight: 1.5 }}>
-              Watch API activity in <strong>your</strong> AWS account as Portabase runners use your vault and KMS.
-              Near-real-time (usually 1–5 minutes behind AWS). No capsule bytes or passphrases appear here.
-            </p>
-          </div>
-          <div className="pb-inline" style={{ gap: 8 }}>
-            <Badge tone={live ? 'ok' : 'warn'}>{live ? 'LIVE' : 'DEMO'}</Badge>
-            <button type="button" className="pb-btn" onClick={() => setPolling(p => !p)}>{polling ? 'Pause' : 'Resume'}</button>
-            <button type="button" className="pb-btn pb-btn-primary" onClick={() => { fetchTrail(); toast('Refreshed', 'ok'); }}>Refresh</button>
-          </div>
-        </div>
-        <p className="mono" style={{ margin: '12px 0 0', fontSize: 11, color: 'var(--c-faint)' }}>{status}</p>
-        {error && <p style={{ margin: '8px 0 0', color: 'var(--c-danger)', fontSize: 12 }}>{error}</p>}
-      </div>
-
-      <div className="pb-grid pb-grid-2">
-        <div className="pb-card">
-          <h3 style={{ marginTop: 0 }}>Connect your Trail (optional)</h3>
-          <p style={{ color: 'var(--c-muted)', fontSize: 12, lineHeight: 1.5 }}>
-            Create a role in <em>your</em> account that trusts Portabase and allows <code>cloudtrail:LookupEvents</code>.
-            Paste the role ARN. External ID recommended. Trail must already be enabled in your account for history.
-          </p>
-          <div className="pb-field"><label>Role ARN</label>
-            <input value={draft.roleArn} onChange={e => setDraft(d => ({ ...d, roleArn: e.target.value }))} placeholder="arn:aws:iam::123456789012:role/portabase-trail-read" />
-          </div>
-          <div className="pb-field"><label>External ID</label>
-            <input value={draft.externalId} onChange={e => setDraft(d => ({ ...d, externalId: e.target.value }))} placeholder="workspace external id" />
-          </div>
-          <div className="pb-field"><label>Region</label>
-            <input value={draft.region} onChange={e => setDraft(d => ({ ...d, region: e.target.value }))} />
-          </div>
-          <div className="pb-field"><label>Vault prefix filter (optional)</label>
-            <input value={draft.vaultPrefixHint} onChange={e => setDraft(d => ({ ...d, vaultPrefixHint: e.target.value }))} placeholder="customer vault (no object names)" />
-          </div>
-          <button type="button" className="pb-btn pb-btn-primary" onClick={saveConnection}>Save connection</button>
-        </div>
-        <div className="pb-card">
-          <h3 style={{ marginTop: 0 }}>What you will see</h3>
-          <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--c-muted)', fontSize: 13, lineHeight: 1.55 }}>
-            <li><code>kms:Encrypt</code> / <code>Decrypt</code> when using your CMK</li>
-            <li><code>s3:PutObject</code> when sealed capsules land — object names withheld from this console</li>
-            <li>Principal / session that Portabase used</li>
-            <li>Errors if a grant was revoked or denied</li>
-          </ul>
-          <p style={{ margin: '14px 0 0', fontSize: 12, color: 'var(--c-faint)', lineHeight: 1.5 }}>
-            Without a role, this panel still runs a <strong>demo live feed</strong> so the product is understandable before AWS setup.
-            Job history in the console is always recorded separately (see Security page).
-          </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 14 }}>
-            <a className="pb-btn" style={{ display: 'inline-flex' }} href="/security#options" target="_blank" rel="noreferrer">Security &amp; trust ↗</a>
-            <a className="pb-btn" style={{ display: 'inline-flex' }} href="/backend" target="_blank" rel="noreferrer">Backend · capsules &amp; workers ↗</a>
-            <a className="pb-btn" style={{ display: 'inline-flex' }} href="/docs" target="_blank" rel="noreferrer">Docs ↗</a>
-            <a className="pb-btn" style={{ display: 'inline-flex' }} href="/legal" target="_blank" rel="noreferrer">Legal ↗</a>
-          </div>
-        </div>
-      </div>
-
-      <div className="pb-table-wrap">
-        <table className="pb-table">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Event</th>
-              <th>Source</th>
-              <th>Principal</th>
-              <th>Resources</th>
-              <th>Result</th>
-            </tr>
-          </thead>
-          <tbody>
-            {events.length === 0 && (
-              <tr><td colSpan={6} style={{ color: 'var(--c-muted)' }}>No events in lookback window.</td></tr>
-            )}
-            {events.map(ev => (
-              <tr key={ev.id}>
-                <td className="mono">{ev.eventTime ? new Date(ev.eventTime).toLocaleString() : '—'}</td>
-                <td><strong>{ev.eventName}</strong></td>
-                <td className="mono">{ev.eventSource}</td>
-                <td className="mono" style={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.username}</td>
-                <td className="mono" style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}>{(ev.resources || []).join(', ') || '—'}</td>
-                <td>{ev.errorCode ? <Badge tone="danger">{ev.errorCode}</Badge> : <Badge tone="ok">ok</Badge>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-
-  if (embedded) return body;
+/** Existing bookmarks remain usable without proxying customer AWS audit data. */
+export function CloudTrailLivePage({ navigate }) {
   return (
-    <>
-      <PageHead title="CloudTrail live" subtitle="Near-real-time API activity from your AWS account." />
-      {body}
-    </>
+    <section className="pb-card">
+      <h2>AWS audit history</h2>
+      <p>Review CloudTrail events in your own AWS account. This console does not retrieve AWS audit logs.</p>
+      <p>For job results emitted by your runner, open Telemetry. Private runner audit browsing is not available yet.</p>
+      <button type="button" className="pb-btn pb-btn-primary" onClick={() => navigate('telemetry')}>
+        Open telemetry
+      </button>
+    </section>
   );
 }
 

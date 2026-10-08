@@ -3,7 +3,9 @@
   radial-gradient(circle at 24px 24px,rgba(20,24,28,.08) 0 2px,transparent 2.5px) 0 0/48px 48px,
   linear-gradient(90deg,rgba(20,24,28,.035) 1px,transparent 1px) 0 0/32px 32px,var(--paper)}[hidden]{display:none!important}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .float-backdrop{position:fixed;inset:0;z-index:1;display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto;background:rgba(10,14,18,.5)}
-.float-window{position:relative;display:flex;flex-direction:column;width:45vw;height:85vh;min-width:420px;min-height:380px;max-width:calc(100vw - 40px);max-height:calc(100vh - 40px);background:var(--paper);border-radius:10px;box-shadow:0 30px 70px rgba(0,0,0,.45);overflow:hidden}
+.float-window{position:relative;display:flex;flex-direction:column;width:45vw;height:85vh;min-width:420px;min-height:380px;max-width:calc(100vw - 40px);max-height:calc(100vh - 40px);background:var(--paper);border-radius:10px;box-shadow:0 30px 70px rgba(0,0,0,.45);overflow:hidden;transition:width .25s ease,height .25s ease}
+.float-window.inventory-expanded{width:96vw;height:94vh;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px)}
+@media(max-width:680px){.float-window.inventory-expanded{width:100vw;height:100vh;max-width:100vw;max-height:100vh;border-radius:0}}
 .float-window.dragging{transition:none}
 .float-window>main{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}.float-window>main::-webkit-scrollbar{display:none}
 #floatDragHandle{cursor:move;user-select:none;flex:0 0 auto;transition:box-shadow .15s ease}
@@ -84,6 +86,9 @@ body.setup-connected main{width:min(760px,calc(100% - 32px));padding-top:28px}bo
 .passkey-row label span{display:block;margin-bottom:3px;color:var(--muted);font-size:12px;font-weight:650}
 .passkey-row input{width:100%}
 .passkey-copy-btn{flex:0 0 auto;min-height:0;width:38px;padding:0;display:grid;place-items:center;font-size:15px}
+.security-packet-prompt{margin-top:10px;padding:12px 14px;background:#fff0ed;border-left:4px solid var(--red);border-radius:6px}
+.security-packet-prompt p{margin:0 0 8px;font-size:13px;color:#6e3028}
+.security-packet-prompt button{min-height:36px}
 .grid-na{text-align:center;color:var(--muted)}
 body:has(#capsuleOnly:checked) .dest-cell{opacity:.4;filter:grayscale(1)}
 body:has(#capsuleOnly:checked) input.dest-cell{pointer-events:none;background:#eee}

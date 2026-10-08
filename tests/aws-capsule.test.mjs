@@ -288,8 +288,11 @@ test('wired CLI: portabase aws doctor --fixture writes a not-proven report', () 
 });
 
 test('portabase doctor remains the Supabase command and does not run AWS doctor', () => {
-  const result = spawnSync(process.execPath, [join(root, 'utility/portabase.mjs'), 'doctor'], {
+  const env = { ...process.env };
+  delete env.PORTABASE_RUNTIME_CONFIG;
+  const result = spawnSync(process.execPath, [join(root, 'utility/portabase.mjs'), 'doctor', '--config', join(root, 'tests', 'missing-doctor-config.json')], {
     encoding: 'utf8',
+    env,
   });
   assert.notEqual(result.status, 0);
   assert.match(`${result.stderr}\n${result.stdout}`, /Config not found|portabase init/);

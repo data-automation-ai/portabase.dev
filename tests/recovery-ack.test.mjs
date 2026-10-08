@@ -61,7 +61,7 @@ test('component shades rows red/amber/green and marks red as immediate attention
   assert.match(src, /Nothing to do/, 'green rows render as automatic');
 });
 
-test('signup is gated: email submit and both OAuth buttons require the full checklist', () => {
+test('signup is gated: email submit and the Google OAuth button require the full checklist', () => {
   const src = readFileSync(new URL('../src/auth-pages.jsx', import.meta.url), 'utf8');
   assert.match(src, /import \{ isRecoveryAckComplete \} from '\.\/data\/recovery-acknowledgments\.js'/);
   assert.match(src, /import \{ RecoveryAcknowledgments, recordRecoveryAck \} from '\.\/recovery-ack\.jsx'/);
@@ -69,7 +69,7 @@ test('signup is gated: email submit and both OAuth buttons require the full chec
   assert.match(src, /if \(!ackComplete\) return;/, 'email signup halts without full acknowledgment');
   assert.match(src, /disabled=\{busy \|\| !ackComplete\}/, 'submit button gated');
   const blocked = src.match(/blocked=\{!ackComplete\}/g) || [];
-  assert.equal(blocked.length, 2, 'both OAuth buttons gated');
+  assert.equal(blocked.length, 1, 'the Google OAuth button is gated');
   assert.match(src, /recordRecoveryAck\(acks\)/, 'acknowledgment is recorded');
   assert.match(src, /Acknowledge every red and amber item above to enable sign-up\./);
 });

@@ -203,6 +203,7 @@ function registerIpc() {
       config: await readJson(userFile('portabase.config.json'), null),
       license: await inspectInstalledLicense(),
       comfortLevel: ['guided', 'standard', 'cli'].includes(settings.comfortLevel) ? settings.comfortLevel : null,
+      version: app.getVersion(),
     };
   });
   ipcMain.handle('portabase:save-settings', async (event, settings) => {
@@ -295,7 +296,8 @@ function registerIpc() {
   });
   ipcMain.handle('portabase:open', async (event, url) => {
     const projectSettingsPage = /^https:\/\/supabase\.com\/dashboard\/project\/[a-z0-9]{20}\/settings\/database$/.test(String(url));
-    if (!validateSender(event) || (!ALLOWED_EXTERNAL.has(url) && !projectSettingsPage)) throw new Error('External link is not allowed.');
+    const sourceCodeTag = url === `https://github.com/data-automation-ai/portabase.dev/tree/v${app.getVersion()}`;
+    if (!validateSender(event) || (!ALLOWED_EXTERNAL.has(url) && !projectSettingsPage && !sourceCodeTag)) throw new Error('External link is not allowed.');
     await shell.openExternal(url);
     return true;
   });

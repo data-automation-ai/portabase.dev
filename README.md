@@ -1,5 +1,11 @@
 # Portabase
 
+**CLI recipes:** [Capture, sizing, and recovery scenarios](docs/CLI-SCENARIOS.md)
+includes DDL-only, object inventories, free-account recovery with S3 diversion,
+destination database names, guarded overwrite, and incremental examples. New
+options are locally tested; see [release gates](PROJECT_STATUS.md).
+Separate Supabase **Vector Buckets are outside Portabase's scope**.
+
 **Your Supabase Escape.** An Apache-2.0 engine that captures a Supabase project — database, Auth, **Storage object bytes**, and Edge Functions — seals it, and stores the capsule in **your** vault.
 
 If the dashboard is banned, official backups are still behind that door. A capsule is already in another building.

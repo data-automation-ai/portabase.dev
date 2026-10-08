@@ -9,11 +9,12 @@ export async function ensureSessionForVersion(version) {
   return ensureSupabaseSession();
 }
 
-async function api(path, { method = 'GET', body, version } = {}) {
+async function api(path, { method = 'GET', body, version, signal } = {}) {
   const v = normalizeCloudVersion(version, sessionCloudVersion() || DEFAULT_CLOUD_VERSION);
   await ensureSessionForVersion(v);
   const response = await fetch(path, {
     method,
+    signal,
     headers: {
       'Content-Type': 'application/json',
       ...authHeaders(loadSession()),
@@ -66,32 +67,27 @@ export function requestSelfRefund(version) {
   return api('/api/cloud/self-refund', { method: 'POST', body: {}, version });
 }
 
-/** List the caller's Supabase projects for a pasted Personal Access Token. Token is sent in-request only. */
-export function fetchSupabaseProjects(token, version) {
-  return api('/api/cloud/supabase', { method: 'POST', body: { action: 'projects', token }, version });
+export function cancelCloudSubscription(version) {
+  return api('/api/cloud/cancel-subscription', { method: 'POST', body: { confirm: true }, version });
 }
 
-/** Measure tables + Storage buckets for one Supabase project ref. Token is sent in-request only. */
-export function fetchSupabaseInventory(token, ref, version) {
-  return api('/api/cloud/supabase', { method: 'POST', body: { action: 'inventory', token, ref }, version });
+// Compatibility exports fail locally before session refresh, serialization or
+// network. Source credentials and named selections belong to the private runner.
+async function privateSetupRequired() {
+  throw Object.assign(new Error('Use the private runner workspace for source setup.'),
+    { status: 410, code: 'private_runner_setup_required' });
 }
-
-/** Saved cloud-7 selection, or `{ selection: null }` when nothing is saved yet. */
-export function fetchCloudSelection(version) {
-  return api('/api/cloud/selection', { version });
-}
-
-/** Save the capsule selection (tables/buckets to include, estimate, plan). */
-export function saveCloudSelection(selection, version) {
-  return api('/api/cloud/selection', { method: 'PUT', body: selection, version });
-}
+export const fetchSupabaseProjects = privateSetupRequired;
+export const fetchSupabaseInventory = privateSetupRequired;
+export const fetchCloudSelection = privateSetupRequired;
+export const saveCloudSelection = privateSetupRequired;
 
 /**
  * Queue a manual backup/verify/replay intent. The body is labels only —
  * project ref, destination kind, exclude lists. The worker pulls it.
  */
-export function queueCloudJob(body, version) {
-  return api('/api/cloud/jobs', { method: 'POST', body, version });
+export function queueCloudJob(body, version, { signal } = {}) {
+  return api('/api/cloud/jobs', { method: 'POST', body, version, signal });
 }
 
 /** Live runner telemetry for the user's own projects (7d default, 30d max server-side). */
@@ -99,6 +95,24 @@ export function fetchTelemetryEvents(version, days = 7) {
   return api(`/api/cloud/telemetry-events?days=${encodeURIComponent(days)}`, { version });
 }
 
-export function fetchCloudJobs(version) {
-  return api('/api/cloud/jobs', { version });
+export function fetchCloudJobs(version, { signal } = {}) {
+  return api('/api/cloud/jobs', { version, signal });
 }
+
+export const fetchAgents = version => api('/api/cloud/agents', { version });
+export const createAgentToken = (body, version) => api('/api/cloud/agents', { method: 'POST', body, version });
+export const revokeAgentToken = (id, version) => api('/api/cloud/agents', { method: 'DELETE', body: { id }, version });
+export const rotateAgentToken = (id, expectedRevision, version) => api('/api/cloud/agents', {
+  method: 'PATCH', body: { id, expectedRevision, enableJobAccess: true }, version,
+});
+
+export const fetchNotificationPreferences = version => api('/api/cloud/notification-preferences', { version });
+export const saveNotificationPreferences = (body, version) => api('/api/cloud/notification-preferences', { method: 'PUT', body, version });
+
+export const fetchNotificationDestinations = version => api('/api/cloud/notification-destinations', { version });
+export const changeNotificationDestination = (body, version) => api('/api/cloud/notification-destinations', { method: 'POST', body, version });
+export const fetchNotificationHistory = version => api('/api/cloud/notification-history', { version });
+
+export const fetchBackupSchedules = (version, { signal } = {}) => api('/api/cloud/schedules', { version, signal });
+export const saveBackupSchedule = (body, version, { signal } = {}) => api('/api/cloud/schedules', { method: 'PUT', body, version, signal });
+export const disableBackupSchedule = (body, version, { signal } = {}) => api('/api/cloud/schedules', { method: 'PATCH', body, version, signal });

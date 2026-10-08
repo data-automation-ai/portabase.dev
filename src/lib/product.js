@@ -291,7 +291,9 @@ export function planPriceRangeLabel() {
 
 export function planTransfersPer24h(planId = CLOUD_DEFAULT_PLAN_ID, { extraTransfersAddon } = {}) {
   const plan = getCloudPlan(planId);
-  const included = Math.max(0, Number(plan.transfersPer24h || plan.escapesPerDay || BASE_TRANSFERS_PER_24H) || 0);
+  // The free manual queue permits one backup per 24h, with no scheduled service.
+  if (plan.id === 'cloud-free') return 1;
+  const included = Math.max(0, Number(plan.transfersPer24h ?? plan.escapesPerDay ?? BASE_TRANSFERS_PER_24H) || 0);
   if (extraTransfersAddon) return Math.max(included, ADDON_TRANSFERS_PER_24H);
   return included;
 }

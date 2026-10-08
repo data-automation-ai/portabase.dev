@@ -45,10 +45,14 @@ const ALLOWED_JOB_FIELDS = Object.freeze([
   'functionsBytes',
   'authBytes',
   'dailyMeterBytes',
+  'capsuleId',
+  'capsuleStatus',
   'capsuleHash',
+  'manifestHash',
   'layerHashes',
   'destinationKind',
   'destinationHint',
+  'destinationVerified',
   'errorCode',
   'runnerId',
   'region',
@@ -159,10 +163,14 @@ export function sanitizeJobTelemetry(job = {}) {
     functionsBytes: positiveInt(src.functionsBytes ?? src.layerBytes?.functions ?? src.layerHashes?.functions?.sizeBytes),
     authBytes: positiveInt(src.authBytes ?? src.layerBytes?.auth ?? src.layerHashes?.auth?.sizeBytes),
     dailyMeterBytes: positiveInt(src.dailyMeterBytes || src.meterBytes),
+    capsuleId: /^[A-Za-z0-9._-]{1,200}$/.test(String(src.capsuleId || '')) ? String(src.capsuleId) : null,
+    capsuleStatus: ['COMPLETE', 'SELECTIVE', 'TRIAL'].includes(src.capsuleStatus) ? src.capsuleStatus : null,
     capsuleHash: hexHash(src.capsuleHash || src.capsule_hash),
+    manifestHash: hexHash(src.manifestHash),
     layerHashes: sanitizeLayerHashes(src.layerHashes),
     destinationKind: dest.kind,
     destinationHint: dest.hint,
+    destinationVerified: src.destinationVerified === true,
     errorCode,
     runnerId: cleanText(src.runnerId, null),
     region: cleanText(src.region, null),
@@ -209,6 +217,7 @@ export function buildCapsuleSizeBreakdown(job = {}) {
   const other = Math.max(0, total - known);
   return {
     jobId: row.jobId || row.id,
+    capsuleId: row.capsuleId || null,
     totalBytes: total,
     layers: [
       { id: 'database', label: 'Database', bytes: db },
@@ -220,6 +229,7 @@ export function buildCapsuleSizeBreakdown(job = {}) {
     hasBreakdown: known > 0,
     objectCount: positiveInt(row.objectCount),
     destinationKind: row.destinationKind,
+    destinationVerified: row.destinationVerified === true,
   };
 }
 

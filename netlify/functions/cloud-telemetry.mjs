@@ -1,5 +1,9 @@
 import { getStore } from '@netlify/blobs';
-import { buildTelemetryEvent } from '../../utility/telemetry.mjs';
+import { randomUUID } from 'node:crypto';
+import { authenticateAgent } from '../shared/agent-store.mjs';
+import { safeCloudEvent } from '../shared/safe-telemetry.mjs';
+import { storeLatestReport } from '../shared/runner-reports.mjs';
+import { createNotificationOutbox } from '../shared/notification-outbox.mjs';
 
 function json(status, body) {
   return new Response(JSON.stringify(body), {
@@ -8,43 +12,34 @@ function json(status, body) {
   });
 }
 
-function authorized(request) {
-  const expected = process.env.PORTABASE_CLOUD_INGEST_TOKEN;
-  if (!expected) return false;
-  const header = request.headers.get('authorization') || '';
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  return Boolean(match && match[1] === expected);
+export function createTelemetryHandler({ authenticate = authenticateAgent, storeFactory = () => getStore({ name: 'portabase-cloud-telemetry', consistency: 'strong' }), now = () => Date.now(), enqueueNotifications = input => createNotificationOutbox().enqueue(input) } = {}) {
+  return async request => {
+    if (request.method !== 'POST') return json(405, { error: 'method_not_allowed' });
+    let agent;
+    try { agent = await authenticate(request.headers.get('authorization')); }
+    catch { return json(503, { error: 'agent_store_unavailable' }); }
+    if (!agent) return json(401, { error: 'unauthorized' });
+    let body;
+    try { body = await request.text(); } catch { return json(400, { error: 'invalid_body' }); }
+    if (Buffer.byteLength(body) > 16_384) return json(413, { error: 'body_too_large' });
+    let event;
+    try { event = safeCloudEvent(JSON.parse(body), agent, now()); }
+    catch { return json(400, { error: 'invalid_event' }); }
+    const receivedAt = new Date(now()).toISOString();
+    const key = `owners/${agent.owner}/${receivedAt.slice(0, 10)}/${randomUUID()}.json`;
+    try {
+      const store = storeFactory();
+      const record = { owner: agent.owner, receivedAt, event };
+      await store.setJSON(key, record);
+      await storeLatestReport(store, record);
+    } catch { return json(503, { error: 'telemetry_store_unavailable' }); }
+    try {
+      await enqueueNotifications({ authorization: request.headers.get('authorization'), input: event });
+      return json(202, { ok: true, stored: true, eventType: event.eventType });
+    } catch {
+      // The same occurredAt must be retained on retry so alert enqueueing deduplicates.
+      return json(503, { error: 'notification_queue_unavailable', telemetryStored: true });
+    }
+  };
 }
-
-export default async (request) => {
-  if (request.method !== 'POST') return json(405, { error: 'method_not_allowed' });
-  if (!authorized(request)) return json(401, { error: 'unauthorized' });
-
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return json(400, { error: 'invalid_json' });
-  }
-
-  let event;
-  try {
-    event = buildTelemetryEvent(body);
-  } catch (error) {
-    return json(400, { error: 'invalid_event', detail: error.message });
-  }
-
-  try {
-    const store = getStore({ name: 'portabase-cloud-telemetry', consistency: 'strong' });
-    const day = event.occurredAt.slice(0, 10);
-    const key = `${event.projectRef}/${day}/${event.occurredAt}-${event.eventType}-${crypto.randomUUID()}.json`;
-    await store.setJSON(key, {
-      receivedAt: new Date().toISOString(),
-      event,
-    });
-    return json(202, { ok: true, stored: true, eventType: event.eventType });
-  } catch (error) {
-    console.error('telemetry_store_failed', error.message);
-    return json(503, { error: 'store_unavailable' });
-  }
-};
+export default createTelemetryHandler();

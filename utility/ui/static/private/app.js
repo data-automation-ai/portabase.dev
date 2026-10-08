@@ -292,7 +292,9 @@ function renderCapacity() {
 }
 function matches(row, kind) {
   const keyword = $('keyword').value.trim().toLocaleLowerCase();
-  return (!keyword || row.key.toLocaleLowerCase().includes(keyword)) && (kind !== 'tables' || !$('schema').value || row.schema === $('schema').value);
+  return (!keyword || row.key.toLocaleLowerCase().includes(keyword))
+    && (kind !== 'tables' || !$('schema').value || row.schema === $('schema').value)
+    && (kind !== 'buckets' || !$('bucketFilter').value || row.key === $('bucketFilter').value);
 }
 function sortedRows(kind, rows) {
   const { key, direction } = sorting[kind], factor = direction === 'asc' ? 1 : -1;
@@ -457,6 +459,9 @@ function persistSelectionDefaults() {
 function renderInventory() {
   const schemas = [...new Set(inventory.tables.map(row => row.schema))].sort((a, b) => a.localeCompare(b));
   $('schema').replaceChildren(new Option('All schemas', ''), ...schemas.map(value => new Option(value, value)));
+  const bucketNames = [...inventory.buckets.map(row => row.key)].sort((a, b) => a.localeCompare(b));
+  $('bucketFilter').replaceChildren(new Option('All buckets', ''), ...bucketNames.map(value => new Option(value, value)));
+  $('floatWindow').classList.add('inventory-expanded');
   $('tableCount').textContent = number(inventory.tables.length); $('estimatedRows').textContent = number(inventory.overview.estimatedRows);
   $('databaseSize').textContent = `${size(inventory.overview.databaseBytes)} database`; $('bucketCount').textContent = number(inventory.buckets.length);
   $('objectCount').textContent = number(inventory.overview.objectCount); $('storageSize').textContent = `${size(inventory.overview.objectBytes)} stored`;
@@ -638,6 +643,33 @@ $('copyPassphrase').addEventListener('click', async () => {
 $('generatePassphrase').addEventListener('click', () => {
   $('capsulePassphrase').value = generatePassphraseValue();
   $('capsulePassphrase').classList.remove('field-error');
+  $('securityPacketPrompt').hidden = false;
+});
+$('capsulePassphrase').addEventListener('input', () => {
+  $('securityPacketPrompt').hidden = !$('capsulePassphrase').value;
+});
+$('downloadSecurityPacket').addEventListener('click', () => {
+  const passkey = $('capsulePassphrase').value;
+  if (!passkey) return;
+  const runnerId = bootstrap?.runnerId || $('runner')?.textContent || 'unknown-runner';
+  const body = [
+    'PORTABASE SECURITY PACKET',
+    `Runner: ${runnerId}`,
+    `Generated: ${new Date().toISOString()}`,
+    '',
+    `Passkey: ${passkey}`,
+    '',
+    'This is the only copy of this passkey. Portabase never stores it and it is',
+    'not saved anywhere in your browser. Store this file somewhere safe and',
+    'separate from this computer (a password manager, printed note, or offline',
+    'backup). If this file is lost, the capsule it protects cannot be recovered',
+    '-- not by you, and not by Portabase.',
+    '',
+  ].join('\n');
+  const url = URL.createObjectURL(new Blob([body], { type: 'text/plain' }));
+  const link = document.createElement('a');
+  link.href = url; link.download = `portabase-security-packet-${runnerId}.txt`; link.click();
+  URL.revokeObjectURL(url);
 });
 for (const button of document.querySelectorAll('.dest-config-btn')) {
   button.addEventListener('click', () => { $('destConfigMessage').textContent = `${button.dataset.dest}: Not yet available.`; });
@@ -750,7 +782,7 @@ $('togglePassphraseVisibility').addEventListener('click', () => {
   btn.setAttribute('aria-label', shown ? 'Show passkey' : 'Hide passkey');
   btn.title = shown ? 'Show passkey' : 'Hide passkey';
 });
-$('refresh').addEventListener('click', () => inspect()); $('keyword').addEventListener('input', renderFilters); $('schema').addEventListener('change', renderFilters); $('empty').addEventListener('change', updateSummary); $('incremental').addEventListener('change', () => { updateSummary(); void persistSelectionDefaults(); });
+$('refresh').addEventListener('click', () => inspect()); $('keyword').addEventListener('input', renderFilters); $('schema').addEventListener('change', renderFilters); $('bucketFilter').addEventListener('change', renderFilters); $('empty').addEventListener('change', updateSummary); $('incremental').addEventListener('change', () => { updateSummary(); void persistSelectionDefaults(); });
 for (const button of document.querySelectorAll('.sort-header')) button.addEventListener('click', () => {
   const kind = button.dataset.sortKind, key = button.dataset.sortKey, current = sorting[kind];
   sorting[kind] = current.key === key
@@ -767,7 +799,7 @@ $('save').addEventListener('click', async () => {
     savedIntent = body.intent; $('intent').textContent = JSON.stringify(savedIntent, null, 2); $('saved').hidden = false; $('loaded').textContent = 'Selection saved privately. Probe again to create another revision.';
     bootstrap = await api('/api/bootstrap'); csrf = bootstrap.csrf; renderEvents(bootstrap.state); $('saved').scrollIntoView({ behavior: 'smooth', block: 'center' });
   } catch (failure) { showError(failure.message); }
-  finally { busy = false; inventory = null; updateSummary(); }
+  finally { busy = false; inventory = null; updateSummary(); $('floatWindow').classList.remove('inventory-expanded'); }
 });
 $('download').addEventListener('click', () => {
   if (!savedIntent) return; const url = URL.createObjectURL(new Blob([`${JSON.stringify(savedIntent, null, 2)}\n`], { type: 'application/json' }));

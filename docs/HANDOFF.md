@@ -1,5 +1,17 @@
 # Portabase — project handoff (for Claude / any successor agent)
 
+**Power-loss/session recovery handoff (2026-10-04):** read
+[`RECOVERY-HANDOFF-2026-10-04.md`](./RECOVERY-HANDOFF-2026-10-04.md) first when
+resuming the interrupted dirty-worktree development session. It records the
+observed checkout, likely active durable-runner thread, evidence limits, and a
+failure analysis of the preceding recovery attempt.
+
+**2026-10-03 CLI update:** read [CLI scenarios](CLI-SCENARIOS.md) and the current
+CLI section of [PROJECT_STATUS.md](../PROJECT_STATUS.md) for recovery options,
+local validation, and outstanding cloud release gates. The older hosted/shared
+Supabase directions below are historical and are overridden by current AGENTS.md
+continuity/isolation rules. No deployment was performed for this update.
+
 **Start here for “what is the project + what do I do”:** **[PROJECT.md](../PROJECT.md)** (repo root).  
 **Then this file** for depth. Then `AGENTS.md` (hard rules).
 

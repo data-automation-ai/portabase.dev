@@ -28,7 +28,11 @@ test('sanitizeJobTelemetry keeps allowlisted fields and drops secrets', () => {
     dbBytes: 1000,
     storageBytes: 2800,
     functionsBytes: 296,
+    capsuleId: 'abcdefghijklmnopqrst-20261005T120000Z',
+    capsuleHash: HASH,
+    manifestHash: 'b'.repeat(64),
     destinationKind: 's3',
+    destinationVerified: true,
     region: 'us-east-1',
     errorCode: 'destination_unreachable',
     passphrase: 'nope',
@@ -38,6 +42,9 @@ test('sanitizeJobTelemetry keeps allowlisted fields and drops secrets', () => {
   assert.equal(clean.jobId, 'job_1');
   assert.equal(clean.destinationKind, 's3');
   assert.equal(clean.objectCount, 12);
+  assert.equal(clean.capsuleId, 'abcdefghijklmnopqrst-20261005T120000Z');
+  assert.equal(clean.manifestHash, 'b'.repeat(64));
+  assert.equal(clean.destinationVerified, true);
   assert.equal(clean.passphrase, undefined);
   assert.doesNotMatch(json, /nope|avatars|secret\.jpg|passphrase/);
   const blank = sanitizeJobTelemetry({ region: null, phase: undefined });
@@ -80,16 +87,20 @@ test('capsule size breakdown uses layer hashes/counts when present', () => {
     storageBytes: 500,
     functionsBytes: 80,
     objectCount: 9,
+    capsuleId: 'capsule-safe-id',
     destinationKind: 'dropbox',
+    destinationVerified: true,
   });
   assert.equal(size.totalBytes, 1000);
   assert.equal(size.hasBreakdown, true);
+  assert.equal(size.capsuleId, 'capsule-safe-id');
+  assert.equal(size.destinationVerified, true);
   assert.equal(size.layers.find((l) => l.id === 'database').bytes, 400);
   assert.equal(size.layers.find((l) => l.id === 'storage').bytes, 500);
   assert.equal(size.layers.find((l) => l.id === 'functions').bytes, 80);
 });
 
-test('backup log stays red unless a real MATCH report is attached', () => {
+test('backup log never promotes comparison MATCH into proven recovery', () => {
   const jobs = sampleDashboardJobs(Date.parse('2026-09-20T12:00:00.000Z'));
   const redLog = buildBackupLog(jobs, { demoMode: false });
   assert.ok(redLog.length >= 2);
@@ -108,8 +119,8 @@ test('backup log stays red unless a real MATCH report is attached', () => {
   }], {
     proof: { kind: 'compare', source: 'cli', verdict: 'MATCH', capsuleHash: HASH },
   });
-  assert.equal(green[0].lamp.tone, PROOF_GREEN);
-  assert.equal(green[0].lamp.label, 'MATCH');
+  assert.equal(green[0].lamp.tone, PROOF_RED);
+  assert.equal(green[0].lamp.label, 'Not proven');
 });
 
 test('charts produce honest empty series and plan allowance', () => {

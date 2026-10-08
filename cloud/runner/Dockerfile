@@ -1,5 +1,5 @@
-# Portabase Cloud Runner — managed container that runs the free open-source engine.
-# Staging disk is this container's ephemeral volume. Capsule bytes go to the customer vault.
+# Portabase private worker image. Deployment and private GUI access are separate.
+# Mount customer-controlled private state; do not keep journals only on ephemeral disk.
 # Never used as a control-plane store. Never F:.
 
 FROM node:24-bookworm-slim
@@ -15,7 +15,7 @@ COPY utility ./utility
 COPY cloud/runner ./cloud/runner
 
 ENV NODE_ENV=production
-ENV PORTABASE_RUNNER_ROLE=sleeping
-# Keys are sealed into this process at job start — not baked into the image.
+# Runtime credentials are supplied inside the private runner boundary.
+# This image does not implement key sealing, attestation or subscription provisioning.
 USER node
-CMD ["node", "cloud/runner/boot.mjs"]
+CMD ["node", "cloud/runner/supervisor.mjs"]

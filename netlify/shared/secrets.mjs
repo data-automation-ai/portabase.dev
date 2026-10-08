@@ -6,7 +6,7 @@ function normalized(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-export function findBundleValue(bundle, { service, key, envName }) {
+export function findBundleValue(bundle, { service, key, envName }, now = Date.now()) {
   const wantedService = normalized(service);
   const wantedKey = normalized(key);
   const wantedEnv = normalized(envName);
@@ -17,7 +17,13 @@ export function findBundleValue(bundle, { service, key, envName }) {
     if (!current || typeof current !== 'object') continue;
     const recordService = normalized(current.service);
     const recordKey = normalized(current.key || current.name || current.id);
-    const active = current.disabled !== true && current.stale !== true && current.active !== false;
+    const expired = ['expires_at', 'rotates_at', 'not_after'].some(field => {
+      if (current[field] == null) return false;
+      const expiry = typeof current[field] === 'number' ? current[field] : Date.parse(current[field]);
+      return !Number.isFinite(expiry) || expiry <= now;
+    });
+    const active = current.disabled !== true && current.stale !== true && current.active !== false && !expired;
+    if (!active) continue; // Do not select nested fields of a disabled/expired record.
     const match = (recordService === wantedService && recordKey === wantedKey) || recordKey === wantedEnv;
     if (active && match) {
       for (const field of VALUE_FIELDS) if (typeof current[field] === 'string' && current[field]) return current[field];

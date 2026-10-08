@@ -19,7 +19,7 @@ import {
   extraTransfersAddonPublic,
   getCloudPlan,
 } from '../shared/product.mjs';
-import { deriveAccess, getSubscriptionByUserId, saveSubscription } from '../shared/subscription-store.mjs';
+import { deriveAccess, getSubscriptionForUser, saveSubscription } from '../shared/subscription-store.mjs';
 import { inspectSquareCheckoutReady, squareBlockedPayload } from '../shared/square-ready.mjs';
 
 export async function handler(event) {
@@ -51,7 +51,7 @@ export async function handler(event) {
   const plan = getCloudPlan(planId);
 
   try {
-    const existing = (await getSubscriptionByUserId(storeKey)) || (await getSubscriptionByUserId(user.id));
+    const existing = (await getSubscriptionForUser(user));
     const access = deriveAccess(existing);
     if (!addonRequested && access.hasAccess && existing?.status !== 'checkout_pending') {
       return jsonResponse(200, {
@@ -153,6 +153,7 @@ export async function handler(event) {
     const now = new Date().toISOString();
     const record = await saveSubscription({
       userId: storeKey,
+      revision: existing?.revision || 0,
       supabaseUserId: user.cloudVersion === 'supabase' ? user.id : null,
       cognitoSub: user.cloudVersion === 'aws' ? user.id : null,
       authProvider: user.authProvider,

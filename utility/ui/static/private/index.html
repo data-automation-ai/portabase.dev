@@ -157,6 +157,7 @@
       <div class="filter-bar" aria-label="Inventory filters">
         <label class="search-field"><span class="sr-only">Filter by keyword</span><input id="keyword" type="search" placeholder="Filter by table or bucket keyword"></label>
         <label><span class="sr-only">Filter tables by schema</span><select id="schema"><option value="">All schemas</option></select></label>
+        <label><span class="sr-only">Filter buckets</span><select id="bucketFilter"><option value="">All buckets</option></select></label>
         <button id="selectVisible" class="secondary" type="button">Select visible</button>
         <button id="clearVisible" class="quiet" type="button">Clear visible</button>
         <span id="visibleCount" class="filter-count">No inventory</span>
@@ -401,6 +402,17 @@
         <p class="fine-print">This download only includes the browser-side setup page. The runner's own backend code (Supabase capture, encryption, and recovery logic) runs on the Linux runner, not in this tab; see “How the seal works” → the deeper technical explanation for that boundary.</p>
       </section>
 
+      <section class="technical-section">
+        <h3>Why there's also a Windows desktop app</h3>
+        <p>Everything above — the live hash check, the Network tab inspection, the CSP enforcement — describes this browser-served setup page specifically, which runs by typing a command yourself and already having Node.js installed on your machine. Most people don't want to install Node.js just to run a backup tool, so Portabase also ships a Windows desktop app (built with Electron) that bundles Node.js inside it. You open it like any other Windows program — nothing extra to install. That convenience is the <strong>only</strong> reason the desktop app exists; it runs the exact same open-source engine underneath, not a different one.</p>
+        <p>That convenience comes with a different, weaker verifiability story, and you should know the difference rather than assume the claims above transfer automatically:</p>
+        <ul class="help-steps">
+          <li><strong>What's still true:</strong> the desktop app is not compiled to machine code or obfuscated. It ships as a plain archive (<code>app.asar</code>) containing the same JavaScript and HTML published in the public repository — extractable with any <code>asar</code> tool and readable like any other source file.</li>
+          <li><strong>What's not possible there:</strong> the live, hash-it-from-the-console check above only works because this page is served over HTTP and you can <code>fetch()</code> it yourself. The desktop app isn't served that way, so there is no equivalent "paste this into the console" step for it.</li>
+          <li><strong>What's not yet true:</strong> there is no reproducible build process proving a specific downloaded installer was built, byte for byte, from a specific tagged commit without alteration. Unlike this page, you cannot currently prove the packaged app matches the published source cryptographically — only that the source inside it is plain, unobfuscated JavaScript you can extract and compare by hand against the matching tagged release in the public repository.</li>
+        </ul>
+      </section>
+
       <div class="technical-actions">
         <button id="closeVerifiabilityInfo" type="button">Close</button>
       </div>
@@ -508,6 +520,10 @@
             <button id="togglePassphraseVisibility" type="button" class="secondary passkey-copy-btn" aria-label="Show passkey" aria-pressed="false" title="Show passkey">👁</button>
             <button id="copyPassphrase" type="button" class="secondary passkey-copy-btn" aria-label="Copy passkey to clipboard" title="Copy passkey">⧉</button>
             <button id="generatePassphrase" type="button" class="secondary">Generate passkey</button>
+          </div>
+          <div id="securityPacketPrompt" class="security-packet-prompt" hidden>
+            <p><strong>Save your security packet now.</strong> This is the only copy. Portabase never stores this passkey, and it is not saved anywhere in your browser — if this file is lost, the capsule cannot be recovered.</p>
+            <button id="downloadSecurityPacket" type="button" class="secondary">Download security packet</button>
           </div>
         </section>
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { createServer } from 'vite';
 import { cloudBackupCliCommand, describeCloudApiError } from '../src/lib/table-sizer.js';
 
 test('cloudBackupCliCommand omits flags with empty lists', () => {
@@ -46,65 +46,17 @@ test('describeCloudApiError falls back to the error message for unknown codes', 
   assert.equal(describeCloudApiError(err), 'boom');
 });
 
-const cloudApiSrc = readFileSync(new URL('../src/lib/cloud-api.js', import.meta.url), 'utf8');
-
-test('cloud-api exposes the S4 fetch helpers on the documented contract paths', () => {
-  assert.match(cloudApiSrc, /export function fetchSupabaseProjects/);
-  assert.match(cloudApiSrc, /export function fetchSupabaseInventory/);
-  assert.match(cloudApiSrc, /export function fetchCloudSelection/);
-  assert.match(cloudApiSrc, /export function saveCloudSelection/);
-  assert.match(cloudApiSrc, /export function queueCloudJob/);
-  assert.match(cloudApiSrc, /'\/api\/cloud\/supabase'/);
-  assert.match(cloudApiSrc, /'\/api\/cloud\/selection'/);
-  assert.match(cloudApiSrc, /'\/api\/cloud\/jobs'/);
-});
-
-const ui = readFileSync(new URL('../src/console/connect-supabase.jsx', import.meta.url), 'utf8');
-
-test('connect-supabase queues a manual backup without sending the token', () => {
-  const call = ui.match(/queueCloudJob\(\{[\s\S]*?\}\)/);
-  assert.ok(call, 'queueCloudJob call');
-  assert.match(call[0], /type: 'backup'/);
-  assert.doesNotMatch(call[0], /token/);
-  assert.match(ui, /Queue manual backup/);
-});
-
-test('connect-supabase UI never persists the token to storage or a URL', () => {
-  assert.doesNotMatch(ui, /localStorage\s*\.\s*(set|get)Item/);
-  assert.doesNotMatch(ui, /sessionStorage\s*\.\s*(set|get)Item/);
-  assert.doesNotMatch(ui, /token[^\n]*window\.location/);
-});
-
-test('connect-supabase UI links to the Supabase token page and explains the token is never saved', () => {
-  assert.match(ui, /supabase\.com\/dashboard\/account\/tokens/);
-  assert.match(ui, /never saved/i);
-  assert.match(ui, /target="_blank"/);
-  assert.match(ui, /rel="noopener/);
-});
-
-test('connect-supabase UI codes to the projects/inventory/selection contract', () => {
-  assert.match(ui, /fetchSupabaseProjects/);
-  assert.match(ui, /fetchSupabaseInventory/);
-  assert.match(ui, /fetchCloudSelection/);
-  assert.match(ui, /saveCloudSelection/);
-});
-
-test('connect-supabase UI says what excluding a table or bucket means', () => {
-  assert.match(ui, /keeps its structure but skips its rows/i);
-  assert.match(ui, /skips its files/i);
-});
-
-test('connect-supabase UI disables Save when the selection is over the plan cap', () => {
-  assert.match(ui, /disabled=\{loading \|\| overCap\}/);
-});
-
-test('connect-supabase UI supports demo mode without a network call for projects/inventory', () => {
-  assert.match(ui, /if \(demo\)/);
-  assert.match(ui, /sampleSizeInventory/);
-  assert.match(ui, /SAMPLE_PROJECTS/);
-});
-
-test('connect-supabase UI shows the exact CLI command with a copy button', () => {
-  assert.match(ui, /cloudBackupCliCommand/);
-  assert.match(ui, /Copy command/);
+// The rendered account flow is covered by check-private-source-boundary.mjs.
+// Load the actual browser module with Vite so import.meta.env uses its real transform.
+test('retired browser API helpers reject before private serialization or network', async () => {
+  const server = await createServer({ configFile: false, server: { middlewareMode: true }, appType: 'custom' });
+  const originalFetch = globalThis.fetch;
+  try {
+    const api = await server.ssrLoadModule('/src/lib/cloud-api.js');
+    globalThis.fetch = () => assert.fail('retired source setup must not request a session or backend');
+    const privateValue = { toJSON() { assert.fail('private input must not be serialized'); } };
+    for (const name of ['fetchSupabaseProjects', 'fetchSupabaseInventory', 'fetchCloudSelection', 'saveCloudSelection']) {
+      await assert.rejects(api[name](privateValue, privateValue), { status: 410, code: 'private_runner_setup_required' });
+    }
+  } finally { globalThis.fetch = originalFetch; await server.close(); }
 });

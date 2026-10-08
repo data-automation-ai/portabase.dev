@@ -12,12 +12,14 @@ test('dashboard stays red without a real dry-run MATCH', () => {
   assert.equal(deriveProofStatus({ report: { kind: 'compare', source: 'cli', verdict: 'DRIFT', capsuleHash: HASH } }).tone, PROOF_RED);
 });
 
-test('only a real runner/CLI compare MATCH turns green', () => {
+test('runner/CLI compare MATCH records comparison evidence without claiming tested recovery', () => {
   const green = deriveProofStatus({
     report: { kind: 'compare', source: 'cli', verdict: 'MATCH', capsuleHash: HASH, comparedAt: '2026-09-19T00:00:00.000Z' },
   });
-  assert.equal(green.tone, PROOF_GREEN);
-  assert.equal(green.proven, true);
+  assert.equal(green.tone, PROOF_RED);
+  assert.equal(green.proven, false);
+  assert.equal(green.comparisonMatched, true);
+  assert.equal(green.reason, 'restore_not_verified');
 });
 
 test('console seed / demo state cannot fake green', () => {

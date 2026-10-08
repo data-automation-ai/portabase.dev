@@ -31,6 +31,41 @@
   status = 200
 
 [[redirects]]
+  from = "/api/cloud/manifest-sharing"
+  to = "/.netlify/functions/cloud-manifest-sharing"
+  status = 200
+
+[[redirects]]
+  from = "/api/cloud/notification-history"
+  to = "/.netlify/functions/cloud-notification-history"
+  status = 200
+
+[[redirects]]
+  from = "/api/notifications/twilio-receipt"
+  to = "/.netlify/functions/notification-twilio-receipt"
+  status = 200
+
+[[redirects]]
+  from = "/api/notifications/mailgun-receipt"
+  to = "/.netlify/functions/notification-mailgun-receipt"
+  status = 200
+
+[[redirects]]
+  from = "/api/cloud/notification-destinations"
+  to = "/.netlify/functions/cloud-notification-destinations"
+  status = 200
+
+[[redirects]]
+  from = "/api/cloud/notification-preferences"
+  to = "/.netlify/functions/cloud-notification-preferences"
+  status = 200
+
+[[redirects]]
+  from = "/api/cloud/agents"
+  to = "/.netlify/functions/cloud-agents"
+  status = 200
+
+[[redirects]]
   from = "/api/cloud/interest"
   to = "/.netlify/functions/cloud-interest"
   status = 200
@@ -61,8 +96,23 @@
   status = 200
 
 [[redirects]]
+  from = "/api/cloud/schedules"
+  to = "/.netlify/functions/cloud-schedules"
+  status = 200
+
+[[redirects]]
+  from = "/api/cloud/cancel-subscription"
+  to = "/.netlify/functions/cloud-cancel-subscription"
+  status = 200
+
+[[redirects]]
   from = "/api/cloud/jobs"
   to = "/.netlify/functions/cloud-jobs"
+  status = 200
+
+[[redirects]]
+  from = "/api/cloud/runner-jobs"
+  to = "/.netlify/functions/cloud-runner-jobs"
   status = 200
 
 [[redirects]]

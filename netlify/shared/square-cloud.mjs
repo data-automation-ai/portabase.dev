@@ -33,10 +33,21 @@ export const TRIAL_DAYS = CLOUD_TRIAL_DAYS;
 export const PRICE_MONTHLY_CENTS = CLOUD_PRICE_MONTHLY_CENTS;
 export { STORAGE_POLICY, getCloudPlan, CLOUD_DEFAULT_PLAN_ID, CLOUD_PLANS };
 
+export async function resolvePortabaseSquareSecret(name, key, { resolve = resolveServerSecret, env = process.env } = {}) {
+  // Bundle records must belong to Portabase. Legacy SQUARE_* names are allowed
+  // only in this product's deployment environment, never as shared bundle keys.
+  try {
+    return await resolve(`PORTABASE_${name}`, { service: 'portabase-square', key });
+  } catch {
+    if (env[name]) return env[name];
+    throw new Error(`Server configuration is missing PORTABASE_${name}.`);
+  }
+}
+
 export async function squareCredentials() {
   const [accessToken, locationId] = await Promise.all([
-    resolveServerSecret('SQUARE_ACCESS_TOKEN', { service: 'square', key: 'access_token' }),
-    resolveServerSecret('SQUARE_LOCATION_ID', { service: 'square', key: 'location_id' }),
+    resolvePortabaseSquareSecret('SQUARE_ACCESS_TOKEN', 'access_token'),
+    resolvePortabaseSquareSecret('SQUARE_LOCATION_ID', 'location_id'),
   ]);
   const rawEnv = process.env.SQUARE_ENVIRONMENT || process.env.SQUARE_ENV || 'production';
   const env = rawEnv === 'sandbox' ? 'sandbox' : 'production';

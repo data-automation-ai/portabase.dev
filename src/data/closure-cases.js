@@ -59,6 +59,62 @@ export const closureReasons = [
 /** Sourced public cases — exact permanent-ish URLs retained */
 export const closureCases = [
   {
+    id: 'C15', provider: 'AWS', platform: 'Reddit', date: '2026-09-25', impact: 3,
+    tag: 'ACCOUNT CLOSED · PRODUCTION DOWN',
+    title: 'AWS account closure left production down for six days',
+    body: 'The poster reported a security suspension after suspected compromised keys, followed by password and payment remediation. They said the account then showed closed and production stayed down while the support case went unanswered.',
+    href: 'https://www.reddit.com/r/aws/comments/1wq3in9/aws_account_suspended_then_marked_closed/', source: 'r/aws · 1wq3in9',
+  },
+  {
+    id: 'C16', provider: 'AWS', platform: 'Reddit', date: '2026-08-25', impact: 3,
+    tag: 'ACCOUNT SUSPENDED · ERP DOWN',
+    title: 'Related-account suspension stopped a business ERP',
+    body: 'The poster said AWS suspended a two-year account as related to previously closed accounts. They reported the account hosted core billing and delivery software, halting daily operations while they waited for review.',
+    href: 'https://www.reddit.com/r/aws/comments/1vxvk29/aws_account_suspended_related_to_previously/', source: 'r/aws · 1vxvk29',
+  },
+  {
+    id: 'C17', provider: 'AWS', platform: 'Reddit', date: '2026-08-13', impact: 3,
+    tag: 'PAID ACCOUNT SUSPENDED · DATA INACCESSIBLE',
+    title: 'Production AWS account suspended despite a paid invoice',
+    body: 'A SaaS operator reported a paid invoice and zero balance, then an account restriction affecting EKS, RDS, S3 and other services. AWS Health warned that its EKS control plane could shut down.',
+    href: 'https://www.reddit.com/r/aws/comments/1vnm4vh/aws_suspended_our_production_account_for/', source: 'r/aws · 1vnm4vh',
+  },
+  {
+    id: 'C18', provider: 'Supabase', platform: 'GitHub Discussions', date: '2026-08-12', impact: 2,
+    tag: 'MFA LOCKOUT · PRODUCTION FIX BLOCKED',
+    title: 'Unexpected MFA prompt blocked a production fix',
+    body: 'The poster said Supabase requested a TOTP code they had never enrolled, blocking a production fix for their education platform. They reported waiting six days after contacting support.',
+    href: 'https://github.com/orgs/supabase/discussions/48980', source: 'supabase/discussions#48980',
+  },
+  {
+    id: 'C19', provider: 'Supabase', platform: 'GitHub Discussions', date: '2026-07-25', impact: 3,
+    tag: 'MFA LOCKOUT · TWO PRODUCTION PROJECTS',
+    title: 'Unrecognized MFA prompt locked two production projects',
+    body: 'The poster said a TOTP prompt appeared although they had never enrolled MFA. They reported being unable to use the support form and remaining locked out of two production projects for more than a week.',
+    href: 'https://github.com/orgs/supabase/discussions/48326', source: 'supabase/discussions#48326',
+  },
+  {
+    id: 'C20', provider: 'Supabase', platform: 'GitHub Discussions', date: '2026-07-15', impact: 2,
+    tag: 'DASHBOARD ACCESS LOST · FOUR PROJECTS',
+    title: 'Dashboard no longer showed four existing projects',
+    body: 'The poster said dashboard access disappeared for four projects after a service disruption, while their applications continued serving traffic through existing API keys.',
+    href: 'https://github.com/orgs/supabase/discussions/47948', source: 'supabase/discussions#47948',
+  },
+  {
+    id: 'C21', provider: 'Supabase', platform: 'GitHub Discussions', date: '2026-04-30', impact: 2,
+    tag: 'ACCOUNT BANNED · APP DOWN',
+    title: 'Account ban broke an app with live users',
+    body: 'The poster said a sudden ban blocked sign-in and broke a browser extension storing user data. They asked for restored access or a way to export their data.',
+    href: 'https://github.com/orgs/supabase/discussions/45424', source: 'supabase/discussions#45424',
+  },
+  {
+    id: 'C22', provider: 'AWS', platform: 'Reddit', date: '2026-04-06', impact: 3,
+    tag: 'ACCOUNT CLOSED · DATA INACCESSIBLE',
+    title: 'A second AWS account was closed after a billing dispute',
+    body: 'The poster said AWS closed a second account after they followed support guidance about an older account they could no longer access. They reported both accounts and their data remained inaccessible.',
+    href: 'https://www.reddit.com/r/aws/comments/1sdnmum/aws_closed_my_account_for_following_their/', source: 'r/aws · 1sdnmum',
+  },
+  {
     id: 'C01',
     provider: 'Supabase',
     platform: 'GitHub Discussions',

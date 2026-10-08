@@ -36,6 +36,10 @@
 .recovery-evidence picture, .recovery-evidence img { display: block; width: 100%; height: auto; }
 .recovery-evidence figcaption { padding: 14px 18px; border-top: 1px solid var(--paper-line); font-size: 13px; line-height: 1.5; color: var(--ink-muted); }
 .stories { scroll-margin-top: 76px; }
+.recovery-overview { padding: 32px 0; background: #fff; border-bottom: 1px solid var(--paper-line); }
+.recovery-overview a { display: block; }
+.recovery-overview img { display: block; width: 100%; height: auto; }
+.recovery-overview a:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
 .stories.section { padding: 48px 0 64px; }
 .stories .split-heading { margin-bottom: 24px; }
 .stories .split-heading h2 { font-size: 36px; font-style: normal; font-weight: 600; letter-spacing: -.025em; line-height: 1.15; }

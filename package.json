@@ -1,6 +1,9 @@
 {
   "name": "portabase",
-  "private": true,
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "version": "0.4.1",
   "description": "Open-source Supabase Escape — encrypted customer-owned recovery capsules (database, Auth, Storage bytes, Edge Functions). Optional Portabase Cloud for GUI and alerts.",
   "homepage": "https://portabase.dev",
@@ -57,7 +60,8 @@
     "react-dom": "19.2.7",
     "recharts": "^2.15.4",
     "square": "^44.2.0",
-    "supabase": "2.109.1"
+    "supabase": "2.109.1",
+    "tar": "7.5.20"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "6.0.3",

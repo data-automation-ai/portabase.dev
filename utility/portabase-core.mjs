@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream, existsSync } from 'node:fs';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, stat, open, unlink } from 'node:fs/promises';
+import { Readable } from 'node:stream';
 import { basename, join, normalize, relative, sep } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { createGzip } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
+import { createDataSqlPolicy } from './data-sql-policy.mjs';
 
 /** Open-source capsule key protection — see utility/capsule-crypto.mjs */
 import {
@@ -569,6 +571,8 @@ export function baselineObjectUnchanged(baselineObject = {}, listing = {}) {
   const listSize = toSafeSize(listing.size);
   if (baseSize === null || listSize === null) return false;
   if (baseSize !== listSize) return false;
+  if (listing.updatedAt && baselineObject.updatedAt && listing.updatedAt !== baselineObject.updatedAt) return false;
+  if (listing.etag && baselineObject.etag && listing.etag !== baselineObject.etag) return false;
   const tag = listing.etag || listing.updatedAt || null;
   const baseTag = baselineObject.etag || baselineObject.updatedAt || null;
   if (!tag || !baseTag) return false;
@@ -821,13 +825,17 @@ export function recoveryEvidenceStatus({ mode, captureStatus, database, storage,
   if (error) return 'FAILED';
   if (mode === 'plan') return 'PLAN_ONLY';
   if (mode === 'preflight') return 'PREFLIGHT_PASSED';
-  const verified = Boolean(database?.verified) && Boolean(storage?.verified) && Boolean(functions?.verified);
+  const verified = database?.verified === true && storage?.verified === true && functions?.verified === true;
   if (!verified) return 'FAILED';
+  if (storage?.destination === 'inventory-only'
+    || storage?.storageServingRestored === false && storage?.destination !== 's3') return 'FAILED';
   if (mode === 'limited-drill') return 'LIMITED_DRILL_PASSED';
+  if (storage?.destination === 's3') return captureStatus === 'COMPLETE' && !restorePlan
+    ? 'DATABASE_RESTORED_OBJECTS_IN_S3' : captureStatus === 'SELECTIVE' || restorePlan ? 'SELECTIVE_RESTORE_OBJECTS_IN_S3' : 'FAILED';
   // A restore plan deliberately restores a selected subset; its own verified layers already
   // confirm that subset round-tripped correctly, independent of whether the SOURCE capsule
   // captured 100% of the project (PARTIAL/sampled capsules are expected inputs for this path).
-  if (restorePlan) return 'SELECTIVE_RESTORE_VERIFIED';
+  if (restorePlan || captureStatus === 'SELECTIVE') return 'SELECTIVE_RESTORE_VERIFIED';
   return captureStatus === 'COMPLETE' ? 'RECOVERY_DATA_PATH_VERIFIED' : 'FAILED';
 }
 
@@ -952,9 +960,13 @@ export async function packDirectoryTarGz(sourceDir, archivePath) {
     const block = Buffer.alloc(512, 0);
     const nameUtf8 = Buffer.from(name, 'utf8');
     if (nameUtf8.length > 100) {
-      // ustar prefix split
-      const slash = name.lastIndexOf('/', 155);
-      if (slash <= 0 || name.length - slash - 1 > 100) {
+      // ustar fields are byte-limited, not JavaScript character-limited.
+      let slash = name.lastIndexOf('/');
+      while (slash > 0 && (Buffer.byteLength(name.slice(0, slash), 'utf8') > 155
+        || Buffer.byteLength(name.slice(slash + 1), 'utf8') > 100)) {
+        slash = name.lastIndexOf('/', slash - 1);
+      }
+      if (slash <= 0) {
         throw new Error(`Path too long for ustar: ${name}`);
       }
       const prefix = name.slice(0, slash);
@@ -979,16 +991,20 @@ export async function packDirectoryTarGz(sourceDir, archivePath) {
   }
 
   const files = (await walk(sourceDir)).sort();
+  // Reject unrepresentable paths before opening the archive or gzip stream.
+  const entries = [];
+  for (const full of files) {
+    const rel = relative(sourceDir, full).split(sep).join('/');
+    if (!rel || rel.startsWith('..')) continue;
+    const { size } = await stat(full);
+    entries.push({ full, size, block: header(rel, size, '0') });
+  }
   const gzip = createGzip({ level: 6 });
   const output = createWriteStream(archivePath);
   const done = pipeline(gzip, output);
 
-  for (const full of files) {
-    const rel = relative(sourceDir, full).split(sep).join('/');
-    if (!rel || rel.startsWith('..')) continue;
-    const info = await stat(full);
-    const size = info.size;
-    gzip.write(header(rel, size, '0'));
+  for (const { full, size, block } of entries) {
+    gzip.write(block);
     if (size > 0) {
       await new Promise((resolveWrite, reject) => {
         const stream = createReadStream(full);
@@ -1040,9 +1056,6 @@ export function classifyFunctionDirs(entries = [], hasDir = () => false) {
 export const RESTORE_PLAN_FORMAT_VERSION = 1;
 export const DEFAULT_RESTORE_PLAN_MAX_BYTES = 500 * 1024 * 1024;
 
-/** Matches native pg_dump COPY headers: COPY "schema"."table" ("col", ...) FROM stdin; */
-const COPY_HEADER_RE = /^COPY "([^"]+)"\."([^"]+)" \(/;
-
 /**
  * Stream a pg_dump --data-only file and measure each table's COPY block size in bytes
  * (header line + data rows + terminator, as they will appear in a filtered dump).
@@ -1053,28 +1066,23 @@ const COPY_HEADER_RE = /^COPY "([^"]+)"\."([^"]+)" \(/;
  */
 export async function measureDataSqlTables(dataSqlPath) {
   const sizes = new Map();
-  let current = null;
+  const policy = createDataSqlPolicy();
   let bytes = 0;
   const input = createReadStream(dataSqlPath);
   const lines = createInterface({ input, crlfDelay: Infinity });
   for await (const line of lines) {
     const lineBytes = Buffer.byteLength(line, 'utf8') + 1;
-    if (current) {
+    const entry = policy.line(line);
+    if (entry.kind !== 'preamble') {
       bytes += lineBytes;
-      if (line === '\\.') {
-        const key = `${current.schema}.${current.table}`;
-        sizes.set(key, (sizes.get(key) || 0) + bytes);
-        current = null;
+      if (entry.kind === 'terminator') {
+        const key = `${entry.table.schema}.${entry.table.table}`;
+        sizes.set(key, bytes);
         bytes = 0;
       }
-      continue;
-    }
-    const header = COPY_HEADER_RE.exec(line);
-    if (header) {
-      current = { schema: header[1], table: header[2] };
-      bytes = lineBytes;
     }
   }
+  policy.finish();
   return [...sizes.entries()].map(([key, value]) => {
     const dot = key.indexOf('.');
     return { schema: key.slice(0, dot), table: key.slice(dot + 1), bytes: value };
@@ -1083,42 +1091,37 @@ export async function measureDataSqlTables(dataSqlPath) {
 
 /**
  * Filter a pg_dump --data-only file down to only the selected schema.table COPY blocks,
- * streaming to avoid loading multi-GB dumps into memory. Non-COPY lines (comments, SET
- * statements, sequence setval calls) are preserved as-is — they are cheap and harmless
- * against empty/absent tables.
+ * streaming to avoid loading the full dump. Only supported pg_dump preamble,
+ * comments and literal sequence setval calls pass outside COPY. Roles/schema
+ * and sequence positions are not selected by this row-data filter.
  *
  * @param {string} sourcePath
  * @param {string} targetPath
  * @param {Set<string>} selectedKeys  Set of "schema.table" strings to keep
  */
 export async function filterDataSqlByTables(sourcePath, targetPath, selectedKeys) {
-  const writer = createWriteStream(targetPath, { flags: 'wx' });
-  let skipping = false;
+  const file = await open(targetPath, 'wx', 0o600);
+  const policy = createDataSqlPolicy();
   try {
-    const input = createReadStream(sourcePath);
-    const lines = createInterface({ input, crlfDelay: Infinity });
-    for await (const line of lines) {
-      if (skipping) {
-        if (line === '\\.') skipping = false;
-        continue;
-      }
-      const header = COPY_HEADER_RE.exec(line);
-      if (header) {
-        const key = `${header[1]}.${header[2]}`;
-        if (!selectedKeys.has(key)) { skipping = true; continue; }
-      }
-      if (!writer.write(`${line}\n`)) {
-        await new Promise(resolveDrain => writer.once('drain', resolveDrain));
+    async function* selectedLines() {
+      const input = createReadStream(sourcePath);
+      const lines = createInterface({ input, crlfDelay: Infinity });
+      try {
+        for await (const line of lines) {
+          const entry = policy.line(line);
+          if (entry.kind === 'preamble' || selectedKeys.has(`${entry.table.schema}.${entry.table.table}`)) yield `${line}\n`;
+        }
+        policy.finish();
+      } finally {
+        lines.close(); input.destroy();
       }
     }
-    await new Promise((resolveWrite, reject) => {
-      writer.once('error', reject);
-      writer.end(resolveWrite);
-    });
+    await pipeline(Readable.from(selectedLines()), file.createWriteStream());
   } catch (error) {
-    writer.destroy();
+    await file.close();
+    await unlink(targetPath).catch(() => {});
     throw error;
-  }
+  } finally { await file.close(); }
 }
 
 /**
@@ -1170,7 +1173,7 @@ export function restorePlanSelectedBytes(plan) {
  * (wrong capsule, stale plan, over budget) must hard-stop before any target write.
  */
 export function validateRestorePlan(plan, { capsuleId, maxBytesOverride } = {}) {
-  if (!plan || typeof plan !== 'object') throw new Error('Restore plan is not a valid JSON object.');
+  if (!plan || typeof plan !== 'object' || Array.isArray(plan)) throw new Error('Restore plan is not a valid JSON object.');
   if (plan.formatVersion !== RESTORE_PLAN_FORMAT_VERSION) {
     throw new Error(`Restore plan formatVersion ${plan.formatVersion} is not supported (expected ${RESTORE_PLAN_FORMAT_VERSION}).`);
   }
@@ -1178,9 +1181,23 @@ export function validateRestorePlan(plan, { capsuleId, maxBytesOverride } = {}) 
   if (capsuleId && plan.capsuleId !== capsuleId) {
     throw new Error(`Restore plan was generated for capsule "${plan.capsuleId}" but this capsule is "${capsuleId}". Generate a new plan with "portabase restore-plan" for this capsule.`);
   }
-  const maxBytes = Number(maxBytesOverride ?? plan.maxBytes ?? DEFAULT_RESTORE_PLAN_MAX_BYTES);
-  if (!Number.isFinite(maxBytes) || maxBytes <= 0) throw new Error('Restore plan maxBytes must be a positive number.');
+  const identity = value => typeof value === 'string' && value.length > 0 && value.length <= 1024 && !/[\u0000-\u001f\u007f]/.test(value);
+  for (const [field, identifiers] of [['tables', ['schema', 'table']], ['buckets', ['id']], ['functions', ['name']]]) {
+    if (!Array.isArray(plan[field])) throw new Error(`Restore plan ${field} must be an array.`);
+    const seen = new Set();
+    for (const row of plan[field]) {
+      if (!row || typeof row !== 'object' || Array.isArray(row) || typeof row.selected !== 'boolean'
+        || identifiers.some(key => !identity(row[key]))) throw new Error(`Restore plan has an invalid ${field} entry.`);
+      const key = JSON.stringify(identifiers.map(name => row[name]));
+      if (seen.has(key)) throw new Error(`Restore plan has duplicate ${field} entries.`);
+      seen.add(key);
+      if (field !== 'functions' && (!Number.isSafeInteger(row.bytes) || row.bytes < 0)) throw new Error('Restore plan bytes must be nonnegative safe integers.');
+    }
+  }
+  const maxBytes = maxBytesOverride ?? plan.maxBytes ?? DEFAULT_RESTORE_PLAN_MAX_BYTES;
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) throw new Error('Restore plan maxBytes must be a positive safe integer.');
   const selectedBytes = restorePlanSelectedBytes(plan);
+  if (!Number.isSafeInteger(selectedBytes)) throw new Error('Restore plan selected byte total exceeds safe integer precision.');
   if (selectedBytes > maxBytes) {
     const items = [
       ...(plan.tables || []).filter(t => t.selected).map(t => `table ${t.schema}.${t.table} (${formatBytes(t.bytes)})`),
