@@ -95,6 +95,18 @@ export function runUnattendedRestore(version, payload = {}) {
   return api('/api/cloud/unattended-restore', { method: 'POST', body: payload, version });
 }
 
+export function fetchStorageConnectors(version) {
+  return api('/api/cloud/storage-connectors', { version });
+}
+
+export function testStorageConnector(version, payload = {}) {
+  return api('/api/cloud/storage-connectors', { method: 'POST', body: { action: 'test', ...payload }, version });
+}
+
+export function uploadCapsuleToConnector(version, payload = {}) {
+  return api('/api/cloud/storage-connectors', { method: 'POST', body: { action: 'upload-capsule', ...payload }, version });
+}
+
 export function fetchRunners(version) {
   return api('/api/cloud/runners', { version });
 }

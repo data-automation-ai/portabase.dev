@@ -166,6 +166,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/cloud/storage-connectors"
+  to = "/.netlify/functions/cloud-storage-connectors"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

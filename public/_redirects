@@ -30,4 +30,5 @@
 /api/cloud/promo-codes /.netlify/functions/cloud-promo-codes 200
 /api/cloud/redeem-test-promo /.netlify/functions/cloud-redeem-test-promo 200
 /api/cloud/unattended-restore /.netlify/functions/cloud-unattended-restore 200
+/api/cloud/storage-connectors /.netlify/functions/cloud-storage-connectors 200
 /* /index.html 200

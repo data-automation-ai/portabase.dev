@@ -6,6 +6,7 @@ export function portabaseCloudApiPlugin() {
     '/api/cloud/promo-codes': './netlify/functions/cloud-promo-codes.mjs',
     '/api/cloud/redeem-test-promo': './netlify/functions/cloud-redeem-test-promo.mjs',
     '/api/cloud/unattended-restore': './netlify/functions/cloud-unattended-restore.mjs',
+    '/api/cloud/storage-connectors': './netlify/functions/cloud-storage-connectors.mjs',
     '/api/cloud/me': './netlify/functions/cloud-me.mjs',
     '/api/cloud/subscribe': './netlify/functions/cloud-subscribe.mjs',
     '/api/cloud/confirm-checkout': './netlify/functions/cloud-confirm-checkout.mjs',

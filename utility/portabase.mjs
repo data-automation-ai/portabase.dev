@@ -103,8 +103,20 @@ import {
   assertDatabaseTarget, verifiedCachePath,
   verifyStoragePayloads, readStorageManifest, assembleDeltaPayload, validateRecoveryArgs,
 } from './recovery-options.mjs';
-import { parseStorageDestination, preflightStorageS3, restoreStorageS3 } from './storage-s3-restore.mjs';
 import { applicationSchema, validateOverwrite, overwriteSql, rolesForOverwrite } from './overwrite-target.mjs';
+import {
+  uploadCapsuleToDropbox,
+  uploadCapsuleToGoogleDrive,
+  testDropboxConnection,
+  testGoogleDriveConnection,
+} from './cloud-storage-connectors.mjs';
+
+export {
+  uploadCapsuleToDropbox,
+  uploadCapsuleToGoogleDrive,
+  testDropboxConnection,
+  testGoogleDriveConnection,
+} from './cloud-storage-connectors.mjs';
 
 export {
   providerCommand,
@@ -1516,6 +1528,12 @@ export async function transferCapsule(config, capsuleDir) {
       bytes,
       maxBytes: sizeGate.maxBytes,
     };
+  }
+  if (config.provider.type === 'dropbox' && (config.provider.mode === 'api' || config.provider.accessToken || config.provider.refreshToken || process.env.DROPBOX_ACCESS_TOKEN || process.env.DROPBOX_REFRESH_TOKEN)) {
+    return await uploadCapsuleToDropbox(capsuleDir, { ...config.provider });
+  }
+  if ((config.provider.type === 'google-drive' || config.provider.type === 'gdrive') && (config.provider.mode === 'api' || config.provider.accessToken || config.provider.refreshToken || process.env.GOOGLE_DRIVE_ACCESS_TOKEN || process.env.GOOGLE_DRIVE_REFRESH_TOKEN)) {
+    return await uploadCapsuleToGoogleDrive(capsuleDir, { ...config.provider });
   }
   const upload = providerCommand(config, capsuleDir);
   if (!resolveTool(upload[0])) throw new Error(`${upload[0]} CLI is not installed.`);

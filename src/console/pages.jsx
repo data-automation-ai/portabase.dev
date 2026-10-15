@@ -30,7 +30,7 @@ import { AgentCredentials } from './agent-credentials.jsx';
 import { NotificationPreferences } from './notification-preferences.jsx';
 import { ManagedBackupSchedules } from './managed-backup-schedules.jsx';
 import { checkoutPlanFromSearch } from '../lib/auth-return.js';
-import { fetchPromoCodes, createPromoCode, redeemPromoCode, runUnattendedRestore, fetchMe } from '../lib/cloud-api.js';
+import { fetchPromoCodes, createPromoCode, redeemPromoCode, runUnattendedRestore, fetchMe, fetchStorageConnectors, testStorageConnector, uploadCapsuleToConnector } from '../lib/cloud-api.js';
 
 const billingDate = value => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(value));
 
@@ -825,8 +825,8 @@ export function DestinationsPage({ state, setState, toast, embedded }) {
             <select value={form.kind} onChange={e => setForm({ ...form, kind: e.target.value })}>
               <option value="local">local · Starter ≤100 MB (this PC / USB / NAS)</option>
               <option value="s3">s3 · Amazon S3</option>
-              <option value="dropbox">dropbox</option>
-              <option value="gdrive">gdrive · coming soon</option>
+              <option value="dropbox">dropbox · Dropbox (Direct API / rclone)</option>
+              <option value="google-drive">google-drive · Google Drive (Direct API / rclone)</option>
               <option value="nas">nas</option>
             </select>
           </div>
@@ -836,6 +836,7 @@ export function DestinationsPage({ state, setState, toast, embedded }) {
           )}
         </Modal>
       )}
+      <StorageConnectorsCard state={state} setState={setState} toast={toast} />
     </>
   );
   if (embedded) return body;
@@ -844,6 +845,225 @@ export function DestinationsPage({ state, setState, toast, embedded }) {
       <PageHead title="Capsule storage (yours)" subtitle="Required. Cloud does not include object storage — you bring the bucket, drive, or Local Starter folder." />
       {body}
     </>
+  );
+}
+
+function StorageConnectorsCard({ state, setState, toast }) {
+  const [provider, setProvider] = useState('dropbox');
+  const [folderPath, setFolderPath] = useState('/Portabase');
+  const [tokenInput, setTokenInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+
+  const onProviderChange = (p) => {
+    setProvider(p);
+    setFolderPath(p === 'dropbox' ? '/Portabase' : 'Portabase');
+    setResult(null);
+    setError('');
+  };
+
+  const handleTest = async () => {
+    setBusy(true);
+    setError('');
+    setResult(null);
+    try {
+      const payload = {
+        provider,
+        folderPath: folderPath.trim(),
+        accessToken: tokenInput.trim() || undefined,
+        simulate: !tokenInput.trim(),
+      };
+      const res = await testStorageConnector(state?.version || 'supabase', payload);
+      setResult(res);
+      if (res?.ok) {
+        toast?.(`Connected to ${provider === 'dropbox' ? 'Dropbox' : 'Google Drive'} successfully!`, 'ok');
+        setState?.(s => {
+          const destName = `${provider === 'dropbox' ? 'dropbox' : 'gdrive'}-vault`;
+          if (!s.destinations.some(d => d.name === destName)) {
+            s.destinations.push({
+              id: uid('dest'),
+              name: destName,
+              kind: provider === 'dropbox' ? 'dropbox' : 'google-drive',
+              status: 'ok',
+              path: folderPath.trim(),
+              lastWriteAt: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+            });
+            s.onboarding.steps.destination = true;
+          }
+          return s;
+        });
+      } else {
+        setError(res?.message || 'Connection test failed');
+      }
+    } catch (err) {
+      setError(err.message || 'Connection test failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleSync = async () => {
+    setBusy(true);
+    setError('');
+    setResult(null);
+    try {
+      const payload = {
+        provider,
+        folderPath: folderPath.trim(),
+        accessToken: tokenInput.trim() || undefined,
+        simulate: !tokenInput.trim(),
+      };
+      const res = await uploadCapsuleToConnector(state?.version || 'supabase', payload);
+      setResult(res);
+      if (res?.ok && res.verified) {
+        toast?.(`Capsule verified and uploaded to ${res.destination}!`, 'ok');
+        setState?.(s => {
+          const destName = `${provider === 'dropbox' ? 'dropbox' : 'gdrive'}-vault`;
+          const existing = s.destinations.find(d => d.name === destName || d.kind === provider);
+          if (existing) {
+            existing.status = 'ok';
+            existing.lastWriteAt = new Date().toISOString();
+          } else {
+            s.destinations.push({
+              id: uid('dest'),
+              name: destName,
+              kind: provider === 'dropbox' ? 'dropbox' : 'google-drive',
+              status: 'ok',
+              path: folderPath.trim(),
+              lastWriteAt: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+            });
+            s.onboarding.steps.destination = true;
+          }
+          return s;
+        });
+      } else {
+        setError(res?.message || 'Verification & sync failed');
+      }
+    } catch (err) {
+      setError(err.message || 'Sync failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="pb-card" data-testid="storage-connectors-card" style={{ marginTop: 14 }}>
+      <div className="pb-card-head">
+        <h3>Dropbox &amp; Google Drive Direct Connectors</h3>
+        <Badge tone="acid">Native API + rclone</Badge>
+      </div>
+      <p className="pb-muted" style={{ fontSize: 13, margin: '6px 0 14px' }}>
+        First-class direct API connectors for <strong>Dropbox</strong> and <strong>Google Drive</strong>. Connect your customer-owned vault with automatic cryptographic hash verification (Dropbox <code>content_hash</code> / Google Drive <code>sha256Checksum</code>).
+      </p>
+
+      <div className="pb-grid pb-grid-3" style={{ gap: 12, marginBottom: 12 }}>
+        <div className="pb-field">
+          <label style={{ fontSize: 11, fontWeight: 600 }}>Storage Provider</label>
+          <select
+            value={provider}
+            onChange={e => onProviderChange(e.target.value)}
+            data-testid="storage-connector-provider-select"
+            style={{ width: '100%', padding: '6px 8px', fontSize: 13 }}
+          >
+            <option value="dropbox">Dropbox (Native API / rclone)</option>
+            <option value="google-drive">Google Drive (Native API / rclone)</option>
+          </select>
+        </div>
+        <div className="pb-field">
+          <label style={{ fontSize: 11, fontWeight: 600 }}>Folder Path</label>
+          <input
+            type="text"
+            value={folderPath}
+            onChange={e => setFolderPath(e.target.value)}
+            placeholder={provider === 'dropbox' ? '/Portabase' : 'Portabase'}
+            data-testid="storage-connector-folder-input"
+            style={{ width: '100%', padding: '6px 8px', fontSize: 13 }}
+          />
+        </div>
+        <div className="pb-field">
+          <label style={{ fontSize: 11, fontWeight: 600 }}>Access Token (Optional)</label>
+          <input
+            type="password"
+            value={tokenInput}
+            onChange={e => setTokenInput(e.target.value)}
+            placeholder="Leave empty for env/simulated token"
+            data-testid="storage-connector-token-input"
+            style={{ width: '100%', padding: '6px 8px', fontSize: 13 }}
+          />
+        </div>
+      </div>
+
+      <div className="pb-inline" style={{ gap: 10, marginBottom: 12 }}>
+        <button
+          type="button"
+          className="pb-btn"
+          disabled={busy}
+          onClick={handleTest}
+          data-testid="test-storage-connector-btn"
+        >
+          {busy ? 'Testing…' : 'Test Connector'}
+        </button>
+        <button
+          type="button"
+          className="pb-btn pb-btn-primary"
+          disabled={busy}
+          onClick={handleSync}
+          data-testid="sync-storage-connector-btn"
+        >
+          {busy ? 'Syncing…' : 'Verify & Sync Capsule'}
+        </button>
+      </div>
+
+      {error && (
+        <div className="pb-callout danger" style={{ marginTop: 10 }}>
+          <div><strong>Error:</strong> {error}</div>
+        </div>
+      )}
+
+      {result && (
+        <div
+          className="storage-connector-result"
+          data-testid="storage-connector-result"
+          style={{
+            marginTop: 12,
+            padding: 12,
+            background: 'var(--c-surface-2, #fafafa)',
+            border: '1px solid var(--c-border, #ddd)',
+            borderRadius: 6,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <strong>{result.provider === 'dropbox' ? 'Dropbox' : 'Google Drive'} Connector Status</strong>
+            <Badge tone={result.ok ? 'ok' : 'warn'}>{result.simulated ? 'SIMULATED / VERIFIED' : 'ACTIVE / VERIFIED'}</Badge>
+          </div>
+          <div className="pb-grid pb-grid-2" style={{ gap: 8, fontSize: 12 }}>
+            <div><span className="pb-muted">Account:</span> {result.accountEmail || result.displayName || 'Connected'}</div>
+            <div><span className="pb-muted">Destination:</span> <code>{result.destination || `${result.provider}:${result.folderPath}`}</code></div>
+            {result.verifiedHash && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <span className="pb-muted">Verified Hash ({result.provider === 'dropbox' ? 'content_hash' : 'SHA-256'}):</span>{' '}
+                <code style={{ fontSize: 11 }}>{result.verifiedHash}</code>
+              </div>
+            )}
+            {result.contentHashes && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <span className="pb-muted">Verified Files ({Object.keys(result.contentHashes).length}):</span>{' '}
+                <span className="mono" style={{ fontSize: 11 }}>{Object.keys(result.contentHashes).join(', ')}</span>
+              </div>
+            )}
+            {result.sha256Checksums && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <span className="pb-muted">Verified Files ({Object.keys(result.sha256Checksums).length}):</span>{' '}
+                <span className="mono" style={{ fontSize: 11 }}>{Object.keys(result.sha256Checksums).join(', ')}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
