@@ -2,6 +2,35 @@ import { DEFAULT_CLOUD_VERSION, normalizeCloudVersion, setStoredCloudVersion } f
 
 const KEY = 'portabase.auth.v1';
 
+function parseSimCustomerToken(token) {
+  try {
+    const raw = token.slice('sim_customer_'.length);
+    const decoded = atob(raw.replace(/-/g, '+').replace(/_/g, '/'));
+    const parsed = JSON.parse(decoded);
+    return {
+      provider: 'supabase',
+      cloudVersion: 'supabase',
+      accessToken: token,
+      user: {
+        id: parsed.id || 'sim_customer',
+        email: parsed.email || 'customer@example.com',
+        name: parsed.name || 'Simulated Customer',
+      },
+    };
+  } catch {
+    return {
+      provider: 'supabase',
+      cloudVersion: 'supabase',
+      accessToken: token,
+      user: {
+        id: 'sim_customer',
+        email: 'customer@example.com',
+        name: 'Simulated Customer',
+      },
+    };
+  }
+}
+
 /**
  * Session shapes:
  *  Supabase: { provider: 'supabase', cloudVersion: 'supabase', accessToken, refreshToken, user }
@@ -9,8 +38,14 @@ const KEY = 'portabase.auth.v1';
  */
 export function loadSession() {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return null;
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(KEY) : null;
+    if (!raw) {
+      const sim = typeof localStorage !== 'undefined' ? localStorage.getItem('portabase.sim_customer_token') : null;
+      if (sim && sim.startsWith('sim_customer_')) {
+        return parseSimCustomerToken(sim);
+      }
+      return null;
+    }
     const data = JSON.parse(raw);
     if (!data) return null;
 
@@ -41,22 +76,32 @@ export function saveSession(session) {
   );
   const provider = session.provider || (cloudVersion === 'aws' ? 'aws' : 'supabase');
   setStoredCloudVersion(cloudVersion);
-  localStorage.setItem(KEY, JSON.stringify({
-    ...session,
-    provider,
-    cloudVersion,
-    savedAt: new Date().toISOString(),
-  }));
-  window.dispatchEvent(new Event('portabase-auth'));
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(KEY, JSON.stringify({
+      ...session,
+      provider,
+      cloudVersion,
+      savedAt: new Date().toISOString(),
+    }));
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('portabase-auth'));
+  }
 }
 
 export function clearSession() {
-  localStorage.removeItem(KEY);
-  window.dispatchEvent(new Event('portabase-auth'));
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem(KEY);
+    localStorage.removeItem('portabase.sim_customer_token');
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('portabase-auth'));
+  }
 }
 
 export function isTokenExpired(token, skewSeconds = 60) {
   if (!token) return true;
+  if (token.startsWith('sim_customer_')) return false;
   try {
     const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
     if (!payload.exp) return false;
@@ -67,6 +112,16 @@ export function isTokenExpired(token, skewSeconds = 60) {
 }
 
 export function decodeJwt(token) {
+  if (!token) return null;
+  if (token.startsWith('sim_customer_')) {
+    const sim = parseSimCustomerToken(token);
+    return {
+      sub: sim.user.id,
+      email: sim.user.email,
+      name: sim.user.name,
+      user_metadata: { full_name: sim.user.name },
+    };
+  }
   try {
     return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
   } catch {
@@ -89,7 +144,11 @@ export function sessionAccessToken(session = loadSession()) {
 }
 
 export function authHeaders(session = loadSession()) {
-  const token = sessionAccessToken(session);
+  let token = sessionAccessToken(session);
+  if (!token && typeof localStorage !== 'undefined') {
+    const sim = localStorage.getItem('portabase.sim_customer_token');
+    if (sim) token = sim;
+  }
   if (!token) return {};
   const version = session?.cloudVersion || session?.provider || DEFAULT_CLOUD_VERSION;
   return {

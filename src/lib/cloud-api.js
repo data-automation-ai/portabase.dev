@@ -1,9 +1,37 @@
-import { authHeaders, loadSession, sessionCloudVersion } from './session.js';
+import { authHeaders, loadSession, saveSession, sessionCloudVersion } from './session.js';
 import { ensureFreshSession as ensureSupabaseSession } from './supabase-auth.js';
 import { ensureFreshSession as ensureAwsSession } from './cognito.js';
 import { DEFAULT_CLOUD_VERSION, normalizeCloudVersion } from './cloud-versions.js';
 
+export function simulateCustomerSignup({ email = 'customer@example.com', name = 'Customer User' } = {}) {
+  const cleanEmail = String(email || 'customer@example.com').trim().toLowerCase();
+  const id = 'sim_' + Math.random().toString(36).slice(2, 10);
+  const user = { id, email: cleanEmail, name };
+  const rawPayload = JSON.stringify(user);
+  let base64 = '';
+  if (typeof btoa !== 'undefined') {
+    base64 = btoa(rawPayload).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+  } else if (typeof Buffer !== 'undefined') {
+    base64 = Buffer.from(rawPayload).toString('base64url');
+  }
+  const token = `sim_customer_${base64}`;
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('portabase.sim_customer_token', token);
+  }
+  const session = {
+    provider: 'supabase',
+    cloudVersion: 'supabase',
+    accessToken: token,
+    user,
+  };
+  saveSession(session);
+  return { ok: true, token, user };
+}
+
 export async function ensureSessionForVersion(version) {
+  if (typeof localStorage !== 'undefined' && localStorage.getItem('portabase.sim_customer_token')) {
+    return loadSession();
+  }
   const v = normalizeCloudVersion(version, sessionCloudVersion() || DEFAULT_CLOUD_VERSION);
   if (v === 'aws') return ensureAwsSession();
   return ensureSupabaseSession();
@@ -49,6 +77,22 @@ export function startAddonCheckout(version, addon = 'extra-transfers') {
 
 export function confirmCheckout({ attempt, version, addon } = {}) {
   return api('/api/cloud/confirm-checkout', { method: 'POST', body: { attempt: attempt || null, addon: addon || null }, version });
+}
+
+export function fetchPromoCodes(version) {
+  return api('/api/cloud/promo-codes', { version });
+}
+
+export function createPromoCode(version, payload) {
+  return api('/api/cloud/promo-codes', { method: 'POST', body: payload, version });
+}
+
+export function redeemPromoCode(version, code, planId = 'cloud-7') {
+  return api('/api/cloud/redeem-test-promo', { method: 'POST', body: { code, planId }, version });
+}
+
+export function runUnattendedRestore(version, payload = {}) {
+  return api('/api/cloud/unattended-restore', { method: 'POST', body: payload, version });
 }
 
 export function fetchRunners(version) {

@@ -439,10 +439,10 @@ export function schemaExcludePattern(list = PLATFORM_SCHEMA_EXCLUDES) {
 
 /** Data dump excludes (includes auth data tables handled separately if ever expanded). */
 export const DATA_SCHEMA_EXCLUDES = Object.freeze([
-  'information_schema', 'pg_*', 'graphql', 'graphql_public', 'pgsodium', 'pgsodium_masks', 'pgtle',
-  'repack', 'tiger', 'tiger_data', 'timescaledb_*', '_timescaledb_*', 'topology', 'vault', 'etl',
-  'extensions', 'pgbouncer', 'realtime', 'storage', 'supabase_functions', 'supabase_migrations',
-  '_analytics', '_realtime', '_supavisor',
+  'information_schema', 'pg_*', 'cron', 'dbdev', 'graphql', 'graphql_public', 'net', 'pgmq',
+  'pgsodium', 'pgsodium_masks', 'pgtle', 'repack', 'tiger', 'tiger_data', 'timescaledb_*',
+  '_timescaledb_*', 'topology', 'vault', 'etl', 'extensions', 'pgbouncer', 'realtime',
+  'storage', 'supabase_functions', 'supabase_migrations', '_analytics', '_realtime', '_supavisor',
 ]);
 
 /** Individual platform tables excluded from data.sql even though their schema's data is kept. */
@@ -956,7 +956,12 @@ export async function packDirectoryTarGz(sourceDir, archivePath) {
     return sum;
   }
 
+  const MAX_USTAR_FILE_BYTES = 0o77777777777; // 8 GiB - 1 byte (11 octal digits)
+
   function header(name, size, type = '0') {
+    if (!Number.isInteger(size) || size < 0 || size > MAX_USTAR_FILE_BYTES) {
+      throw new Error(`File size out of ustar range (max 8 GiB): ${name} (${size} bytes)`);
+    }
     const block = Buffer.alloc(512, 0);
     const nameUtf8 = Buffer.from(name, 'utf8');
     if (nameUtf8.length > 100) {
@@ -1057,6 +1062,32 @@ export const RESTORE_PLAN_FORMAT_VERSION = 1;
 export const DEFAULT_RESTORE_PLAN_MAX_BYTES = 500 * 1024 * 1024;
 
 /**
+ * Stream a SQL file splitting only on ASCII LF (\n) or CRLF (\r\n), never on Unicode
+ * U+2028 (LINE SEPARATOR) or U+2029 (PARAGRAPH SEPARATOR), which Node's readline splits on.
+ */
+export async function* readAsciiSqlLines(sourcePath) {
+  const input = createReadStream(sourcePath, { encoding: 'utf8', highWaterMark: 256 * 1024 });
+  let carry = '';
+  try {
+    for await (const chunk of input) {
+      let start = 0;
+      for (let i = 0; i < chunk.length; i += 1) {
+        if (chunk.charCodeAt(i) === 10) {
+          const raw = carry ? carry + chunk.slice(start, i) : chunk.slice(start, i);
+          carry = '';
+          start = i + 1;
+          yield raw.endsWith('\r') ? raw.slice(0, -1) : raw;
+        }
+      }
+      if (start < chunk.length) carry += chunk.slice(start);
+    }
+    if (carry) yield carry.endsWith('\r') ? carry.slice(0, -1) : carry;
+  } finally {
+    input.destroy();
+  }
+}
+
+/**
  * Stream a pg_dump --data-only file and measure each table's COPY block size in bytes
  * (header line + data rows + terminator, as they will appear in a filtered dump).
  * Tables with no COPY block (empty tables) are not included — callers should default them to 0.
@@ -1068,9 +1099,7 @@ export async function measureDataSqlTables(dataSqlPath) {
   const sizes = new Map();
   const policy = createDataSqlPolicy();
   let bytes = 0;
-  const input = createReadStream(dataSqlPath);
-  const lines = createInterface({ input, crlfDelay: Infinity });
-  for await (const line of lines) {
+  for await (const line of readAsciiSqlLines(dataSqlPath)) {
     const lineBytes = Buffer.byteLength(line, 'utf8') + 1;
     const entry = policy.line(line);
     if (entry.kind !== 'preamble') {
@@ -1089,6 +1118,23 @@ export async function measureDataSqlTables(dataSqlPath) {
   });
 }
 
+const EXCLUDED_SETVAL_SCHEMAS = new Set(['cron', 'dbdev', 'net', 'pgmq']);
+
+function copyExpectedTabs(headerLine) {
+  const openIdx = headerLine.indexOf('(');
+  const closeIdx = headerLine.lastIndexOf(') FROM stdin;');
+  if (openIdx === -1 || closeIdx <= openIdx) return 0;
+  return headerLine.slice(openIdx + 1, closeIdx).split(',').length - 1;
+}
+
+function countTabChars(line) {
+  let count = 0;
+  for (let i = 0; i < line.length; i += 1) {
+    if (line.charCodeAt(i) === 9) count += 1;
+  }
+  return count;
+}
+
 /**
  * Filter a pg_dump --data-only file down to only the selected schema.table COPY blocks,
  * streaming to avoid loading the full dump. Only supported pg_dump preamble,
@@ -1104,17 +1150,58 @@ export async function filterDataSqlByTables(sourcePath, targetPath, selectedKeys
   const policy = createDataSqlPolicy();
   try {
     async function* selectedLines() {
-      const input = createReadStream(sourcePath);
-      const lines = createInterface({ input, crlfDelay: Infinity });
-      try {
-        for await (const line of lines) {
-          const entry = policy.line(line);
-          if (entry.kind === 'preamble' || selectedKeys.has(`${entry.table.schema}.${entry.table.table}`)) yield `${line}\n`;
+      let expectedTabs = 0;
+      let pendingRow = null;
+      let pendingTabs = 0;
+      for await (const line of readAsciiSqlLines(sourcePath)) {
+        const entry = policy.line(line);
+        if (entry.kind === 'preamble') {
+          if (line.startsWith("SELECT pg_catalog.setval('")) {
+            const sm = /^SELECT pg_catalog\.setval\('(?:"([^"]+)"|([A-Za-z0-9_]+))\./.exec(line);
+            const seqSchema = sm ? (sm[1] || sm[2]) : null;
+            if (seqSchema && EXCLUDED_SETVAL_SCHEMAS.has(seqSchema)) continue;
+          }
+          yield `${line}\n`;
+          continue;
         }
-        policy.finish();
-      } finally {
-        lines.close(); input.destroy();
+        const keep = selectedKeys.has(`${entry.table.schema}.${entry.table.table}`);
+        if (!keep) continue;
+        if (entry.kind === 'copy') {
+          expectedTabs = copyExpectedTabs(line);
+          pendingRow = null;
+          pendingTabs = 0;
+          yield `${line}\n`;
+        } else if (entry.kind === 'terminator') {
+          if (pendingRow !== null) {
+            yield `${pendingRow}\n`;
+            pendingRow = null;
+            pendingTabs = 0;
+          }
+          expectedTabs = 0;
+          yield `${line}\n`;
+        } else if (expectedTabs > 0) {
+          const tabs = countTabChars(line);
+          if (pendingRow === null) {
+            if (tabs < expectedTabs) {
+              pendingRow = line;
+              pendingTabs = tabs;
+            } else {
+              yield `${line}\n`;
+            }
+          } else {
+            pendingRow += `\u2028${line}`;
+            pendingTabs += tabs;
+            if (pendingTabs >= expectedTabs) {
+              yield `${pendingRow}\n`;
+              pendingRow = null;
+              pendingTabs = 0;
+            }
+          }
+        } else {
+          yield `${line}\n`;
+        }
       }
+      policy.finish();
     }
     await pipeline(Readable.from(selectedLines()), file.createWriteStream());
   } catch (error) {

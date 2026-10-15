@@ -13,7 +13,7 @@ import * as supabaseAuth from './lib/supabase-auth.js';
 import * as googleAuth from './lib/google-gis-auth.js';
 import * as awsAuth from './lib/cognito.js';
 import { sessionUser, isSignedIn } from './lib/session.js';
-import { ensureSessionForVersion } from './lib/cloud-api.js';
+import { ensureSessionForVersion, simulateCustomerSignup, redeemPromoCode } from './lib/cloud-api.js';
 import { safeAuthReturnPath } from './lib/auth-return.js';
 import { ConsoleApp } from './console/ConsoleApp.jsx';
 import { KEYS_COPY } from './data/never-hold-keys.js';
@@ -156,6 +156,97 @@ function GoogleButton({ version, next, label, blocked = false, onStart }) {
       </button>
       {error && <p className="auth-error" role="alert">{error}</p>}
     </>
+  );
+}
+
+function SimulatedCustomerSection({ version, afterLogin }) {
+  const [simEmail, setSimEmail] = useState('customer@example.com');
+  const [simPromo, setSimPromo] = useState('FREE100');
+  const [simBusy, setSimBusy] = useState(false);
+  const [simError, setSimError] = useState('');
+
+  const handleSimulate = async (e) => {
+    e.preventDefault();
+    setSimBusy(true);
+    setSimError('');
+    try {
+      const email = (simEmail || 'customer@example.com').trim();
+      simulateCustomerSignup({ email, name: 'Customer User' });
+      if (simPromo.trim()) {
+        try {
+          await redeemPromoCode(version || 'supabase', simPromo.trim(), 'cloud-7');
+        } catch (err) {
+          console.warn('Auto-redeem promo failed:', err.message);
+        }
+      }
+      window.location.assign('/app');
+    } catch (err) {
+      setSimError(err.message || 'Simulation failed');
+      setSimBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="simulated-customer-box"
+      data-testid="simulated-customer-signup-panel"
+      style={{
+        marginTop: 20,
+        padding: 16,
+        border: '1px dashed var(--c-acid, #0e7c74)',
+        borderRadius: 8,
+        background: 'rgba(14, 124, 116, 0.05)',
+      }}
+    >
+      <strong style={{ display: 'block', fontSize: 13, marginBottom: 4, color: 'var(--c-acid, #0e7c74)' }}>
+        Simulate Customer Sign Up (Instant / Unattended)
+      </strong>
+      <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--c-muted, #666)' }}>
+        Instant customer signup simulation without external email delays. Automatically creates an authenticated session and activates free usage access.
+      </p>
+      <form onSubmit={handleSimulate}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div>
+            <label htmlFor="sim-email" style={{ display: 'block', fontSize: 11, marginBottom: 2, fontWeight: 500 }}>
+              Customer Email
+            </label>
+            <input
+              id="sim-email"
+              type="email"
+              value={simEmail}
+              onChange={e => setSimEmail(e.target.value)}
+              placeholder="customer@example.com"
+              style={{ width: '100%', padding: '6px 8px', fontSize: 13, borderRadius: 4, border: '1px solid #ccc' }}
+              data-testid="sim-customer-email"
+            />
+          </div>
+          <div>
+            <label htmlFor="sim-promo" style={{ display: 'block', fontSize: 11, marginBottom: 2, fontWeight: 500 }}>
+              Promo Code (Free Usage)
+            </label>
+            <input
+              id="sim-promo"
+              type="text"
+              value={simPromo}
+              onChange={e => setSimPromo(e.target.value)}
+              placeholder="FREE100"
+              style={{ width: '100%', padding: '6px 8px', fontSize: 13, borderRadius: 4, border: '1px solid #ccc' }}
+              data-testid="sim-customer-promo"
+            />
+          </div>
+          <button
+            type="submit"
+            className="button button-primary"
+            disabled={simBusy}
+            style={{ marginTop: 4, padding: '8px 12px', fontSize: 13 }}
+            data-testid="simulate-customer-signup-btn"
+          >
+            {simBusy ? 'Setting up customer account…' : 'Simulate Customer Sign Up (Instant / Unattended)'}
+          </button>
+        </div>
+      </form>
+      {simError && <p className="auth-error" style={{ marginTop: 8 }} role="alert">{simError}</p>}
+    </div>
   );
 }
 
@@ -522,6 +613,10 @@ export function LoginPage() {
             {busy ? 'Updating…' : 'Update password'}
           </button>
         </form>
+      )}
+
+      {(mode === 'signin' || mode === 'signup') && (
+        <SimulatedCustomerSection version={version} afterLogin={afterLogin} />
       )}
 
       {message && <p className="auth-ok" role="status">{message}</p>}

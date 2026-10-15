@@ -2,7 +2,7 @@ import { createReadStream } from 'node:fs';
 import { createDataSqlPolicy, DATA_SQL_HEADER_BYTES } from './data-sql-policy.mjs';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
-const validName = value => typeof value === 'string' && /^[A-Za-z_][A-Za-z0-9_$]{0,127}$/.test(value);
+const validName = value => typeof value === 'string' && /^[A-Za-z0-9_][A-Za-z0-9_$]{0,127}$/.test(value);
 const key = row => JSON.stringify([row.schema, row.table]);
 const quoted = name => `"${name.replaceAll('"', '""')}"`;
 

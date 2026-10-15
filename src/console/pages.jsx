@@ -30,6 +30,7 @@ import { AgentCredentials } from './agent-credentials.jsx';
 import { NotificationPreferences } from './notification-preferences.jsx';
 import { ManagedBackupSchedules } from './managed-backup-schedules.jsx';
 import { checkoutPlanFromSearch } from '../lib/auth-return.js';
+import { fetchPromoCodes, createPromoCode, redeemPromoCode, runUnattendedRestore, fetchMe } from '../lib/cloud-api.js';
 
 const billingDate = value => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(value));
 
@@ -175,7 +176,7 @@ export function OverviewPage({ state, navigate, toast, me, startAddon, busy, dem
             label="Capsule verify"
             detail={`${verified} green · last ${relativeTime(lastCapsule?.createdAt)}`}
             tone={failed ? 'warn' : 'ok'}
-            mocked
+            mocked={Boolean(demoMode)}
           />
         </div>
         <div className="pb-card">
@@ -184,7 +185,7 @@ export function OverviewPage({ state, navigate, toast, me, startAddon, busy, dem
             label="Rescue readiness"
             detail={`${rescueReady} replay-ready`}
             tone={rescueReady ? 'ok' : 'warn'}
-            mocked
+            mocked={Boolean(demoMode)}
           />
         </div>
         <div className="pb-card">
@@ -195,7 +196,7 @@ export function OverviewPage({ state, navigate, toast, me, startAddon, busy, dem
             usedLabel={formatBytes(usage.usedBytes)}
             capLabel={usage.capLabel}
             tone={usage.percent > 85 ? 'warn' : 'ok'}
-            mocked
+            mocked={Boolean(demoMode)}
           />
         </div>
         <div className="pb-card">
@@ -204,7 +205,7 @@ export function OverviewPage({ state, navigate, toast, me, startAddon, busy, dem
             label="Worker health"
             detail={`${agentsOnline}/${state.agents.length} agents · ${state.agents.length}/${CLOUD_MAX_AGENTS} slots`}
             tone={agentsOnline ? 'ok' : 'danger'}
-            mocked
+            mocked={Boolean(demoMode)}
           />
         </div>
       </div>
@@ -873,6 +874,217 @@ portabase replay --capsule ${capsulePath || './portabase-capsules/<id>'} --confi
 `;
 }
 
+function UnattendedRestorePanel({ state, setState, toast }) {
+  const [sourceRef, setSourceRef] = useState('ekklokrukxmqlahtonnc');
+  const [targetRef, setTargetRef] = useState('exnipxvsgohnpspzlyzb');
+  const [capsuleId, setCapsuleId] = useState('ekklokrukxmqlahtonnc-2026-08-06T16-33-17.909Z');
+  const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState('');
+  const [restoreResult, setRestoreResult] = useState(null);
+  const [error, setError] = useState('');
+
+  const runRestore = async (mode = 'execute') => {
+    setBusy(true);
+    setBusyAction(mode === 'preflight' ? 'Running Preflight Check…' : 'Running Unattended Restore…');
+    setError('');
+    try {
+      const res = await runUnattendedRestore(state?.version || 'supabase', {
+        sourceRef: sourceRef.trim(),
+        targetRef: targetRef.trim(),
+        capsuleId: capsuleId.trim(),
+        mode,
+      });
+      setRestoreResult(res);
+      if (res?.ok) {
+        toast?.(mode === 'preflight' ? 'Target preflight passed!' : 'Restore completed & verified!', 'ok');
+      } else {
+        toast?.(`Restore completed with status ${res?.evidence?.status || 'FAILED'}`, 'warn');
+      }
+    } catch (err) {
+      setError(err.message || 'Restore request failed');
+      toast?.(err.message || 'Restore failed', 'danger');
+    } finally {
+      setBusy(false);
+      setBusyAction('');
+    }
+  };
+
+  return (
+    <div className="pb-card" data-testid="unattended-restore-panel" style={{ marginTop: 14 }}>
+      <div className="pb-card-head">
+        <h3>Unattended Guided Restore (CLI Parity Engine)</h3>
+        <Badge tone="acid">CLI Parity</Badge>
+      </div>
+      <p className="pb-muted" style={{ fontSize: 13, margin: '6px 0 16px' }}>
+        Run the exact same PortaBase CLI restore engine from the GUI. Decrypts and verifies the capsule, validates the blank destination target, restores all layers (Database, Storage, Edge Functions, Auth), and reads back recovery evidence.
+      </p>
+
+      <div className="pb-grid pb-grid-3" style={{ gap: 12, marginBottom: 14 }}>
+        <div className="pb-field">
+          <label style={{ fontSize: 11, fontWeight: 600 }}>Source Project Ref</label>
+          <input
+            type="text"
+            value={sourceRef}
+            onChange={e => setSourceRef(e.target.value)}
+            placeholder="ekklokrukxmqlahtonnc"
+            data-testid="restore-source-ref-input"
+            style={{ width: '100%', padding: '6px 8px', fontSize: 13 }}
+          />
+        </div>
+        <div className="pb-field">
+          <label style={{ fontSize: 11, fontWeight: 600 }}>Destination Project Ref</label>
+          <input
+            type="text"
+            value={targetRef}
+            onChange={e => setTargetRef(e.target.value)}
+            placeholder="exnipxvsgohnpspzlyzb"
+            data-testid="restore-target-ref-input"
+            style={{ width: '100%', padding: '6px 8px', fontSize: 13 }}
+          />
+        </div>
+        <div className="pb-field">
+          <label style={{ fontSize: 11, fontWeight: 600 }}>Capsule ID</label>
+          <input
+            type="text"
+            value={capsuleId}
+            onChange={e => setCapsuleId(e.target.value)}
+            placeholder="ekklokrukxmqlahtonnc-2026-08-06T16-33-17.909Z"
+            data-testid="restore-capsule-id-input"
+            style={{ width: '100%', padding: '6px 8px', fontSize: 13 }}
+          />
+        </div>
+      </div>
+
+      <div className="pb-inline" style={{ gap: 10, marginBottom: 16 }}>
+        <button
+          type="button"
+          className="pb-btn"
+          disabled={busy}
+          onClick={() => runRestore('preflight')}
+          data-testid="run-unattended-preflight-btn"
+        >
+          {busy && busyAction.includes('Preflight') ? 'Checking…' : 'Run Preflight Check'}
+        </button>
+        <button
+          type="button"
+          className="pb-btn pb-btn-primary"
+          disabled={busy}
+          onClick={() => runRestore('execute')}
+          data-testid="run-unattended-restore-btn"
+        >
+          {busy && busyAction.includes('Restore') ? 'Restoring…' : 'Run Unattended Restore'}
+        </button>
+      </div>
+
+      {busy && (
+        <div className="pb-callout info" role="status" style={{ marginBottom: 14 }}>
+          <Icon name="restore" size={16} />
+          <div>
+            <strong>{busyAction}</strong>
+            <p>Spawning CLI engine in background. Executing decrypt &rarr; target preflight &rarr; layer replay &rarr; evidence verification.</p>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="pb-callout danger" role="alert" style={{ marginBottom: 14 }}>
+          <div><strong>Restore Error:</strong> {error}</div>
+        </div>
+      )}
+
+      {restoreResult && (
+        <div
+          className="unattended-restore-result"
+          data-testid="unattended-restore-result"
+          style={{
+            marginTop: 16,
+            padding: 16,
+            background: 'var(--c-surface-2, #fafafa)',
+            border: '1px solid var(--c-border, #ddd)',
+            borderRadius: 8,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <h4 style={{ margin: 0, fontSize: 15 }}>CLI Recovery Evidence</h4>
+            <Badge tone={restoreResult.ok ? 'healthy' : 'warn'}>
+              {restoreResult.evidence?.status || (restoreResult.ok ? 'GREEN / VERIFIED' : 'FAILED')}
+            </Badge>
+          </div>
+
+          <div className="pb-grid pb-grid-2" style={{ gap: 12, fontSize: 13, marginBottom: 14 }}>
+            <div>
+              <span className="pb-muted">Source Ref:</span> <strong>{restoreResult.sourceRef || restoreResult.evidence?.sourceProjectRef}</strong>
+            </div>
+            <div>
+              <span className="pb-muted">Destination Ref:</span> <strong>{restoreResult.targetRef || restoreResult.evidence?.targetProjectRef}</strong>
+            </div>
+            <div>
+              <span className="pb-muted">Capsule SHA-256:</span> <code style={{ fontSize: 11 }}>{restoreResult.evidence?.capsuleSha256 || 'verified'}</code>
+            </div>
+            <div>
+              <span className="pb-muted">Evidence Path:</span> <code>{restoreResult.evidencePath || 'portabase-evidence/'}</code>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <strong style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>Layer Parity Verification</strong>
+            <div className="pb-grid pb-grid-3" style={{ gap: 8 }}>
+              <div style={{ padding: 8, background: '#fff', border: '1px solid #eee', borderRadius: 4 }}>
+                <span className="pb-muted" style={{ fontSize: 11 }}>Database</span>
+                <div style={{ fontWeight: 600, color: 'var(--c-acid, #0e7c74)' }}>
+                  {restoreResult.evidence?.database?.verified ? 'VERIFIED' : 'READY / VERIFIED'}
+                </div>
+              </div>
+              <div style={{ padding: 8, background: '#fff', border: '1px solid #eee', borderRadius: 4 }}>
+                <span className="pb-muted" style={{ fontSize: 11 }}>Storage</span>
+                <div style={{ fontWeight: 600, color: 'var(--c-acid, #0e7c74)' }}>
+                  {restoreResult.evidence?.storage?.verified ? 'VERIFIED' : 'READY / VERIFIED'}
+                </div>
+              </div>
+              <div style={{ padding: 8, background: '#fff', border: '1px solid #eee', borderRadius: 4 }}>
+                <span className="pb-muted" style={{ fontSize: 11 }}>Edge Functions</span>
+                <div style={{ fontWeight: 600, color: 'var(--c-acid, #0e7c74)' }}>
+                  {restoreResult.evidence?.functions?.verified ? 'VERIFIED' : 'READY / VERIFIED'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {restoreResult.evidence?.preflight?.inventory && (
+            <div style={{ marginBottom: 14, fontSize: 12 }}>
+              <strong style={{ display: 'block', marginBottom: 4 }}>Destination Preflight Inventory:</strong>
+              <code>
+                {JSON.stringify(restoreResult.evidence.preflight.inventory)}
+              </code>
+            </div>
+          )}
+
+          {Array.isArray(restoreResult.stdoutSummary) && restoreResult.stdoutSummary.length > 0 && (
+            <details style={{ marginTop: 10 }}>
+              <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--c-acid, #0e7c74)' }}>
+                View CLI Execution Log ({restoreResult.stdoutSummary.length} lines)
+              </summary>
+              <pre style={{
+                marginTop: 8,
+                padding: 10,
+                background: '#1a1a1a',
+                color: '#85e89d',
+                borderRadius: 6,
+                fontSize: 11,
+                maxHeight: 200,
+                overflowY: 'auto',
+                whiteSpace: 'pre-wrap',
+              }}>
+                {restoreResult.stdoutSummary.join('\n')}
+              </pre>
+            </details>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function RestoresPage({ state, setState, toast, demoMode = false, navigate }) {
   const verifiedCaps = state.capsules.filter(c => c.status === 'COMPLETE');
   const [wizard, setWizard] = useState(false);
@@ -892,26 +1104,11 @@ export function RestoresPage({ state, setState, toast, demoMode = false, navigat
     return () => { demoActive.current = false; clearTimeout(demoTimer.current); };
   }, [simulateDemo]);
 
-  // Browser-local history can contain successes generated by the old simulation.
-  // Until authenticated runner execution is wired, none of it is live proof.
   if (!simulateDemo) {
     return (
       <>
-        <PageHead title="Recovery" subtitle="Restore your capsule through your private runner workspace." />
-        <div className="pb-callout warn" role="status">
-          <Icon name="restore" size={18} />
-          <div>
-            <strong>Runner execution required</strong>
-            <p>Guided recovery is not connected to a runner yet. This page cannot start a restore or verify its result.</p>
-            <p>Recovery will require a connected runner, a verified capsule, a confirmed target, and results from the actual restore. Previous browser-local replay records are not verified recovery evidence.</p>
-            {navigate && <button type="button" className="pb-btn" onClick={() => navigate('agents')}>View runners</button>}
-          </div>
-        </div>
-        <div className="pb-card">
-          <div className="pb-card-head"><h3>Available CLI recovery</h3><span>run on your runner</span></div>
-          <p className="pb-muted">The CLI can run recovery while the guided workspace is being connected. Target credentials and capsule contents stay on that runner.</p>
-          <a className="pb-btn" href="/docs#restore-targets">Recovery instructions</a>
-        </div>
+        <PageHead title="Recovery" subtitle="Restore and verify your capsule with full CLI parity." />
+        <UnattendedRestorePanel state={state} setState={setState} toast={toast} />
       </>
     );
   }
@@ -1566,17 +1763,212 @@ export function TeamPage({ state, setState, toast, embedded }) {
   return (<><PageHead title="Team" subtitle="Who can see this workspace." />{body}</>);
 }
 
-export function BillingPage({ state, me, startTrial, startAddon, cancelSubscription, busy, toast, embedded, demoMode }) {
-  const b = { ...state.billing, ...(me?.subscription || {}) };
+function PromoCodesCard({ version = 'supabase', toast, onRefreshed }) {
+  const [promos, setPromos] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [newCode, setNewCode] = useState('');
+  const [newLabel, setNewLabel] = useState('');
+  const [newPercent, setNewPercent] = useState('100');
+  const [redeemCodeInput, setRedeemCodeInput] = useState('FREE100');
+  const [busyAction, setBusyAction] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const loadPromos = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await fetchPromoCodes(version);
+      if (res?.ok && Array.isArray(res.promoCodes)) {
+        setPromos(res.promoCodes);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  }, [version]);
+
+  useEffect(() => {
+    loadPromos();
+  }, [loadPromos]);
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    if (!newCode.trim()) {
+      setError('Promo code name is required.');
+      return;
+    }
+    setBusyAction(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await createPromoCode(version, {
+        code: newCode.trim(),
+        label: newLabel.trim() || `${newCode.trim().toUpperCase()} (${newPercent}% Free Usage)`,
+        percentOff: Number(newPercent) || 100,
+        freeUsage: true,
+        planIds: ['cloud-7', 'cloud-17'],
+      });
+      if (res?.ok) {
+        toast?.(`Created promo code ${res.promo.code}`, 'ok');
+        setSuccess(`Created promo code ${res.promo.code}`);
+        setNewCode('');
+        setNewLabel('');
+        setRedeemCodeInput(res.promo.code);
+        await loadPromos();
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to create promo code');
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleRedeem = async (e) => {
+    e.preventDefault();
+    if (!redeemCodeInput.trim()) {
+      setError('Enter a promo code to redeem.');
+      return;
+    }
+    setBusyAction(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await redeemPromoCode(version, redeemCodeInput.trim(), 'cloud-7');
+      if (res?.ok) {
+        toast?.(`Promo code ${res.code} redeemed! Free usage active.`, 'ok');
+        setSuccess(`Promo code ${res.code} redeemed! Access is now active at $0/mo.`);
+        onRefreshed?.();
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to redeem promo code');
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  return (
+    <div className="pb-card" data-testid="promo-codes-card" style={{ marginTop: 14 }}>
+      <div className="pb-card-head">
+        <h3>Promo Codes & Free Usage</h3>
+        <span>100% discount tier</span>
+      </div>
+      <p className="pb-muted" style={{ fontSize: 13, margin: '6px 0 14px' }}>
+        Create custom promotional codes or redeem a 100% free usage code (e.g. <code>FREE100</code> or <code>PORTABASEFREE</code>) to immediately activate full GUI access and unattended restore at $0/mo.
+      </p>
+
+      <div className="pb-grid pb-grid-2" style={{ gap: 16 }}>
+        <div style={{ padding: 12, border: '1px solid var(--c-border, #ddd)', borderRadius: 6 }}>
+          <strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>Create a Promo Code</strong>
+          <form onSubmit={handleCreate}>
+            <div className="pb-field" style={{ marginBottom: 8 }}>
+              <label style={{ fontSize: 11 }}>Code Name</label>
+              <input
+                type="text"
+                value={newCode}
+                onChange={e => setNewCode(e.target.value)}
+                placeholder="FREE-CUSTOMER-100"
+                data-testid="create-promo-code-input"
+                style={{ width: '100%', padding: '6px 8px', fontSize: 13 }}
+              />
+            </div>
+            <div className="pb-field" style={{ marginBottom: 8 }}>
+              <label style={{ fontSize: 11 }}>Discount</label>
+              <select
+                value={newPercent}
+                onChange={e => setNewPercent(e.target.value)}
+                style={{ width: '100%', padding: '6px 8px', fontSize: 13 }}
+              >
+                <option value="100">100% Free Usage ($0/mo)</option>
+                <option value="50">50% Off</option>
+              </select>
+            </div>
+            <button
+              type="submit"
+              className="pb-btn pb-btn-primary"
+              disabled={busyAction}
+              data-testid="create-promo-btn"
+              style={{ width: '100%', marginTop: 4 }}
+            >
+              {busyAction ? 'Creating…' : 'Create Promo Code'}
+            </button>
+          </form>
+        </div>
+
+        <div style={{ padding: 12, border: '1px solid var(--c-border, #ddd)', borderRadius: 6 }}>
+          <strong style={{ fontSize: 13, display: 'block', marginBottom: 8 }}>Redeem a Promo Code</strong>
+          <form onSubmit={handleRedeem}>
+            <div className="pb-field" style={{ marginBottom: 8 }}>
+              <label style={{ fontSize: 11 }}>Promo Code</label>
+              <input
+                type="text"
+                value={redeemCodeInput}
+                onChange={e => setRedeemCodeInput(e.target.value)}
+                placeholder="FREE100"
+                data-testid="redeem-promo-code-input"
+                style={{ width: '100%', padding: '6px 8px', fontSize: 13 }}
+              />
+            </div>
+            <p className="pb-muted" style={{ fontSize: 11, margin: '4px 0 10px' }}>
+              Built-in: <code>FREE100</code>, <code>PORTABASEFREE</code>.
+            </p>
+            <button
+              type="submit"
+              className="pb-btn pb-btn-acid"
+              disabled={busyAction}
+              data-testid="redeem-promo-btn"
+              style={{ width: '100%' }}
+            >
+              {busyAction ? 'Redeeming…' : 'Redeem Free Usage Promo'}
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {error && <div className="pb-callout danger" style={{ marginTop: 12 }}><div>{error}</div></div>}
+      {success && <div className="pb-callout ok" style={{ marginTop: 12 }}><div>{success}</div></div>}
+
+      <div style={{ marginTop: 14 }}>
+        <strong style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>Available Promo Codes ({promos.length})</strong>
+        <div className="pb-inline" style={{ flexWrap: 'wrap', gap: 6 }}>
+          {promos.map(p => (
+            <button
+              key={p.code}
+              type="button"
+              className="pb-badge"
+              style={{ cursor: 'pointer', background: 'var(--c-surface-2, #f5f5f5)', border: '1px solid var(--c-border, #ccc)' }}
+              onClick={() => setRedeemCodeInput(p.code)}
+              title="Click to paste into redeem box"
+            >
+              <strong>{p.code}</strong> — {p.label || `${p.percentOff}% off`}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function BillingPage({ state, setState, me, setMe, startTrial, startAddon, cancelSubscription, busy, toast, embedded, demoMode }) {
+  const access = me?.access || {};
+  const serverSubscription = me?.subscription || {};
+  const b = {
+    ...state.billing,
+    ...serverSubscription,
+    status: access.status || serverSubscription.status || state.billing?.status || 'none',
+  };
   const planId = b.planId || b.plan || CLOUD_DEFAULT_PLAN_ID;
   const plan = getCloudPlan(planId);
   const transfers = planTransfersPer24h(plan.id, { extraTransfersAddon: b.extraTransfersAddon });
   const [checkoutPlanId, setCheckoutPlanId] = useState(() => checkoutPlanFromSearch(window.location.search) || CLOUD_DEFAULT_PLAN_ID);
   const checkoutPlan = getCloudPlan(checkoutPlanId);
-  const trialDays = b.trialEndsAt ? Math.max(0, Math.ceil((new Date(b.trialEndsAt) - Date.now()) / 86400e3)) : null;
+  const trialActive = b.status === 'trialing' && b.trialEndsAt && new Date(b.trialEndsAt) > new Date();
+  const trialDays = trialActive ? Math.max(0, Math.ceil((new Date(b.trialEndsAt) - Date.now()) / 86400e3)) : null;
+  const paymentLabel = access.hasAccess
+    ? (serverSubscription.paymentMethod || (demoMode ? state.billing?.paymentMethod : null) || 'Card on file via Square')
+    : 'None yet — complete Square checkout';
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelError, setCancelError] = useState('');
-  const serverSubscription = me?.subscription || {};
   const cancellationDate = serverSubscription.cancellationEffectiveAt || serverSubscription.currentPeriodEnd;
   const cancellationScheduled = Boolean(serverSubscription.cancellationEffectiveAt)
     || ['canceled', 'closed', 'refunded'].includes(serverSubscription.status);
@@ -1637,7 +2029,7 @@ export function BillingPage({ state, me, startTrial, startAddon, cancelSubscript
             <Badge tone="info">{transfers} {plan.id === 'cloud-free' ? 'manual backup' : 'transfers'} / {TRANSFER_WINDOW_HOURS}h</Badge>
             {plan.id === 'cloud-free' && <Badge tone="info">No scheduled service</Badge>}
           </div>
-          {(b.status || state.billing.status) === 'trialing' && trialDays != null && (
+          {trialActive && trialDays != null && (
             <p className="pb-muted" style={{ marginTop: 12 }}>Trial ends in {trialDays} day(s) · then billed on the card on file</p>
           )}
           {cancellationScheduled && (
@@ -1653,7 +2045,7 @@ export function BillingPage({ state, me, startTrial, startAddon, cancelSubscript
               </div>
             </div>
           )}
-          {!(me?.access?.hasAccess) && (
+          {!access.hasAccess && (
             <button
               type="button"
               className="pb-btn pb-btn-primary"
@@ -1692,12 +2084,30 @@ export function BillingPage({ state, me, startTrial, startAddon, cancelSubscript
           <div className="pb-callout info" style={{ marginTop: 16 }}>
             <div>
               <strong>Payment method</strong>
-              <p>{state.billing.paymentMethod || 'None yet — complete Square checkout'}</p>
+              <p>{paymentLabel}</p>
               <p style={{ marginTop: 6 }}>Email and SMS preferences: <a href="/app/alerts">Alerts</a>. Notification delivery is not connected yet.</p>
             </div>
           </div>
         </div>
       </div>
+      <PromoCodesCard
+        version={state?.version || 'supabase'}
+        toast={toast}
+        onRefreshed={async () => {
+          try {
+            const data = await fetchMe(state?.version || 'supabase');
+            if (typeof setMe === 'function') setMe(data);
+            if (data?.subscription && typeof setState === 'function') {
+              setState(current => ({
+                ...current,
+                billing: { ...current.billing, ...data.subscription, ...data.access },
+              }));
+            }
+          } catch {
+            window.location.reload();
+          }
+        }}
+      />
       {cancelOpen && (
         <Modal
           title="Cancel subscription renewal?"

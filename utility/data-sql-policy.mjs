@@ -3,7 +3,8 @@
 const fail = () => { throw Object.assign(new Error('Unsupported data SQL for selective restore.'), { code: 'unsupported_capsule_sql' }); };
 export const DATA_SQL_HEADER_BYTES = 64 * 1024;
 const name = '[A-Za-z_][A-Za-z0-9_$]{0,127}';
-const identifier = `(?:"${name}"|${name})`;
+const quotedName = '[A-Za-z0-9_][A-Za-z0-9_$]{0,127}';
+const identifier = `(?:"${quotedName}"|${name})`;
 const column = '(?:"(?:[^"\\x00-\\x1f\\x7f]|"")+"|[A-Za-z_][A-Za-z0-9_$]*)';
 const copy = new RegExp(`^COPY (${identifier})\\.(${identifier}) \\((${column}(?:, ${column})*)\\) FROM stdin;$`);
 const sequence = new RegExp(`^SELECT pg_catalog\\.setval\\('(${identifier}\\.${identifier})', (-?[0-9]{1,19}), (true|false)\\);$`);

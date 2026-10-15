@@ -96,9 +96,16 @@ function parseRoute() {
     page = 'supabase-viewer';
   }
   if (window.location.hash.startsWith('#/')) {
-    const h = window.location.hash.slice(2).split('/');
+    const [hashPath, hashQuery] = window.location.hash.slice(2).split('?');
+    const h = hashPath.split('/');
     if (h[0] === 'projects' && h[1]) { page = 'project'; id = h[1]; }
     else if (h[0]) page = h[0];
+    if (hashQuery) {
+      const hashParams = new URLSearchParams(hashQuery);
+      if (hashParams.get('tab') && !params.get('tab')) {
+        params.set('tab', hashParams.get('tab'));
+      }
+    }
   }
   page = ALIASES[page] || page;
   const known = page === 'project' || TITLES[page];
@@ -486,6 +493,7 @@ export function ConsoleApp() {
   const pageProps = {
     state,
     me,
+    setMe,
     setState,
     navigate,
     toast,

@@ -15,6 +15,20 @@ async function copyTree(source, destination) {
   const value = await info(source);
   if (!value || value.isSymbolicLink() || (!value.isFile() && !value.isDirectory()) || (value.isFile() && value.nlink !== 1)) fail('invalid_source');
   if (value.isFile()) {
+    const raw = await readFile(source);
+    if (raw.length >= 5 && raw.subarray(0, 5).toString('utf8') === 'ESZIP') {
+      const text = raw.toString('utf8');
+      const match = /\{"version":3,"sources":\[[^\]]+\],"sourcesContent":\[("(?:[^"\\]|\\.)*")/.exec(text);
+      if (match) {
+        try {
+          const extractedSource = JSON.parse(match[1]);
+          if (typeof extractedSource === 'string' && extractedSource.trim().length > 0) {
+            await writeFile(destination, extractedSource, { flag: 'wx', mode: 0o600 });
+            return;
+          }
+        } catch { /* fall back to copyFile */ }
+      }
+    }
     await copyFile(source, destination, 1); // COPYFILE_EXCL; staging never overwrites source.
     return;
   }

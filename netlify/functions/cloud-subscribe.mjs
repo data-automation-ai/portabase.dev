@@ -21,6 +21,8 @@ import {
 } from '../shared/product.mjs';
 import { deriveAccess, getSubscriptionForUser, saveSubscription } from '../shared/subscription-store.mjs';
 import { inspectSquareCheckoutReady, squareBlockedPayload } from '../shared/square-ready.mjs';
+import { applyPromoCode, lookupPromo, normalizePromoCode } from '../shared/promo-codes.mjs';
+import { testPromoEndsAt } from '../shared/test-promo.mjs';
 
 export async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
@@ -53,6 +55,62 @@ export async function handler(event) {
   try {
     const existing = (await getSubscriptionForUser(user));
     const access = deriveAccess(existing);
+
+    // Handle Promo Code if supplied
+    const rawPromo = body.promoCode || body.code || '';
+    if (rawPromo && !addonRequested) {
+      const applied = applyPromoCode({
+        planId: plan.id,
+        baseCents: plan.priceMonthlyCents,
+        code: rawPromo,
+      });
+      if (applied.ok && applied.priceMonthlyCents === 0) {
+        const nowIso = new Date().toISOString();
+        const endsAt = testPromoEndsAt(new Date(), 30);
+        const record = await saveSubscription({
+          ...existing,
+          userId: storeKey,
+          revision: existing?.revision || 0,
+          supabaseUserId: user.cloudVersion === 'supabase' ? user.id : null,
+          cognitoSub: user.cloudVersion === 'aws' ? user.id : null,
+          authProvider: user.authProvider || 'supabase',
+          cloudVersion: user.cloudVersion || 'supabase',
+          email: user.email,
+          name: user.name || '',
+          status: 'active',
+          plan: plan.id,
+          planId: plan.id,
+          cyclesPerDay: BASE_TRANSFERS_PER_24H,
+          transfersPer24h: BASE_TRANSFERS_PER_24H,
+          extraTransfersAddon: Boolean(existing?.extraTransfersAddon),
+          paymentGateway: 'promo_code',
+          verifiedBy: 'promo_code',
+          promoCode: applied.promo.code,
+          testPromoRedeemedAt: nowIso,
+          testAccessEndsAt: endsAt,
+          currentPeriodEnd: endsAt,
+          trialDays: 0,
+          priceMonthlyCents: 0,
+          listPriceMonthlyCents: plan.priceMonthlyCents,
+          storageCapGb: plan.storageCapGb,
+          storagePolicy: 'customer_byo',
+          startedAt: existing?.startedAt || nowIso,
+          updatedAt: nowIso,
+          createdAt: existing?.createdAt || nowIso,
+        });
+        const promoAccess = deriveAccess(record);
+        return jsonResponse(200, {
+          ok: true,
+          promoActivated: true,
+          planId: plan.id,
+          promoCode: applied.promo.code,
+          url: `/app?checkout=complete&mode=promo&plan=${plan.id}&promo=${encodeURIComponent(applied.promo.code)}`,
+          subscription: record,
+          access: promoAccess,
+        });
+      }
+    }
+
     if (!addonRequested && access.hasAccess && existing?.status !== 'checkout_pending') {
       return jsonResponse(200, {
         ok: true,

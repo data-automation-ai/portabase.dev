@@ -151,6 +151,21 @@
   status = 200
 
 [[redirects]]
+  from = "/api/cloud/promo-codes"
+  to = "/.netlify/functions/cloud-promo-codes"
+  status = 200
+
+[[redirects]]
+  from = "/api/cloud/redeem-test-promo"
+  to = "/.netlify/functions/cloud-redeem-test-promo"
+  status = 200
+
+[[redirects]]
+  from = "/api/cloud/unattended-restore"
+  to = "/.netlify/functions/cloud-unattended-restore"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

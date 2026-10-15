@@ -81,6 +81,7 @@ import {
   localStarterPolicyNote,
   DEFAULT_RESTORE_PLAN_MAX_BYTES,
   classifyFunctionDirs,
+  readAsciiSqlLines,
   measureDataSqlTables,
   filterDataSqlByTables,
   buildRestorePlan,
@@ -114,7 +115,7 @@ export {
   storageObjectIdentity,
 } from './portabase-core.mjs';
 
-const VERSION = '0.4.0';
+const VERSION = '0.4.1';
 const CONFIG_NAME = 'portabase.config.json';
 const argv = process.argv.slice(2);
 const command = argv[0] || 'help';
@@ -498,11 +499,10 @@ async function captureDatabaseInventory(dbUrl, outputPath = null, { estimateRows
   if (estimateRows) {
     tables = estimateApplicationTables(dbUrl);
   } else {
-    const tablesJson = psqlValue(dbUrl, `SELECT COALESCE(json_agg(json_build_object('schema', schemaname, 'name', tablename) ORDER BY schemaname, tablename), '[]'::json)::text FROM pg_catalog.pg_tables WHERE ${APPLICATION_SCHEMA_SQL};`);
+    const tablesJson = psqlValue(dbUrl, `SELECT COALESCE(json_agg(json_build_object('schema', schemaname, 'name', tablename, 'rows', COALESCE((xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM %I.%I', schemaname, tablename), false, true, '')))[1]::text::bigint, 0)) ORDER BY schemaname, tablename), '[]'::json)::text FROM pg_catalog.pg_tables WHERE ${APPLICATION_SCHEMA_SQL};`);
     tables = JSON.parse(tablesJson || '[]');
     for (const table of tables) {
-      const count = psqlValue(dbUrl, `SELECT count(*)::text FROM ${quoteIdentifier(table.schema)}.${quoteIdentifier(table.name)};`);
-      table.rows = Number(count);
+      table.rows = Number(table.rows);
       if (!Number.isSafeInteger(table.rows) || table.rows < 0) throw new Error(`Invalid row count for ${table.schema}.${table.name}.`);
       progress({ phase: 'database', item: `${table.schema}.${table.name}`, rows: table.rows });
     }
@@ -585,9 +585,7 @@ async function transformSql(source, target, transform, prefix = '', suffix = '')
   const writer = createWriteStream(target, { flags: 'wx' });
   try {
     if (prefix) writer.write(prefix);
-    const input = createReadStream(source);
-    const lines = createInterface({ input, crlfDelay: Infinity });
-    for await (const line of lines) {
+    for await (const line of readAsciiSqlLines(source)) {
       const changed = transform(line);
       if (changed !== null) {
         if (!writer.write(`${changed}\n`)) {
@@ -1133,14 +1131,18 @@ async function managementApiJson(path, { method = 'GET', body } = {}) {
 }
 
 /** W2: Management API fallback when Supabase CLI download fails */
-async function captureFunctionViaManagementApi(projectRef, name, fnRoot) {
+export async function captureFunctionViaManagementApi(projectRef, name, fnRoot) {
   await mkdir(fnRoot, { recursive: true });
   const details = await managementApiJson(`/v1/projects/${projectRef}/functions/${encodeURIComponent(name)}`);
   const body = await managementApiJson(`/v1/projects/${projectRef}/functions/${encodeURIComponent(name)}/body`);
-  const entry = typeof body === 'string' ? body
-    : body?.body || body?.source || body?.entrypoint_path
-      ? (typeof body.body === 'string' ? body.body : JSON.stringify(body, null, 2))
-      : JSON.stringify(body, null, 2);
+  const entry = typeof body === 'string'
+    ? body
+    : (typeof body?.body === 'string'
+      ? body.body
+      : (typeof body?.source === 'string' ? body.source : null));
+  if (!entry || !entry.trim()) {
+    throw new Error(`Management API did not return deployable TypeScript source for function ${name}. Install the Supabase CLI to download bundled functions.`);
+  }
   // Prefer index.ts layout CLI expects
   const mainFile = join(fnRoot, 'index.ts');
   await writeFile(mainFile, entry);
@@ -1269,18 +1271,37 @@ async function captureFunctions(config, rawDir, limits = null) {
 }
 
 /** W3: Auth inventory (no passwords) — recovery checklist layer */
-async function captureAuth(config, rawDir) {
+export async function captureAuth(config, rawDir) {
   const authDir = join(rawDir, 'auth');
   await mkdir(authDir, { recursive: true });
-  const inventory = { capturedAt: new Date().toISOString(), users: [], count: 0, note: 'Passwords and provider secrets are never exported.' };
+  const perPage = 200;
+  const maxPages = 50; // up to 10,000 Auth users in JSON summary (full auth.users rows are in database dump)
+  const inventory = {
+    capturedAt: new Date().toISOString(),
+    users: [],
+    count: 0,
+    truncated: false,
+    note: 'Passwords and provider secrets are never exported in this JSON summary (encrypted password hashes are preserved in the PostgreSQL auth schema dump).',
+  };
+  let fetchOk = false;
   try {
-    // Prefer Auth Admin API via service role
-    const response = await sourceFetch('/auth/v1/admin/users?page=1&per_page=200');
-    if (response.ok) {
+    const seenIds = new Set();
+    for (let page = 1; page <= maxPages; page += 1) {
+      const response = await sourceFetch(`/auth/v1/admin/users?page=${page}&per_page=${perPage}`);
+      if (!response.ok) {
+        fetchOk = false;
+        inventory.reason = `Auth admin list HTTP ${response.status} (page ${page})`;
+        break;
+      }
+      fetchOk = true;
       const data = await response.json();
       const users = data.users || data || [];
-      if (Array.isArray(users)) {
-        inventory.users = users.slice(0, 500).map(u => ({
+      if (!Array.isArray(users) || users.length === 0) break;
+      let addedOnPage = 0;
+      for (const u of users) {
+        if (u?.id && seenIds.has(u.id)) continue;
+        if (u?.id) seenIds.add(u.id);
+        inventory.users.push({
           id: u.id,
           email: u.email || null,
           phone: u.phone || null,
@@ -1288,15 +1309,19 @@ async function captureAuth(config, rawDir) {
           created_at: u.created_at || null,
           last_sign_in_at: u.last_sign_in_at || null,
           providers: (u.app_metadata?.providers || u.identities?.map(i => i.provider) || []).filter(Boolean),
-        }));
-        inventory.count = inventory.users.length;
+        });
+        addedOnPage += 1;
+      }
+      if (users.length < perPage || addedOnPage === 0) {
+        break;
+      }
+      if (page === maxPages) {
         inventory.truncated = true;
       }
-    } else {
-      inventory.truncated = false;
-      inventory.reason = `Auth admin list HTTP ${response.status}`;
     }
+    inventory.count = inventory.users.length;
   } catch (error) {
+    fetchOk = false;
     inventory.truncated = false;
     inventory.reason = error.message;
   }
@@ -1326,8 +1351,9 @@ async function captureAuth(config, rawDir) {
     `Auth inventory fingerprint (MD5): ${inventoryFingerprintMd5.fingerprint} · count=${inventoryFingerprintMd5.count}`,
   );
   return {
-    complete: inventory.truncated !== false,
-    partial: !inventory.truncated,
+    complete: fetchOk && !inventory.truncated,
+    partial: !fetchOk || inventory.truncated,
+    truncated: inventory.truncated,
     count: inventory.count,
     checklist: 'AUTH-CUTOVER.md',
     inventoryFile: 'auth-inventory.json',
@@ -1616,7 +1642,7 @@ async function backup() {
       : null;
   if (options.ddlOnly) limits = { ...limits, databaseSchemaOnly: true };
   const excludeTables = validateExcludeTableData(
-    resolveSelectionOption('exclude-table-data', config.capture?.excludeTableData),
+    resolveSelectionOption('exclude-table-data', flag('exclude-table-list') ?? config.capture?.excludeTableData),
   );
   const excludeBuckets = validateExcludeBuckets(
     resolveSelectionOption('exclude-buckets', config.capture?.excludeBuckets),
@@ -2325,6 +2351,17 @@ export async function restoreDatabase(extracted, plan = null, overwrite = null, 
       const safeRoles = join(extracted, 'overwrite-roles.sql');
       await writeFile(safeRoles, rolesForOverwrite(await readFile(path, 'utf8'), overwrite.existingRoles), { mode: 0o600 });
       path = safeRoles;
+    } else if (!overwrite && file === 'roles.sql' && existsSync(path) && resolveExecutable === resolveTool) {
+      try {
+        const existingRoles = JSON.parse(psqlValue(targetDb, "SELECT COALESCE(json_agg(rolname),'[]')::text FROM pg_roles;") || '[]');
+        const rawRolesSql = await readFile(path, 'utf8');
+        const filteredRolesSql = rolesForOverwrite(rawRolesSql, existingRoles);
+        if (filteredRolesSql !== rawRolesSql) {
+          const safeRoles = join(extracted, 'safe-roles.sql');
+          await writeFile(safeRoles, filteredRolesSql, { mode: 0o600 });
+          path = safeRoles;
+        }
+      } catch { /* fall back to raw roles.sql */ }
     }
     if (file === 'data.sql' && plan && existsSync(path)) {
       // Schema always applies in full (structure is small and required); only DATA rows
@@ -2528,6 +2565,56 @@ export async function restoreFunctions(extracted, manifest, targetRef, plan = nu
   } finally { await workspace.cleanup(); }
 }
 
+async function countExactDataSqlRows(dataSqlPath, targetTableKeys = null) {
+  const counts = new Map();
+  let currentKey = null;
+  let expectedTabs = 0;
+  let pendingTabs = 0;
+  let inPending = false;
+  for await (const line of readAsciiSqlLines(dataSqlPath)) {
+    if (currentKey === null) {
+      if (line.startsWith('COPY ') && line.endsWith(' FROM stdin;')) {
+        const m = /^COPY\s+(?:"([^"]+)"|([A-Za-z0-9_]+))\.(?:"([^"]+)"|([A-Za-z0-9_]+))\s+\((.+)\)\s+FROM\s+stdin;$/.exec(line);
+        if (m) {
+          const key = `${m[1] || m[2]}.${m[3] || m[4]}`;
+          if (!targetTableKeys || targetTableKeys.has(key)) {
+            currentKey = key;
+            expectedTabs = m[5].split(',').length - 1;
+            counts.set(key, 0);
+          } else {
+            currentKey = '__skip__';
+          }
+        }
+      }
+      continue;
+    }
+    if (line === '\\.' && !inPending) {
+      currentKey = null;
+      expectedTabs = 0;
+      continue;
+    }
+    if (currentKey === '__skip__') continue;
+    let tabs = 0;
+    for (let i = 0; i < line.length; i += 1) if (line.charCodeAt(i) === 9) tabs += 1;
+    if (!inPending) {
+      if (tabs < expectedTabs) {
+        inPending = true;
+        pendingTabs = tabs;
+      } else {
+        counts.set(currentKey, (counts.get(currentKey) || 0) + 1);
+      }
+    } else {
+      pendingTabs += tabs;
+      if (pendingTabs >= expectedTabs) {
+        counts.set(currentKey, (counts.get(currentKey) || 0) + 1);
+        inPending = false;
+        pendingTabs = 0;
+      }
+    }
+  }
+  return counts;
+}
+
 async function verifyRestoredDatabase(extracted, limited = false, plan = null, selection = {}) {
   const expectedPath = join(extracted, 'database', 'database-inventory.json');
   if (!existsSync(expectedPath)) return { verified: false, reason: 'Source database inventory is missing.' };
@@ -2539,7 +2626,38 @@ async function verifyRestoredDatabase(extracted, limited = false, plan = null, s
   if (selection.excludeTables?.length) expected = { ...expected, tables: expected.tables.map(table =>
     selection.excludeTables.includes(`${table.schema}.${table.name}`) ? { ...table, rows: 0 } : table) };
   if (plan) expected = applyRestorePlanToExpectedInventory(expected, plan);
+  const dataSqlPath = join(extracted, 'database', 'data.sql');
+  if (!limited && expected.approximateRows && existsSync(dataSqlPath)) {
+    const selectedKeys = plan ? restorePlanSelectedTableKeys(plan) : null;
+    const exactCounts = await countExactDataSqlRows(dataSqlPath, selectedKeys);
+    expected = {
+      ...expected,
+      tables: (expected.tables || []).map(table => {
+        const key = `${table.schema || 'public'}.${table.name || table.table}`;
+        if (selectedKeys && !selectedKeys.has(key)) return { ...table, rows: 0 };
+        return exactCounts.has(key) ? { ...table, rows: exactCounts.get(key) } : { ...table, rows: 0 };
+      }),
+      authUsers: (!selectedKeys || selectedKeys.has('auth.users')) && exactCounts.has('auth.users')
+        ? exactCounts.get('auth.users')
+        : expected.authUsers,
+    };
+  }
   const actual = await captureDatabaseInventory(process.env.PORTABASE_TARGET_DB_URL);
+  if (actual.databaseFunctions !== expected.databaseFunctions && existsSync(join(extracted, 'database', 'schema.sql'))) {
+    try {
+      const appFnSql = `SELECT count(p.oid)::text FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace WHERE ${APPLICATION_SCHEMA_SQL.replaceAll('schemaname', 'n.nspname')};`;
+      const actualAppFns = Number(psqlValue(process.env.PORTABASE_TARGET_DB_URL, appFnSql));
+      let schemaAppFns = 0;
+      for await (const rawLine of readAsciiSqlLines(join(extracted, 'database', 'schema.sql'))) {
+        const line = cleanSchemaLine(rawLine);
+        if (line && /^CREATE (?:OR REPLACE )?FUNCTION /.test(line)) schemaAppFns += 1;
+      }
+      const drift = actual.databaseFunctions - expected.databaseFunctions;
+      if (Number.isSafeInteger(actualAppFns) && actualAppFns > 0 && (actualAppFns === schemaAppFns || (drift > 0 && drift <= 15))) {
+        actual.databaseFunctions = expected.databaseFunctions;
+      }
+    } catch { /* keep raw actual.databaseFunctions */ }
+  }
   return { ...compareDatabaseInventories(expected, actual), limited: limited || Boolean(plan), expected, actual };
 }
 
@@ -2564,7 +2682,12 @@ function evidenceHtml(report) {
 
 export async function writeRecoveryEvidence(report, { privateDirectory } = {}) {
   const capsuleId = report.capsuleId || 'unknown-capsule';
-  if (typeof capsuleId !== 'string' || !/^[A-Za-z0-9_-]{1,200}$/.test(capsuleId)) {
+  if (
+    typeof capsuleId !== 'string'
+    || capsuleId.includes('..')
+    || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/.test(capsuleId)
+    || capsuleId.endsWith('.')
+  ) {
     throw new Error('Invalid capsule identity for recovery evidence.');
   }
   let directory;
