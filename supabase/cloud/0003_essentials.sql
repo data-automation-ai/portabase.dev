@@ -83,3 +83,7 @@ comment on table portabase_cloud.jobs is
   'Job metadata. capsule_hash is a hex digest only.';
 comment on table portabase_cloud.capsule_hashes is
   'Hex digests only. Never capsule ciphertext or .pbase bytes.';
+
+revoke all on schema portabase_cloud from public, anon, authenticated;
+revoke all on all tables in schema portabase_cloud from public, anon, authenticated;
+

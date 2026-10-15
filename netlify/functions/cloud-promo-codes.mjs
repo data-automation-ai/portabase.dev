@@ -25,8 +25,22 @@ export async function handler(event) {
       user = await verifyCloudUser(event);
     } catch {
       const auth = event.headers?.authorization || event.headers?.Authorization || '';
-      if (!auth.includes('sim_customer_') && process.env.NODE_ENV === 'production') {
+      if (!auth.includes('sim_customer_') && (process.env.NODE_ENV === 'production' || process.env.CONTEXT === 'production')) {
         return jsonResponse(401, { error: 'unauthorized', message: 'Sign in to create promo codes.' });
+      }
+    }
+
+    if (process.env.CONTEXT === 'production' && process.env.PORTABASE_ALLOW_PUBLIC_PROMO_CREATE !== 'true') {
+      const adminSecret = process.env.PORTABASE_ADMIN_SECRET;
+      const headerSecret = event.headers?.['x-portabase-admin-secret'] || event.headers?.['X-Portabase-Admin-Secret'];
+      const adminEmails = String(process.env.PORTABASE_ADMIN_EMAILS || '')
+        .split(',')
+        .map(e => e.trim().toLowerCase())
+        .filter(Boolean);
+      const isAdmin = (adminSecret && headerSecret === adminSecret)
+        || (user?.email && adminEmails.includes(user.email.toLowerCase()));
+      if (!isAdmin) {
+        return jsonResponse(403, { error: 'admin_required', message: 'Promo code creation requires administrator authorization in production.' });
       }
     }
 

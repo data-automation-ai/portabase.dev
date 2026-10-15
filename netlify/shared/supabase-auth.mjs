@@ -85,7 +85,8 @@ export async function verifySupabaseUser(authorizationHeader) {
   if (!token) throw new Error('missing_bearer');
 
   if (token.startsWith('sim_customer_')) {
-    if (process.env.PORTABASE_ALLOW_SIMULATED_SIGNUP === 'false') {
+    const isProd = process.env.CONTEXT === 'production' && process.env.PORTABASE_ALLOW_SIMULATED_SIGNUP !== 'true';
+    if (process.env.PORTABASE_ALLOW_SIMULATED_SIGNUP === 'false' || isProd) {
       throw new Error('simulated_signup_disabled');
     }
     const rawPayload = token.slice('sim_customer_'.length);
