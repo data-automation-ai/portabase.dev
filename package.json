@@ -34,6 +34,16 @@
   "bin": {
     "portabase": "utility/portabase.mjs"
   },
+  "files": [
+    "utility/**",
+    "!utility/**/*.test.mjs",
+    "cloud/runner/**",
+    "desktop/**",
+    "!desktop/vendor/**",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
