@@ -79,6 +79,26 @@
 .recovery-actions .button { box-shadow: none; min-height: 46px; }
 .recovery-evidence-link { display: inline-flex; gap: 10px; align-items: center; font-size: 14px; font-weight: 600; text-decoration: underline; text-underline-offset: 4px; }
 .recovery-note { margin: 14px 0 0; color: var(--ink-muted); font-size: 12px; }
+.recovery-evidence-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.recovery-fire-quote {
+  margin: 0;
+  padding: 14px 18px;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.55;
+  letter-spacing: -0.01em;
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.05);
+  border: 1px solid rgba(220, 38, 38, 0.28);
+  border-left: 4px solid #dc2626;
+  border-radius: 8px;
+}
+.recovery-fire-quote strong {
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .recovery-evidence { margin: 0; min-width: 0; border: 1px solid var(--paper-line); border-radius: 8px; overflow: hidden; background: #fff; }
 .recovery-evidence-heading { padding: 13px 18px; background: var(--paper-2); font-size: 13px; font-weight: 600; }
 .recovery-evidence picture, .recovery-evidence img { display: block; width: 100%; height: auto; }

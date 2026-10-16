@@ -236,14 +236,19 @@ function Hero() {
         </div>
         <p className="recovery-note">Set it up before a lockout. Keep the copy. Test the restore.</p>
       </div>
-      <figure className="recovery-evidence">
+      <div className="recovery-evidence-col">
+        <p className="recovery-fire-quote">
+          “Portabase is like fire insurance for your Supabase account. You can only get Fire Insurance <strong>BEFORE</strong> the fire...”
+        </p>
+        <figure className="recovery-evidence">
           <div className="recovery-evidence-heading">Why Portabase exists</div>
           <picture>
             <source srcSet="/images/banned.webp" type="image/webp" />
             <img src="/images/banned.png" width="1376" height="1143" alt="The founder’s Supabase sign-in screen showing Error: User is banned, circled in red." />
           </picture>
           <figcaption>The founder’s actual lockout. The reason we built a way to keep a recovery copy outside the account.</figcaption>
-      </figure>
+        </figure>
+      </div>
     </div>
   </section>;
 }
