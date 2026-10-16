@@ -1299,7 +1299,7 @@ function CloudPage() {
   const signedIn = isSignedIn();
 
   useEffect(() => {
-    document.title = 'Portabase Cloud — Open source vs hosted · 7-day trial';
+    document.title = 'Portabase Cloud — Cross-Account Supabase Recovery & Pricing';
     if (window.location.hash === '#subscribe') {
       document.getElementById('subscribe')?.scrollIntoView({ behavior: 'smooth' });
     }
@@ -1310,13 +1310,11 @@ function CloudPage() {
       <div className="shell nav-wrap">
         <Logo href="/" />
         <nav className="nav cloud-page-nav">
-          <a href="#how-it-works">How it works</a>
-          <a href="#closures">Why accounts close</a>
-          <a href="#compare">Compare</a>
-          <a href="#keys">Key storage</a>
+          <a href="#subscribe">Plans &amp; Pricing</a>
+          <a href="#new-account">New-Account Restore</a>
+          <a href="#compare">CLI vs Cloud</a>
+          <a href="#keys">Zero-Knowledge Keys</a>
           <a href="/docs">Docs</a>
-          <a href="/backend">Backend</a>
-          <a href="#subscribe">Pricing</a>
           <a href={signedIn ? '/dashboard' : '/login'}>{signedIn ? 'Dashboard' : 'Sign in'}</a>
         </nav>
         <a className="button button-small desktop-cta" href={signedIn ? '/dashboard' : '/login?mode=signup&next=/dashboard'}>
@@ -1326,177 +1324,34 @@ function CloudPage() {
     </header>
 
     <main className="cloud-page">
-      <section className="section cloud-hero">
+      <section className="section cloud-hero" style={{ paddingBottom: 36 }}>
         <div className="shell">
-          <div className="section-kicker green">YOUR SUPABASE ESCAPE</div>
-          <h1>GitHub is the Escape hatch.<br />This site is the Escape console.</h1>
-          <p className="cloud-hero-lead"><strong>Escape.</strong> Supabase only. Open-source engine does full recovery — including <strong>Storage object bytes and Edge Functions</strong> that platform DB backups leave behind. <strong>This website</strong> is the Cloud GUI, easier configuration, and telemetry so the Escape is operable — not a forgotten script.</p>
+          <div className="section-kicker green">PORTABASE CLOUD · CROSS-ACCOUNT RECOVERY</div>
+          <h1>When an account is locked,<br />you restore into a <em>new account</em> — not just a new database.</h1>
+          <p className="cloud-hero-lead">
+            If Supabase restricts or bans your login, your entire organization is unreachable. Official platform backups sit behind that same locked door.
+            Portabase captures your <strong>Postgres database, Auth user directory, Storage object bytes, and Edge Functions</strong> into an encrypted capsule in your own vault — ready to restore into a <strong>completely separate Supabase account under a different email address</strong>.
+          </p>
           <div className="cloud-hero-actions">
             <a className="button button-primary" href={signedIn ? '/dashboard' : '/login?mode=signup&next=/dashboard'}>Start 7-day free trial <Arrow /></a>
-            <a className="button button-ghost" href="/dashboard?demo=1">Open dashboard (demo) <Arrow /></a>
-            <a className="button button-ghost" href="#subscribe">See trial → subscription <Arrow /></a>
-            <a className="button button-ghost" href="/backend">Backend · capsules &amp; workers <Arrow /></a>
-            <a className="button button-ghost" href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">GitHub · open source <Arrow /></a>
+            <a className="button button-ghost" href="#subscribe">View plans ($0 · $7 · $17) <Arrow /></a>
+            <a className="button button-ghost" href="/dashboard?demo=1">Interactive demo <Arrow /></a>
+            <a className="button button-ghost" href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">Open-source CLI (`npx portabase`) <Arrow /></a>
           </div>
         </div>
       </section>
 
-      <HowItWorksDiagrams />
-      <ClosureRisk variant="cloud" />
-
-      <section className="section cloud-compare" id="compare">
+      <section className="section pricing" id="subscribe" style={{ paddingTop: 24 }}>
         <div className="shell">
-          <div className="section-kicker">SIDE BY SIDE</div>
-          <h2>Same capsule engine.<br />Different day-to-day experience.</h2>
-          <div className="compare-table-wrap">
-            <table className="compare-table">
-              <thead>
-                <tr>
-                  <th>Capability</th>
-                  <th>GitHub / self-host<br /><span>Apache-2.0 · free</span></th>
-                  <th>Portabase Cloud<br /><span>Free 100 MB · $7 · 10 GB · $17 · 25 GB</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr><td>Built for <strong>Supabase only</strong> (launch)</td><td className="yes">Yes</td><td className="yes">Yes</td></tr>
-                <tr><td>Storage <strong>object bytes</strong> (not metadata-only)</td><td className="yes">Yes</td><td className="yes">Yes · same engine</td></tr>
-                <tr><td>Edge Function source capture</td><td className="yes">Yes</td><td className="yes">Yes · same engine</td></tr>
-                <tr><td>Full encrypted capture (DB, Auth, Storage, Functions)</td><td className="yes">Yes — complete job</td><td className="yes">Yes — same engine</td></tr>
-                <tr><td>Verify + guarded restore to a new Supabase project</td><td className="yes">Yes</td><td className="yes">Yes</td></tr>
-                <tr><td>Destinations (Drive, Dropbox, S3, local/NAS)</td><td className="yes">Yes</td><td className="yes">Yes</td></tr>
-                <tr><td>Works offline if Portabase Cloud disappears</td><td className="yes">Yes</td><td className="yes">Engine still yes</td></tr>
-                <tr><td>Read every line that encrypts your capsule</td><td className="yes">Yes · public GitHub</td><td className="yes">Same public code</td></tr>
-                <tr><td>Hosted GUI / ease of configuration</td><td className="no">CLI / self-host config</td><td className="yes">Yes · this website</td></tr>
-                <tr><td>Telemetry &amp; fleet / job status</td><td className="no">Local status only</td><td className="yes">Yes</td></tr>
-                <tr><td>Scheduled service</td><td className="yes">Your cron / Task Scheduler</td><td className="mid">The free plan has no scheduled service. Paid $7 / $17 include schedules.</td></tr>
-                <tr><td>Capsule transfers / 24h</td><td className="yes">Unlimited (you run it)</td><td className="yes">Cloud Free · manual · $7 · 1 / 24h · $17 · 3 / day</td></tr>
-                <tr><td>Table + bucket sizer</td><td className="yes">Doctor inventory + existing exclude flags</td><td className="yes">Include/exclude before a job · loud NOT COVERED</td></tr>
-                <tr><td>SMS on success &amp; failure · multi-person alerts</td><td className="no">DIY webhooks only</td><td className="yes">Optional on $17 · status only</td></tr>
-                <tr><td>Advanced reports &amp; RPO / miss dashboards</td><td className="no">No</td><td className="yes">Yes</td></tr>
-                <tr><td>Portabase account required</td><td className="no">No</td><td className="mid">Yes · for Cloud only</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <p className="compare-footnote">The GitHub edition is not a lite edition. It is the full recovery path without the hosted GUI, telemetry product, or advanced reports.</p>
-        </div>
-      </section>
-
-      <section className="section" id="recovery-ladder">
-        <div className="shell">
-          <div className="section-kicker green">RECOVERY LADDER · COLD / WARM / HOT</div>
-          <div className="split-heading">
-            <h2>How fast is the way out?</h2>
-            <p>Every plan starts with an encrypted escape you already hold. Higher tiers shorten the walk back — but a hot replica is never promised.</p>
-          </div>
-          <div className="subscribe-case">
-            <article><small>01 · COLD · EVERY PLAN</small><b>Encrypted escape in your Dropbox.</b><p>Each capsule is encrypted and stored in storage you own. Recovery means a fresh project plus a guarded restore — proven by Replay, not by a status page.</p></article>
-            <article><small>02 · WARM · $17 / PREMIUM</small><b>Standby project, refreshed on schedule.</b><p>A standby Supabase project refreshed on schedule, plus the re-adapt runbook. Re-pointable in an hour, not a millisecond — recovery work, not failover magic.</p></article>
-            <article><small>03 · HOT · NEVER PROMISED</small><b>No hot replica. No instant cutover claim.</b><p>Anyone promising a millisecond Supabase failover is selling a different product. Portabase promises the capsule, the runbook, and the rehearsal — not a hot standby.</p></article>
-          </div>
-        </div>
-      </section>
-
-      <section className="section cloud-keys" id="keys">
-        <div className="shell">
-          <div className="section-kicker green">{KEYS_COPY.kicker}</div>
-          <div className="split-heading">
-            <h2>{KEYS_COPY.headline}</h2>
-            <p>{KEYS_COPY.lead}</p>
-          </div>
-          <KeysPathCards />
-          <KeysFlow />
-          <KeysHonest />
-          <p className="cloud-section-lead" style={{ marginTop: 36 }}>
-            Using Portabase Cloud does not make us your Supabase landlord or the permanent home of your recovery files.
-            Capsules are sealed with <strong>AES-256-GCM</strong> and written to <strong>storage you own</strong>.
-            Full deep-dive (every secret type, standalone vs Cloud, checklists):{' '}
-            <a href="/security#keys-protected" style={{ color: 'var(--accent)', fontWeight: 600 }}>Security · how your keys are protected <span aria-hidden="true">↗</span></a>.
-          </p>
-          <div className="key-grid">
-            <article>
-              <small>ON THE RUNNER · CAPSULE CRYPTO</small>
-              <b>Encryption passphrase</b>
-              <p>
-                Derives AES-256-GCM material that seals the Escape capsule. On self-host it lives only in your env / OS secret store.
-                On managed Cloud it is available to the job runner for the run so schedules can complete unattended —
-                that is an <strong>explicit operational trade</strong>, not a hidden one. It is not stored as our “backup of record” in the product vault.
-              </p>
-            </article>
-            <article>
-              <small>ON THE RUNNER · SOURCE ACCESS</small>
-              <b>Supabase &amp; database credentials</b>
-              <p>
-                Project URL, service-role / secret key, DB URL, access token — used only to capture or restore during a job.
-                They open the live project; they do not open a sealed capsule by themselves. Limit who holds them; rotate on staff change.
-              </p>
-            </article>
-            <article>
-              <small>ON YOUR DESTINATION · CIPHERTEXT ONLY</small>
-              <b>Encrypted capsules</b>
-              <p>
-                <code>.pbase</code> (and checksums/metadata) land in S3, Dropbox, Drive, NAS, or Local Starter — <strong>your</strong> vault.
-                Portabase Cloud is not the storage of record. Without the passphrase, vault access is not a usable Escape.
-              </p>
-            </article>
-            <article>
-              <small>ON PORTABASE CLOUD · OPS ONLY</small>
-              <b>Account &amp; health metadata</b>
-              <p>
-                Login identity (Supabase Auth), workspace membership, hashed agent tokens, alert routes, opt-in job status/timing/error class.
-                Enough to run the console and wake people — <strong>not</strong> enough to decrypt a capsule.
-                Telemetry rejects secret-shaped fields by design.
-              </p>
-            </article>
-          </div>
-          <div className="key-callout">
-            <span>HOSTED TRANSPARENCY</span>
-            <b>If Cloud is down, you still restore from capsule + passphrase on infrastructure you control.</b>
-            <p>
-              Subscription value is visibility, schedules, hosted runners, and escalation — not custody of your only recovery copy.
-              The open-source engine remains the recovery authority. Want zero Portabase key path? Run the CLI yourself.
-              Want maximum AWS-side control on Cloud? Customer KMS + your CloudTrail — details on the Security page.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="section cloud-github" id="github">
-        <div className="shell">
-          <div className="section-kicker">GITHUB EDITION · FULL JOB</div>
-          <h2>Transparent source. Complete recovery path.</h2>
-          <div className="github-split">
-            <div>
-              <p>The public GitHub edition (under <a href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">DataAutomation.ai</a> / Portabase open core) ships everything required to protect and restore a Supabase project:</p>
-              <ul className="github-list">
-                <li>Capture database structure and data, Auth material, Storage objects, Edge Functions</li>
-                <li>Local AES-256-GCM encryption and checksums</li>
-                <li>Transfer to customer destinations and post-transfer verify</li>
-                <li>Guarded restore into a <em>new</em> project (never silent overwrite of source)</li>
-                <li>CLI: init, doctor, capture (backup command), verify, status, restore, schedule helpers</li>
-              </ul>
-              <p>What GitHub deliberately does <strong>not</strong> include as a hosted product: the multi-tenant management GUI, Portabase-operated telemetry inbox, multi-person SMS escalation product, and advanced fleet reports. Those are Cloud.</p>
-              <a className="button button-ghost" href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">Browse the open-source home <Arrow /></a>
-            </div>
-            <aside className="github-aside">
-              <span>WHY THIS MATTERS</span>
-              <b>You can prove what encrypts your data.</b>
-              <p>High-profile recovery software should not hide the crypto path behind a paid binary. Cloud is optional convenience and ops — the GitHub tree remains readable and runnable without a Portabase login.</p>
-            </aside>
-          </div>
-        </div>
-      </section>
-
-      <section className="section pricing" id="subscribe">
-        <div className="shell">
-          <div className="price-copy" style={{ maxWidth: 760, marginBottom: 28 }}>
-            <div className="section-kicker green">SUPABASE · CLOUD FREE · SQUARE · BYO STORAGE</div>
+          <div className="price-copy" style={{ maxWidth: 820, marginBottom: 28 }}>
+            <div className="section-kicker green">PLANS &amp; PRICING · BYO VAULT · ZERO-KNOWLEDGE KEYS</div>
             <h2>Cloud Free 100 MB, then $7 or $17/mo.</h2>
-            <p><strong>Launch: Supabase only.</strong> Protect database, Auth, Storage, and Edge Functions. <strong>Cloud Free</strong> is 100 MB — dashboard and manual runs, <strong>no scheduled service</strong>. Paid: <strong>$7</strong> one database ≤10 GB, 1 capsule / 24h · <strong>$17</strong> unlimited databases ≤25 GB, 3 capsules / day. Use the table sizer to include or exclude tables and Storage buckets so the capsule fits. Paid plans are <strong>Square</strong> (card on file) after a 7-day trial. Cloud is ops only — <strong>you provide capsule storage</strong>. Portabase never hosts recovery bytes. The paid service is <strong>designed to be blind to your keys</strong> — checks in this repo, not a third-party audit.</p>
-            <div className="subscribe-case">
-              <article><small>01 · SUPABASE FIRST</small><b>Built for Supabase projects.</b><p>Sign in with Supabase Auth (email, magic link, or Google). Capture DB, Auth inventory, Storage objects, Edge Functions.</p></article>
-              <article><small>02 · PLAN CAPS</small><b>Free 100 MB · $7 · 10 GB · $17 · 25 GB.</b><p>$7 is one database, 1 capsule / 24h. $17 is unlimited databases, 3 capsules / day. Optional SMS status on $17 (never keys or capsule bytes). Size the include list so the capsule fits.</p></article>
-              <article><small>03 · BYO CAPSULE STORAGE</small><b>You supply the vault.</b><p>S3, Dropbox, Drive, rclone, NAS, or Local Starter (≤100 MB). Capsules never live on Portabase. Keys stay on your runner or this browser’s local inject — never our database.</p></article>
-            </div>
+            <p>
+              The open-source CLI engine (<code>npx portabase</code>) is free forever on your own machine.
+              <strong> Portabase Cloud</strong> adds the web dashboard, table &amp; bucket sizer, automated schedules, cross-account restore orchestration, and SMS alerts.
+              <strong> Cloud Free</strong> includes up to 100 MB for manual runs (The free plan has no scheduled service).
+              Paid plans include a <strong>7-day free trial</strong> via Square.
+            </p>
           </div>
           <div className="plan-grid plan-grid-3">
             <article className="price-card plan-card plan-card-free" key={CLOUD_FREE.id}>
@@ -1507,15 +1362,15 @@ function CloudPage() {
                   <b>$0<span className="per">/mo</span></b>
                   <small className="list-price">1 project · up to {CLOUD_FREE.storageCapLabel}</small>
                 </div>
-                <p>{CLOUD_FREE.summary} Capsules still land in <strong>your</strong> storage. Keys stay sealed to your runner or stay local on the free CLI.</p>
+                <p>Manual backups and cross-account restore checks for projects up to 100 MB. Capsules land in <strong>your</strong> storage.</p>
               </div>
               <ul>
-                <li><span>✓</span> 1 Supabase project</li>
-                <li><span>✓</span> Up to {CLOUD_FREE.storageCapLabel} metered usage</li>
+                <li><span>✓</span> 1 Supabase project (up to {CLOUD_FREE.storageCapLabel})</li>
+                <li><span>✓</span> Restore into any separate Supabase account</li>
                 <li><span>✓</span> Dashboard · manual runs</li>
                 <li><span>✓</span> <strong>No scheduled service</strong></li>
                 <li><span>✓</span> Table + bucket sizer to fit 100 MB</li>
-                <li><span>✓</span> You provide the vault · zero knowledge of keys</li>
+                <li><span>✓</span> Your Google Drive, Dropbox, S3, or disk</li>
               </ul>
               <a className="button button-ghost purchase" href={signedIn ? '/dashboard' : '/login?mode=signup&next=/dashboard'}>
                 {signedIn ? 'Open dashboard' : 'Start Cloud Free'} <Arrow />
@@ -1528,27 +1383,125 @@ function CloudPage() {
                   <span>{plan.title.toUpperCase()}</span>
                   <div className="price-stack">
                     <b>${plan.priceMonthlyUsd}<span className="per">/mo</span></b>
-                    <small className="list-price">up to {plan.storageCapLabel} · Square</small>
+                    <small className="list-price">up to {plan.storageCapLabel} · 7-day free trial</small>
                   </div>
-                  <p>{plan.cadenceLabel}. Ops console, table sizer, and telemetry. Capsules encrypt on your runner and land in <strong>your</strong> storage.</p>
+                  <p>{plan.cadenceLabel}. Automated schedules, cross-account restore readiness, and encrypted capsules in <strong>your</strong> vault.</p>
                 </div>
                 <ul>
-                  <li><span>✓</span> {plan.databasesLabel}</li>
-                  <li><span>✓</span> Up to {plan.storageCapLabel} metered usage</li>
-                  <li><span>✓</span> {plan.transfersPer24h} capsule{plan.transfersPer24h === 1 ? '' : 's'} / 24h</li>
+                  <li><span>✓</span> {plan.databasesLabel} (up to {plan.storageCapLabel})</li>
+                  <li><span>✓</span> {plan.transfersPer24h} automated capsule{plan.transfersPer24h === 1 ? '' : 's'} / 24h</li>
+                  <li><span>✓</span> Restore to a brand-new account &amp; email</li>
                   <li><span>✓</span> Scheduled service · 7-day trial</li>
-                  <li><span>✓</span> {plan.smsOptional ? 'Optional SMS status — never keys' : 'SMS is on $17, not this plan'}</li>
-                  <li><span>✓</span> Table + bucket sizer</li>
-                  <li><span>✓</span> You provide the vault · zero knowledge of keys</li>
+                  <li><span>✓</span> {plan.smsOptional ? 'Automated SMS alerts on success & failure' : 'Email & dashboard status telemetry'}</li>
+                  <li><span>✓</span> Selective table + bucket sizer</li>
+                  <li><span>✓</span> Keys remain invisible to Portabase.dev</li>
                 </ul>
                 <a className="button button-primary purchase" href={signedIn ? `/app/account?tab=billing&plan=${plan.id}` : `/login?mode=signup&next=${encodeURIComponent(`/app/account?tab=billing&plan=${plan.id}`)}`}>
-                  {signedIn ? `Start ${plan.title}` : 'Sign in · pick this plan'} <Arrow />
+                  {signedIn ? `Subscribe to ${plan.title}` : 'Start 7-day free trial'} <Arrow />
                 </a>
               </article>
             ))}
           </div>
-          <p className="checkout-hint" style={{ marginTop: 12 }}>$17 already includes 3 capsules / day. Use the dashboard table sizer to keep the capsule inside 100 MB / 10 GB / 25 GB. Square catalog IDs are pinned by Louis.</p>
-          <p className="checkout-hint" style={{ marginTop: 18 }}>Already have an account? <a href="/login">Sign in</a> · Independent product, not affiliated with Supabase, Inc.</p>
+          <p className="checkout-hint" style={{ marginTop: 16 }}>
+            Already have an account? <a href="/login">Sign in</a> · Need manual secret contingency details? Read the <a href="/docs/manual-contingency">Manual effort contingency guide</a>.
+          </p>
+        </div>
+      </section>
+
+      <section className="section" id="new-account">
+        <div className="shell">
+          <div className="section-kicker green">CROSS-ACCOUNT ESCAPE · DIFFERENT EMAIL</div>
+          <div className="split-heading">
+            <h2>Why you restore into a new account — not just a new database.</h2>
+            <p>When an account is suspended, locked by MFA, or flagged by automated billing/abuse filters, you cannot log in to create a second project inside that same organization.</p>
+          </div>
+          <div className="subscribe-case">
+            <article>
+              <small>01 · ACCOUNT-LEVEL LOCKOUT</small>
+              <b>Your original login is blocked.</b>
+              <p>A platform suspension locks the entire Supabase account associated with your primary email — blocking dashboard access, support tickets, and internal database snapshots all at once.</p>
+            </article>
+            <article>
+              <small>02 · YOUR CAPSULE SITS OUTSIDE</small>
+              <b>Encrypted in your own Drive, Dropbox, or S3.</b>
+              <p>Because Portabase writes AES-256-GCM capsules directly to storage you own outside of Supabase, your backup is never trapped inside the locked organization.</p>
+            </article>
+            <article>
+              <small>03 · NEW ACCOUNT, NEW EMAIL</small>
+              <b>Restore into a clean Supabase account.</b>
+              <p>Create a brand-new Supabase account with a different email address, spin up a blank target project, and restore your schema, data, Auth users, Storage files, and Edge Functions into it.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section className="section" id="recovery-ladder">
+        <div className="shell">
+          <div className="section-kicker green">RECOVERY LADDER · COLD / WARM / HOT</div>
+          <div className="split-heading">
+            <h2>How fast is the way out?</h2>
+            <p>Every plan starts with an encrypted escape you already hold. Higher tiers shorten the walk back — but a hot replica is never promised.</p>
+          </div>
+          <div className="subscribe-case">
+            <article><small>01 · COLD · EVERY PLAN</small><b>Encrypted escape in your Dropbox.</b><p>Each capsule is encrypted and stored in storage you own (Google Drive, Dropbox, S3, or disk). Recovery means a fresh project in a separate account plus a guarded restore.</p></article>
+            <article><small>02 · WARM · $17 / PREMIUM</small><b>Standby project, refreshed on schedule.</b><p>A standby Supabase project in a second account refreshed on schedule, plus the re-adapt runbook. Re-pointable in an hour, not a millisecond — recovery work, not failover magic.</p></article>
+            <article><small>03 · HOT · NEVER PROMISED</small><b>No hot replica. No instant cutover claim.</b><p>Anyone promising a millisecond Supabase failover is selling a different product. Portabase gives you the verified capsule, the cross-account restore engine, and the <a href="/docs/manual-contingency">manual secret contingency</a> runbook.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section className="section cloud-compare" id="compare">
+        <div className="shell">
+          <div className="section-kicker">SIDE BY SIDE</div>
+          <h2>Free Open-Source CLI vs. Portabase Cloud</h2>
+          <div className="compare-table-wrap">
+            <table className="compare-table">
+              <thead>
+                <tr>
+                  <th>Capability</th>
+                  <th>Free CLI (<code>npx portabase</code>)<br /><span>Apache-2.0 · Run on your machine</span></th>
+                  <th>Portabase Cloud<br /><span>Free 100 MB · $7 (10 GB) · $17 (25 GB)</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>Full encrypted capture (Postgres DB, Auth, Storage bytes, Edge Functions)</td><td className="yes">Yes</td><td className="yes">Yes — same engine</td></tr>
+                <tr><td>Restore into a <strong>new Supabase account</strong> (different email)</td><td className="yes">Yes</td><td className="yes">Yes</td></tr>
+                <tr><td>Your own vault (Google Drive, Dropbox, AWS S3, local disk)</td><td className="yes">Yes</td><td className="yes">Yes — you own the capsules</td></tr>
+                <tr><td>Keys &amp; capsule passphrase invisible to Portabase.dev</td><td className="yes">Yes (local only)</td><td className="yes">Yes (status &amp; hashes only)</td></tr>
+                <tr><td>Web GUI, visual table + bucket sizer &amp; readiness lamp</td><td className="no">CLI flags only</td><td className="yes">Yes · included</td></tr>
+                <tr><td>Automated scheduled backups</td><td className="yes">DIY cron / Task Scheduler</td><td className="mid">The free plan has no scheduled service. Paid $7 / $17 include schedules.</td></tr>
+                <tr><td>Automated SMS alerts on backup success &amp; failure</td><td className="no">No</td><td className="yes">Included on $17/mo</td></tr>
+                <tr><td>Works offline even if Portabase.dev is unreachable</td><td className="yes">Yes</td><td className="yes">Yes — capsules decrypt with the CLI</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section className="section cloud-keys" id="keys">
+        <div className="shell">
+          <div className="section-kicker green">ZERO-KNOWLEDGE BOUNDARY</div>
+          <div className="split-heading">
+            <h2>Your keys and capsule bytes never live on Portabase.dev.</h2>
+            <p>Portabase Cloud is the control and scheduling console — never the custodian of your database credentials or backup archives.</p>
+          </div>
+          <div className="subscribe-case">
+            <article>
+              <small>01 · INVISIBLE KEYS</small>
+              <b>Service-role keys &amp; passphrases stay on your runner.</b>
+              <p>The Portabase Cloud API enforces a strict schema allowlist that rejects database URLs, service-role keys, and encryption passphrases. Only job status, timestamps, byte sizes, and SHA-256 hashes reach the dashboard.</p>
+            </article>
+            <article>
+              <small>02 · CUSTOMER-OWNED VAULT</small>
+              <b>Capsules write directly to your storage.</b>
+              <p>Every capsule is sealed with AES-256-GCM (<code>scrypt</code> key derivation) and uploaded straight to your Google Drive, Dropbox, S3 bucket, or disk.</p>
+            </article>
+            <article>
+              <small>03 · HONEST CONTINGENCY</small>
+              <b>Know what Supabase marks write-only.</b>
+              <p>Supabase Edge Function secret values and OAuth secrets cannot be exported by any API. Read our <a href="/docs/manual-contingency">Manual effort contingency guide</a> (with a ready-to-run Python bridge) so your new account is ready at cutover.</p>
+            </article>
+          </div>
         </div>
       </section>
     </main>
