@@ -9,6 +9,14 @@ import { resolveServerSecret } from './secrets.mjs';
  */
 const SUPABASE_PROJECT_REF = 'eoiqvdmvgaurlecdzqkp';
 const DEFAULT_URL = `https://${SUPABASE_PROJECT_REF}.supabase.co`;
+export const DEFAULT_PUBLISHABLE_KEY = 'sb_publishable_OSrYsvzHMubG3YWYUSq6vw_BqEpNQyL';
+
+export function cleanAnonKey(key) {
+  if (typeof key !== 'string') return '';
+  const trimmed = key.trim();
+  if (!trimmed || trimmed.includes('****')) return '';
+  return trimmed;
+}
 
 let cachedPublic;
 
@@ -18,22 +26,30 @@ export async function resolveSupabasePublicConfig() {
   let url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || DEFAULT_URL;
   url = String(url).replace(/\/rest\/v1\/?$/i, '').replace(/\/$/, '');
 
-  let anonKey = process.env.SUPABASE_ANON_KEY
+  let anonKey = cleanAnonKey(
+    process.env.SUPABASE_ANON_KEY
     || process.env.SUPABASE_PUBLISHABLE_KEY
     || process.env.VITE_SUPABASE_ANON_KEY
     || process.env.VITE_SUPABASE_PUBLISHABLE_KEY
-    || '';
+    || ''
+  );
 
   if (!anonKey) {
     try {
-      anonKey = await resolveServerSecret('SUPABASE_ANON_KEY', { service: 'supabase', key: 'publishable-key' });
+      const resolved = await resolveServerSecret('SUPABASE_ANON_KEY', { service: 'supabase', key: 'publishable-key' });
+      anonKey = cleanAnonKey(resolved);
     } catch {
       try {
-        anonKey = await resolveServerSecret('SUPABASE_ANON_KEY', { service: 'supabase', key: 'anon-key' });
+        const resolved = await resolveServerSecret('SUPABASE_ANON_KEY', { service: 'supabase', key: 'anon-key' });
+        anonKey = cleanAnonKey(resolved);
       } catch {
         anonKey = '';
       }
     }
+  }
+
+  if (!anonKey) {
+    anonKey = DEFAULT_PUBLISHABLE_KEY;
   }
 
   cachedPublic = {

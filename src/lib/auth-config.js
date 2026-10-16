@@ -47,7 +47,20 @@ export const productConfig = {
  * project rather than failing loudly.
  */
 export const SUPABASE_PROJECT_REF = 'eoiqvdmvgaurlecdzqkp';
+export const SUPABASE_DEFAULT_PUBLISHABLE_KEY = 'sb_publishable_OSrYsvzHMubG3YWYUSq6vw_BqEpNQyL';
 const SUPABASE_DEFAULT_URL = `https://${SUPABASE_PROJECT_REF}.supabase.co`;
+
+export function cleanAnonKey(key) {
+  if (typeof key !== 'string') return '';
+  const trimmed = key.trim();
+  if (!trimmed || trimmed.includes('****')) return '';
+  return trimmed;
+}
+
+export function resolveDefaultAnonKey() {
+  const envKey = cleanAnonKey(import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '');
+  return envKey || SUPABASE_DEFAULT_PUBLISHABLE_KEY;
+}
 
 /** @deprecated use productConfig */
 export const authConfig = {
@@ -56,12 +69,12 @@ export const authConfig = {
   ...productConfig,
   // defaults used by older imports
   url: import.meta.env.VITE_SUPABASE_URL || SUPABASE_DEFAULT_URL,
-  anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '',
+  anonKey: resolveDefaultAnonKey(),
 };
 
 export const supabasePublicDefaults = {
   url: import.meta.env.VITE_SUPABASE_URL || SUPABASE_DEFAULT_URL,
-  anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '',
+  anonKey: resolveDefaultAnonKey(),
 };
 
 export const cognitoPublicDefaults = {

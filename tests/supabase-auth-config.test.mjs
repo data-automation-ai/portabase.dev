@@ -20,3 +20,17 @@ test('auth provider product constants match trial offer', () => {
   assert.equal(7, 7);
   assert.equal(1700 / 100, 17);
 });
+
+test('cleanAnonKey rejects masked keys containing asterisks and empty values', async () => {
+  const { cleanAnonKey, resolveSupabasePublicConfig, DEFAULT_PUBLISHABLE_KEY } = await import('../netlify/shared/supabase-auth.mjs');
+  assert.equal(cleanAnonKey('****************NQyL'), '');
+  assert.equal(cleanAnonKey('  ****  '), '');
+  assert.equal(cleanAnonKey(''), '');
+  assert.equal(cleanAnonKey(null), '');
+  assert.equal(cleanAnonKey('sb_publishable_valid'), 'sb_publishable_valid');
+
+  const config = await resolveSupabasePublicConfig();
+  assert.equal(config.anonKey, DEFAULT_PUBLISHABLE_KEY);
+  assert.equal(config.url, 'https://eoiqvdmvgaurlecdzqkp.supabase.co');
+});
+
