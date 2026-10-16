@@ -660,7 +660,7 @@ function EscapeVsSupabaseDiagram() {
 
         <article className="esc-cmp-panel esc-cmp-panel-escape">
           <header>
-            <small>USP · THE ESCAPE</small>
+            <small>THE ESCAPE</small>
             <h3>Portabase Escape</h3>
           </header>
           <div className="esc-cmp-lock" aria-hidden="true">
@@ -825,8 +825,8 @@ function RunnerArchitectureDiagram() {
 function Escape() {
   return <section className="section escape" id="escape">
     <div className="shell">
-      <div className="section-kicker green">USP · THE ESCAPE</div>
-      <div className="escape-heading"><h2>When the front door fails,<br /><em>leave through your own.</em></h2><p><strong>Escape</strong> is the USP: a customer-owned way out of a Supabase lockout — not a second landlord. Open-source engine builds the encrypted capsule in storage you own (DB, Auth, Storage bytes, Functions). Cloud (this site) keeps the Escape easy with GUI, configuration, and telemetry — and who to wake if the job goes quiet.</p></div>
+      <div className="section-kicker green">THE ESCAPE</div>
+      <div className="escape-heading"><h2>When the front door fails,<br /><em>leave through your own.</em></h2><p><strong>Escape</strong> is a customer-owned way out of a Supabase lockout — not a second landlord. Open-source engine builds the encrypted capsule in storage you own (DB, Auth, Storage bytes, Functions). Cloud (this site) keeps the Escape easy with GUI, configuration, and telemetry — and who to wake if the job goes quiet.</p></div>
       <EscapeVsSupabaseDiagram />
       <div className="viz-panel-grid escape-viz">
         <figure className="viz-panel">
@@ -1188,7 +1188,7 @@ function CloudTeaser() {
   return <section className="section cloud-teaser" id="cloud-teaser">
     <div className="shell cloud-teaser-card">
       <div>
-        <div className="section-kicker green">USP · ESCAPE OPS</div>
+        <div className="section-kicker green">ESCAPE OPS</div>
         <h2>Open source is the Escape.<br />Cloud keeps the Escape running.</h2>
         <p><strong>Supabase only.</strong> GitHub = free Escape engine. <strong>This site</strong> = hosted <strong>GUI</strong>, guided configuration, <strong>telemetry</strong>, and optional SMS on $17 — so the Escape is not a forgotten cron job. <strong>Cloud Free</strong> is 100 MB, manual only. Paid: <strong>$7</strong> (one database, 10 GB, 1 capsule / 24h) or <strong>$17</strong> (unlimited databases, 25 GB, 3 capsules / day). You provide capsule storage. Zero knowledge of your encryption keys. Restore into your <strong>contingency account</strong> — a free second Supabase account that the incident cannot touch. Refunds are self-serve: full within 8 days, prorated after, one button, no email required.</p>
         <p className="cloud-insurance"><strong>Both versions are fire insurance — and insurance only works before the fire.</strong> The free CLI is the policy you write yourself: one snapshot, taken before any lockout, that the incident cannot reach. Cloud is the premium: a few dollars a month to keep that policy current, tested, and watched. A proven restore is the payout — your business rebuilt in a new account while the old one is still locked. Nobody is glad they paid the premium. Everyone is glad they had the policy.</p>
@@ -1212,10 +1212,10 @@ function CloudTeaser() {
 function PublicDeal() {
   return <section className="section" id="deal" style={{ background: '#0a0b0d', borderTop: '1px solid #2a2b30' }}>
     <div className="shell">
-      <div className="section-kicker green">USP · YOUR SUPABASE ESCAPE</div>
+      <div className="section-kicker green">YOUR SUPABASE ESCAPE</div>
       <div className="split-heading">
         <h2>Keep Supabase.<br /><em>Own the Escape.</em></h2>
-        <p><strong>USP:</strong> Portabase is your <strong>Supabase Escape</strong> — open source, Supabase-only. Encrypted capsule you control (database, Auth, <strong>Storage objects</strong>, <strong>Edge Functions</strong>) so lockout is not the end. This website is Cloud convenience: <strong>GUI, easier configuration, and telemetry</strong> — so the Escape stays real day to day, not a dusty script.</p>
+        <p>Portabase is your <strong>Supabase Escape</strong> — open source, Supabase-only. Encrypted capsule you control (database, Auth, <strong>Storage objects</strong>, <strong>Edge Functions</strong>) so lockout is not the end. This website is Cloud convenience: <strong>GUI, easier configuration, and telemetry</strong> — so the Escape stays real day to day, not a dusty script.</p>
       </div>
       <div className="gap-callout" style={{ marginTop: 28, marginBottom: 8, padding: '22px 24px', border: '1px solid rgba(76,141,255,.35)', background: 'rgba(76,141,255,.05)' }}>
         <div className="section-kicker green" style={{ marginBottom: 10 }}>SUPABASE PLATFORM BACKUPS · THE GAP</div>
@@ -1291,9 +1291,9 @@ function CloudPage() {
     <main className="cloud-page">
       <section className="section cloud-hero">
         <div className="shell">
-          <div className="section-kicker green">USP · YOUR SUPABASE ESCAPE</div>
+          <div className="section-kicker green">YOUR SUPABASE ESCAPE</div>
           <h1>GitHub is the Escape hatch.<br />This site is the Escape console.</h1>
-          <p className="cloud-hero-lead"><strong>USP: Escape.</strong> Supabase only. Open-source engine does full recovery — including <strong>Storage object bytes and Edge Functions</strong> that platform DB backups leave behind. <strong>This website</strong> is the Cloud GUI, easier configuration, and telemetry so the Escape is operable — not a forgotten script.</p>
+          <p className="cloud-hero-lead"><strong>Escape.</strong> Supabase only. Open-source engine does full recovery — including <strong>Storage object bytes and Edge Functions</strong> that platform DB backups leave behind. <strong>This website</strong> is the Cloud GUI, easier configuration, and telemetry so the Escape is operable — not a forgotten script.</p>
           <div className="cloud-hero-actions">
             <a className="button button-primary" href={signedIn ? '/dashboard' : '/login?mode=signup&next=/dashboard'}>Start 7-day free trial <Arrow /></a>
             <a className="button button-ghost" href="/dashboard?demo=1">Open dashboard (demo) <Arrow /></a>

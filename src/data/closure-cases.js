@@ -5,16 +5,16 @@
  * Always preserve exact href.
  */
 
-export const allClosureReasons = [
+export const closureReasons = [
   {
     id: 'R01',
-    provider: 'Both',
+    provider: 'Supabase',
     title: 'Billing dispute or chargeback',
     body: 'A payment dispute can freeze projects or close self-service access while the case is open. The dashboard you need to export data may be the thing that is locked.',
   },
   {
     id: 'R02',
-    provider: 'Both',
+    provider: 'Supabase',
     title: 'Automated fraud / abuse review',
     body: 'Risk systems can ban or suspend on signals you never see: disposable email, velocity, shared cards, or traffic patterns. Appeals often go through a ticket queue, not a live restore path.',
   },
@@ -26,19 +26,13 @@ export const allClosureReasons = [
   },
   {
     id: 'R04',
-    provider: 'Both',
+    provider: 'Supabase',
     title: 'Terms / AUP enforcement',
     body: 'Account and message abuse policies, multi-account free-tier limits, and content rules can result in bans. Notice windows vary; some users report discovering the ban only at sign-in.',
   },
   {
-    id: 'R05',
-    provider: 'AWS',
-    title: 'Account permanently closed',
-    body: 'AWS can permanently close an account. Associated emails may be blocked from new signups. Resources and console access disappear together if you have no external copy.',
-  },
-  {
     id: 'R06',
-    provider: 'Both',
+    provider: 'Supabase',
     title: 'Support path blocked by the same ban',
     body: 'When the ban screen also appears on the support route, self-service recovery is gone. You depend on email that may not reply in production-critical hours.',
   },
@@ -48,37 +42,10 @@ export const allClosureReasons = [
     title: 'Project delete or stuck pause',
     body: 'Destructive actions and stuck lifecycle states (pausing, recovery mode) can strand data while the only recovery tools live behind the same dashboard.',
   },
-  {
-    id: 'R08',
-    provider: 'AWS',
-    title: 'Suspension with delayed human response',
-    body: 'Account suspension emails can land before any useful dialogue. Until reinstatement, APIs and console for that account stop being a recovery plan.',
-  },
 ];
 
-/** Sourced public cases — exact permanent-ish URLs retained (AWS entries kept in background until AWS launch) */
-export const allClosureCases = [
-  {
-    id: 'C15', provider: 'AWS', platform: 'Reddit', date: '2026-09-25', impact: 3,
-    tag: 'ACCOUNT CLOSED · PRODUCTION DOWN',
-    title: 'AWS account closure left production down for six days',
-    body: 'The poster reported a security suspension after suspected compromised keys, followed by password and payment remediation. They said the account then showed closed and production stayed down while the support case went unanswered.',
-    href: 'https://www.reddit.com/r/aws/comments/1wq3in9/aws_account_suspended_then_marked_closed/', source: 'r/aws · 1wq3in9',
-  },
-  {
-    id: 'C16', provider: 'AWS', platform: 'Reddit', date: '2026-08-25', impact: 3,
-    tag: 'ACCOUNT SUSPENDED · ERP DOWN',
-    title: 'Related-account suspension stopped a business ERP',
-    body: 'The poster said AWS suspended a two-year account as related to previously closed accounts. They reported the account hosted core billing and delivery software, halting daily operations while they waited for review.',
-    href: 'https://www.reddit.com/r/aws/comments/1vxvk29/aws_account_suspended_related_to_previously/', source: 'r/aws · 1vxvk29',
-  },
-  {
-    id: 'C17', provider: 'AWS', platform: 'Reddit', date: '2026-08-13', impact: 3,
-    tag: 'PAID ACCOUNT SUSPENDED · DATA INACCESSIBLE',
-    title: 'Production AWS account suspended despite a paid invoice',
-    body: 'A SaaS operator reported a paid invoice and zero balance, then an account restriction affecting EKS, RDS, S3 and other services. AWS Health warned that its EKS control plane could shut down.',
-    href: 'https://www.reddit.com/r/aws/comments/1vnm4vh/aws_suspended_our_production_account_for/', source: 'r/aws · 1vnm4vh',
-  },
+/** Sourced public Supabase cases — exact permanent-ish URLs retained */
+export const closureCases = [
   {
     id: 'C18', provider: 'Supabase', platform: 'GitHub Discussions', date: '2026-08-12', impact: 2,
     tag: 'MFA LOCKOUT · PRODUCTION FIX BLOCKED',
@@ -106,13 +73,6 @@ export const allClosureCases = [
     title: 'Account ban broke an app with live users',
     body: 'The poster said a sudden ban blocked sign-in and broke a browser extension storing user data. They asked for restored access or a way to export their data.',
     href: 'https://github.com/orgs/supabase/discussions/45424', source: 'supabase/discussions#45424',
-  },
-  {
-    id: 'C22', provider: 'AWS', platform: 'Reddit', date: '2026-04-06', impact: 3,
-    tag: 'ACCOUNT CLOSED · DATA INACCESSIBLE',
-    title: 'A second AWS account was closed after a billing dispute',
-    body: 'The poster said AWS closed a second account after they followed support guidance about an older account they could no longer access. They reported both accounts and their data remained inaccessible.',
-    href: 'https://www.reddit.com/r/aws/comments/1sdnmum/aws_closed_my_account_for_following_their/', source: 'r/aws · 1sdnmum',
   },
   {
     id: 'C01',
@@ -203,61 +163,6 @@ export const allClosureCases = [
     source: 'AnswerOverflow · 1438177383642566719',
   },
   {
-    id: 'C09',
-    provider: 'AWS',
-    platform: 'Reddit',
-    date: '2023-02-20',
-    tag: 'PERMANENTLY CLOSED',
-    title: '“Your AWS account was permanently closed”',
-    body: 'Thread on permanent closure implications (including email association limits for new accounts). Durable multi-year Reddit post ID.',
-    href: 'https://www.reddit.com/r/aws/comments/1185k0g/your_aws_account_was_permanently_closed/',
-    source: 'r/aws · 1185k0g',
-  },
-  {
-    id: 'C10',
-    provider: 'AWS',
-    platform: 'Reddit',
-    date: '2024-05-07',
-    tag: 'ACCOUNT CLOSED',
-    title: 'Account closed; new account also closed',
-    body: 'Poster reported the original account closed, a replacement closed as well, and reinstatement instructions pointing at “the other AWS account” — recovery blocked in a loop.',
-    href: 'https://www.reddit.com/r/aws/comments/1ckpl5h/my_account_has_been_closed_i_made_a_new_one_and/',
-    source: 'r/aws · 1ckpl5h',
-  },
-  {
-    id: 'C11',
-    provider: 'AWS',
-    platform: 'Reddit',
-    date: '2024-08-08',
-    tag: 'CLOSED · STILL BILLED',
-    title: 'Could not log in to pay the final bill after closure',
-    body: 'Account closed; poster still expected a bill but could not access console login to pay — operational deadlock after closure.',
-    href: 'https://www.reddit.com/r/aws/comments/1ekt2cr/how_do_i_pay_the_bill_after_account_is_closed/',
-    source: 'r/aws · 1ekt2cr',
-  },
-  {
-    id: 'C12',
-    provider: 'AWS',
-    platform: 'Reddit',
-    date: '2025-06-05',
-    tag: 'CLOSED · BILLING DEADLOCK',
-    title: 'Closed account, ongoing $1 charges, card closed',
-    body: 'Report of account closed, inability to log in, residual billing, and a closed credit card creating a support deadlock.',
-    href: 'https://www.reddit.com/r/aws/comments/1l35gfh/help_aws_account_closure_and_ongoing_billing/',
-    source: 'r/aws · 1l35gfh',
-  },
-  {
-    id: 'C13',
-    provider: 'AWS',
-    platform: 'Reddit',
-    date: '2025-12-01',
-    tag: 'CLOSED · UNUSED',
-    title: 'Personal account closed after years of non-use (as reported)',
-    body: 'Poster said they received email that the unused personal account was closed — unexpected loss of that AWS identity.',
-    href: 'https://www.reddit.com/r/aws/comments/1qj44kp/does_aws_close_accounts_for_lack_of_use/',
-    source: 'r/aws · 1qj44kp',
-  },
-  {
     id: 'C14',
     provider: 'Supabase',
     platform: 'Reddit',
@@ -270,9 +175,22 @@ export const allClosureCases = [
   },
 ];
 
-export const closureReasons = allClosureReasons
-  .filter(r => r.provider === 'Supabase' || r.provider === 'Both')
-  .map(r => ({ ...r, provider: 'Supabase' }));
-
-export const closureCases = allClosureCases.filter(c => c.provider === 'Supabase');
-
+/*
+ * Background archive of AWS closure reasons & cases — kept out of the active bundle
+ * until the AWS recovery portion of Portabase launches:
+ *
+ * Reasons:
+ * - R05 (AWS): Account permanently closed — AWS can permanently close an account. Associated emails may be blocked from new signups. Resources and console access disappear together if you have no external copy.
+ * - R08 (AWS): Suspension with delayed human response — Account suspension emails can land before any useful dialogue. Until reinstatement, APIs and console for that account stop being a recovery plan.
+ *
+ * Cases:
+ * - C15 (2026-09-25, Reddit r/aws · 1wq3in9): https://www.reddit.com/r/aws/comments/1wq3in9/aws_account_suspended_then_marked_closed/
+ * - C16 (2026-08-25, Reddit r/aws · 1vxvk29): https://www.reddit.com/r/aws/comments/1vxvk29/aws_account_suspended_related_to_previously/
+ * - C17 (2026-08-13, Reddit r/aws · 1vnm4vh): https://www.reddit.com/r/aws/comments/1vnm4vh/aws_suspended_our_production_account_for/
+ * - C22 (2026-04-06, Reddit r/aws · 1sdnmum): https://www.reddit.com/r/aws/comments/1sdnmum/aws_closed_my_account_for_following_their/
+ * - C09 (2023-02-20, Reddit r/aws · 1185k0g): https://www.reddit.com/r/aws/comments/1185k0g/your_aws_account_was_permanently_closed/
+ * - C10 (2024-05-07, Reddit r/aws · 1ckpl5h): https://www.reddit.com/r/aws/comments/1ckpl5h/my_account_has_been_closed_i_made_a_new_one_and/
+ * - C11 (2024-08-08, Reddit r/aws · 1ekt2cr): https://www.reddit.com/r/aws/comments/1ekt2cr/how_do_i_pay_the_bill_after_account_is_closed/
+ * - C12 (2025-06-05, Reddit r/aws · 1l35gfh): https://www.reddit.com/r/aws/comments/1l35gfh/help_aws_account_closure_and_ongoing_billing/
+ * - C13 (2025-12-01, Reddit r/aws · 1qj44kp): https://www.reddit.com/r/aws/comments/1qj44kp/does_aws_close_accounts_for_lack_of_use/
+ */
