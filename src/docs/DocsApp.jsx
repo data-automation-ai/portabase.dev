@@ -605,11 +605,16 @@ function ManualContingency() {
   return (
     <>
       <p className="docs-lead">
-        No CLI, Management API, or MCP server can extract write-only secret values from a Supabase project.
-        That is a deliberate platform security boundary. A complete recovery plan pairs your automated Portabase capsule
-        with a <strong>manual effort contingency</strong>: mirroring non-regenerable secrets in an external secret vault{' '}
-        <em>before</em> a lockout occurs.
+        Certain runtime secrets and control-plane settings cannot be exported through standard backup APIs.{' '}
+        <strong>This is not a limitation of Portabase — it is a deliberate, built-in security architecture within Supabase</strong>{' '}
+        (and even the official Supabase CLI, Management API, and MCP servers enforce the exact same boundary).
       </p>
+      <div className="docs-callout danger">
+        <strong>Important — Not every restore is 100% turnkey out of the box:</strong> You must be aware that you will{' '}
+        <strong>not, in all cases, receive a turnkey-ready database or project on the restored side</strong> without addressing the items below.
+        Your data, tables, subscriber lists, Storage files, and Edge Function code will be intact, but your application will not run end-to-end
+        until missing secret values, Vault keys, and external provider callbacks are re-applied.
+      </div>
       <h2>1 · What IS copied automatically (including subscribers &amp; memberships)</h2>
       <p>
         Everything stored as database rows, Storage object bytes, Auth user records, or Edge Function code travels inside your encrypted capsule:
@@ -642,21 +647,51 @@ function ManualContingency() {
             </tr>
             <tr>
               <td><strong>Edge Function secret <em>names</em></strong></td>
-              <td><strong>Names only</strong></td>
+              <td><strong>Names only (by default)</strong></td>
               <td>The capsule manifest records every secret key name (e.g. <code>STRIPE_SECRET_KEY</code>, <code>APP_ENCRYPTION_KEY</code>) so you have an exact checklist of what to re-inject.</td>
             </tr>
           </tbody>
         </table>
       </div>
-      <h2>2 · Why no CLI, API, or MCP can copy plaintext secrets</h2>
+      <h2>2 · Why Supabase blocks standard secret exports — and what CAN still be read</h2>
       <p>
-        Supabase treats runtime secrets as <strong>write-only</strong> once saved. When any tool (the official Supabase CLI, Management API, or MCP)
-        queries <code>supabase secrets list</code>, the platform returns only the secret <strong>name</strong> and a one-way digest — never the plaintext value.
-        Similarly, <code>supabase_vault</code> (<code>pgsodium</code>) encrypts secrets inside Postgres using a host-managed root key that lives outside the SQL dump.
+        Supabase separates secrets into two distinct layers, and understanding how each layer works determines how you back them up:
       </p>
-      <div className="docs-callout danger">
-        <strong>The golden rule of secret contingency:</strong> If a secret value only exists inside your Supabase dashboard or Edge Function environment and nowhere else,
-        an account lockout makes that secret permanently unrecoverable.
+      <div className="docs-table-wrap">
+        <table className="docs-table">
+          <thead>
+            <tr><th>Secret layer</th><th>Why standard dumps miss it</th><th>Can plaintext be read while the source project is alive?</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>1. Postgres Vault (<code>vault.secrets</code> / <code>pgsodium</code>)</strong></td>
+              <td>
+                <code>pg_dump</code> only dumps the raw table <code>vault.secrets</code> (which holds ciphertext) and skips views. The root decryption key lives on the Supabase host outside the SQL dump.
+              </td>
+              <td>
+                <strong>YES — via SQL view.</strong> While your source database is reachable via <code>SUPABASE_DB_URL</code>, querying <code>SELECT name, description, secret FROM vault.decrypted_secrets</code> decrypts and returns the <strong>actual plaintext secret values</strong> in memory, which can then be re-inserted into the target database via <code>vault.create_secret()</code>.
+              </td>
+            </tr>
+            <tr>
+              <td><strong>2. Edge Function secrets (<code>supabase secrets set</code>)</strong></td>
+              <td>
+                The Supabase Management API (<code>GET /v1/projects/&#123;ref&#125;/secrets</code>) is write-only by design: it returns the secret <code>name</code> and a one-way digest, never the plaintext string.
+              </td>
+              <td>
+                <strong>Only from inside the Edge runtime or your local <code>.env</code> vault.</strong> Outside the runtime, the API never returns plaintext. Inside a running Edge Function, <code>Deno.env.toObject()</code> holds the live plaintext values.
+              </td>
+            </tr>
+            <tr>
+              <td><strong>3. Auth provider secrets &amp; SMTP credentials</strong></td>
+              <td>
+                Stored in the Supabase control plane per project ref; OAuth callback URLs are tied to <code>https://&lt;ref&gt;.supabase.co/auth/v1/callback</code>.
+              </td>
+              <td>
+                Auth config settings can be read via <code>GET /v1/projects/&#123;ref&#125;/config/auth</code> and pushed to the target via <code>PATCH /v1/projects/&#123;target_ref&#125;/config/auth</code>, though redacted provider secrets must come from your external vault.
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
       <h2>3 · Non-regenerable vs. regenerable secrets</h2>
       <p>
@@ -672,13 +707,13 @@ function ManualContingency() {
               <td><strong>Non-regenerable (Irreplaceable)</strong></td>
               <td>
                 Application column-encryption keys (<code>APP_ENCRYPTION_KEY</code>, AES/Fernet keys),{' '}
-                <code>pgsodium</code> / Vault root keys, customer-supplied webhook or partner keys you cannot self-issue, custom signing keys
+                <code>pgsodium</code> / Vault secrets, customer-supplied webhook or partner keys you cannot self-issue, custom signing keys
               </td>
               <td>
                 <strong>Permanent data loss of encrypted columns or integrations.</strong> Even with a 100% intact Postgres dump, ciphertext cannot be decrypted without the original key.
               </td>
               <td>
-                <strong>Mandatory external vaulting before any incident.</strong> Store a copy in 1Password, Bitwarden, AWS Secrets Manager, Doppler, or HashiCorp Vault the moment the key is created.
+                <strong>Mandatory external vaulting before any incident.</strong> Store a copy in 1Password, Bitwarden, AWS Secrets Manager, Doppler, or extract them with the Python script below while healthy.
               </td>
             </tr>
             <tr>
@@ -696,25 +731,180 @@ function ManualContingency() {
           </tbody>
         </table>
       </div>
-      <h2>4 · Before-the-fire checklist (do this once while healthy)</h2>
+      <h2>4 · Python script: Extract, hold, and restore Vault secrets &amp; runtime config</h2>
       <p>
-        <strong>1 · Store every Edge Function secret in an external vault.</strong> Keep a dedicated folder or environment in your password manager or secret manager (1Password, Bitwarden, Doppler, AWS Secrets Manager) that mirrors your production <code>.env.production</code> secret values.
+        Run the Python script below on your own machine while your source project is healthy. It connects directly to your source Postgres database and the Supabase Management API to:
       </p>
       <p>
-        <strong>2 · Export your <code>pgsodium</code> root key if you use Supabase Vault.</strong> If your database uses <code>vault.secrets</code> or <code>pgsodium</code>, fetch the project root key while healthy via the Management API and store it alongside your capsule passphrase.
+        <strong>1. Extract</strong> every plaintext secret from <code>vault.decrypted_secrets</code>, capture your project's Auth configuration, list all Edge Function secret names, and merge them with your local <code>.env</code> secret values into a single local contingency file (<code>contingency-bundle.json</code>).<br />
+        <strong>2. Restore</strong> those exact Vault secrets (via <code>vault.create_secret</code>), Edge Function secrets (via the Management API), and Auth settings directly into your new target Supabase project.
       </p>
+      <Code>{`#!/usr/bin/env python3
+"""
+portabase_contingency_bridge.py
+Extracts plaintext Supabase Vault secrets (vault.decrypted_secrets), Edge Function
+secret names + local .env values, and Auth config from a source project, holds them
+in a local JSON bundle, and restores them into a new target Supabase project.
+
+Install deps:  pip install psycopg[binary] requests python-dotenv
+Usage:
+  1. Extract while healthy:
+     python portabase_contingency_bridge.py extract \\
+       --source-db-url "postgresql://postgres:[PASS]@db.[SOURCE_REF].supabase.co:5432/postgres" \\
+       --source-ref "[SOURCE_REF]" \\
+       --access-token "sbp_..." \\
+       --env-file ".env.production" \\
+       --out "contingency-bundle.json"
+
+  2. Restore into new target project:
+     python portabase_contingency_bridge.py restore \\
+       --target-db-url "postgresql://postgres:[PASS]@db.[TARGET_REF].supabase.co:5432/postgres" \\
+       --target-ref "[TARGET_REF]" \\
+       --access-token "sbp_..." \\
+       --bundle "contingency-bundle.json"
+"""
+import argparse
+import json
+import pathlib
+import requests
+import psycopg
+from dotenv import dotenv_values
+
+API_BASE = "https://api.supabase.com/v1"
+
+
+def extract_bundle(args):
+    headers = {"Authorization": f"Bearer {args.access_token}"}
+    local_env = dotenv_values(args.env_file) if args.env_file and pathlib.Path(args.env_file).exists() else {}
+
+    # 1. Extract plaintext secrets from Postgres vault.decrypted_secrets
+    vault_secrets = []
+    with psycopg.connect(args.source_db_url) as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.views
+                    WHERE table_schema = 'vault' AND table_name = 'decrypted_secrets'
+                );
+            """)
+            if cur.fetchone()[0]:
+                cur.execute("SELECT name, description, secret FROM vault.decrypted_secrets WHERE secret IS NOT NULL;")
+                for name, description, secret in cur.fetchall():
+                    vault_secrets.append({
+                        "name": name,
+                        "description": description or "",
+                        "secret": secret,
+                    })
+
+    # 2. Fetch Edge Function secret names from Management API & pair with local .env values
+    resp = requests.get(f"{API_BASE}/projects/{args.source_ref}/secrets", headers=headers, timeout=30)
+    resp.raise_for_status()
+    SYSTEM_PREFIXES = ("SUPABASE_",)
+    edge_secrets = {}
+    missing_edge_secrets = []
+    for item in resp.json():
+        key = item.get("name", "")
+        if key.startswith(SYSTEM_PREFIXES):
+            continue
+        if key in local_env and local_env[key]:
+            edge_secrets[key] = local_env[key]
+        else:
+            missing_edge_secrets.append(key)
+
+    # 3. Fetch Auth configuration (Site URL, redirect URLs, provider toggles)
+    auth_resp = requests.get(f"{API_BASE}/projects/{args.source_ref}/config/auth", headers=headers, timeout=30)
+    auth_config = auth_resp.json() if auth_resp.ok else {}
+
+    bundle = {
+        "source_project_ref": args.source_ref,
+        "vault_decrypted_secrets": vault_secrets,
+        "edge_function_secrets": edge_secrets,
+        "missing_edge_secret_names": missing_edge_secrets,
+        "auth_config": {
+            "site_url": auth_config.get("site_url"),
+            "uri_allow_list": auth_config.get("uri_allow_list"),
+            "jwt_exp": auth_config.get("jwt_exp"),
+            "disable_signup": auth_config.get("disable_signup"),
+        },
+    }
+    out_path = pathlib.Path(args.out)
+    out_path.write_text(json.dumps(bundle, indent=2), encoding="utf-8")
+    print(f"[OK] Saved {len(vault_secrets)} Vault secrets and {len(edge_secrets)} Edge secrets to {out_path}")
+    if missing_edge_secrets:
+        print(f"[ACTION NEEDED] Populate plaintext values in {out_path} for: {', '.join(missing_edge_secrets)}")
+
+
+def restore_bundle(args):
+    headers = {
+        "Authorization": f"Bearer {args.access_token}",
+        "Content-Type": "application/json",
+    }
+    bundle = json.loads(pathlib.Path(args.bundle).read_text(encoding="utf-8"))
+
+    # 1. Restore Postgres Vault secrets via vault.create_secret(...)
+    vault_items = bundle.get("vault_decrypted_secrets", [])
+    if vault_items:
+        with psycopg.connect(args.target_db_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute("CREATE EXTENSION IF NOT EXISTS supabase_vault WITH SCHEMA vault CASCADE;")
+                for item in vault_items:
+                    cur.execute(
+                        """
+                        DELETE FROM vault.secrets WHERE name = %s;
+                        SELECT vault.create_secret(%s, %s, %s);
+                        """,
+                        (item["name"], item["secret"], item["name"], item.get("description", "")),
+                    )
+            conn.commit()
+        print(f"[OK] Restored {len(vault_items)} plaintext secrets into target vault.secrets")
+
+    # 2. Push Edge Function secrets via Management API
+    edge_secrets = bundle.get("edge_function_secrets", {})
+    payload = [{"name": k, "value": v} for k, v in edge_secrets.items() if v]
+    if payload:
+        r = requests.post(f"{API_BASE}/projects/{args.target_ref}/secrets", headers=headers, json=payload, timeout=30)
+        r.raise_for_status()
+        print(f"[OK] Restored {len(payload)} Edge Function secrets to project {args.target_ref}")
+
+    # 3. Restore non-empty Auth URL settings
+    auth_patch = {k: v for k, v in bundle.get("auth_config", {}).items() if v is not None}
+    if auth_patch:
+        r = requests.patch(f"{API_BASE}/projects/{args.target_ref}/config/auth", headers=headers, json=auth_patch, timeout=30)
+        r.raise_for_status()
+        print(f"[OK] Applied Auth URL/session config to project {args.target_ref}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Portabase Contingency Secret Bridge")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p_ext = sub.add_parser("extract")
+    p_ext.add_argument("--source-db-url", required=True)
+    p_ext.add_argument("--source-ref", required=True)
+    p_ext.add_argument("--access-token", required=True)
+    p_ext.add_argument("--env-file", default=".env.production")
+    p_ext.add_argument("--out", default="contingency-bundle.json")
+
+    p_res = sub.add_parser("restore")
+    p_res.add_argument("--target-db-url", required=True)
+    p_res.add_argument("--target-ref", required=True)
+    p_res.add_argument("--access-token", required=True)
+    p_res.add_argument("--bundle", default="contingency-bundle.json")
+
+    parsed = parser.parse_args()
+    if parsed.cmd == "extract":
+        extract_bundle(parsed)
+    else:
+        restore_bundle(parsed)`}</Code>
+      <h2>5 · Final cutover checklist (re-injecting secrets on the lifeboat project)</h2>
       <p>
-        <strong>3 · Never generate a secret only inside the Supabase dashboard.</strong> Always generate keys locally or in your secret vault first, save them there, and then push them to Supabase with <code>supabase secrets set</code>.
-      </p>
-      <h2>5 · Cutover execution (re-injecting secrets on the lifeboat project)</h2>
-      <p>
-        After Portabase restores your database, Storage objects, Auth inventory, and Edge Function code into your new Supabase project, re-hydrate all runtime secrets in one command from your external vault:
+        If you store your Edge Function secrets in a standard <code>.env</code> file inside your external vault (1Password, Bitwarden, Doppler, AWS Secrets Manager), you can also push them with the Supabase CLI in one line:
       </p>
       <Code>{`# Pull your production secrets from your external vault (1Password / Doppler / AWS SM)
 # and push them to the new lifeboat project in a single batch:
 supabase secrets set --project-ref newprojectref0000001 --env-file ./vault-production.env`}</Code>
       <p>
-        Then complete the remaining external pointer updates:
+        Then complete the remaining external pointer updates so your restored project becomes turnkey:
       </p>
       <p>
         <strong>1 · Billing &amp; webhook endpoints (Stripe / Square).</strong> Your subscriber and membership tables are already restored in Postgres. In your Stripe or Square dashboard, update the webhook destination URL to <code>https://newprojectref0000001.supabase.co/functions/v1/your-webhook</code> and set the new signing secret via <code>supabase secrets set</code>.
