@@ -21,15 +21,16 @@ test('docs routes cover introduction, quickstart, cloud, threat model, proven', 
   assert.equal(resolveDocsSlug('/docs/restore-targets'), 'restore-targets');
   assert.equal(resolveDocsSlug('/docs/disaster-recovery'), 'disaster-recovery');
   assert.equal(resolveDocsSlug('/docs/auth-cutover'), 'auth-cutover');
+  assert.equal(resolveDocsSlug('/docs/manual-contingency'), 'manual-contingency');
   assert.equal(resolveDocsSlug('/docs/rls-check'), 'rls-check');
   assert.equal(resolveDocsSlug('/docs', '#install'), 'cli');
   const slugs = DOCS_NAV.flatMap((g) => g.items.map((i) => i.slug));
-  for (const need of ['introduction', 'quickstart', 'keepalive', 'rls-check', 'restore-targets', 'disaster-recovery', 'auth-cutover', 'cloud', 'threat-model', 'proven']) {
+  for (const need of ['introduction', 'quickstart', 'keepalive', 'rls-check', 'restore-targets', 'disaster-recovery', 'auth-cutover', 'manual-contingency', 'cloud', 'threat-model', 'proven']) {
     assert.equal(slugs.includes(need), true, need);
   }
 });
 
-test('recovery pages stay honest: real replay commands, Google callback, no Auth overclaim', () => {
+test('recovery pages stay honest: real replay commands, Google callback, no Auth overclaim, manual contingency', () => {
   const src = readFileSync(new URL('../src/docs/DocsApp.jsx', import.meta.url), 'utf8');
   // Disaster-recovery runbook uses only the verified replay path from REPLAY.md.
   assert.match(src, /portabase replay --capsule \.\/portabase-capsules\/<id> --confirm-target newprojectref0000001 --preflight/);
@@ -45,7 +46,13 @@ test('recovery pages stay honest: real replay commands, Google callback, no Auth
   assert.match(src, /root key lives outside the database/);
   assert.match(src, /plaintext is unrecoverable by design/);
   assert.match(src, /Vector Buckets/);
-  // Both pages exist and are routed.
+  // Manual effort contingency page: non-regenerable vs regenerable secrets & subscriber/membership preservation.
+  assert.match(src, /function ManualContingency\(\)/);
+  assert.match(src, /'manual-contingency': ManualContingency/);
+  assert.match(src, /Non-regenerable \(Irreplaceable\)/);
+  assert.match(src, /Subscriber lists &amp; memberships/);
+  assert.match(src, /supabase secrets set --project-ref newprojectref0000001/);
+  // Pages exist and are routed.
   assert.match(src, /function DisasterRecovery\(\)/);
   assert.match(src, /function AuthCutover\(\)/);
   assert.match(src, /'disaster-recovery': DisasterRecovery/);

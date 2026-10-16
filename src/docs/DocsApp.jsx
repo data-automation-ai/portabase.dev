@@ -580,6 +580,9 @@ portabase replay --capsule ./portabase-capsules/<id> --confirm-target newproject
           </tbody>
         </table>
       </div>
+      <p>
+        For a complete breakdown of <strong>non-regenerable vs. regenerable secrets</strong>, why subscriber lists and memberships <em>are</em> preserved, and how to mirror write-only secrets into an external secret vault before an incident, see <a href="/docs/manual-contingency">Manual effort contingency</a>.
+      </p>
       <h2>7 · Post-mortem — while it's fresh</h2>
       <p>
         Write it within a day and store it next to the capsule: the timeline (detected → lifeboat
@@ -593,6 +596,137 @@ portabase replay --capsule ./portabase-capsules/<id> --confirm-target newproject
         on a quiet afternoon takes a fraction of the time and none of the panic. The proof lamp
         stays red until a real replay or compare reports MATCH — treat that as your drill
         reminder, not decoration.
+      </div>
+    </>
+  );
+}
+
+function ManualContingency() {
+  return (
+    <>
+      <p className="docs-lead">
+        No CLI, Management API, or MCP server can extract write-only secret values from a Supabase project.
+        That is a deliberate platform security boundary. A complete recovery plan pairs your automated Portabase capsule
+        with a <strong>manual effort contingency</strong>: mirroring non-regenerable secrets in an external secret vault{' '}
+        <em>before</em> a lockout occurs.
+      </p>
+      <h2>1 · What IS copied automatically (including subscribers &amp; memberships)</h2>
+      <p>
+        Everything stored as database rows, Storage object bytes, Auth user records, or Edge Function code travels inside your encrypted capsule:
+      </p>
+      <div className="docs-table-wrap">
+        <table className="docs-table">
+          <thead>
+            <tr><th>Asset category</th><th>Copied in capsule?</th><th>How it restores</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Subscriber lists &amp; memberships</strong></td>
+              <td><strong>Yes — 100%</strong></td>
+              <td>All tables in <code>public.*</code> and custom schemas (<code>subscribers</code>, <code>memberships</code>, <code>subscriptions</code>, <code>organizations</code>, <code>entitlements</code>, Stripe/Square customer IDs, billing tiers) are standard Postgres rows and restore intact.</td>
+            </tr>
+            <tr>
+              <td><strong>Auth user directory &amp; UUIDs</strong></td>
+              <td><strong>Yes</strong></td>
+              <td><code>auth.users</code> and <code>auth.identities</code> (user UUIDs, emails, phone numbers, <code>raw_user_meta_data</code>, <code>raw_app_meta_data</code>) are captured so foreign keys in your membership tables never break.</td>
+            </tr>
+            <tr>
+              <td><strong>Storage buckets &amp; object bytes</strong></td>
+              <td><strong>Yes</strong></td>
+              <td>Bucket definitions, RLS policies, and the actual binary files inside every selected bucket.</td>
+            </tr>
+            <tr>
+              <td><strong>Edge Function source code</strong></td>
+              <td><strong>Yes</strong></td>
+              <td>TypeScript / JavaScript entrypoints, import maps, and per-function <code>verify_jwt</code> config.</td>
+            </tr>
+            <tr>
+              <td><strong>Edge Function secret <em>names</em></strong></td>
+              <td><strong>Names only</strong></td>
+              <td>The capsule manifest records every secret key name (e.g. <code>STRIPE_SECRET_KEY</code>, <code>APP_ENCRYPTION_KEY</code>) so you have an exact checklist of what to re-inject.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <h2>2 · Why no CLI, API, or MCP can copy plaintext secrets</h2>
+      <p>
+        Supabase treats runtime secrets as <strong>write-only</strong> once saved. When any tool (the official Supabase CLI, Management API, or MCP)
+        queries <code>supabase secrets list</code>, the platform returns only the secret <strong>name</strong> and a one-way digest — never the plaintext value.
+        Similarly, <code>supabase_vault</code> (<code>pgsodium</code>) encrypts secrets inside Postgres using a host-managed root key that lives outside the SQL dump.
+      </p>
+      <div className="docs-callout danger">
+        <strong>The golden rule of secret contingency:</strong> If a secret value only exists inside your Supabase dashboard or Edge Function environment and nowhere else,
+        an account lockout makes that secret permanently unrecoverable.
+      </div>
+      <h2>3 · Non-regenerable vs. regenerable secrets</h2>
+      <p>
+        Not all secrets carry the same blast radius. Your manual contingency plan should separate secrets into two buckets today:
+      </p>
+      <div className="docs-table-wrap">
+        <table className="docs-table">
+          <thead>
+            <tr><th>Category</th><th>Examples</th><th>If lost during a lockout</th><th>Required contingency</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Non-regenerable (Irreplaceable)</strong></td>
+              <td>
+                Application column-encryption keys (<code>APP_ENCRYPTION_KEY</code>, AES/Fernet keys),{' '}
+                <code>pgsodium</code> / Vault root keys, customer-supplied webhook or partner keys you cannot self-issue, custom signing keys
+              </td>
+              <td>
+                <strong>Permanent data loss of encrypted columns or integrations.</strong> Even with a 100% intact Postgres dump, ciphertext cannot be decrypted without the original key.
+              </td>
+              <td>
+                <strong>Mandatory external vaulting before any incident.</strong> Store a copy in 1Password, Bitwarden, AWS Secrets Manager, Doppler, or HashiCorp Vault the moment the key is created.
+              </td>
+            </tr>
+            <tr>
+              <td><strong>Regenerable (Rotatable)</strong></td>
+              <td>
+                Stripe / Square API keys &amp; webhook signing secrets, Resend / Postmark / SendGrid SMTP keys, OpenAI / Anthropic API keys, Google / GitHub OAuth client secrets
+              </td>
+              <td>
+                <strong>Temporary downtime during cutover.</strong> You can log into Stripe, Square, Google Cloud, or Resend, roll a new key, and inject it into the lifeboat project.
+              </td>
+              <td>
+                Store in your external secret vault for a 2-minute cutover, or document the provider dashboards where new keys must be rolled during recovery.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <h2>4 · Before-the-fire checklist (do this once while healthy)</h2>
+      <p>
+        <strong>1 · Store every Edge Function secret in an external vault.</strong> Keep a dedicated folder or environment in your password manager or secret manager (1Password, Bitwarden, Doppler, AWS Secrets Manager) that mirrors your production <code>.env.production</code> secret values.
+      </p>
+      <p>
+        <strong>2 · Export your <code>pgsodium</code> root key if you use Supabase Vault.</strong> If your database uses <code>vault.secrets</code> or <code>pgsodium</code>, fetch the project root key while healthy via the Management API and store it alongside your capsule passphrase.
+      </p>
+      <p>
+        <strong>3 · Never generate a secret only inside the Supabase dashboard.</strong> Always generate keys locally or in your secret vault first, save them there, and then push them to Supabase with <code>supabase secrets set</code>.
+      </p>
+      <h2>5 · Cutover execution (re-injecting secrets on the lifeboat project)</h2>
+      <p>
+        After Portabase restores your database, Storage objects, Auth inventory, and Edge Function code into your new Supabase project, re-hydrate all runtime secrets in one command from your external vault:
+      </p>
+      <Code>{`# Pull your production secrets from your external vault (1Password / Doppler / AWS SM)
+# and push them to the new lifeboat project in a single batch:
+supabase secrets set --project-ref newprojectref0000001 --env-file ./vault-production.env`}</Code>
+      <p>
+        Then complete the remaining external pointer updates:
+      </p>
+      <p>
+        <strong>1 · Billing &amp; webhook endpoints (Stripe / Square).</strong> Your subscriber and membership tables are already restored in Postgres. In your Stripe or Square dashboard, update the webhook destination URL to <code>https://newprojectref0000001.supabase.co/functions/v1/your-webhook</code> and set the new signing secret via <code>supabase secrets set</code>.
+      </p>
+      <p>
+        <strong>2 · OAuth &amp; SMTP providers.</strong> Follow the <a href="/docs/auth-cutover">Auth cutover</a> guide to point Google/GitHub callback URLs and custom SMTP credentials at the new project ref.
+      </p>
+      <p>
+        <strong>3 · Application environment variables.</strong> Update <code>SUPABASE_URL</code>, <code>SUPABASE_ANON_KEY</code>, and <code>SUPABASE_SERVICE_ROLE_KEY</code> in Netlify, Vercel, Cloudflare, or your container host.
+      </p>
+      <div className="docs-callout honest">
+        <strong>Why Portabase will never ask for your external vault.</strong> Keeping your runtime secrets in an independent vault you control — while Portabase captures the database, Storage, Auth inventory, and Edge Functions without holding your keys — means no single vendor lockout or breach can ever take both your data and your decryption keys.
       </div>
     </>
   );
@@ -726,6 +860,7 @@ const PAGES = {
   'restore-targets': RestoreTargets,
   'disaster-recovery': DisasterRecovery,
   'auth-cutover': AuthCutover,
+  'manual-contingency': ManualContingency,
   'rls-check': RlsCheck,
   cloud: CloudDocs,
   'threat-model': ThreatModel,
