@@ -1,3 +1,4 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 import { WebhooksHelper } from 'square';
 import { getSubscriptionByUserId, getUserIdBySquareOrder, getUserIdBySquareSubscription } from '../shared/subscription-store.mjs';
 import { reconcileSubscription } from '../shared/billing-entitlement.mjs';
@@ -52,4 +53,4 @@ export function createWebhookHandler({
     } catch { return { statusCode: 503, body: 'Billing processing unavailable' }; }
   };
 }
-export const handler = createWebhookHandler();
+export const handler = withBlobs(createWebhookHandler());

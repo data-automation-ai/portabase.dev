@@ -1,3 +1,4 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 
 // Legacy records remain untouched. New selections belong to the private runner;
@@ -11,4 +12,4 @@ export function createSelectionHandler({ authenticate = verifyCloudUser } = {}) 
       message: 'Review and save selections in the private runner workspace. Existing legacy records have not been migrated or deleted.' });
   };
 }
-export const handler = createSelectionHandler();
+export const handler = withBlobs(createSelectionHandler());

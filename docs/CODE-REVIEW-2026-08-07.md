@@ -127,7 +127,7 @@ No auth binds the requester's identity to the order's buyer — only `orderId` (
 35. Replay-simulation timer loop (`src/console/pages.jsx:857-901`) has no unmount cleanup or run de-duplication — a recursive `setTimeout` chain can stack a second timer against the same state after navigate-away-and-back.
 36. `CloudWatchLivePage`/`CloudTrailLivePage` are ~210-line near-duplicates that copy-pasted the same wrong-localStorage-key bug (#13) into two places instead of sharing a `useLivePoll()` hook.
 37. Pricing copy ($17/$27) is hardcoded as literal strings in ~15 places in `src/main.jsx` marketing copy rather than sourced from `src/lib/product.js`'s `CLOUD_PLANS` — a price change updates the config but not the page text.
-38. `docs/HANDOFF.md` and `docs/E2E-ESCAPE-TEST.md` are public and git-tracked and disclose real production Supabase project refs, a real S3 bucket/prefix with an actual capsule object key, and exact Secrets Manager key *names* to request — reconnaissance value for anyone who separately gets AWS access. No credential values are exposed, but this is more specific than it needs to be in a public repo.
+38. `docs/E2E-ESCAPE-TEST.md` is public and git-tracked and discloses real production Supabase project refs, a real S3 bucket/prefix with an actual capsule object key, and exact Secrets Manager key *names* to request — reconnaissance value for anyone who separately gets AWS access. No credential values are exposed, but this is more specific than it needs to be in a public repo.
 
 ---
 

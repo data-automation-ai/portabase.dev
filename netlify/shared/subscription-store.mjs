@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { getStore } from '@netlify/blobs';
+import { connectLambda, getStore } from '@netlify/blobs';
 
 const STORE = 'portabase-cloud-subscriptions';
 
@@ -92,38 +92,22 @@ export function createLocalFallbackStore(name = STORE) {
   };
 }
 
+export function withBlobs(handler) {
+  return async (event, ...args) => {
+    if (event?.blobs) connectLambda(event);
+    return handler(event, ...args);
+  };
+}
+
 export function store(name = STORE) {
-  const hasBlobsEnv = Boolean(
-    process.env.NETLIFY_BLOBS_CONTEXT
-    || (process.env.NETLIFY_BLOBS_TOKEN && process.env.NETLIFY_BLOBS_SITE_ID)
-  );
-  if (!hasBlobsEnv) {
+  const siteID = process.env.NETLIFY_BLOBS_SITE_ID || process.env.SITE_ID;
+  const token = process.env.NETLIFY_BLOBS_TOKEN;
+  const configured = process.env.NETLIFY_BLOBS_CONTEXT || globalThis.netlifyBlobsContext || (siteID && token);
+  if (!configured && !process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
     return createLocalFallbackStore(name);
   }
-  try {
-    const realStore = getStore({ name, consistency: 'strong' });
-    const fallback = createLocalFallbackStore(name);
-    return new Proxy(realStore, {
-      get(target, prop) {
-        const orig = target[prop];
-        if (typeof orig === 'function') {
-          return async (...args) => {
-            try {
-              return await orig.apply(target, args);
-            } catch (err) {
-              if (err.name === 'MissingBlobsEnvironmentError' || /environment has not been configured/i.test(err.message)) {
-                return fallback[prop](...args);
-              }
-              throw err;
-            }
-          };
-        }
-        return orig;
-      },
-    });
-  } catch {
-    return createLocalFallbackStore(name);
-  }
+  // Never silently persist production billing on ephemeral Lambda disk.
+  return getStore({ name, consistency: 'strong', ...(siteID && token ? { siteID, token } : {}) });
 }
 
 /** Primary key is Supabase auth user id (uuid). */
@@ -166,6 +150,9 @@ export async function saveSubscription(record, database = store()) {
     ['square-sub', record.squareSubscriptionId], ['square-sub', record.squareAddonSubscriptionId],
     ['square-order', record.squareOrderId], ['square-order', record.squareAddonOrderId],
     ['attempt', record.checkoutAttempt],
+    ...(record.checkoutAttempts || []).flatMap(row => [
+      ['attempt', row.checkoutAttempt], ['square-order', row.squareOrderId], ['square-order', row.squareAddonOrderId],
+    ]),
   ]) {
     if (!id) continue;
     const key = `${prefix}:${id}`;

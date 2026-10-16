@@ -1,3 +1,4 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 
 // Retired credential proxy. Never parse request bodies or contact Supabase here.
@@ -10,4 +11,4 @@ export function createSupabaseHandler({ authenticate = verifyCloudUser } = {}) {
       message: 'Inspect your source in the private runner workspace, then import its opaque job reference in the dashboard.' });
   };
 }
-export const handler = createSupabaseHandler();
+export const handler = withBlobs(createSupabaseHandler());

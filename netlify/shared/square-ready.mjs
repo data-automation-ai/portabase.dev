@@ -3,6 +3,8 @@
  * Prefer LIVE (production). TEST = sandbox.
  */
 
+import { resolvePortabaseSquareSecret } from './square-cloud.mjs';
+
 export const SQUARE_REQUIRED_VARS = Object.freeze([
   'SQUARE_ACCESS_TOKEN',
   'SQUARE_LOCATION_ID',
@@ -28,7 +30,7 @@ export function squareMode(env = process.env) {
 }
 
 function present(env, name) {
-  return Boolean(String(env[name] || '').trim());
+  return Boolean(String(env[`PORTABASE_${name}`] || env[name] || '').trim());
 }
 
 export function inspectSquareCheckoutReady(env = process.env) {
@@ -63,4 +65,15 @@ export function squareBlockedPayload(inspect = inspectSquareCheckoutReady()) {
       ? `Square ${inspect.mode} checkout failed. Confirm catalog pins: ${inspect.unsetCatalogPins.join(', ') || 'none'}.`
       : `Square ${inspect.mode} checkout blocked until Louis sets Netlify / secrets-bundle: ${inspect.missing.join(', ')}.`,
   };
+}
+
+// Use the same AWS-first, product-scoped resolution as actual checkout.
+export async function resolveSquareCheckoutReady({ env = process.env, resolve = resolvePortabaseSquareSecret } = {}) {
+  const inspection = inspectSquareCheckoutReady(env);
+  const results = await Promise.allSettled(SQUARE_REQUIRED_VARS.map(name =>
+    resolve(name, name === 'SQUARE_ACCESS_TOKEN' ? 'access_token' : 'location_id', { env })));
+  inspection.missing = SQUARE_REQUIRED_VARS.filter((name, i) =>
+    results[i].status !== 'fulfilled' || !String(results[i].value || '').trim());
+  inspection.ready = inspection.missing.length === 0;
+  return inspection;
 }

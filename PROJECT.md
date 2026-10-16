@@ -2,7 +2,7 @@
 
 **Audience:** Any new AI (Claude, etc.) or engineer taking over.  
 **Public GitHub face:** [README.md](./README.md) (Community first). This file is **maintainer** context.  
-**Also read:** `docs/HANDOFF.md` (detail) · `AGENTS.md` (hard rules).
+**Also read:** `AGENTS.md` (hard rules).
 
 ---
 
@@ -139,7 +139,7 @@ Details: `AGENTS.md` · global `C:\Users\ryanh\.grok\AGENTS.md`.
 | E2E status | **Backup path green (sampled Storage).** **Replay still not green** (2026-08-15): target blank + capsule COMPLETE; `replay` no-op bug fixed; **still blocked on target DB password**. |
 | **Queue rule** | Full Storage spool → **EC2/container** — never F:; no workstation thrash |
 
-Detail: `docs/HANDOFF.md` §9 · `docs/E2E-ESCAPE-TEST.md`.
+Detail: `docs/E2E-ESCAPE-TEST.md`.
 
 ---
 
@@ -174,7 +174,7 @@ Detail: `docs/HANDOFF.md` §9 · `docs/E2E-ESCAPE-TEST.md`.
 
 ### First hour
 
-1. Read **this file** + `docs/HANDOFF.md` + `AGENTS.md`.  
+1. Read **this file** + `AGENTS.md`.  
 2. `git status` / `git log` — prefer clean tree on `main`; use org PAT if push 403 as `lcapece`.  
 3. Confirm you will **not** write to F: or start multi‑GB local backup without explicit ask.  
 4. Ask owner: next priority = **blank replay**, **full Storage cloud proof**, **Dropbox**, or **billing**?
@@ -204,7 +204,6 @@ Detail: `docs/HANDOFF.md` §9 · `docs/E2E-ESCAPE-TEST.md`.
 
 ```text
 Repo:     C:\Users\ryanh\git\portabase.dev
-Handoff:  docs/HANDOFF.md
 Rules:    AGENTS.md
 Engine:   utility/portabase.mjs
 Site:     src/main.jsx
@@ -229,7 +228,6 @@ npm run portabase -- doctor
 
 | Doc | Topic |
 | --- | --- |
-| `docs/HANDOFF.md` | Deep handoff, pitfalls, git, next build list |
 | `docs/PRODUCT_SPEC.md` | Product definition |
 | `docs/LAUNCH-SCOPE.md` | Supabase-only, Cloud vs standalone staging |
 | `docs/OPEN_CORE.md` | Open core vs paid |

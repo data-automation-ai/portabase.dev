@@ -27,6 +27,6 @@ Two audiences. Do not mix them in a README badge.
 
 ## Maintainers (not the public pitch)
 
-[PROJECT.md](../PROJECT.md) · [HANDOFF.md](HANDOFF.md) · [../AGENTS.md](../AGENTS.md)
+[PROJECT.md](../PROJECT.md) · [../AGENTS.md](../AGENTS.md)
 
 Internal reviews, SWOT, and export runbooks in this folder are for operators. They are not the Community onboarding path.

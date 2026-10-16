@@ -1,3 +1,4 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { getSubscriptionForUser, saveSubscription, deriveAccess } from '../shared/subscription-store.mjs';
 import { cancelSquareSubscription } from '../shared/square-cloud.mjs';
@@ -80,4 +81,4 @@ export function createCancellationHandler({ authenticate = verifyCloudUser,
     }
   };
 }
-export const handler = createCancellationHandler();
+export const handler = withBlobs(createCancellationHandler());

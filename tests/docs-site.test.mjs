@@ -139,12 +139,10 @@ test('rls-check page resolves, sits in nav, and blames the default', () => {
   assert.match(app, /never you/i);
 });
 
-test('homepage reality grid links the RLS-public item to the rls-check guide', () => {
+test('homepage reality grid has 4 articles and does not contain public database banner', () => {
   const src = readFileSync(new URL('../src/main.jsx', import.meta.url), 'utf8');
-  // Item moved from the removed 13-reason ban grid into reality-grid as article 05.
-  assert.match(src, /<span>05<\/span><h3>Your database may already be public\.<\/h3>/);
-  assert.match(src, /\/docs\/rls-check/);
-  assert.match(src, /Check yours in 5 minutes/);
+  assert.doesNotMatch(src, /Your database may already be public/);
+  assert.match(src, /<span>04<\/span><h3>Pro support is an email path\.<\/h3>/);
 });
 
 test('cloud page carries the cold/warm ladder and never promises hot', () => {

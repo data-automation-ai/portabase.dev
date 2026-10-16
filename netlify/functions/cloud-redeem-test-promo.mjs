@@ -1,10 +1,11 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { deriveAccess, getSubscriptionForUser, saveSubscription } from '../shared/subscription-store.mjs';
 import { BASE_TRANSFERS_PER_24H, CLOUD_DEFAULT_PLAN_ID, CLOUD_PLANS } from '../shared/product.mjs';
 import { normalizePromoCode, lookupPromo } from '../shared/promo-codes.mjs';
 import { testPromoCodeMatches, testPromoEndsAt } from '../shared/test-promo.mjs';
 
-export async function handler(event) {
+async function lambdaHandler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return jsonResponse(204, {}, {
       'Access-Control-Allow-Origin': '*',
@@ -98,3 +99,5 @@ export async function handler(event) {
     access,
   });
 }
+
+export const handler = withBlobs(lambdaHandler);

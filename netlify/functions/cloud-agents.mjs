@@ -1,3 +1,4 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { createAgent, listAgents, ownerKey, revokeAgent, rotateAgent } from '../shared/agent-store.mjs';
 import { agentsWithHealth } from '../shared/runner-reports.mjs';
@@ -21,4 +22,4 @@ export function createAgentsHandler({ verifyUser = verifyCloudUser, create = cre
   }
   };
 }
-export const handler = createAgentsHandler();
+export const handler = withBlobs(createAgentsHandler());

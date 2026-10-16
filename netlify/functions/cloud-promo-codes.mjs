@@ -1,7 +1,8 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { listAllPromos, createCustomPromo, normalizePromoCode } from '../shared/promo-codes.mjs';
 
-export async function handler(event) {
+async function lambdaHandler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return jsonResponse(204, {}, {
       'Access-Control-Allow-Origin': '*',
@@ -78,3 +79,5 @@ export async function handler(event) {
 
   return jsonResponse(405, { error: 'method_not_allowed' });
 }
+
+export const handler = withBlobs(lambdaHandler);

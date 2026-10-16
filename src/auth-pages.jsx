@@ -12,7 +12,7 @@ import {
 import * as supabaseAuth from './lib/supabase-auth.js';
 import * as googleAuth from './lib/google-gis-auth.js';
 import * as awsAuth from './lib/cognito.js';
-import { sessionUser, isSignedIn } from './lib/session.js';
+import { clearDemoMode, sessionUser, isSignedIn } from './lib/session.js';
 import { ensureSessionForVersion, simulateCustomerSignup, redeemPromoCode } from './lib/cloud-api.js';
 import { safeAuthReturnPath } from './lib/auth-return.js';
 import { ConsoleApp } from './console/ConsoleApp.jsx';
@@ -292,6 +292,7 @@ export function LoginPage() {
   };
 
   useEffect(() => {
+    clearDemoMode();
     document.title = `Sign in · Portabase Cloud (${CLOUD_VERSIONS[version].label})`;
     setStoredCloudVersion(version);
     let cancelled = false;
@@ -615,7 +616,7 @@ export function LoginPage() {
         </form>
       )}
 
-      {(mode === 'signin' || mode === 'signup') && (
+      {import.meta.env.DEV && (mode === 'signin' || mode === 'signup') && (
         <SimulatedCustomerSection version={version} afterLogin={afterLogin} />
       )}
 

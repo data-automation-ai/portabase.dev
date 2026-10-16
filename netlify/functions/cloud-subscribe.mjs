@@ -1,3 +1,5 @@
+import { rememberCheckout } from '../shared/checkout-attempts.mjs';
+import { withBlobs } from '../shared/subscription-store.mjs';
 import { publicAuthConfigBoth, jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import {
   buildAddonPaymentLinkRequest,
@@ -20,11 +22,14 @@ import {
   getCloudPlan,
 } from '../shared/product.mjs';
 import { deriveAccess, getSubscriptionForUser, saveSubscription } from '../shared/subscription-store.mjs';
-import { inspectSquareCheckoutReady, squareBlockedPayload } from '../shared/square-ready.mjs';
+import { resolveSquareCheckoutReady, squareBlockedPayload } from '../shared/square-ready.mjs';
 import { applyPromoCode, lookupPromo, normalizePromoCode } from '../shared/promo-codes.mjs';
 import { testPromoEndsAt } from '../shared/test-promo.mjs';
 
-export async function handler(event) {
+export function createSubscribeHandler({ authenticate = verifyCloudUser, get = getSubscriptionForUser,
+  save = saveSubscription, credentials = squareCredentials, ensurePlan = ensureCloudPlanVariationId,
+  request = squareFetch, authConfig = publicAuthConfigBoth, readiness = resolveSquareCheckoutReady } = {}) {
+return async function lambdaHandler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return jsonResponse(204, {}, {
       'Access-Control-Allow-Origin': '*',
@@ -36,7 +41,7 @@ export async function handler(event) {
 
   let user;
   try {
-    user = await verifyCloudUser(event);
+    user = await authenticate(event);
   } catch {
     return jsonResponse(401, { error: 'unauthorized', message: 'Sign in (Supabase or AWS version) before starting a trial.' });
   }
@@ -53,7 +58,7 @@ export async function handler(event) {
   const plan = getCloudPlan(planId);
 
   try {
-    const existing = (await getSubscriptionForUser(user));
+    const existing = (await get(user));
     const access = deriveAccess(existing);
 
     // Handle Promo Code if supplied
@@ -67,7 +72,7 @@ export async function handler(event) {
       if (applied.ok && applied.priceMonthlyCents === 0) {
         const nowIso = new Date().toISOString();
         const endsAt = testPromoEndsAt(new Date(), 30);
-        const record = await saveSubscription({
+        const record = await save({
           ...existing,
           userId: storeKey,
           revision: existing?.revision || 0,
@@ -111,7 +116,8 @@ export async function handler(event) {
       }
     }
 
-    if (!addonRequested && access.hasAccess && existing?.status !== 'checkout_pending') {
+    if (!addonRequested && access.hasAccess && existing?.status !== 'checkout_pending'
+      && getCloudPlan(existing.planId || existing.plan).id === plan.id) {
       return jsonResponse(200, {
         ok: true,
         alreadySubscribed: true,
@@ -138,7 +144,7 @@ export async function handler(event) {
       }
       const subscribedPlan = getCloudPlan(existing.plan || plan.id);
       const addonVariationId = await ensureExtraTransfersAddonVariationId(subscribedPlan.id);
-      const { locationId } = await squareCredentials();
+      const { locationId } = await credentials();
       const siteUrl = (process.env.PORTABASE_SITE_URL || process.env.URL || 'https://portabase.dev').replace(/\/$/, '');
       const attempt = crypto.randomUUID();
       const linkBody = buildAddonPaymentLinkRequest({
@@ -150,7 +156,7 @@ export async function handler(event) {
         cognitoSub: storeKey,
         planId: subscribedPlan.id,
       });
-      const result = await squareFetch('/v2/online-checkout/payment-links', {
+      const result = await request('/v2/online-checkout/payment-links', {
         method: 'POST',
         body: linkBody,
       });
@@ -158,9 +164,10 @@ export async function handler(event) {
       const orderId = result.payment_link?.order_id;
       if (!url) throw new Error('missing_payment_link');
       const now = new Date().toISOString();
-      const record = await saveSubscription({
+      const record = await save(rememberCheckout(existing, {
         ...existing,
         userId: storeKey,
+        squarePaymentLinkId: result.payment_link?.id || null,
         checkoutKind: EXTRA_TRANSFERS_ADDON_ID,
         pendingAddon: EXTRA_TRANSFERS_ADDON_ID,
         squareAddonPlanVariationId: addonVariationId,
@@ -168,7 +175,7 @@ export async function handler(event) {
         checkoutAttempt: attempt,
         checkoutUrl: url,
         updatedAt: now,
-      });
+      }));
       const addon = extraTransfersAddonPublic(subscribedPlan.id);
       return jsonResponse(200, {
         ok: true,
@@ -182,8 +189,8 @@ export async function handler(event) {
       });
     }
 
-    const planVariationId = await ensureCloudPlanVariationId(plan.id);
-    const { locationId } = await squareCredentials();
+    const planVariationId = await ensurePlan(plan.id);
+    const { locationId } = await credentials();
     const siteUrl = (process.env.PORTABASE_SITE_URL || process.env.URL || 'https://portabase.dev').replace(/\/$/, '');
     const attempt = crypto.randomUUID();
 
@@ -199,7 +206,7 @@ export async function handler(event) {
     linkBody.payment_note = `portabase-cloud trial plan=${plan.id} version=${user.cloudVersion} user=${user.id} attempt=${attempt}`;
     linkBody.checkout_options.redirect_url = `${siteUrl}/app?checkout=complete&version=${user.cloudVersion}&plan=${plan.id}&attempt=${encodeURIComponent(attempt)}`;
 
-    const result = await squareFetch('/v2/online-checkout/payment-links', {
+    const result = await request('/v2/online-checkout/payment-links', {
       method: 'POST',
       body: linkBody,
     });
@@ -209,8 +216,9 @@ export async function handler(event) {
     if (!url) throw new Error('missing_payment_link');
 
     const now = new Date().toISOString();
-    const record = await saveSubscription({
+    const candidate = rememberCheckout(existing, {
       userId: storeKey,
+      squarePaymentLinkId: result.payment_link?.id || null,
       revision: existing?.revision || 0,
       supabaseUserId: user.cloudVersion === 'supabase' ? user.id : null,
       cognitoSub: user.cloudVersion === 'aws' ? user.id : null,
@@ -238,7 +246,11 @@ export async function handler(event) {
       createdAt: existing?.createdAt || now,
     });
 
-    const product = await publicAuthConfigBoth();
+    // An unfinished upgrade must not revoke the customer's current entitlement.
+    const record = await save(access.hasAccess
+      ? { ...existing, checkoutAttempts: candidate.checkoutAttempts }
+      : candidate);
+    const product = await authConfig();
     return jsonResponse(200, {
       ok: true,
       url,
@@ -265,7 +277,7 @@ export async function handler(event) {
       },
     });
   } catch (error) {
-    const inspect = inspectSquareCheckoutReady();
+    const inspect = await readiness();
     const msg = String(error.message || 'error');
     const missingFromError = (msg.match(/missing ([A-Z][A-Z0-9_]+)/) || [])[1];
     if (!inspect.ready || /missing /i.test(msg) || /not configured/i.test(msg)) {
@@ -283,3 +295,6 @@ export async function handler(event) {
     });
   }
 }
+
+}
+export const handler = withBlobs(createSubscribeHandler());

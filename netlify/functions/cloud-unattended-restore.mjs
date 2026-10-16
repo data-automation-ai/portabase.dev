@@ -1,3 +1,4 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -56,7 +57,7 @@ function sanitizeObject(obj) {
   return out;
 }
 
-export async function handler(event) {
+async function lambdaHandler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return jsonResponse(204, {}, {
       'Access-Control-Allow-Origin': '*',
@@ -368,3 +369,5 @@ export async function handler(event) {
     stdoutSummary: sanitizedLines,
   });
 }
+
+export const handler = withBlobs(lambdaHandler);

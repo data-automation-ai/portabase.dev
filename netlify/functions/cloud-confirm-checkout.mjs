@@ -1,3 +1,5 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
+import { checkoutForAttempt } from '../shared/checkout-attempts.mjs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { EXTRA_TRANSFERS_ADDON_ID } from '../shared/product.mjs';
 import { deriveAccess, getSubscriptionByUserId } from '../shared/subscription-store.mjs';
@@ -18,10 +20,11 @@ export function createConfirmationHandler({ authenticate = verifyCloudUser, get 
     try {
       const record = await get(`${user.cloudVersion}:${user.id}`);
       if (!record) return jsonResponse(404, { error: 'no_checkout' });
-      if (!record.checkoutAttempt || body.attempt !== record.checkoutAttempt) return jsonResponse(409, { error: 'attempt_mismatch' });
+      const checkout = checkoutForAttempt(record, body.attempt);
+      if (!checkout) return jsonResponse(409, { error: 'attempt_mismatch' });
       // The caller cannot turn a normal checkout into an add-on purchase.
-      const kind = record.pendingAddon === EXTRA_TRANSFERS_ADDON_ID ? 'addon' : 'base';
-      const result = await reconcile(record, { kind });
+      const kind = checkout.pendingAddon === EXTRA_TRANSFERS_ADDON_ID ? 'addon' : 'base';
+      const result = await reconcile(checkout, { kind });
       if (!result.verified) return jsonResponse(202, { ok: false, pending: true, message: 'Square has not confirmed this subscription yet.' });
       return jsonResponse(200, { ok: true, access: deriveAccess(result.record), subscription: result.record, cloudVersion: user.cloudVersion });
     } catch (error) {
@@ -29,4 +32,4 @@ export function createConfirmationHandler({ authenticate = verifyCloudUser, get 
     }
   };
 }
-export const handler = createConfirmationHandler();
+export const handler = withBlobs(createConfirmationHandler());

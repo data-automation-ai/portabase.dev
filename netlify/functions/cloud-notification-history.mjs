@@ -1,3 +1,4 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 import { getStore } from '@netlify/blobs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { ownerKey } from '../shared/agent-store.mjs';
@@ -42,4 +43,4 @@ export function createNotificationHistoryHandler({ authenticate = verifyCloudUse
     } catch { return jsonResponse(503, { error: 'notification_history_unavailable' }); }
   };
 }
-export const handler = createNotificationHistoryHandler();
+export const handler = withBlobs(createNotificationHistoryHandler());

@@ -1,3 +1,4 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
@@ -10,7 +11,7 @@ import {
   uploadCapsuleToGoogleDrive,
 } from '../../utility/cloud-storage-connectors.mjs';
 
-export async function handler(event) {
+async function lambdaHandler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return jsonResponse(204, {}, {
       'Access-Control-Allow-Origin': '*',
@@ -185,3 +186,5 @@ export async function handler(event) {
 
   return jsonResponse(400, { error: 'unknown_action', message: `Action "${action}" is not supported.` });
 }
+
+export const handler = withBlobs(lambdaHandler);

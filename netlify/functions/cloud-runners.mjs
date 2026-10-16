@@ -1,3 +1,4 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 /**
  * Runner lifecycle intents. No compute provisioning happens in this endpoint.
  * Customer secrets are refused; records describe requested state only.
@@ -65,4 +66,4 @@ export function createRunnersHandler({ authenticate = verifyCloudUser, getSubscr
     } catch { return jsonResponse(503, { error: 'runner_service_unavailable' }); }
   };
 }
-export const handler = createRunnersHandler();
+export const handler = withBlobs(createRunnersHandler());

@@ -120,5 +120,4 @@ Same day earlier: PARTIAL `…15-35-27.337Z` (Functions Management API **502**).
 
 ## Related
 
-- `docs/HANDOFF.md` §9 — proof status  
 - `docs/REPLAY.md` — sample mode + fingerprints + simulate tiers  

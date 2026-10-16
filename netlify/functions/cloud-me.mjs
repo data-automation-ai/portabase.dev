@@ -1,12 +1,13 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 import { publicAuthConfigBoth, jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { deriveAccess, getSubscriptionForUser } from '../shared/subscription-store.mjs';
 import { extraTransfersAddonPublic, transferWindow } from '../shared/product.mjs';
 import { runnerAdmission } from '../shared/runner-admission.mjs';
-import { inspectSquareCheckoutReady } from '../shared/square-ready.mjs';
+import { resolveSquareCheckoutReady } from '../shared/square-ready.mjs';
 import { publicSquareStatus } from '../../src/lib/square-public.js';
 
 export function createMeHandler({ authenticate = verifyCloudUser, subscription = getSubscriptionForUser,
-  authConfig = publicAuthConfigBoth, squareStatus = () => publicSquareStatus(inspectSquareCheckoutReady()), clock = Date.now } = {}) {
+  authConfig = publicAuthConfigBoth, squareStatus = async () => publicSquareStatus(await resolveSquareCheckoutReady()), clock = Date.now } = {}) {
 return async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return jsonResponse(204, {}, {
@@ -63,7 +64,7 @@ return async function handler(event) {
           cyclesPerDay: admission.paid ? transfers : 0,
         },
       access,
-      square: squareStatus(),
+      square: await squareStatus(),
       product: {
         provider: 'dual',
         cloudVersion: user.cloudVersion,
@@ -88,4 +89,4 @@ return async function handler(event) {
   }
 };
 }
-export const handler = createMeHandler();
+export const handler = withBlobs(createMeHandler());

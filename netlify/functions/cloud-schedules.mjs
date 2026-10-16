@@ -1,3 +1,4 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { createManagedSchedules } from '../shared/managed-schedules.mjs';
 export function createSchedulesHandler({ authenticate = verifyCloudUser, service = createManagedSchedules() } = {}) {
@@ -20,4 +21,4 @@ export function createSchedulesHandler({ authenticate = verifyCloudUser, service
     }
   };
 }
-export const handler = createSchedulesHandler();
+export const handler = withBlobs(createSchedulesHandler());

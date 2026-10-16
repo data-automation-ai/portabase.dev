@@ -1,3 +1,4 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { createNotificationDestinationService } from '../shared/notification-destinations.mjs';
 import { resolveNotificationTransport } from '../shared/notification-config.mjs';
@@ -43,4 +44,4 @@ export function createNotificationDestinationsHandler({ authenticate = verifyClo
 }
 // Sending requires explicit global/channel enable flags and product-specific
 // provider configuration. Missing configuration fails before a reservation.
-export const handler = createNotificationDestinationsHandler();
+export const handler = withBlobs(createNotificationDestinationsHandler());

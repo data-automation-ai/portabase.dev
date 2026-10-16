@@ -1,3 +1,4 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 /**
  * GET /api/cloud/dashboard — customer telemetry for the signed-in user.
  * Reads the jobs blob store + subscription. Never returns keys or capsule bytes.
@@ -7,7 +8,7 @@ import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { deriveAccess, getSubscriptionForUser } from '../shared/subscription-store.mjs';
 import { findForbiddenField } from '../../cloud/control-plane/forbidden.mjs';
 import { buildDashboardModel, sanitizeJobTelemetry } from '../../src/lib/dashboard-view.js';
-import { inspectSquareCheckoutReady } from '../shared/square-ready.mjs';
+import { resolveSquareCheckoutReady } from '../shared/square-ready.mjs';
 import { publicSquareStatus } from '../../src/lib/square-public.js';
 import { runnerAdmission } from '../shared/runner-admission.mjs';
 import { publicDashboardJob } from '../shared/public-records.mjs';
@@ -17,7 +18,7 @@ function jobsStore() {
   return getStore({ name: 'portabase-cloud-jobs', consistency: 'strong' });
 }
 
-export function createDashboardHandler({ authenticate = verifyCloudUser, jobsDatabase = jobsStore, subscription = getSubscriptionForUser, squareStatus = () => publicSquareStatus(inspectSquareCheckoutReady()) } = {}) {
+export function createDashboardHandler({ authenticate = verifyCloudUser, jobsDatabase = jobsStore, subscription = getSubscriptionForUser, squareStatus = async () => publicSquareStatus(await resolveSquareCheckoutReady()) } = {}) {
 return async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return jsonResponse(204, {}, {
@@ -56,7 +57,7 @@ return async function handler(event) {
   catch { return jsonResponse(503, { error: 'dashboard_subscription_unavailable' }); }
   const access = deriveAccess(record);
   const admission = runnerAdmission(record);
-  const square = squareStatus();
+  const square = await squareStatus();
   const model = buildDashboardModel({
     jobs: safeJobs,
     billing: record
@@ -97,4 +98,4 @@ return async function handler(event) {
   });
 }
 }
-export const handler = createDashboardHandler();
+export const handler = withBlobs(createDashboardHandler());

@@ -69,4 +69,4 @@ Supabase OAuth app; server-side token custody. Customers run the generated comma
 
 - 2026-09-23: plan written; code map complete (sizer UI + pure functions exist; no live inventory, no saved selection, no engine flags, runner idle).
 - 2026-09-23: netlify.toml redirects for /api/cloud/supabase and /api/cloud/selection added; S1–S5 workers launched in parallel on disjoint paths.
-- 2026-09-23: S1, S2, S3, S5 committed (219291c, 330a1eb, 8b18f50). S4 WIP checkpoint d0735b5 (unverified). Session interrupted; see docs/HANDOFF_CLOUD_7.md. Next: finish S4, then S6, S7.
+- 2026-09-23: S1, S2, S3, S5 committed (219291c, 330a1eb, 8b18f50). S4 WIP checkpoint d0735b5 (unverified). Session interrupted. Next: finish S4, then S6, S7.

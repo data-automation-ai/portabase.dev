@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { authCallbackUrl, productConfig, supabasePublicDefaults } from './auth-config.js';
 import { consumeStoredGoogleIdToken, requestGoogleIdToken } from './google-gis-auth.js';
 import { sha256Hex } from './sha256-hex.js';
-import { clearSession, isTokenExpired, loadSession, saveSession } from './session.js';
+import { clearDemoMode, clearSession, isTokenExpired, loadSession, saveSession } from './session.js';
 import { safeAuthReturnPath } from './auth-return.js';
 
 let client;
@@ -128,6 +128,7 @@ function emailConfirmationRedirect(next) {
 }
 
 export async function signUpWithEmail({ email, password, name, next = '/dashboard' }) {
+  clearDemoMode();
   const supabase = await getSupabase();
   const { data, error } = await supabase.auth.signUp({
     email: email.trim().toLowerCase(),
@@ -147,6 +148,7 @@ export async function signUpWithEmail({ email, password, name, next = '/dashboar
 }
 
 export async function signInWithMagicLink({ email, next = '/dashboard' } = {}) {
+  clearDemoMode();
   const supabase = await getSupabase();
   sessionStorage.setItem('portabase.auth.next', next);
   sessionStorage.setItem('portabase.auth.version', 'supabase');
@@ -161,6 +163,7 @@ export async function signInWithMagicLink({ email, next = '/dashboard' } = {}) {
 }
 
 export async function signInWithEmail({ email, password }) {
+  clearDemoMode();
   const supabase = await getSupabase();
   const { data, error } = await supabase.auth.signInWithPassword({
     email: email.trim().toLowerCase(),
@@ -211,6 +214,7 @@ async function completeGoogleIdToken({ idToken, nonce }) {
  * resolved only after the token comes back.
  */
 export async function signInWithGoogle({ next = '/app' } = {}) {
+  clearDemoMode();
   sessionStorage.setItem('portabase.auth.next', next);
   sessionStorage.setItem('portabase.auth.version', 'supabase');
   const { idToken, nonce } = await requestGoogleIdToken();
@@ -222,12 +226,14 @@ export async function signInWithGoogle({ next = '/app' } = {}) {
  * Returns the session, or null when no redirect flow was in progress.
  */
 export async function completeGoogleRedirectSignIn() {
+  clearDemoMode();
   const stored = consumeStoredGoogleIdToken();
   if (!stored?.idToken) return null;
   return completeGoogleIdToken(stored);
 }
 
 export async function signInWithGitHub({ next = '/dashboard' } = {}) {
+  clearDemoMode();
   const supabase = await getSupabase();
   sessionStorage.setItem('portabase.auth.next', next);
   sessionStorage.setItem('portabase.auth.version', 'supabase');
@@ -271,6 +277,7 @@ export async function resendSignupEmail({ email, next = '/dashboard' }) {
 }
 
 export async function completeOAuthCallback() {
+  clearDemoMode();
   const supabase = await getSupabase();
   const url = new URL(window.location.href);
   const hash = new URLSearchParams(url.hash.startsWith('#') ? url.hash.slice(1) : url.hash);
@@ -310,6 +317,7 @@ export async function completeOAuthCallback() {
 }
 
 export async function signOut() {
+  clearDemoMode();
   try {
     const supabase = await getSupabase();
     await supabase.auth.signOut();

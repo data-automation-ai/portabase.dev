@@ -1,3 +1,4 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 /**
  * GET /api/cloud/telemetry-events — live runner telemetry for the signed-in user.
  * Reads the telemetry blob store written by POST /api/cloud/telemetry, scoped
@@ -84,7 +85,7 @@ export async function collectTelemetryEvents({
   return { events, truncated, prefixesScanned: prefixes.length };
 }
 
-export async function handler(event) {
+async function lambdaHandler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return jsonResponse(204, {}, {
       'Access-Control-Allow-Origin': '*',
@@ -133,3 +134,5 @@ export async function handler(event) {
   });
   } catch { return jsonResponse(503, { error: 'telemetry_store_unavailable' }); }
 }
+
+export const handler = withBlobs(lambdaHandler);

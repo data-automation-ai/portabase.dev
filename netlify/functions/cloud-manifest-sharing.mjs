@@ -1,3 +1,4 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { authenticateAgent, listAgents, ownerKey } from '../shared/agent-store.mjs';
 import { grantManifestSharing, ManifestSharingError, readManifestSharing, revokeManifestSharing, uploadSharedManifest } from '../shared/manifest-sharing.mjs';
@@ -44,4 +45,4 @@ export function createManifestSharingHandler({ verifyUser = verifyCloudUser, aut
     }
   };
 }
-export const handler = createManifestSharingHandler();
+export const handler = withBlobs(createManifestSharingHandler());

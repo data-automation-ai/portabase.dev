@@ -1,7 +1,6 @@
 # Portabase — agent rules
 
-**Project brief (what this is + what to do):** [PROJECT.md](./PROJECT.md)  
-**Full handoff:** [docs/HANDOFF.md](./docs/HANDOFF.md)
+**Project brief (what this is + what to do):** [PROJECT.md](./PROJECT.md)
 
 ## NEVER write to F:
 
@@ -40,7 +39,6 @@ Capture (especially Storage) needs temporary disk. That disk must be **cloud run
 
 ## Related docs
 
-- **`docs/HANDOFF.md`** — full project handoff for successor agents (read first)
 - `docs/LAUNCH-SCOPE.md`
 - `docs/SECURITY-TRUST.md`
 - `docs/REPLAY.md`

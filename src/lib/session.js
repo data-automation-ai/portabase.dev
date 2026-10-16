@@ -69,7 +69,20 @@ export function loadSession() {
   }
 }
 
+export function clearDemoMode() {
+  if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem('portabase.console.demo');
+}
+
+export function isRealSession(session) {
+  const token = session?.accessToken || session?.idToken;
+  return Boolean(token && token !== 'demo' && !token.startsWith('sim_customer_'));
+}
+
 export function saveSession(session) {
+  if (isRealSession(session)) {
+    clearDemoMode();
+    if (typeof localStorage !== 'undefined') localStorage.removeItem('portabase.sim_customer_token');
+  }
   const cloudVersion = normalizeCloudVersion(
     session.cloudVersion || session.provider,
     session.provider === 'aws' || session.idToken ? 'aws' : DEFAULT_CLOUD_VERSION,
@@ -90,6 +103,7 @@ export function saveSession(session) {
 }
 
 export function clearSession() {
+  clearDemoMode();
   if (typeof localStorage !== 'undefined') {
     localStorage.removeItem(KEY);
     localStorage.removeItem('portabase.sim_customer_token');

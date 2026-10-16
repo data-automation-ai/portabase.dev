@@ -1,3 +1,4 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 import { jsonResponse } from '../shared/verify-user.mjs';
 import { authenticateAgent, runnerJobIdentity } from '../shared/agent-store.mjs';
 import { parseJobRequest } from '../../cloud/runner/job-intent.mjs';
@@ -42,4 +43,4 @@ export function createRunnerJobsHandler({ authenticateRunner = authenticateAgent
       headers: { Authorization: authorization, 'X-Portabase-Agent-Authorization': authorization } });
   };
 }
-export const handler = createRunnerJobsHandler();
+export const handler = withBlobs(createRunnerJobsHandler());

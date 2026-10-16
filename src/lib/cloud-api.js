@@ -4,6 +4,7 @@ import { ensureFreshSession as ensureAwsSession } from './cognito.js';
 import { DEFAULT_CLOUD_VERSION, normalizeCloudVersion } from './cloud-versions.js';
 
 export function simulateCustomerSignup({ email = 'customer@example.com', name = 'Customer User' } = {}) {
+  if (!import.meta.env?.DEV) throw new Error('Customer simulation is development-only.');
   const cleanEmail = String(email || 'customer@example.com').trim().toLowerCase();
   const id = 'sim_' + Math.random().toString(36).slice(2, 10);
   const user = { id, email: cleanEmail, name };
@@ -29,7 +30,7 @@ export function simulateCustomerSignup({ email = 'customer@example.com', name = 
 }
 
 export async function ensureSessionForVersion(version) {
-  if (typeof localStorage !== 'undefined' && localStorage.getItem('portabase.sim_customer_token')) {
+  if (import.meta.env?.DEV && typeof localStorage !== 'undefined' && localStorage.getItem('portabase.sim_customer_token')) {
     return loadSession();
   }
   const v = normalizeCloudVersion(version, sessionCloudVersion() || DEFAULT_CLOUD_VERSION);

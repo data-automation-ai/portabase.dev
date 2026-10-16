@@ -1,3 +1,4 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 /**
  * Account-scoped job intents. Admission and atomic queue writes enforce current
  * entitlements; this endpoint does not itself run backup or recovery processes.
@@ -195,4 +196,4 @@ export function createJobsHandler({ authenticate = verifyCloudUser, getSubscript
     } catch { return jsonResponse(503, { error: 'job_service_unavailable' }); }
   };
 }
-export const handler = createJobsHandler();
+export const handler = withBlobs(createJobsHandler());

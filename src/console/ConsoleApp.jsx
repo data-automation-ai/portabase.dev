@@ -6,7 +6,7 @@ import {
   emptyWorkspace, loadLiveConsoleState, saveLiveConsoleState,
 } from './data/store.js';
 import { CLOUD_VERSIONS, normalizeCloudVersion, getStoredCloudVersion, setStoredCloudVersion, isSupabaseOnlyLaunch } from '../lib/cloud-versions.js';
-import { clearSession, loadSession, sessionCloudVersion, sessionUser } from '../lib/session.js';
+import { clearDemoMode, isRealSession, clearSession, loadSession, sessionCloudVersion, sessionUser } from '../lib/session.js';
 import {
   cancelCloudSubscription,
   ensureSessionForVersion,
@@ -122,6 +122,7 @@ function parseRoute() {
 }
 
 function isDemoMode() {
+  if (isRealSession(loadSession())) { clearDemoMode(); return false; }
   return new URLSearchParams(window.location.search).get('demo') === '1'
     || (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('portabase.console.demo') === '1');
 }
@@ -169,8 +170,7 @@ export function ConsoleApp() {
   }, []);
 
   const setState = useCallback((mutator) => {
-    const demo = sessionStorage.getItem('portabase.console.demo') === '1'
-      || new URLSearchParams(window.location.search).get('demo') === '1';
+    const demo = isDemoMode();
     setStateRaw(current => {
       const base = current || (demo ? loadConsoleState(user) : loadLiveConsoleState(user));
       const draft = structuredClone(base);
@@ -207,13 +207,20 @@ export function ConsoleApp() {
     document.title = `${TITLES[route.page] || 'Console'} · Portabase Cloud`;
     setStoredCloudVersion(version);
     let cancelled = false;
-    const demoMode = new URLSearchParams(window.location.search).get('demo') === '1'
-      || sessionStorage.getItem('portabase.console.demo') === '1';
+    let demoMode = isDemoMode();
     setDashboardLoading(!demoMode);
     setDashboardUnavailable(false);
     (async () => {
       try {
         let session = await ensureSessionForVersion(version);
+        if (isRealSession(session)) {
+          clearDemoMode();
+          demoMode = false;
+          const url = new URL(window.location.href);
+          url.searchParams.delete('demo');
+          window.history.replaceState({}, '', url);
+          setDashboardLoading(true);
+        }
         if (!session && demoMode) {
           sessionStorage.setItem('portabase.console.demo', '1');
           session = {
@@ -444,6 +451,7 @@ export function ConsoleApp() {
   };
 
   const signOut = async () => {
+    clearDemoMode();
     // Launch: Supabase Auth only. Cognito sign-out retained behind flag.
     if (version === 'aws' && !isSupabaseOnlyLaunch()) {
       window.location.href = awsAuth.signOut();
@@ -502,7 +510,7 @@ export function ConsoleApp() {
     startTrial,
     startAddon,
     cancelSubscription,
-    demoMode: sessionStorage.getItem('portabase.console.demo') === '1',
+    demoMode: isDemoMode(),
     liveJobs,
     live: liveDashboard,
     square,

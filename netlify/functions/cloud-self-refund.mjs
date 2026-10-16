@@ -1,3 +1,4 @@
+import { withBlobs } from '../shared/subscription-store.mjs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { CLOUD_MONEY_BACK_DAYS } from '../shared/product.mjs';
 import {
@@ -16,7 +17,7 @@ import {
  * Customer-triggered 7-day money-back: refund any first paid charge and close Cloud access.
  * Capsules in the customer's vault are not touched.
  */
-export async function handler(event) {
+async function lambdaHandler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return jsonResponse(204, {}, {
       'Access-Control-Allow-Origin': '*',
@@ -117,3 +118,5 @@ export async function handler(event) {
       : 'Refund issued. Cloud access is closed. Capsules in your vault are untouched.',
   });
 }
+
+export const handler = withBlobs(lambdaHandler);

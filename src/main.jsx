@@ -543,7 +543,6 @@ function Reality() {
         <article><span>02</span><h3>A database dump is not your business.</h3><p>Customers still need Auth. Products still need images. Workflows still need Functions, secrets, URLs, and integrations. Recover only Postgres and you may recover a database that cannot run the company.</p></article>
         <article><span>03</span><h3>Deletion can erase the safety net.</h3><p>Supabase states that deleting a project permanently removes its data and associated backups. One destructive action can take the production system and the provider-held recovery copy with it.</p></article>
         <article><span>04</span><h3>Pro support is an email path.</h3><p>No published Pro hotline. No private live-support channel. If that email does not get answered, how many hours can your company bleed before “waiting” becomes “we may not recover”?</p></article>
-        <article><span>05</span><h3>Your database may already be public.</h3><p>Most vibe-coded projects leave RLS off with the anon key in the frontend — readable by anyone. Supabase ships with the door unlocked and the instructions assume you know that. <a href="/docs/rls-check">Check yours in 5 minutes <Arrow /></a></p></article>
       </div>
       <div className="ban-reasons">
         <div className="billing-emergency">

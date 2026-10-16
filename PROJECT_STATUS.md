@@ -857,13 +857,13 @@ are not. S3 diversion preserves objects but does not restore Storage URL serving
 Independent database/S3 plan budgets and KMS-specific destination configuration
 remain unimplemented. No whole-product completion claim is made.
 
-Current repo guidance overrides stale hosted/shared-project examples in the older
-handoff: never use the dead shared project or treat a sibling project's backend as
+Current repo guidance overrides stale hosted/shared-project examples:
+never use the dead shared project or treat a sibling project's backend as
 the Portabase identity or recovery destination.
 
 Historical scope of this file: **Google sign-in for Portabase Cloud identity.** Other
 capabilities (capture, restore, replay, Square billing) are tracked in
-`PROJECT.md` and `docs/HANDOFF.md`.
+`PROJECT.md` and `AGENTS.md`.
 
 Status vocabulary is the portfolio one: *scaffolded → implemented → provisioned
 → configured → deployed → verified → complete*. Never substitute one for
