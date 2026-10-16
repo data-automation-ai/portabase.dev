@@ -22,11 +22,14 @@ function base64ToBuffer(b64) {
 const VAULT_STORAGE_KEY = 'portabase.runner.vault.sealed.v1';
 
 export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
-  const [sourceSecret, setSourceSecret] = useState('');
+  const [dbPassword, setDbPassword] = useState('');
+  const [supabaseApiKey, setSupabaseApiKey] = useState('');
   const [capsulePassphrase, setCapsulePassphrase] = useState('');
   const [sealingPassword, setSealingPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [unlockPassword, setUnlockPassword] = useState('');
+  const [showDbPassword, setShowDbPassword] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
   
   const [sealedData, setSealedData] = useState(() => {
     try {
@@ -55,8 +58,8 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
       setError('Sealing passwords do not match.');
       return;
     }
-    if (!sourceSecret && !capsulePassphrase) {
-      setError('Please provide at least a source secret or capsule passphrase to seal.');
+    if (!dbPassword && !supabaseApiKey && !capsulePassphrase) {
+      setError('Please provide at least a database password or Supabase API key to seal.');
       return;
     }
 
@@ -82,10 +85,13 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
         ['encrypt', 'decrypt']
       );
 
+      const effectiveCapsulePassphrase = capsulePassphrase || sealingPassword;
       const payload = JSON.stringify({
         projectRef,
-        sourceSecret,
-        capsulePassphrase,
+        dbPassword,
+        supabaseApiKey,
+        capsulePassphrase: effectiveCapsulePassphrase,
+        sourceSecret: dbPassword || supabaseApiKey,
         sealedAt: new Date().toISOString(),
       });
 
@@ -111,10 +117,14 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
         fingerprint: `sha256:${hashHex}`,
         shortFingerprint: `sha256:${hashHex.slice(0, 16)}…`,
         sealedAt: new Date().toISOString(),
+        hasDbPassword: Boolean(dbPassword),
+        hasApiKey: Boolean(supabaseApiKey),
+        hasCapsulePassphrase: Boolean(effectiveCapsulePassphrase),
       };
 
       // Immediately scrub plaintext secrets from memory
-      setSourceSecret('');
+      setDbPassword('');
+      setSupabaseApiKey('');
       setCapsulePassphrase('');
       setSealingPassword('');
       setConfirmPassword('');
@@ -170,7 +180,10 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
       );
 
       const parsed = JSON.parse(dec.decode(decrypted));
-      setSourceSecret(parsed.sourceSecret || '');
+      const loadedDbPassword = parsed.dbPassword || (!parsed.sourceSecret?.startsWith('sb_') && !parsed.sourceSecret?.startsWith('eyJ') ? parsed.sourceSecret || '' : '');
+      const loadedApiKey = parsed.supabaseApiKey || (parsed.sourceSecret?.startsWith('sb_') || parsed.sourceSecret?.startsWith('eyJ') ? parsed.sourceSecret || '' : '');
+      setDbPassword(loadedDbPassword);
+      setSupabaseApiKey(loadedApiKey);
       setCapsulePassphrase(parsed.capsulePassphrase || '');
       setShowUnlockModal(false);
       setUnlockPassword('');
@@ -196,6 +209,10 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
   };
 
   if (sealedData) {
+    const hasDb = sealedData.hasDbPassword !== undefined ? sealedData.hasDbPassword : true;
+    const hasApi = sealedData.hasApiKey !== undefined ? sealedData.hasApiKey : true;
+    const hasCap = sealedData.hasCapsulePassphrase !== undefined ? sealedData.hasCapsulePassphrase : true;
+
     return (
       <div className="pb-card pb-vault-sealed" style={{
         background: '#0e1713',
@@ -225,11 +242,17 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
           </span>
         </div>
 
-        <div style={{ background: '#07100b', padding: '14px 16px', borderRadius: '6px', border: '1px solid #1c3d2c', marginBottom: '16px', fontFamily: 'monospace', fontSize: '13px' }}>
-          <div style={{ color: '#9ca3af', marginBottom: '4px', fontSize: '11px', textTransform: 'uppercase' }}>Cryptographic Seal Fingerprint</div>
-          <div style={{ color: '#6ee7b7', wordBreak: 'break-all' }}>{sealedData.fingerprint}</div>
-          <div style={{ color: '#6b7280', fontSize: '11px', marginTop: '6px' }}>
+        <div style={{ background: '#07100b', padding: '14px 16px', borderRadius: '6px', border: '1px solid #1c3d2c', marginBottom: '16px', fontSize: '13px' }}>
+          <div style={{ color: '#9ca3af', marginBottom: '4px', fontSize: '11px', textTransform: 'uppercase', fontFamily: 'monospace' }}>Cryptographic Seal Fingerprint</div>
+          <div style={{ color: '#6ee7b7', wordBreak: 'break-all', fontFamily: 'monospace' }}>{sealedData.fingerprint}</div>
+          <div style={{ color: '#6b7280', fontSize: '11px', marginTop: '6px', fontFamily: 'monospace' }}>
             Sealed at: {sealedData.sealedAt} · KDF: PBKDF2 (100,000 rounds)
+          </div>
+          <div style={{ borderTop: '1px solid #1c3d2c', marginTop: '10px', paddingTop: '10px', fontSize: '12px', color: '#d1d5db' }}>
+            <span style={{ fontWeight: 600, color: '#3ecf8e' }}>Sealed contents: </span>
+            <span>
+              Database Password ({hasDb ? '✓' : '—'}) · Supabase API Key ({hasApi ? '✓' : '—'}) · Capsule Passphrase ({hasCap ? '✓' : '—'})
+            </span>
           </div>
         </div>
 
@@ -295,71 +318,166 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
       <form onSubmit={handleSeal} style={{ display: 'grid', gap: '16px' }}>
         <div>
           <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
-            1. Supabase Source Secret / DB Connection or Service Key <span style={{ color: '#8b949e', fontWeight: 400 }}>(stays on machine only)</span>
+            1. Supabase Database Password{' '}
+            <span style={{ color: '#8b949e', fontWeight: 400 }}>(Supabase Dashboard → Project Settings → Database)</span>
           </label>
-          <input
-            type="password"
-            className="pb-input"
-            placeholder="postgresql://postgres:[password]@db.ref.supabase.co:5432/postgres or sb_secret_..."
-            value={sourceSecret}
-            onChange={e => setSourceSecret(e.target.value)}
-            style={{ width: '100%', fontFamily: 'monospace' }}
-            autoComplete="new-password"
-          />
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <input
+              type={showDbPassword ? 'text' : 'password'}
+              className="pb-input"
+              placeholder="Enter your Postgres database password"
+              value={dbPassword}
+              onChange={e => setDbPassword(e.target.value)}
+              style={{ width: '100%', fontFamily: 'monospace', paddingRight: '60px' }}
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowDbPassword(v => !v)}
+              style={{
+                position: 'absolute',
+                right: '8px',
+                background: '#21262d',
+                border: '1px solid #30363d',
+                color: '#c9d1d9',
+                cursor: 'pointer',
+                fontSize: '11px',
+                padding: '3px 8px',
+                borderRadius: '4px',
+              }}
+              aria-label={showDbPassword ? 'Hide database password' : 'Show database password'}
+            >
+              {showDbPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          {dbPassword && (
+            <div style={{ fontSize: '12px', color: '#3ecf8e', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              ✓ Database password ready (target: db.{projectRef || '<project-ref>'}.supabase.co:5432/postgres)
+            </div>
+          )}
         </div>
 
         <div>
           <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
-            2. Capsule Encryption Passphrase <span style={{ color: '#8b949e', fontWeight: 400 }}>(used by runner to encrypt backup files)</span>
+            2. Supabase Secret / Service-Role API Key{' '}
+            <span style={{ color: '#8b949e', fontWeight: 400 }}>(Supabase Dashboard → Project Settings → API Keys)</span>
           </label>
-          <input
-            type="password"
-            className="pb-input"
-            placeholder="Min 16 characters recommended"
-            value={capsulePassphrase}
-            onChange={e => setCapsulePassphrase(e.target.value)}
-            style={{ width: '100%', fontFamily: 'monospace' }}
-            autoComplete="new-password"
-          />
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <input
+              type={showApiKey ? 'text' : 'password'}
+              className="pb-input"
+              placeholder="sb_secret_... or service_role JWT (eyJ...)"
+              value={supabaseApiKey}
+              onChange={e => setSupabaseApiKey(e.target.value)}
+              style={{ width: '100%', fontFamily: 'monospace', paddingRight: '60px' }}
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowApiKey(v => !v)}
+              style={{
+                position: 'absolute',
+                right: '8px',
+                background: '#21262d',
+                border: '1px solid #30363d',
+                color: '#c9d1d9',
+                cursor: 'pointer',
+                fontSize: '11px',
+                padding: '3px 8px',
+                borderRadius: '4px',
+              }}
+              aria-label={showApiKey ? 'Hide API key' : 'Show API key'}
+            >
+              {showApiKey ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          {supabaseApiKey.trim() && (
+            <div style={{ fontSize: '12px', marginTop: '6px' }}>
+              {(supabaseApiKey.trim().startsWith('sb_secret_') || supabaseApiKey.trim().startsWith('eyJ')) ? (
+                <span style={{ color: '#3ecf8e' }}>✓ Valid Supabase secret / service_role key format</span>
+              ) : supabaseApiKey.trim().startsWith('sb_publishable_') ? (
+                <span style={{ color: '#f59e0b' }}>⚠ That looks like a publishable/anon key — use your sb_secret_ or service_role key for full Auth &amp; Storage backup</span>
+              ) : null}
+            </div>
+          )}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px', background: '#161b22', padding: '14px', borderRadius: '6px', border: '1px solid #21262d' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
-              3. Vault Sealing Password <span style={{ color: '#3ecf8e' }}>*</span>
-            </label>
-            <input
-              type="password"
-              className="pb-input"
-              placeholder="Min 8 characters"
-              value={sealingPassword}
-              onChange={e => setSealingPassword(e.target.value)}
-              style={{ width: '100%' }}
-              autoComplete="new-password"
-            />
+        <div style={{ background: '#161b22', padding: '16px', borderRadius: '6px', border: '1px solid #21262d' }}>
+          <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#c9d1d9', lineHeight: 1.5 }}>
+            This password seals the vault shut <strong>AND</strong> encrypts your backup capsules. You will use this same password to unlock this vault or decrypt capsules produced by your runner.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
+                3. Vault Sealing Password <span style={{ color: '#3ecf8e' }}>*</span>
+              </label>
+              <input
+                type="password"
+                className="pb-input"
+                placeholder="Min 8 characters"
+                value={sealingPassword}
+                onChange={e => setSealingPassword(e.target.value)}
+                style={{ width: '100%' }}
+                autoComplete="new-password"
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
+                4. Confirm Sealing Password <span style={{ color: '#3ecf8e' }}>*</span>
+              </label>
+              <input
+                type="password"
+                className="pb-input"
+                placeholder="Confirm password"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                style={{ width: '100%' }}
+                autoComplete="new-password"
+              />
+            </div>
           </div>
 
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
-              4. Confirm Sealing Password <span style={{ color: '#3ecf8e' }}>*</span>
-            </label>
-            <input
-              type="password"
-              className="pb-input"
-              placeholder="Confirm password"
-              value={confirmPassword}
-              onChange={e => setConfirmPassword(e.target.value)}
-              style={{ width: '100%' }}
-              autoComplete="new-password"
-            />
-          </div>
+          {(confirmPassword || (sealingPassword && sealingPassword.length > 0)) && (
+            <div style={{ marginTop: '8px', fontSize: '12px' }}>
+              {sealingPassword && confirmPassword && sealingPassword === confirmPassword ? (
+                <span style={{ color: '#3ecf8e' }}>✓ Passwords match</span>
+              ) : confirmPassword ? (
+                <span style={{ color: '#f87171' }}>Passwords do not match</span>
+              ) : null}
+            </div>
+          )}
+
+          <details style={{ marginTop: '14px', fontSize: '12px', color: '#8b949e' }}>
+            <summary style={{ cursor: 'pointer', color: '#58a6ff', userSelect: 'none', fontWeight: 500 }}>
+              Optional: Use a different passphrase for capsule files
+            </summary>
+            <div style={{ marginTop: '8px', padding: '10px 12px', background: '#0d1117', borderRadius: '4px', border: '1px solid #30363d' }}>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#c9d1d9', marginBottom: '4px' }}>
+                Capsule Encryption Passphrase (defaults to Vault Sealing Password)
+              </label>
+              <input
+                type="password"
+                className="pb-input"
+                placeholder="Leave blank to use Vault Sealing Password"
+                value={capsulePassphrase}
+                onChange={e => setCapsulePassphrase(e.target.value)}
+                style={{ width: '100%', fontFamily: 'monospace' }}
+                autoComplete="new-password"
+              />
+              <span style={{ fontSize: '11px', color: '#8b949e', marginTop: '4px', display: 'block' }}>
+                If specified, the runner will use this passphrase to encrypt capsule files instead of your vault sealing password.
+              </span>
+            </div>
+          </details>
         </div>
 
         <div>
           <button
             type="submit"
             className="pb-btn pb-btn-primary"
-            disabled={isSealing || !sealingPassword || sealingPassword.length < 8}
+            disabled={isSealing || !sealingPassword || sealingPassword.length < 8 || sealingPassword !== confirmPassword || (!dbPassword && !supabaseApiKey && !capsulePassphrase)}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 20px', fontSize: '14px' }}
           >
             <Icon name="lock" size={16} /> 🔒 Seal Vault Shut with Sealing Password
