@@ -14,6 +14,8 @@
  * sharing the browser cannot read an in-flight token.
  */
 
+import { sha256Hex } from './sha256-hex.js';
+
 /**
  * Web OAuth client for Google -> id_token -> Supabase signInWithIdToken.
  *
@@ -44,19 +46,21 @@ function randomNonce() {
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
     crypto.getRandomValues(bytes);
   } else {
-    for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+    // A nonce is part of the authentication proof. Never silently downgrade
+    // it to a predictable PRNG when the browser has no CSPRNG.
+    throw new Error('Google sign-in is unavailable in this browser. Use email instead.');
   }
   return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 }
 
-function buildGoogleAuthUrl(clientId, redirectUri, nonce) {
+function buildGoogleAuthUrl(clientId, redirectUri, hashedNonce) {
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: 'id_token',
     response_mode: 'fragment',
     scope: 'openid email profile',
-    nonce,
+    nonce: hashedNonce,
     prompt: 'select_account',
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
@@ -83,8 +87,8 @@ export function parseIdTokenFromUrl(href) {
  * same-origin location polling. COOP can sever `window.opener`, so neither
  * channel alone is reliable — both run.
  */
-function requestGoogleIdTokenViaPopup(clientId, redirectUri, nonce) {
-  const authUrl = buildGoogleAuthUrl(clientId, redirectUri, nonce);
+function requestGoogleIdTokenViaPopup(clientId, redirectUri, hashedNonce) {
+  const authUrl = buildGoogleAuthUrl(clientId, redirectUri, hashedNonce);
 
   const w = 500;
   const h = 640;
@@ -132,6 +136,7 @@ function requestGoogleIdTokenViaPopup(clientId, redirectUri, nonce) {
 
     const onMessage = (event) => {
       if (event.origin !== window.location.origin) return;
+      if (event.source !== popup) return;
       const data = event.data;
       if (!data || data.type !== GOOGLE_ID_TOKEN_MESSAGE) return;
       // A same-origin postMessage from the callback page means Google did come back.
@@ -191,33 +196,32 @@ function requestGoogleIdTokenViaPopup(clientId, redirectUri, nonce) {
 }
 
 /** Full-page redirect fallback, used only when the popup is blocked. */
-function requestGoogleIdTokenViaRedirect(clientId, redirectUri, nonce) {
+function requestGoogleIdTokenViaRedirect(clientId, redirectUri, rawNonce, hashedNonce) {
   try {
     sessionStorage.setItem(GOOGLE_ID_FLOW_KEY, '1');
-    sessionStorage.setItem(GOOGLE_ID_NONCE_KEY, nonce);
+    sessionStorage.setItem(GOOGLE_ID_NONCE_KEY, rawNonce);
   } catch {
     /* ignore */
   }
-  window.location.assign(buildGoogleAuthUrl(clientId, redirectUri, nonce));
+  window.location.assign(buildGoogleAuthUrl(clientId, redirectUri, hashedNonce));
   // Page navigates away.
   throw new Error('REDIRECTING');
 }
 
 /**
  * Start Google ID-token sign-in. Call only from a user gesture (button click).
- * Resolves to `{ idToken, nonce }` — the nonce must be handed to
- * signInWithIdToken so Supabase can match it against the token's nonce claim.
+ * Resolves to `{ idToken, nonce }` where nonce is the RAW value for Supabase.
  */
 export async function requestGoogleIdToken(clientId = GOOGLE_WEB_CLIENT_ID) {
   if (typeof window === 'undefined') throw new Error('Google sign-in is web-only');
   if (!clientId) {
-    throw new Error(
-      'Google sign-in is not configured for this deployment. Missing VITE_GOOGLE_OAUTH_CLIENT_ID.',
-    );
+    console.error('Google sign-in unavailable: VITE_GOOGLE_OAUTH_CLIENT_ID is not set.');
+    throw new Error('Google sign-in is unavailable right now. Use email instead.');
   }
 
   const redirectUri = googleRedirectUri();
   const nonce = randomNonce();
+  const hashedNonce = sha256Hex(nonce);
 
   try {
     sessionStorage.setItem(GOOGLE_ID_NONCE_KEY, nonce);
@@ -226,13 +230,13 @@ export async function requestGoogleIdToken(clientId = GOOGLE_WEB_CLIENT_ID) {
   }
 
   try {
-    const idToken = await requestGoogleIdTokenViaPopup(clientId, redirectUri, nonce);
+    const idToken = await requestGoogleIdTokenViaPopup(clientId, redirectUri, hashedNonce);
     return { idToken, nonce };
   } catch (err) {
     const msg = err?.message || String(err);
     if (msg === 'POPUP_BLOCKED') {
       // Full-page navigation — does not return.
-      requestGoogleIdTokenViaRedirect(clientId, redirectUri, nonce);
+      requestGoogleIdTokenViaRedirect(clientId, redirectUri, nonce, hashedNonce);
     }
     throw err instanceof Error ? err : new Error(msg);
   }

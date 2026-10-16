@@ -5,8 +5,9 @@
 FROM node:24-bookworm-slim
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends postgresql-client ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
+  && apt-get install -y --no-install-recommends postgresql-client ca-certificates curl awscli rclone \
+  && rm -rf /var/lib/apt/lists/* \
+  && npm install -g supabase
 
 WORKDIR /opt/portabase
 COPY package.json package-lock.json ./

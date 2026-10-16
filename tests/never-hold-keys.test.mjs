@@ -50,7 +50,9 @@ test('homepage, login, dashboard, and seal UI use the shared keys copy', () => {
   assert.doesNotMatch(agents, /Provably zero-knowledge: Cloud cannot see/i);
 });
 
-test('seal URL helper still refuses Portabase /api', () => {
+test('seal URL helper still refuses Portabase /api and control-plane hosts', () => {
   assert.throws(() => assertRunnerSealUrl('https://portabase.dev/api/cloud/runners'), { code: 'seal_to_runner_only' });
+  assert.throws(() => assertRunnerSealUrl('https://portabase.dev/seal'), { code: 'seal_to_runner_only' });
+  assert.throws(() => assertRunnerSealUrl('http://localhost:8888/seal'), { code: 'seal_to_runner_only' });
   assert.equal(assertRunnerSealUrl('https://runner.example.internal/seal'), 'https://runner.example.internal/seal');
 });

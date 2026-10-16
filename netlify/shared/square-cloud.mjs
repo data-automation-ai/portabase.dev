@@ -86,6 +86,37 @@ function variationEnv(planId) {
     || (plan.id === 'cloud-37' ? process.env.SQUARE_CLOUD_PLAN_VARIATION_ID_37 : null);
 }
 
+export function findNamedPlanVariation(listed, variationName) {
+  for (const obj of listed?.objects || []) {
+    if (
+      obj.type === 'SUBSCRIPTION_PLAN_VARIATION'
+      && obj.subscription_plan_variation_data?.name === variationName
+      && obj.present_at_all_locations !== false
+      && obj.id
+    ) {
+      return obj.id;
+    }
+    const nested = obj.subscription_plan_data?.subscription_plan_variations || [];
+    const hit = nested.find(v =>
+      (v.subscription_plan_variation_data?.name === variationName || v.name === variationName) && v.id,
+    );
+    if (hit?.id) return hit.id;
+  }
+  return null;
+}
+
+export function catalogVariationIdFromUpsert(batch, variationClientId) {
+  const fromObjects = (batch?.objects || []).find(o => o.type === 'SUBSCRIPTION_PLAN_VARIATION')?.id;
+  if (fromObjects) return fromObjects;
+  for (const obj of batch?.objects || []) {
+    const nested = obj.subscription_plan_data?.subscription_plan_variations || [];
+    const hit = nested.find(v => v.id && !String(v.id).startsWith('#'));
+    if (hit?.id) return hit.id;
+  }
+  const mapped = (batch?.id_mappings || []).find(m => m.client_object_id === variationClientId);
+  return mapped?.object_id || null;
+}
+
 /**
  * Ensure Catalog plan + variation for a Cloud plan id.
  * @param {'cloud-7'|'cloud-17'|'cloud-37'} [planId]
@@ -96,13 +127,9 @@ export async function ensureCloudPlanVariationId(planId = CLOUD_DEFAULT_PLAN_ID)
   if (configured) return configured;
 
   const variationName = VARIATION_NAMES[plan.id] || VARIATION_NAMES[CLOUD_DEFAULT_PLAN_ID];
-  const listed = await squareFetch('/v2/catalog/list?types=SUBSCRIPTION_PLAN_VARIATION');
-  const existing = (listed.objects || []).find(obj =>
-    obj.type === 'SUBSCRIPTION_PLAN_VARIATION'
-    && obj.subscription_plan_variation_data?.name === variationName
-    && obj.present_at_all_locations !== false,
-  );
-  if (existing?.id) return existing.id;
+  const listed = await squareFetch('/v2/catalog/list?types=SUBSCRIPTION_PLAN,SUBSCRIPTION_PLAN_VARIATION');
+  const existingId = findNamedPlanVariation(listed, variationName);
+  if (existingId) return existingId;
 
   const catalogPlanId = `#portabase-cloud-plan`;
   const variationId = `#portabase-cloud-${plan.id}-trial`;
@@ -155,9 +182,9 @@ export async function ensureCloudPlanVariationId(planId = CLOUD_DEFAULT_PLAN_ID)
     },
   });
 
-  const createdVariation = (batch.objects || []).find(o => o.type === 'SUBSCRIPTION_PLAN_VARIATION');
-  if (!createdVariation?.id) throw new Error('plan_variation_create_failed');
-  return createdVariation.id;
+  const createdId = catalogVariationIdFromUpsert(batch, variationId);
+  if (!createdId) throw new Error('plan_variation_create_failed');
+  return createdId;
 }
 
 /** Square catalog ID for Extra transfers add-on. Louis pins SQUARE_EXTRA_TRANSFERS_ADDON_VARIATION_ID[_7|_17|_37]. */
@@ -170,13 +197,9 @@ export async function ensureExtraTransfersAddonVariationId(planId = CLOUD_DEFAUL
   if (configured && configured !== 'REPLACE_WITH_SQUARE_CATALOG_ID') return configured;
 
   const variationName = ADDON_VARIATION_NAMES[plan.id] || ADDON_VARIATION_NAME;
-  const listed = await squareFetch('/v2/catalog/list?types=SUBSCRIPTION_PLAN_VARIATION');
-  const existing = (listed.objects || []).find(obj =>
-    obj.type === 'SUBSCRIPTION_PLAN_VARIATION'
-    && obj.subscription_plan_variation_data?.name === variationName
-    && obj.present_at_all_locations !== false,
-  );
-  if (existing?.id) return existing.id;
+  const listed = await squareFetch('/v2/catalog/list?types=SUBSCRIPTION_PLAN,SUBSCRIPTION_PLAN_VARIATION');
+  const existingId = findNamedPlanVariation(listed, variationName);
+  if (existingId) return existingId;
 
   const cents = extraTransfersAddonMonthlyCents(plan.id);
   const catalogPlanId = `#portabase-cloud-extra-transfers`;
@@ -220,9 +243,9 @@ export async function ensureExtraTransfersAddonVariationId(planId = CLOUD_DEFAUL
     },
   });
 
-  const createdVariation = (batch.objects || []).find(o => o.type === 'SUBSCRIPTION_PLAN_VARIATION');
-  if (!createdVariation?.id) throw new Error('addon_variation_create_failed');
-  return createdVariation.id;
+  const createdId = catalogVariationIdFromUpsert(batch, variationId);
+  if (!createdId) throw new Error('addon_variation_create_failed');
+  return createdId;
 }
 
 export function buildAddonPaymentLinkRequest({

@@ -604,3 +604,61 @@ test('restorePlanSelectedFunctionNames reflects only selected: true entries', ()
   plan.functions.find(f => f.name === 'fn-b').selected = false;
   assert.deepEqual([...restorePlanSelectedFunctionNames(plan)], ['fn-a']);
 });
+
+test('captureAuth paginates past 200 users and sets truncated=false when all pages are read', async () => {
+  const { captureAuth } = await import('./portabase.mjs');
+  const tmp = await mkdtemp(join(tmpdir(), 'portabase-auth-test-'));
+  const origFetch = globalThis.fetch;
+  const origUrl = process.env.SUPABASE_URL;
+  const origKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = 'https://abcdefghijklmnopqrst.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'sb_secret_test_key';
+  const page1 = Array.from({ length: 200 }, (_, i) => ({ id: `u-${i + 1}`, email: `u${i + 1}@example.com` }));
+  const page2 = Array.from({ length: 45 }, (_, i) => ({ id: `u-${i + 201}`, email: `u${i + 201}@example.com` }));
+  globalThis.fetch = async (url) => {
+    const u = new URL(url);
+    const page = Number(u.searchParams.get('page') || '1');
+    const users = page === 1 ? page1 : page === 2 ? page2 : [];
+    return new Response(JSON.stringify({ users }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const result = await captureAuth({ projectRef: 'abcdefghijklmnopqrst' }, tmp);
+    assert.equal(result.complete, true);
+    assert.equal(result.partial, false);
+    assert.equal(result.truncated, false);
+    assert.equal(result.count, 245);
+    const saved = JSON.parse(await readFile(join(tmp, 'auth', 'auth-inventory.json'), 'utf8'));
+    assert.equal(saved.truncated, false);
+    assert.equal(saved.count, 245);
+  } finally {
+    globalThis.fetch = origFetch;
+    if (origUrl === undefined) delete process.env.SUPABASE_URL; else process.env.SUPABASE_URL = origUrl;
+    if (origKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY; else process.env.SUPABASE_SERVICE_ROLE_KEY = origKey;
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
+test('captureFunctionViaManagementApi refuses non-source JSON metadata instead of writing broken index.ts', async () => {
+  const { captureFunctionViaManagementApi } = await import('./portabase.mjs');
+  const tmp = await mkdtemp(join(tmpdir(), 'portabase-fn-test-'));
+  const origFetch = globalThis.fetch;
+  const origToken = process.env.SUPABASE_ACCESS_TOKEN;
+  process.env.SUPABASE_ACCESS_TOKEN = 'sbp_test_token';
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith('/body')) {
+      return new Response(JSON.stringify({ id: 'fn-1', status: 'ACTIVE' }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ name: 'my-fn', verify_jwt: true }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    await assert.rejects(
+      () => captureFunctionViaManagementApi('abcdefghijklmnopqrst', 'my-fn', join(tmp, 'my-fn')),
+      /did not return deployable TypeScript source/,
+    );
+  } finally {
+    globalThis.fetch = origFetch;
+    if (origToken === undefined) delete process.env.SUPABASE_ACCESS_TOKEN; else process.env.SUPABASE_ACCESS_TOKEN = origToken;
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+

@@ -121,3 +121,18 @@ comment on schema portabase_cloud is 'Portabase Cloud control plane — health m
 comment on table portabase_cloud.telemetry_events is 'Health metadata only. Never store secrets or capsule payloads.';
 comment on table portabase_cloud.agents is 'token_hash only; plaintext token returned once at creation.';
 comment on table portabase_cloud.runners is 'AWS ECS managed runner registry; secrets in Secrets Manager under secret_prefix.';
+
+alter table portabase_cloud.profiles enable row level security;
+alter table portabase_cloud.workspaces enable row level security;
+alter table portabase_cloud.workspace_members enable row level security;
+alter table portabase_cloud.monitored_projects enable row level security;
+alter table portabase_cloud.agents enable row level security;
+alter table portabase_cloud.telemetry_events enable row level security;
+alter table portabase_cloud.alert_channels enable row level security;
+alter table portabase_cloud.alert_policies enable row level security;
+alter table portabase_cloud.escalation_steps enable row level security;
+alter table portabase_cloud.runners enable row level security;
+
+revoke all on schema portabase_cloud from public, anon, authenticated;
+revoke all on all tables in schema portabase_cloud from public, anon, authenticated;
+

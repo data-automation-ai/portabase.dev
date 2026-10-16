@@ -78,7 +78,7 @@ export function cliInjectHint(capsuleId) {
   return [
     '# Run on YOUR runner — Portabase Cloud never sees this value.',
     'export PORTABASE_ENCRYPTION_PASSPHRASE   # ≥16 chars, not committed',
-    `portabase backup --capsule ${id}`,
+    `portabase verify --capsule ${id} --decrypt`,
     '# or rotate: set a new passphrase locally, then re-seal / verify',
   ].join('\n');
 }

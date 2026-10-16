@@ -25,6 +25,7 @@ async function put(root, path, data) {
 
 test('capture modes have explicit conflicts and omitted objects never become payload', () => {
   assert.deepEqual(captureOptions({}, ['--ddl-only', '--storage-inventory-only']), { ddlOnly: true, storageInventoryOnly: true });
+  assert.deepEqual(captureOptions({}, ['--exclude-binaries']), { ddlOnly: false, storageInventoryOnly: true });
   assert.throws(() => captureOptions({}, ['--ddl-only', '--include-table-data']), /cannot/);
   assert.throws(() => captureOptions({}, ['--storage-inventory-only', '--trial']), /unsampled/);
   const object = inventoryObject('photo.jpg', { size: 17 });
@@ -37,6 +38,7 @@ test('capture and restore reject misspelled options and missing values before si
   assert.throws(() => validateRecoveryArgs('backup', ['backup', '--storage-inventry-only']), /Unknown/);
   assert.throws(() => validateRecoveryArgs('restore', ['restore', '--storage-to-s3', '--execute']), /requires a value/);
   assert.throws(() => validateRecoveryArgs('restore', ['restore', '--fill-missing']), /unsupported/);
+  validateRecoveryArgs('backup', ['backup', '--exclude-binaries', '--exclude-table-list', 'public.audit_logs']);
   validateRecoveryArgs('restore', ['restore', '--capsule', '/runner/full', '--preflight', '--storage-to-s3', 's3://vault/prefix', '--s3-expected-owner', '123456789012']);
 });
 
@@ -92,6 +94,18 @@ test('database names differ independently; wrong host/project and same-source ta
   assert.throws(() => assertDatabaseTarget({ sourceUrl: target, targetUrl: target, targetRef: 'target' }), /source/);
   assert.throws(() => targetDatabaseUrl(target, 'x/other'), /simple database/);
   assert.throws(() => assertDatabaseTarget({ targetUrl: target, targetRef: 'target', overwrite: true }), /confirm-target-db/);
+
+  const poolerSource = 'postgresql://postgres.ekklokrukxmqlahtonnc:pass1@aws-0-us-east-1.pooler.supabase.com:5432/postgres';
+  const poolerTarget = 'postgresql://postgres.svltssnxzqsrxtbjgaex:pass2@aws-0-us-east-1.pooler.supabase.com:5432/postgres';
+  assert.notEqual(databaseIdentity(poolerSource), databaseIdentity(poolerTarget));
+  assert.equal(
+    assertDatabaseTarget({ sourceUrl: poolerSource, targetUrl: poolerTarget, targetRef: 'svltssnxzqsrxtbjgaex' }),
+    'postgres.svltssnxzqsrxtbjgaex@aws-0-us-east-1.pooler.supabase.com:5432/postgres',
+  );
+  assert.throws(
+    () => assertDatabaseTarget({ sourceUrl: poolerSource, targetUrl: poolerSource, targetRef: 'ekklokrukxmqlahtonnc' }),
+    /source/,
+  );
 });
 
 test('incremental capture downloads new files, reuses verified bytes, refreshes newer files, and emits delta deletions', async t => {

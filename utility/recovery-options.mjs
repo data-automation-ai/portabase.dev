@@ -5,7 +5,10 @@ import { hashFile } from './capsule-crypto.mjs';
 
 export function captureOptions(config = {}, args = []) {
   const ddlOnly = args.includes('--ddl-only') || config.capture?.ddlOnly === true;
-  const storageInventoryOnly = args.includes('--storage-inventory-only') || config.capture?.storageInventoryOnly === true;
+  const storageInventoryOnly = args.includes('--storage-inventory-only')
+    || args.includes('--exclude-binaries')
+    || config.capture?.storageInventoryOnly === true
+    || config.capture?.excludeBinaries === true;
   if (ddlOnly && (args.includes('--include-table-data') || config.capture?.includeTableData?.length)) {
     throw new Error('--ddl-only cannot be combined with --include-table-data.');
   }
@@ -16,8 +19,8 @@ export function captureOptions(config = {}, args = []) {
 }
 
 export function validateRecoveryArgs(command, args) {
-  const captureBooleans = 'trial storage-first-per-bucket ddl-only storage-inventory-only delta progress json allow-large-local incremental-binary'.split(' ');
-  const captureValues = 'config license exclude-table-data include-table-data exclude-buckets include-buckets baseline'.split(' ');
+  const captureBooleans = 'trial storage-first-per-bucket ddl-only storage-inventory-only exclude-binaries delta progress json allow-large-local incremental-binary'.split(' ');
+  const captureValues = 'config license exclude-table-data exclude-table-list include-table-data exclude-buckets include-buckets baseline'.split(' ');
   const restoreBooleans = 'execute preflight drill json overwrite-target allow-occupied-target allow-source-target'.split(' ');
   const restoreValues = 'capsule baseline restore-plan max-restore-bytes target-db-name confirm-target-db confirm-target storage-to-s3 s3-expected-owner overwrite-scope confirm-overwrite rollback-capsule rollback-evidence'.split(' ');
   const booleans = new Set(command === 'backup' ? captureBooleans : restoreBooleans);
@@ -61,7 +64,9 @@ export function targetDatabaseUrl(value, name) {
 
 export function databaseIdentity(value) {
   const url = new URL(targetDatabaseUrl(value));
-  return `${url.hostname}:${url.port || '5432'}/${decodeURIComponent(url.pathname.slice(1) || 'postgres')}`;
+  const user = decodeURIComponent(url.username || '');
+  const tenantPrefix = user.includes('.') ? `${user}@` : '';
+  return `${tenantPrefix}${url.hostname}:${url.port || '5432'}/${decodeURIComponent(url.pathname.slice(1) || 'postgres')}`;
 }
 
 export function assertDatabaseTarget({ sourceUrl, targetUrl, targetRef, confirmation, overwrite = false }) {

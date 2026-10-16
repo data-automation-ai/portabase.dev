@@ -61,12 +61,18 @@ export async function handler(event) {
         amountCents = Number(found.amount_money?.amount) || 0;
       }
     }
-    if (eligible.reason === 'paid_window' && paymentId && amountCents > 0) {
+    if ((eligible.reason === 'paid_window' || eligible.reason === 'prorated_window') && paymentId && amountCents > 0) {
+      const refundAmount = eligible.reason === 'prorated_window'
+        ? Math.min(amountCents, Number(eligible.refundExpectedCents) || amountCents)
+        : amountCents;
+      amountCents = refundAmount;
       refund = await refundSquarePayment({
         paymentId,
-        amountCents,
+        amountCents: refundAmount,
         idempotencyKey: `self-refund-${storeKey}-${paymentId}`,
-        reason: 'Customer self-serve 7-day money-back. Cloud account closed.',
+        reason: eligible.reason === 'prorated_window'
+          ? 'Customer self-serve prorated refund. Cloud account closed.'
+          : 'Customer self-serve 8-day money-back. Cloud account closed.',
       });
     }
   } catch (error) {

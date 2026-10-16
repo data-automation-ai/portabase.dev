@@ -31,3 +31,7 @@ create index if not exists subscriptions_status_idx
 
 comment on table portabase_cloud.subscriptions is
   'Cloud ops subscription only. Never store card PANs or capsule secrets.';
+
+alter table portabase_cloud.subscriptions enable row level security;
+revoke all on table portabase_cloud.subscriptions from public, anon, authenticated;
+

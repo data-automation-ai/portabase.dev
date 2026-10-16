@@ -24,7 +24,8 @@ test('passphrase minimum is 16 and fingerprint is hex, not the secret', async ()
 test('CLI inject hint never embeds the passphrase', () => {
   const hint = cliInjectHint('cap_abc');
   assert.match(hint, /PORTABASE_ENCRYPTION_PASSPHRASE/);
-  assert.match(hint, /cap_abc/);
+  assert.match(hint, /portabase verify --capsule cap_abc --decrypt/);
+  assert.doesNotMatch(hint, /portabase backup --capsule/);
   assert.doesNotMatch(hint, /correct horse/);
   assert.ok(neverSendFields().some((item) => /passphrase/i.test(item)));
 });

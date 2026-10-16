@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { authCallbackUrl, productConfig, supabasePublicDefaults } from './auth-config.js';
 import { consumeStoredGoogleIdToken, requestGoogleIdToken } from './google-gis-auth.js';
+import { sha256Hex } from './sha256-hex.js';
 import { clearSession, isTokenExpired, loadSession, saveSession } from './session.js';
 import { safeAuthReturnPath } from './auth-return.js';
 
@@ -82,6 +83,12 @@ function persistFromSupabaseSession(session) {
   return loadSession();
 }
 
+function requirePersistedSession(session) {
+  const persisted = persistFromSupabaseSession(session);
+  if (!persisted) throw new Error('Authentication did not return a session. Try signing in again.');
+  return persisted;
+}
+
 export async function syncSessionFromSupabase() {
   const supabase = await getSupabase();
   const { data, error } = await supabase.auth.getSession();
@@ -160,19 +167,39 @@ export async function signInWithEmail({ email, password }) {
     password,
   });
   if (error) throw error;
-  return persistFromSupabaseSession(data.session);
+  return requirePersistedSession(data.session);
+}
+
+function readIdTokenNonce(idToken) {
+  try {
+    const [, body] = String(idToken || '').split('.');
+    if (!body) return undefined;
+    const b64 = body.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = b64.length % 4 ? '='.repeat(4 - (b64.length % 4)) : '';
+    const claims = JSON.parse(atob(b64 + pad));
+    return typeof claims.nonce === 'string' && claims.nonce ? claims.nonce : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Exchange a Google id_token for a Supabase session and persist it. */
 async function completeGoogleIdToken({ idToken, nonce }) {
   const supabase = await getSupabase();
-  const { data, error } = await supabase.auth.signInWithIdToken({
-    provider: 'google',
-    token: idToken,
-    nonce,
-  });
-  if (error) throw error;
-  return persistFromSupabaseSession(data.session);
+  const tokenNonce = readIdTokenNonce(idToken);
+  const hashed = nonce ? sha256Hex(nonce) : '';
+  if (!nonce || !tokenNonce || tokenNonce !== hashed) {
+    // Supabase's exchange must receive the nonce that was used to start this
+    // flow. Retrying without it would turn a failed replay check into a login.
+    throw new Error('Google nonce validation failed. Please try signing in again.');
+  }
+  const payload = { provider: 'google', token: idToken, nonce };
+  const { data, error } = await supabase.auth.signInWithIdToken(payload);
+  if (error) {
+    console.error('[portabase] Google id_token exchange failed:', error.message || error);
+    throw error;
+  }
+  return requirePersistedSession(data.session);
 }
 
 /**
@@ -246,22 +273,39 @@ export async function resendSignupEmail({ email, next = '/dashboard' }) {
 export async function completeOAuthCallback() {
   const supabase = await getSupabase();
   const url = new URL(window.location.href);
+  const hash = new URLSearchParams(url.hash.startsWith('#') ? url.hash.slice(1) : url.hash);
+  const callbackError = url.searchParams.get('error_description')
+    || url.searchParams.get('error')
+    || hash.get('error_description')
+    || hash.get('error');
+  if (callbackError) throw new Error(callbackError);
   const tokenHash = url.searchParams.get('token_hash');
   const type = url.searchParams.get('type');
   if (tokenHash && type) {
     const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
     if (error) throw error;
-    return persistFromSupabaseSession(data.session);
+    return requirePersistedSession(data.session);
   }
   const code = url.searchParams.get('code');
   if (code) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) throw error;
-    return persistFromSupabaseSession(data.session);
+    return requirePersistedSession(data.session);
+  }
+  const accessToken = hash.get('access_token');
+  const refreshToken = hash.get('refresh_token');
+  if (accessToken || refreshToken) {
+    if (!accessToken || !refreshToken) throw new Error('Incomplete session returned after auth redirect. Try signing in again.');
+    const { data, error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+    if (error) throw error;
+    return requirePersistedSession(data.session);
   }
   const { data, error } = await supabase.auth.getSession();
   if (error) throw error;
-  if (data.session) return persistFromSupabaseSession(data.session);
+  if (data.session) return requirePersistedSession(data.session);
   throw new Error('No session found after auth redirect. Try signing in again.');
 }
 
@@ -284,6 +328,7 @@ export function describeAuthError(error) {
   if (lower.includes('provider is not enabled') || lower.includes('unsupported provider')) {
     return 'That social provider is not enabled yet in Supabase Auth. Use email, or enable Google / GitHub under Authentication → Providers.';
   }
+  if (lower.includes('nonce')) return 'Google sign-in failed a security check. Close extra login windows and try once more.';
   if (lower.includes('not configured')) return msg;
   return msg;
 }

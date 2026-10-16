@@ -160,7 +160,7 @@ export function KeyInjectModal({ capsule, onClose, toast }) {
   );
 }
 
-export function CapsuleManagePage({ state, setState, toast, navigate, embedded, me, startAddon, busy }) {
+export function CapsuleManagePage({ state, setState, toast, navigate, embedded, me, startAddon, busy, demoMode = false }) {
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('all');
   const [selected, setSelected] = useState(null);
@@ -254,7 +254,7 @@ export function CapsuleManagePage({ state, setState, toast, navigate, embedded, 
             label="Verify health"
             detail={`${state.capsules.filter((c) => c.verified).length} verified capsules`}
             tone="ok"
-            mocked
+            mocked={Boolean(demoMode)}
           />
         </div>
         <div className="pb-card">
@@ -263,7 +263,7 @@ export function CapsuleManagePage({ state, setState, toast, navigate, embedded, 
             label="Rescue readiness"
             detail="COMPLETE + verify-green"
             tone="ok"
-            mocked
+            mocked={Boolean(demoMode)}
           />
         </div>
         <div className="pb-card">
@@ -274,7 +274,7 @@ export function CapsuleManagePage({ state, setState, toast, navigate, embedded, 
             usedLabel={formatBytes(usage.usedBytes)}
             capLabel={usage.capLabel}
             tone={usage.percent > 85 ? 'warn' : 'ok'}
-            mocked
+            mocked={Boolean(demoMode)}
           />
           <p className="pb-faint" style={{ margin: '10px 0 0', fontSize: 12 }}>
             Plan cap is telemetry against {plan.shortLabel}. The vault is still yours — we do not host these bytes.
@@ -457,8 +457,13 @@ export function CapsuleManagePage({ state, setState, toast, navigate, embedded, 
               type="button"
               className="pb-btn"
               onClick={() => {
-                updateCapsule(selectedCapsule.id, { verified: true });
-                toast('Verify intent queued for the worker — Cloud does not open the capsule', 'ok');
+                if (demoMode) {
+                  updateCapsule(selectedCapsule.id, { verified: true });
+                  toast('Demo: marked verified in sample workspace', 'ok');
+                } else {
+                  updateCapsule(selectedCapsule.id, { verifyQueuedAt: new Date().toISOString() });
+                  toast('Verify intent recorded — run portabase verify on your runner to report verification', 'ok');
+                }
               }}
             >
               Queue verify

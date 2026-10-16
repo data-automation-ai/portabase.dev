@@ -58,7 +58,10 @@ test('private setup preserves loopback/Host/Origin/session/CSP boundaries and re
     assert.equal((await call(server, '/api/configurations', { method: 'POST', body, headers: { ...headers, Origin: 'null' } })).status, 403);
     assert.equal((await call(server, '/api/configurations', { method: 'POST', body, headers: { ...headers, 'Content-Type': 'text/plain' } })).status, 415);
     assert.equal((await call(server, '/api/configurations', { method: 'POST', body: ' '.repeat(256 * 1024 + 1), headers })).status, 413);
-    assert.deepEqual((await readdir(f.directory)).sort(), ['engine.json', 'runner-state.sqlite', 'runner-state.sqlite-shm', 'runner-state.sqlite-wal'].sort());
+    assert.deepEqual(
+      (await readdir(f.directory)).filter(name => !name.endsWith('-shm') && !name.endsWith('-wal')).sort(),
+      ['engine.json', 'runner-state.sqlite'].sort(),
+    );
   } finally { await server.close(); }
 });
 

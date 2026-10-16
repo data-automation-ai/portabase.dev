@@ -11,8 +11,8 @@ const CONTROL_PLANE_HOSTS = [
 export function isControlPlaneUrl(url) {
   try {
     const u = new URL(url, 'https://portabase.dev');
+    if (CONTROL_PLANE_HOSTS.includes(u.hostname)) return true;
     if (/^\/api\//.test(u.pathname)) return true;
-    if (CONTROL_PLANE_HOSTS.includes(u.hostname) && /^\/api\//.test(u.pathname)) return true;
     return false;
   } catch {
     return true;
