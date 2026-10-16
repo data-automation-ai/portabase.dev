@@ -5,7 +5,7 @@
  * Always preserve exact href.
  */
 
-export const closureReasons = [
+export const allClosureReasons = [
   {
     id: 'R01',
     provider: 'Both',
@@ -56,8 +56,8 @@ export const closureReasons = [
   },
 ];
 
-/** Sourced public cases — exact permanent-ish URLs retained */
-export const closureCases = [
+/** Sourced public cases — exact permanent-ish URLs retained (AWS entries kept in background until AWS launch) */
+export const allClosureCases = [
   {
     id: 'C15', provider: 'AWS', platform: 'Reddit', date: '2026-09-25', impact: 3,
     tag: 'ACCOUNT CLOSED · PRODUCTION DOWN',
@@ -269,3 +269,10 @@ export const closureCases = [
     source: 'r/Supabase · 1i6jzuj',
   },
 ];
+
+export const closureReasons = allClosureReasons
+  .filter(r => r.provider === 'Supabase' || r.provider === 'Both')
+  .map(r => ({ ...r, provider: 'Supabase' }));
+
+export const closureCases = allClosureCases.filter(c => c.provider === 'Supabase');
+

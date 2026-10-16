@@ -828,14 +828,6 @@ function Escape() {
       <div className="section-kicker green">USP · THE ESCAPE</div>
       <div className="escape-heading"><h2>When the front door fails,<br /><em>leave through your own.</em></h2><p><strong>Escape</strong> is the USP: a customer-owned way out of a Supabase lockout — not a second landlord. Open-source engine builds the encrypted capsule in storage you own (DB, Auth, Storage bytes, Functions). Cloud (this site) keeps the Escape easy with GUI, configuration, and telemetry — and who to wake if the job goes quiet.</p></div>
       <EscapeVsSupabaseDiagram />
-      <figure className="escape-vault-hero">
-        <div className="viz-panel-label"><span>USP · THE ESCAPE CAPSULE</span><b>Armored · off-site · under guard</b></div>
-        <img loading="lazy" src="/images/diagrams/escape-capsule-vault.jpg" alt="Armored Escape recovery capsule sealed on a pedestal inside a vast high-security storage facility with guards and surveillance" width="1920" height="1080" />
-        <figcaption>
-          <span>Your Escape is not “another login to Supabase.” It is a sealed capsule in storage you control.</span>
-          <small>Conceptual · product illustration</small>
-        </figcaption>
-      </figure>
       <div className="viz-panel-grid escape-viz">
         <figure className="viz-panel">
           <div className="viz-panel-label"><span>HOW IT WORKS</span><b>Encrypt outside the locked account</b></div>
@@ -1119,17 +1111,12 @@ function HowItWorksDiagrams() {
 
 /** Public first-hand reports: accounts closed / banned with little or no usable notice. */
 function ClosureRisk({ variant = 'home' } = {}) {
-  const [providerFilter, setProviderFilter] = useState('All');
-  const reasons = useMemo(
-    () => (providerFilter === 'All' ? closureReasons : closureReasons.filter(r => r.provider === 'Both' || r.provider === providerFilter)),
-    [providerFilter],
-  );
+  const reasons = closureReasons;
   const cases = useMemo(
-    () => (providerFilter === 'All' ? closureCases : closureCases.filter(c => c.provider === providerFilter))
+    () => closureCases
       .slice().sort((a, b) => b.date.localeCompare(a.date) || (b.impact || 0) - (a.impact || 0)),
-    [providerFilter],
+    [],
   );
-  const filters = ['All', 'Supabase', 'AWS'];
 
   return <section className={`section closure-risk${variant === 'cloud' ? ' closure-risk-cloud' : ''}`} id="closures">
     <div className="shell">
@@ -1137,21 +1124,6 @@ function ClosureRisk({ variant = 'home' } = {}) {
       <div className="split-heading">
         <h2>Accounts close without a usable exit.</h2>
         <p>These are first-hand public posts from GitHub Discussions, Reddit, and mirrored Discord support threads. Exact source URLs are preserved. Posts are at least several months old where durable IDs allow. A report is what someone said happened — not independent proof of cause, and not a claim that every ban is wrongful.</p>
-      </div>
-
-      <div className="closure-filter" role="tablist" aria-label="Filter by provider">
-        {filters.map(f => (
-          <button
-            key={f}
-            type="button"
-            role="tab"
-            aria-selected={providerFilter === f}
-            className={providerFilter === f ? 'is-active' : ''}
-            onClick={() => setProviderFilter(f)}
-          >
-            {f}
-          </button>
-        ))}
       </div>
 
       <div className="closure-reasons-block">
@@ -1166,7 +1138,7 @@ function ClosureRisk({ variant = 'home' } = {}) {
               <div>
                 <div className="closure-reason-meta">
                   <strong>{reason.title}</strong>
-                  <em>{reason.provider === 'Both' ? 'Supabase · AWS' : reason.provider}</em>
+                  <em>{reason.provider}</em>
                 </div>
                 <p>{reason.body}</p>
               </div>
