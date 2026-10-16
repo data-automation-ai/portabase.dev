@@ -34,16 +34,16 @@ import { CustomerDashboardPage } from './customer-dashboard.jsx';
 /** Portabase-native IA — recovery ops only (not a Supabase Studio clone). */
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: 'home' },
-  { id: 'home', label: 'Ops home', icon: 'activity' },
-  { id: 'projects', label: 'Sources', icon: 'folder' },
-  { id: 'supabase-viewer', label: 'Private source setup', icon: 'table' },
-  { id: 'backups', label: 'Capsules', icon: 'capsule' },
-  { id: 'telemetry', label: 'Telemetry', icon: 'chart' },
-  { id: 'inspect', label: 'Private capsule review', icon: 'key' },
-  { id: 'agents', label: 'Agents', icon: 'cpu' },
+  { id: 'home', label: 'Ops Overview', icon: 'activity' },
+  { id: 'projects', label: 'Supabase Sources', icon: 'folder' },
+  { id: 'supabase-viewer', label: 'Connect Database', icon: 'table' },
+  { id: 'backups', label: 'Backup Capsules', icon: 'capsule' },
+  { id: 'telemetry', label: 'System Health', icon: 'chart' },
+  { id: 'inspect', label: 'Inspect Capsules', icon: 'key' },
+  { id: 'agents', label: 'Runners & Vault', icon: 'cpu' },
   { id: 'alerts', label: 'Alerts', icon: 'bell' },
-  { id: 'restore', label: 'Replay', icon: 'restore' },
-  { id: 'account', label: 'Account', icon: 'settings' },
+  { id: 'restore', label: 'Restore & Replay', icon: 'restore' },
+  { id: 'account', label: 'Account & Plan', icon: 'settings' },
 ];
 
 const TITLES = Object.fromEntries(NAV.map(i => [i.id, i.label]));
@@ -622,7 +622,7 @@ export function ConsoleApp() {
             <p>Job and subscription status could not be loaded. This is not confirmation that no jobs exist or that backups are healthy.</p>
             <button type="button" className="pb-btn" onClick={() => window.location.reload()}>Reload account activity</button>
           </div></div>}
-          {!isDemoMode() && (dashboardLoading || dashboardUnavailable) && ['dashboard', 'home'].includes(route.page) ? null : body}
+          {!isDemoMode() && dashboardLoading && ['dashboard', 'home'].includes(route.page) ? null : body}
         </div>
       </div>
 

@@ -18,6 +18,7 @@ import { formatOperatorTime } from '../lib/operator-time.js';
 import { JobSetupWizard, TableSizer } from './table-sizer.jsx';
 import { ConnectSupabaseFlow } from './connect-supabase.jsx';
 import { NotificationPreferences } from './notification-preferences.jsx';
+import { GuidedWalkthrough } from './walkthrough.jsx';
 
 function Badge({ tone, children }) {
   const t = tone === 'ok' || tone === 'COMPLETE' || tone === 'green' || tone === 'MATCH'
@@ -130,6 +131,16 @@ export function CustomerDashboardPage({
             </button>
           </>
         }
+      />
+
+      <GuidedWalkthrough
+        state={state}
+        setState={setState}
+        toast={toast}
+        navigate={navigate}
+        plan={plan}
+        me={me}
+        onOpenSizer={() => { setTab('sizer'); setWizard(true); }}
       />
 
       {model.demo && (

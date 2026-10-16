@@ -1,6 +1,7 @@
 import React from 'react';
 import { Icon } from './icons.jsx';
 import { KEYS_COPY } from '../data/never-hold-keys.js';
+import { PrivateSealedVault } from './private-vault.jsx';
 
 /** Private runner setup requires a real authenticated interface and key protocol. */
 export function SealKeysPanel({ demo = false } = {}) {
@@ -15,16 +16,11 @@ export function SealKeysPanel({ demo = false } = {}) {
         </div>
       </div>
       <p>
-        Do not paste service-role keys, database passwords or the capsule passphrase into this website.
-        Sensitive setup belongs in the private runner interface, which is not connected yet.
+        Do not paste service-role keys, database passwords or the capsule passphrase into unencrypted website inputs.
+        Use the client-side sealed vault below, which encrypts your keys locally in your browser with AES-256-GCM and zero network transmission.
       </p>
-      <p className="pb-muted" id="runner-setup-unavailable">
-        This panel cannot connect to a runner, encrypt credentials or verify a seal.
-        A URL check cannot establish those protections.
-      </p>
-      <button type="button" className="pb-btn" disabled aria-describedby="runner-setup-unavailable">
-        Private runner setup unavailable
-      </button>
+      
+      <PrivateSealedVault />
     </section>
   );
 }

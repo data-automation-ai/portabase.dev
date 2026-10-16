@@ -167,6 +167,46 @@ function Logo({ href = '/' }) {
   return <a className="logo" href={href} aria-label="Portabase home"><span className="logo-mark"><i /><i /><i /></span><span>porta<b>base</b></span></a>;
 }
 
+function TopAnnouncementBanner() {
+  return (
+    <aside className="pb-top-announcement-banner" aria-label="Special pricing announcement" style={{
+      background: 'linear-gradient(90deg, #132a1e 0%, #1f4a33 50%, #132a1e 100%)',
+      borderBottom: '1px solid rgba(62, 207, 142, 0.3)',
+      color: '#f0fdf4',
+      padding: '9px 16px',
+      fontSize: '13px',
+      fontWeight: 500,
+      textAlign: 'center',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '12px',
+      zIndex: 100,
+      position: 'relative',
+    }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+        <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#3ecf8e', boxShadow: '0 0 6px #3ecf8e' }}></span>
+        <strong style={{ color: '#fff', fontWeight: 700 }}>7 dollars per month for secure protection.</strong>
+      </span>
+      <a href="/login?mode=signup&next=/dashboard" style={{
+        background: '#3ecf8e',
+        color: '#0d1117',
+        fontSize: '12px',
+        fontWeight: 700,
+        padding: '3px 10px',
+        borderRadius: '999px',
+        textDecoration: 'none',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '4px',
+        transition: 'transform 0.15s ease',
+      }}>
+        Get Started <span aria-hidden="true">&rarr;</span>
+      </a>
+    </aside>
+  );
+}
+
 function Header() {
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState(() => sessionUser(loadSession()));
@@ -176,26 +216,29 @@ function Header() {
     sync();
     return () => window.removeEventListener('portabase-auth', sync);
   }, []);
-  return <header className="site-header">
-    <div className="shell nav-wrap">
-      <Logo href="/#top" />
-      <button className="menu" onClick={() => setOpen(!open)} aria-label="Toggle navigation">{open ? 'Close' : 'Menu'}</button>
-      <nav className={open ? 'nav open' : 'nav'}>
-        <a href="/#escape">Escape</a>
-        <a href="/#never-hold-keys">Keys</a>
-        <a href="/#cli-vs-cloud">CLI vs Cloud</a>
-        <a href="/#faq">FAQ</a>
-        <a href="/#stories">Incidents</a>
-        <a href="/docs">Docs</a>
-        <a href="/security">Security</a>
-        <a href="/cloud">Pricing</a>
-        <a href={user ? '/dashboard' : '/login'}>{user ? 'Dashboard' : 'Sign in'}</a>
-      </nav>
-      <a className="button button-small desktop-cta" href={user ? '/dashboard' : '/login?next=/dashboard'}>
-        {user ? 'Open dashboard' : 'Start free trial'} <Arrow />
-      </a>
-    </div>
-  </header>;
+  return <>
+    <TopAnnouncementBanner />
+    <header className="site-header">
+      <div className="shell nav-wrap">
+        <Logo href="/#top" />
+        <button className="menu" onClick={() => setOpen(!open)} aria-label="Toggle navigation">{open ? 'Close' : 'Menu'}</button>
+        <nav className={open ? 'nav open' : 'nav'}>
+          <a href="/#escape">Escape</a>
+          <a href="/#never-hold-keys">Keys</a>
+          <a href="/#cli-vs-cloud">CLI vs Cloud</a>
+          <a href="/#faq">FAQ</a>
+          <a href="/#stories">Incidents</a>
+          <a href="/docs">Docs</a>
+          <a href="/security">Security</a>
+          <a href="/cloud">Pricing</a>
+          <a href={user ? '/dashboard' : '/login'}>{user ? 'Dashboard' : 'Sign in'}</a>
+        </nav>
+        <a className="button button-small desktop-cta" href={user ? '/dashboard' : '/login?next=/dashboard'}>
+          {user ? 'Open dashboard' : 'Start free trial'} <Arrow />
+        </a>
+      </div>
+    </header>
+  </>;
 }
 
 function Hero() {

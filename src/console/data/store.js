@@ -19,6 +19,50 @@ function daysAgo(d) {
   return hoursAgo(d * 24);
 }
 
+export const CONSUMER_EMAIL_DOMAINS = new Set([
+  'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com',
+  'yahoo.com', 'ymail.com', 'rocketmail.com',
+  'icloud.com', 'me.com', 'mac.com',
+  'proton.me', 'protonmail.com', 'pm.me',
+  'aol.com', 'aim.com', 'zoho.com', 'mail.com', 'gmx.com', 'gmx.net',
+  'fastmail.com', 'tutanota.com', 'tuta.io', 'hey.com',
+]);
+
+export function deriveWorkspaceName(user = {}) {
+  const email = String(user.email || '').trim().toLowerCase();
+  const domain = email.includes('@') ? email.split('@')[1] : '';
+  const domainPrefix = domain ? domain.split('.')[0] : '';
+  const isConsumer = !domain || CONSUMER_EMAIL_DOMAINS.has(domain);
+
+  if (user.name && user.name.trim() && user.name !== 'Operator') {
+    return `${user.name.trim()}'s workspace`;
+  }
+  if (email && isConsumer) {
+    const handle = email.split('@')[0];
+    return handle ? `${handle}'s workspace` : 'Portabase Workspace';
+  }
+  if (domainPrefix && !isConsumer) {
+    return `${domainPrefix} workspace`;
+  }
+  return 'Portabase Workspace';
+}
+
+export function sanitizeWorkspaceName(existingName, user = {}) {
+  if (!existingName || typeof existingName !== 'string') return deriveWorkspaceName(user);
+  const lower = existingName.trim().toLowerCase();
+  const consumerPrefixes = [
+    'gmail', 'googlemail', 'outlook', 'hotmail', 'live', 'msn',
+    'yahoo', 'ymail', 'icloud', 'me', 'proton', 'protonmail',
+    'aol', 'zoho', 'mail', 'gmx', 'production recovery', 'your recovery',
+  ];
+  const isOldRecovery = consumerPrefixes.some(p => lower === `${p} recovery` || lower.startsWith(`${p} recovery`))
+    || lower.endsWith(' recovery');
+  if (isOldRecovery) {
+    return deriveWorkspaceName(user);
+  }
+  return existingName;
+}
+
 export function seedWorkspace(user = {}) {
   const projectA = uid('proj');
   const projectB = uid('proj');
@@ -52,9 +96,7 @@ export function seedWorkspace(user = {}) {
     version: 1,
     workspace: {
       id: uid('ws'),
-      name: user.email?.split('@')[1]?.split('.')[0]
-        ? `${user.email.split('@')[1].split('.')[0]} recovery`
-        : 'Production recovery',
+      name: deriveWorkspaceName(user),
       slug: 'production',
       plan: 'cloud-17',
       cloudVersion: user.cloudVersion || 'supabase',
@@ -310,9 +352,7 @@ export function emptyWorkspace(user = {}) {
     version: 2,
     workspace: {
       id: 'ws_empty',
-      name: user.email?.split('@')[1]?.split('.')[0]
-        ? `${user.email.split('@')[1].split('.')[0]} recovery`
-        : 'Your recovery workspace',
+      name: deriveWorkspaceName(user),
       slug: 'workspace',
       plan: 'cloud-17',
       cloudVersion: user.cloudVersion || 'supabase',
@@ -413,6 +453,7 @@ export function loadLiveConsoleState(user) {
           data.workspace.cloudVersion = user.cloudVersion;
           data.billing = { ...data.billing, cloudVersion: user.cloudVersion };
         }
+        data.workspace.name = sanitizeWorkspaceName(data.workspace.name, { ...data.profile, ...user });
         return data;
       }
     }
@@ -438,6 +479,7 @@ export function loadConsoleState(user) {
           data.workspace.cloudVersion = user.cloudVersion;
           data.billing = { ...data.billing, cloudVersion: user.cloudVersion };
         }
+        data.workspace.name = sanitizeWorkspaceName(data.workspace.name, { ...data.profile, ...user });
         return data;
       }
     }

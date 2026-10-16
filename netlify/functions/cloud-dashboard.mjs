@@ -3,9 +3,8 @@ import { withBlobs } from '../shared/subscription-store.mjs';
  * GET /api/cloud/dashboard — customer telemetry for the signed-in user.
  * Reads the jobs blob store + subscription. Never returns keys or capsule bytes.
  */
-import { getStore } from '@netlify/blobs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
-import { deriveAccess, getSubscriptionForUser } from '../shared/subscription-store.mjs';
+import { deriveAccess, getSubscriptionForUser, store } from '../shared/subscription-store.mjs';
 import { findForbiddenField } from '../../cloud/control-plane/forbidden.mjs';
 import { buildDashboardModel, sanitizeJobTelemetry } from '../../src/lib/dashboard-view.js';
 import { resolveSquareCheckoutReady } from '../shared/square-ready.mjs';
@@ -15,7 +14,7 @@ import { publicDashboardJob } from '../shared/public-records.mjs';
 import { normalizeJobQueue } from '../shared/job-queue-envelope.mjs';
 
 function jobsStore() {
-  return getStore({ name: 'portabase-cloud-jobs', consistency: 'strong' });
+  return store('portabase-cloud-jobs');
 }
 
 export function createDashboardHandler({ authenticate = verifyCloudUser, jobsDatabase = jobsStore, subscription = getSubscriptionForUser, squareStatus = async () => publicSquareStatus(await resolveSquareCheckoutReady()) } = {}) {

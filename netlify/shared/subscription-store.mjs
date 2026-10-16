@@ -95,16 +95,32 @@ export function createLocalFallbackStore(name = STORE) {
 export function withBlobs(handler) {
   return async (event, ...args) => {
     if (event?.blobs) connectLambda(event);
+    const siteID = process.env.NETLIFY_BLOBS_SITE_ID || process.env.SITE_ID || '794217cc-42ab-4a9f-81da-06a661403573';
+    const token = process.env.NETLIFY_BLOBS_TOKEN;
+    if (!process.env.NETLIFY_BLOBS_CONTEXT && !globalThis.netlifyBlobsContext && siteID && token) {
+      try {
+        globalThis.netlifyBlobsContext = Buffer.from(JSON.stringify({ siteID, token })).toString('base64');
+      } catch {
+        // ignore
+      }
+    }
     return handler(event, ...args);
   };
 }
 
 export function store(name = STORE) {
-  const siteID = process.env.NETLIFY_BLOBS_SITE_ID || process.env.SITE_ID;
+  const siteID = process.env.NETLIFY_BLOBS_SITE_ID || process.env.SITE_ID || '794217cc-42ab-4a9f-81da-06a661403573';
   const token = process.env.NETLIFY_BLOBS_TOKEN;
   const configured = process.env.NETLIFY_BLOBS_CONTEXT || globalThis.netlifyBlobsContext || (siteID && token);
   if (!configured && !process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
     return createLocalFallbackStore(name);
+  }
+  if (!process.env.NETLIFY_BLOBS_CONTEXT && !globalThis.netlifyBlobsContext && siteID && token) {
+    try {
+      globalThis.netlifyBlobsContext = Buffer.from(JSON.stringify({ siteID, token })).toString('base64');
+    } catch {
+      // ignore
+    }
   }
   // Never silently persist production billing on ephemeral Lambda disk.
   return getStore({ name, consistency: 'strong', ...(siteID && token ? { siteID, token } : {}) });
