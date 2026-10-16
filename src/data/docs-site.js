@@ -7,16 +7,17 @@ import { CLI_INSTALL } from '../lib/product.js';
 
 export const DOCS_NAV = Object.freeze([
   Object.freeze({
-    label: 'Get started',
+    label: 'Open-Source NPM CLI',
     items: Object.freeze([
-      Object.freeze({ slug: 'introduction', href: '/docs/introduction', title: 'Introduction' }),
+      Object.freeze({ slug: 'introduction', href: '/docs/introduction', title: 'NPM Package Overview' }),
       Object.freeze({ slug: 'quickstart', href: '/docs/quickstart', title: 'Quickstart' }),
+      Object.freeze({ slug: 'cli', href: '/docs/cli', title: 'CLI Commands & Examples' }),
       Object.freeze({ slug: 'keepalive', href: '/docs/keepalive', title: 'Keepalive' }),
       Object.freeze({ slug: 'rls-check', href: '/docs/rls-check', title: 'RLS exposure check' }),
     ]),
   }),
   Object.freeze({
-    label: 'Recovery',
+    label: 'Cross-Account Recovery',
     items: Object.freeze([
       Object.freeze({ slug: 'restore-targets', href: '/docs/restore-targets', title: 'Restore targets' }),
       Object.freeze({ slug: 'disaster-recovery', href: '/docs/disaster-recovery', title: 'Disaster recovery' }),
@@ -25,39 +26,28 @@ export const DOCS_NAV = Object.freeze([
     ]),
   }),
   Object.freeze({
-    label: 'Cloud',
+    label: 'Cloud & Trust',
     items: Object.freeze([
-      Object.freeze({ slug: 'cloud', href: '/docs/cloud', title: 'Cloud' }),
-    ]),
-  }),
-  Object.freeze({
-    label: 'Trust',
-    items: Object.freeze([
+      Object.freeze({ slug: 'cloud', href: '/docs/cloud', title: 'Portabase Cloud' }),
       Object.freeze({ slug: 'threat-model', href: '/docs/threat-model', title: 'Threat model' }),
       Object.freeze({ slug: 'proven', href: '/docs/proven', title: 'Guarantees & limits' }),
-    ]),
-  }),
-  Object.freeze({
-    label: 'Reference',
-    items: Object.freeze([
-      Object.freeze({ slug: 'cli', href: '/docs/cli', title: 'CLI reference' }),
     ]),
   }),
 ]);
 
 export const DOCS_TITLES = Object.freeze({
-  introduction: 'Introduction',
-  quickstart: 'Quickstart',
+  introduction: 'Portabase NPM Package — Official Documentation',
+  quickstart: 'Quickstart & CLI Setup',
+  cli: 'CLI Commands, Flags & Invocation Examples',
   keepalive: 'Keepalive',
-  'restore-targets': 'Restore targets',
-  'disaster-recovery': 'Disaster recovery',
+  'restore-targets': 'Restore targets (New Account)',
+  'disaster-recovery': 'Disaster recovery runbook',
   'auth-cutover': 'Auth cutover',
   'manual-contingency': 'Manual effort contingency',
   'rls-check': 'RLS exposure check',
-  cloud: 'Cloud',
-  'threat-model': 'Threat model',
+  cloud: 'Portabase Cloud',
+  'threat-model': 'Threat model & Zero-Knowledge Keys',
   proven: 'Recovery guarantees & limits',
-  cli: 'CLI reference',
 });
 
 const CLI_HASHES = new Set([
@@ -78,7 +68,7 @@ export function resolveDocsSlug(pathname = '', hash = '') {
   if (path === '/docs/cloud') return 'cloud';
   if (path === '/docs/threat-model' || path === '/docs/keys') return 'threat-model';
   if (path === '/docs/proven' || path === '/docs/proven-vs-not') return 'proven';
-  if (path === '/docs/cli' || path === '/docs/reference') return 'cli';
+  if (path === '/docs/cli' || path === '/docs/reference' || path === '/docs/npm' || path === '/docs/examples') return 'cli';
   if (path === '/docs' && CLI_HASHES.has(h)) return 'cli';
   return 'introduction';
 }

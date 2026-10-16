@@ -31,31 +31,104 @@ function Introduction() {
   return (
     <>
       <p className="docs-lead">
-        <strong>Supabase is an excellent product.</strong> Portabase is the Escape hatch —
-        an open-source, customer-owned encrypted capsule you can still reach if the dashboard is locked.
-        Platform backups cover the database volume. They do not take Storage object bytes, and they still sit behind the same account door.
+        <strong>Supabase is an excellent product.</strong> Portabase (<code>npm install -g portabase</code> / <code>npx portabase</code>) is the open-source Apache-2.0 disaster-recovery and cross-account migration engine that captures an entire Supabase project —{' '}
+        <strong>PostgreSQL roles, schema, and data</strong>, <strong>Auth user inventory</strong>, <strong>Storage object bytes</strong>, and <strong>Edge Function source</strong> — seals it into an <strong>AES-256-GCM encrypted capsule</strong>, and stores it in <strong>your</strong> vault.
       </p>
-      <h2>What an escape package is</h2>
       <p>
-        An escape package is a customer-owned encrypted capsule of <strong>database, Auth, Storage object bytes, and Edge Functions</strong>.
-        It is not an official Supabase backup. Official backups remain valuable — they are not a way out if the account door does not open.
+        If a dashboard is locked, MFA breaks, or an account is suspended, official platform backups remain behind that locked login. A Portabase capsule sits outside the account — ready to restore and verify into a <strong>brand-new Supabase account under a different email address</strong>.
       </p>
-      <h2>Free CLI vs Cloud</h2>
+      <h2>Install &amp; Quick Start (Official NPM Package)</h2>
       <p>
-        The engine is free and open source. You run it. Cloud is optional convenience: GUI, guided setup, telemetry,
-        and (on paid plans) schedules. Same capsule engine either way. You bring the vault.
+        <strong>Prerequisites:</strong> Node.js 20+, <code>pg_dump</code> and <code>psql</code> on <code>PATH</code>, and credentials for your source Supabase project.
+        Package on npm: <a href="https://www.npmjs.com/package/portabase" target="_blank" rel="noreferrer"><code>portabase</code></a> · Source on GitHub: <a href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer"><code>data-automation-ai/portabase.dev</code></a>.
       </p>
+      <Code>{`# Install globally from npm (or invoke directly with npx portabase)
+npm install -g portabase
+
+# 1. Initialize configuration (writes portabase.config.json — never commit secrets)
+portabase init
+
+# 2. Validate tools, credentials, database & bucket sizes, and vault connectivity
+portabase doctor
+portabase sizes
+portabase plan
+portabase ui              # Launch local read-only sizing & capsule inspection GUI
+
+# 3. Capture and seal a full AES-256-GCM encrypted capsule
+portabase backup --progress
+
+# 4. Verify capsule integrity & test decryption offline (no target project required)
+portabase verify --capsule ./portabase-capsules/<capsule-id> --decrypt
+portabase simulate --capsule ./portabase-capsules/<capsule-id>
+
+# 5. Build a selective restore plan (e.g. to fit a 500 MB free-tier test target)
+portabase restore-plan --capsule ./portabase-capsules/<capsule-id>
+
+# 6. Execute a guarded restore into a NEW blank Supabase project (in a separate account)
+portabase restore \\
+  --capsule ./portabase-capsules/<capsule-id> \\
+  --execute \\
+  --confirm-target <NEW_TARGET_PROJECT_REF>`}</Code>
+      <p>
+        Looking for more invocation flags (DDL-only, selective table inclusion/exclusion, incremental binary caching, delta capsules, S3 object diversion)? Jump straight to <a href="/docs/cli"><strong>CLI Commands, Flags &amp; Invocation Examples →</strong></a>
+      </p>
+      <h2>What is inside a Portabase capsule</h2>
       <div className="docs-table-wrap">
         <table className="docs-table">
           <thead>
-            <tr><th>Layer</th><th>Free open-source CLI</th><th>Portabase Cloud</th></tr>
+            <tr><th>Layer</th><th>Official Platform Backup</th><th>Portabase Encrypted Capsule</th></tr>
           </thead>
           <tbody>
-            <tr><td>Who runs capture</td><td>You, on a machine you control</td><td>Your Cloud Runner</td></tr>
-            <tr><td>Keys</td><td>Stay on that machine</td><td>Browser seals keys to the runner only</td></tr>
-            <tr><td>Control plane</td><td>None</td><td>Status and hashes — never keys or capsule bytes</td></tr>
-            <tr><td>Scheduled service</td><td>Your cron</td><td>The free plan has no scheduled service. Paid $7 / $17 include schedules.</td></tr>
-            <tr><td>Price</td><td>Free</td><td>Cloud Free, then {planPriceRangeLabel()}</td></tr>
+            <tr>
+              <td><strong>PostgreSQL roles, schema, RLS policies, triggers, functions, and table rows</strong></td>
+              <td>Yes</td>
+              <td><strong>Yes</strong> (<code>roles.sql</code>, <code>schema.sql</code>, <code>data.sql</code> + exact row &amp; object inventory)</td>
+            </tr>
+            <tr>
+              <td><strong>Auth users &amp; identity inventory</strong></td>
+              <td>Behind the same login</td>
+              <td><strong>Yes</strong> (<code>auth.users</code> + <code>auth-inventory.json</code>)</td>
+            </tr>
+            <tr>
+              <td><strong>Storage files (actual binary object bytes)</strong></td>
+              <td><strong>No</strong> — metadata only</td>
+              <td><strong>Yes</strong> (SHA-256 verified object payloads + MD5 name/size inventory fingerprint)</td>
+            </tr>
+            <tr>
+              <td><strong>Edge Function source &amp; config</strong></td>
+              <td><strong>No</strong></td>
+              <td><strong>Yes</strong> (<code>functions-manifest.json</code>, TypeScript/JS source trees, and <code>ESZIP</code> extraction)</td>
+            </tr>
+            <tr>
+              <td><strong>Restorable into a brand-new Supabase account (different email)</strong></td>
+              <td><strong>No</strong></td>
+              <td><strong>Yes</strong> — guarded restore &amp; replay with post-restore readback verification</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <h2>Supported Storage Destinations (BYO Vault)</h2>
+      <p>
+        Portabase never holds your recovery archives. Capsules are encrypted locally with <code>scrypt</code> + <code>AES-256-GCM</code> before transfer and written directly to your storage:
+      </p>
+      <ul>
+        <li><strong>Amazon S3 (<code>aws</code>):</strong> Direct S3 upload with post-upload sync verification.</li>
+        <li><strong>Dropbox (<code>dropbox</code>):</strong> Native Dropbox API v2 connector (<code>DROPBOX_ACCESS_TOKEN</code> or OAuth2 refresh token) with chunked upload sessions and cryptographic verification against Dropbox&apos;s 4 MB block SHA-256 <code>content_hash</code> (plus <code>rclone</code> fallback).</li>
+        <li><strong>Google Drive (<code>google-drive</code>):</strong> Native Google Drive API v3 connector (<code>GOOGLE_DRIVE_ACCESS_TOKEN</code> or OAuth2 refresh token) with automatic <code>/Portabase/&lt;capsuleId&gt;</code> folder resolution and server-computed <code>sha256Checksum</code> verification (plus <code>rclone</code> fallback).</li>
+        <li><strong>Local / NAS (<code>local</code>):</strong> Encrypted capsules on local disk, USB, or NAS (≤ 100 MB default per capsule unless <code>--allow-large-local</code> is passed).</li>
+      </ul>
+      <h2>Free Open-Source CLI vs. Portabase Cloud</h2>
+      <div className="docs-table-wrap">
+        <table className="docs-table">
+          <thead>
+            <tr><th>Layer</th><th>Free open-source CLI (<code>npx portabase</code>)</th><th>Portabase Cloud</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Who runs capture</td><td>You, on a machine, VM, NAS, or CI you control</td><td>Your Cloud Runner or local agent</td></tr>
+            <tr><td>Keys &amp; Passphrase</td><td>Stay on that machine (<code>.env.portabase.local</code>)</td><td>Browser seals keys to the runner only</td></tr>
+            <tr><td>Control plane</td><td>None (100% standalone)</td><td>Status and hashes — never keys or capsule bytes</td></tr>
+            <tr><td>Scheduled service</td><td>Your cron / Task Scheduler</td><td>The free plan has no scheduled service. Paid $7 / $17 include schedules.</td></tr>
+            <tr><td>Price</td><td>Free forever (Apache-2.0)</td><td>Cloud Free, then {planPriceRangeLabel()}</td></tr>
           </tbody>
         </table>
       </div>
@@ -72,7 +145,7 @@ function Introduction() {
       </div>
       <p>
         Independent product — not affiliated with Supabase, Inc.
-        Source: <a href="/docs/threat-model">threat model</a>, <a href="https://github.com/DataAutomation-ai/portabase-CLI" target="_blank" rel="noreferrer">portabase-CLI</a>.
+        Source: <a href="/docs/threat-model">threat model</a>, <a href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">data-automation-ai/portabase.dev</a>.
       </p>
     </>
   );
@@ -305,13 +378,174 @@ function CliReference({ Arrow }) {
   return (
     <>
       <p className="docs-lead">
-        Fill-missing, restore order, drift, destinations, and related CLI surfaces already documented on this site.
-        Cloud remains optional telemetry. Independent product — not affiliated with Supabase, Inc.
+        Complete command reference and real-world invocation examples for the open-source{' '}
+        <a href="https://www.npmjs.com/package/portabase" target="_blank" rel="noreferrer"><code>portabase</code></a> NPM package.
+        Run globally with <code>portabase &lt;command&gt;</code>, on-demand with <code>npx portabase &lt;command&gt;</code>, or from a git clone with <code>npm run portabase -- &lt;command&gt;</code>.
       </p>
-      <h2 id="install">Install</h2>
-      <Code>{installCopy.command}</Code>
+      <h2 id="install">1 · Install &amp; Environment Setup</h2>
+      <Code>{`# Install globally from npm
+npm install -g portabase
+
+# Or invoke any command without global install
+npx portabase --help`}</Code>
       <ol>
         {installCopy.steps.map((step) => <li key={step}>{step}</li>)}
+      </ol>
+      <p>
+        Create a gitignored <code>.env.portabase.local</code> file on your machine with your source project and target lifeboat project credentials:
+      </p>
+      <Code>{`# Source Supabase project (to capture from)
+SUPABASE_PROJECT_REF=your_source_project_ref
+SUPABASE_URL=https://your_source_project_ref.supabase.co
+SUPABASE_DB_URL=postgresql://postgres:YOUR_DB_PASS@db.your_source_project_ref.supabase.co:5432/postgres
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+SUPABASE_ACCESS_TOKEN=sbp_...
+
+# Capsule encryption passphrase (>= 16 characters — keep in your password manager!)
+PORTABASE_ENCRYPTION_PASSPHRASE=correct-horse-battery-staple-2026
+
+# Optional BYO Vault credentials (Google Drive / Dropbox / AWS S3)
+GOOGLE_DRIVE_ACCESS_TOKEN=ya29...
+DROPBOX_ACCESS_TOKEN=sl.B...
+AWS_DEFAULT_REGION=us-east-1
+
+# Target Supabase project (in a separate Supabase account under a different email)
+PORTABASE_TARGET_PROJECT_REF=your_new_account_project_ref
+PORTABASE_TARGET_SUPABASE_URL=https://your_new_account_project_ref.supabase.co
+PORTABASE_TARGET_DB_URL=postgresql://postgres:TARGET_DB_PASS@db.your_new_account_project_ref.supabase.co:5432/postgres
+PORTABASE_TARGET_SERVICE_ROLE_KEY=eyJ...`}</Code>
+
+      <h2>2 · Summary of CLI Scenarios &amp; Flags</h2>
+      <div className="docs-table-wrap">
+        <table className="docs-table">
+          <thead>
+            <tr><th>Scenario / Goal</th><th>CLI Invocation</th><th>What is captured / restored</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Initialize &amp; check health</strong></td><td><code>portabase init &amp;&amp; portabase doctor</code></td><td>Creates <code>portabase.config.json</code> and verifies <code>pg_dump</code>, <code>psql</code>, DB, Storage, and vault access</td></tr>
+            <tr><td><strong>Inspect table &amp; bucket sizes</strong></td><td><code>portabase sizes [--json]</code></td><td>Read-only size &amp; row/object inventory per Postgres table and Storage bucket</td></tr>
+            <tr><td><strong>Full encrypted backup</strong></td><td><code>portabase backup --progress</code></td><td>Complete Postgres roles/schema/rows, Auth inventory, Storage bytes, and Edge Functions</td></tr>
+            <tr><td><strong>Schema-only backup (no rows)</strong></td><td><code>portabase backup --ddl-only</code></td><td>All database DDL, functions, triggers, and RLS policies without table row data</td></tr>
+            <tr><td><strong>Exclude specific heavy tables</strong></td><td><code>portabase backup --exclude-table-data public.logs,public.events</code></td><td>Keeps table DDL for all tables; omits row data for listed tables</td></tr>
+            <tr><td><strong>Include only specific table rows</strong></td><td><code>portabase backup --include-table-data public.orders,public.users</code></td><td>Keeps table DDL for all tables; captures row data only for listed tables</td></tr>
+            <tr><td><strong>Storage inventory without file bytes</strong></td><td><code>portabase backup --storage-inventory-only</code></td><td>Captures full DB + Storage file names/sizes without downloading binary payloads</td></tr>
+            <tr><td><strong>Incremental binary cache</strong></td><td><code>portabase backup --incremental-binary</code></td><td>Reuses hash-verified local cache for unchanged binary files while writing a standalone capsule</td></tr>
+            <tr><td><strong>Differential delta capsule</strong></td><td><code>portabase backup --delta --baseline &lt;FULL_CAPSULE&gt;</code></td><td>Stores only changed objects and SQL diffs relative to a verified full baseline</td></tr>
+            <tr><td><strong>Verify &amp; decrypt test offline</strong></td><td><code>portabase verify --capsule &lt;DIR&gt; --decrypt</code></td><td>Verifies SHA-256 manifest signatures and tests AES-256-GCM decryption locally</td></tr>
+            <tr><td><strong>Guarded restore to new account</strong></td><td><code>portabase restore --capsule &lt;DIR&gt; --execute --confirm-target &lt;REF&gt;</code></td><td>Restores DB, Auth, Storage, and Functions into a blank project in a new Supabase account</td></tr>
+            <tr><td><strong>Restore DB + divert files to S3</strong></td><td><code>portabase restore --storage-to-s3 s3://bucket/prefix ...</code></td><td>Restores Postgres to a free-tier Supabase project while streaming Storage files to S3</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2>3 · Step-by-Step Invocation Examples</h2>
+
+      <h3>Example A · Inspect table and Storage bucket sizes before capture</h3>
+      <p>Run a read-only size audit without downloading any Storage files:</p>
+      <Code>{`# Human-readable table & bucket breakdown
+portabase sizes
+
+# Export machine-readable JSON size inventory
+portabase sizes --json > ./project-sizes.json
+
+# Or launch the local read-only sizing & capsule viewer UI in your browser
+portabase ui`}</Code>
+
+      <h3>Example B · Full baseline capture, offline verify, and simulation</h3>
+      <Code>{`# Capture all layers (Database, Auth, Storage object bytes, Edge Functions)
+portabase backup --progress
+
+# Check latest backup status
+portabase status
+
+# Cryptographically verify SHA-256 hashes and test AES-256-GCM decryption
+portabase verify --capsule ./portabase-capsules/myref-2026-10-16T12-00-00.000Z --decrypt
+
+# Simulate restore layout offline without touching any target project
+portabase simulate --capsule ./portabase-capsules/myref-2026-10-16T12-00-00.000Z --json`}</Code>
+
+      <h3>Example C · Selective backups (DDL-only, table filtering, or excluding binaries)</h3>
+      <Code>{`# 1. Capture all database schemas, RLS policies & functions without table row data
+portabase backup --ddl-only
+
+# 2. Omit high-volume audit/event logs while keeping their CREATE TABLE schema
+portabase backup --exclude-table-data public.audit_logs,public.webhook_events
+
+# 3. Capture row data ONLY for critical business tables (all other tables keep DDL only)
+portabase backup --include-table-data public.customers,public.subscriptions,public.memberships
+
+# 4. Exclude binary Storage objects or capture Storage metadata inventory only
+portabase backup --exclude-binaries
+portabase backup --storage-inventory-only --include-buckets avatars,documents`}</Code>
+
+      <h3>Example D · Incremental binary caching &amp; differential delta capsules</h3>
+      <Code>{`# Reuse verified local binary cache across daily full capsules
+portabase backup --incremental-binary
+
+# Or create a lightweight differential delta capsule against a full baseline
+portabase backup --delta --baseline ./portabase-capsules/myref-full-baseline
+
+# Verify and preflight a delta + baseline pair together
+portabase verify --capsule ./portabase-capsules/myref-delta-01 --decrypt
+portabase restore \\
+  --capsule ./portabase-capsules/myref-delta-01 \\
+  --baseline ./portabase-capsules/myref-full-baseline \\
+  --preflight`}</Code>
+
+      <h3>Example E · Guarded cross-account restore into a brand-new Supabase account</h3>
+      <p>
+        Create a fresh Supabase account under a secondary email address, create a blank project, and run the 3-step guarded restore:
+      </p>
+      <Code>{`# Step 1: Decrypt capsule locally and print the restore plan (writes nothing)
+portabase restore --capsule ./portabase-capsules/myref-2026-10-16T12-00-00.000Z
+
+# Step 2: Run live preflight against the new target project (verifies target is blank & reachable)
+portabase restore \\
+  --capsule ./portabase-capsules/myref-2026-10-16T12-00-00.000Z \\
+  --preflight
+
+# Step 3: Execute the restore and run post-restore readback verification
+portabase restore \\
+  --capsule ./portabase-capsules/myref-2026-10-16T12-00-00.000Z \\
+  --execute \\
+  --confirm-target newprojectref0000001`}</Code>
+
+      <h3>Example F · Restore database to a free Supabase account + divert Storage files to S3</h3>
+      <p>
+        If your database fits inside a free-tier Supabase project (≤ 500 MB) but you have gigabytes of Storage files, divert the Storage objects directly into your own private S3 bucket during restore:
+      </p>
+      <Code>{`# Preflight S3 ownership and blank database target
+portabase restore \\
+  --capsule ./portabase-capsules/myref-2026-10-16T12-00-00.000Z \\
+  --preflight \\
+  --storage-to-s3 s3://my-recovery-bucket/portabase-objects \\
+  --s3-expected-owner 123456789012
+
+# Execute database restore to Supabase + verified object upload to S3
+portabase restore \\
+  --capsule ./portabase-capsules/myref-2026-10-16T12-00-00.000Z \\
+  --execute \\
+  --confirm-target newprojectref0000001 \\
+  --storage-to-s3 s3://my-recovery-bucket/portabase-objects \\
+  --s3-expected-owner 123456789012`}</Code>
+
+      <h3>Example G · Selective restore plan (trimming a full capsule to fit a smaller target)</h3>
+      <Code>{`# Generate an editable restore-plan.json from an existing full capsule
+portabase restore-plan \\
+  --capsule ./portabase-capsules/myref-2026-10-16T12-00-00.000Z \\
+  --output ./restore-plan.json
+
+# Edit restore-plan.json (set "selected": false on unneeded tables/buckets), then restore:
+portabase restore \\
+  --capsule ./portabase-capsules/myref-2026-10-16T12-00-00.000Z \\
+  --restore-plan ./restore-plan.json \\
+  --execute \\
+  --confirm-target newprojectref0000001`}</Code>
+
+      <h2 id="restore-order">4 · Restore order &amp; architecture surfaces</h2>
+      <p>Replay writes only into a <strong>new blank</strong> Supabase project — never the source.</p>
+      <ol>
+        {restoreOrder.map((step) => <li key={step.id}><strong>{step.title}.</strong> {step.body}</li>)}
       </ol>
       <h2 id="fill-missing">{fillMissing.title}</h2>
       <p>{fillMissing.summary}</p>
@@ -319,11 +553,6 @@ function CliReference({ Arrow }) {
       <Code>{`portabase restore --fill-missing --writers 1
 # default --writers is 1
 # not incremental sync — absent-only Storage/DB fill`}</Code>
-      <h2 id="restore-order">Restore order</h2>
-      <p>Replay into a <strong>new blank</strong> Supabase project. Never the source.</p>
-      <ol>
-        {restoreOrder.map((step) => <li key={step.id}><strong>{step.title}.</strong> {step.body}</li>)}
-      </ol>
       <h2 id="export-manifest">{exportManifest.title}</h2>
       <p>{exportManifest.summary}</p>
       <h2 id="report-drift">{reportDrift.title}</h2>
