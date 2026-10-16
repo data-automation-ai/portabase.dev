@@ -17,7 +17,7 @@ export function InstallCta({ Arrow }) {
           <pre className="docs-code" tabIndex={0}><code>{CLI_INSTALL.npmCommand}</code></pre>
           <div className="docs-cta-row">
             <a className="button button-primary" href={CLI_INSTALL.npmUrl} target="_blank" rel="noreferrer">View on npm <Arrow /></a>
-            <a className="button button-ghost" href={CLI_INSTALL.githubCli} target="_blank" rel="noreferrer">GitHub · portabase-CLI <Arrow /></a>
+            <a className="button button-ghost" href={CLI_INSTALL.githubCli} target="_blank" rel="noreferrer">GitHub · portabase.dev <Arrow /></a>
             <a className="button button-ghost" href="/docs/quickstart">Docs <Arrow /></a>
           </div>
         </div>

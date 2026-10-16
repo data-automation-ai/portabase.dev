@@ -23,12 +23,6 @@ export const diagrams = [
     layer: 'community',
   },
   {
-    src: '/images/diagrams/04-portabase-aws-recovery.png',
-    title: 'Customer-owned vault options',
-    body: 'Use Drive, Dropbox, local/NAS, or your own AWS S3 path. Templates help advanced teams; ownership of vault and keys stays with you.',
-    layer: 'community',
-  },
-  {
     src: '/images/diagrams/05-continuous-backup-cycle.png',
     title: 'Continuous backup cycle',
     body: 'Capture → encrypt → transfer → verify → retain. Optional Cloud telemetry watches the same cycle and alerts when it stalls.',

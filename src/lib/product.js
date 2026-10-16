@@ -24,10 +24,10 @@ export const CLOUD_MAX_AGENTS = 12;
 
 /** Verified public install / source URLs. */
 export const CLI_INSTALL = Object.freeze({
-  npmCommand: 'npm i -g portabase',
+  npmCommand: 'npx portabase',
   npmUrl: 'https://www.npmjs.com/package/portabase',
-  githubCli: 'https://github.com/DataAutomation-ai/portabase-CLI',
-  githubOrg: 'https://github.com/DataAutomation-ai',
+  githubCli: 'https://github.com/data-automation-ai/portabase.dev',
+  githubOrg: 'https://github.com/data-automation-ai',
 });
 
 /** @typedef {'cloud-7' | 'cloud-17' | 'cloud-37'} CloudPlanId */

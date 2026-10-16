@@ -467,13 +467,13 @@ function WhatIsThis() {
           {' '}Trust an Escape you can run yourself — and a Cloud that only exists to keep that Escape real.
         </p>
         <div className="open-core-story-actions">
-          <a className="button button-primary" href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">Browse the open-source engine <Arrow /></a>
+          <a className="button button-primary" href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">Browse the open-source engine <Arrow /></a>
           <a className="button button-ghost" href="/cloud">See open source vs Cloud <Arrow /></a>
         </div>
       </div>
       <div className="diagram-intro">
         <div><span>TECHNICAL DETAIL</span><h3>How recovery actually works — still customer-owned.</h3></div>
-        <p>These diagrams stay relevant under open core: data path, capsule contents, key custody, and restore guards. Captions now describe Community vs optional Cloud instead of a paid software unlock.</p>
+        <p>Architecture for zero-knowledge capture, AES-256-GCM encryption on your runner, customer-owned vaults, and guarded restore into a fresh Supabase project.</p>
       </div>
       <div className="diagram-grid">
         {diagrams.map(diagram => (
@@ -911,10 +911,10 @@ function Cutover() {
     <div>
       <div className="section-kicker green">TWO RECOVERY PATHS · BYO VAULT</div>
       <h2>Same capsule.<br />Your storage.</h2>
-      <p>No S3 or Dropbox yet? <strong>Local Starter</strong> keeps encrypted capsules on this computer (or USB/NAS) while each capsule is ≤ 100 MB. Prefer S3/Dropbox when you can — Portabase never hosts recovery bytes.</p>
+      <p>No S3, Dropbox, or Google Drive yet? <strong>Local Starter</strong> keeps encrypted capsules on this computer (or USB/NAS) while each capsule is ≤ 100 MB. Prefer Dropbox, Google Drive, or S3 when you can — Portabase never hosts recovery bytes.</p>
       <a className="button button-light" href="/cloud">Compare the two paths <Arrow /></a>
     </div>
-    <div className="vault-demo" role="img" aria-label="Customer-owned vault destinations: Amazon S3, Dropbox, and Local Starter under 100 MB available; Google Cloud Storage and Drive, Azure Blob, Backblaze B2, and Cloudflare R2 coming soon">
+    <div className="vault-demo" role="img" aria-label="Customer-owned vault destinations: Amazon S3, Dropbox, Google Drive, and Local Starter under 100 MB available; Google Cloud Storage, Azure Blob, Backblaze B2, and Cloudflare R2 coming soon">
       <div className="vault-demo-chrome">
         <span className="vault-demo-title">CUSTOMER-OWNED VAULT</span>
         <span className="vault-demo-badge">NO PORTABASE STORAGE</span>
@@ -926,7 +926,7 @@ function Cutover() {
       </div>
       <div className="vault-tier">
         <header><span className="led live" /><b>AVAILABLE NOW</b><small>production destinations</small></header>
-        <div className="vault-grid live three">
+        <div className="vault-grid live">
           <article className="vault-tile live">
             <span className="vault-icon" aria-hidden="true">
               <svg viewBox="0 0 32 32" fill="none"><path d="M6 22c0-4.4 3.1-8 7.2-8.8C14.4 9.4 17.8 7 22 7c4.4 0 8 3.1 8.8 7.2 3.6.8 6.2 4 6.2 7.8 0 4.4-3.6 8-8 8H14c-4.4 0-8-3.6-8-8z" stroke="currentColor" strokeWidth="1.4"/><path d="M11 18h10M11 21h7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
@@ -949,6 +949,16 @@ function Cutover() {
           </article>
           <article className="vault-tile live">
             <span className="vault-icon" aria-hidden="true">
+              <svg viewBox="0 0 32 32" fill="none"><path d="M10 22l6-10 6 10H10z" stroke="currentColor" strokeWidth="1.4"/><path d="M16 12l6 10h6L22 12h-6z" stroke="currentColor" strokeWidth="1.4"/></svg>
+            </span>
+            <div>
+              <small>CLOUD DRIVE</small>
+              <b>Google Drive</b>
+              <span className="status-ok">● Online · your account</span>
+            </div>
+          </article>
+          <article className="vault-tile live">
+            <span className="vault-icon" aria-hidden="true">
               <svg viewBox="0 0 32 32" fill="none"><rect x="6" y="8" width="20" height="16" rx="2" stroke="currentColor" strokeWidth="1.4"/><path d="M10 20h12M10 16h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
             </span>
             <div>
@@ -964,9 +974,9 @@ function Cutover() {
         <div className="vault-grid soon">
           <article className="vault-tile soon">
             <span className="soon-chip">COMING SOON</span>
-            <small>GCP + CONSUMER</small>
-            <b>GCP Storage / G-Drive</b>
-            <span>Cloud Storage · Google Drive</span>
+            <small>ENTERPRISE OBJECT STORE</small>
+            <b>Google Cloud Storage</b>
+            <span>Direct GCS bucket archive</span>
           </article>
           <article className="vault-tile soon">
             <span className="soon-chip">COMING SOON</span>
@@ -1232,21 +1242,21 @@ function CloudTeaser() {
 
 /** Opportunity deal framing: keep Supabase, remove SPOF */
 function PublicDeal() {
-  return <section className="section" id="deal" style={{ background: '#0a0b0d', borderTop: '1px solid #2a2b30' }}>
+  return <section className="section" id="deal">
     <div className="shell">
       <div className="section-kicker green">YOUR SUPABASE ESCAPE</div>
       <div className="split-heading">
         <h2>Keep Supabase.<br /><em>Own the Escape.</em></h2>
         <p>Portabase is your <strong>Supabase Escape</strong> — open source, Supabase-only. Encrypted capsule you control (database, Auth, <strong>Storage objects</strong>, <strong>Edge Functions</strong>) so lockout is not the end. This website is Cloud convenience: <strong>GUI, easier configuration, and telemetry</strong> — so the Escape stays real day to day, not a dusty script.</p>
       </div>
-      <div className="gap-callout" style={{ marginTop: 28, marginBottom: 8, padding: '22px 24px', border: '1px solid rgba(76,141,255,.35)', background: 'rgba(76,141,255,.05)' }}>
+      <div className="gap-callout" style={{ marginTop: 28, marginBottom: 8, padding: '22px 24px', border: '1px solid var(--paper-line-strong)', background: 'var(--paper-2)', borderRadius: 8 }}>
         <div className="section-kicker green" style={{ marginBottom: 10 }}>SUPABASE PLATFORM BACKUPS · THE GAP</div>
-        <h3 style={{ margin: '0 0 12px', fontSize: 22, letterSpacing: '-.03em' }}>Their backup is not a full product escape hatch.</h3>
-        <p style={{ margin: 0, color: '#b4b4ae', fontSize: 15, lineHeight: 1.65, maxWidth: 820 }}>
+        <h3 style={{ margin: '0 0 12px', fontSize: 22, letterSpacing: '-.03em', color: 'var(--ink)' }}>Their backup is not a full product escape hatch.</h3>
+        <p style={{ margin: 0, color: 'var(--ink-muted)', fontSize: 15, lineHeight: 1.65, maxWidth: 820 }}>
           Supabase documents that <strong>database backups do not include objects stored via the Storage API</strong> — the database holds <em>metadata</em> about files, not the file bytes themselves.
-          <a href="https://supabase.com/docs/guides/platform/backups" target="_blank" rel="noreferrer" style={{ color: 'var(--acid)', fontWeight: 700 }}> Official backups docs ↗</a>
+          <a href="https://supabase.com/docs/guides/platform/backups" target="_blank" rel="noreferrer" style={{ color: 'var(--accent-ink)', fontWeight: 700 }}> Official backups docs ↗</a>
           {' '}Edge Function source is managed outside that Postgres snapshot path — a DB-only restore does not bring back your Storage files or redeploy Functions for you.
-          <strong style={{ color: '#f0eee8' }}> Portabase captures Storage object bytes and Function source as first-class layers.</strong>
+          <strong style={{ color: 'var(--ink)' }}> Portabase captures Storage object bytes and Function source as first-class layers.</strong>
         </p>
       </div>
       <div className="dual-version-grid" style={{ marginTop: 28 }}>
@@ -1274,7 +1284,7 @@ function PublicDeal() {
       <div className="cloud-teaser-actions" style={{ marginTop: 28 }}>
         <a className="button button-primary" href="/cloud#subscribe">Cloud · GUI &amp; telemetry <Arrow /></a>
         <a className="button button-ghost" href="/backend">How the backend works <Arrow /></a>
-        <a className="button button-ghost" href="https://github.com/DataAutomation-ai" target="_blank" rel="noreferrer">Open-source engine <Arrow /></a>
+        <a className="button button-ghost" href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">Open-source engine <Arrow /></a>
       </div>
     </div>
   </section>;
