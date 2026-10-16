@@ -84,7 +84,7 @@ function AuthShell({ children, title, lead, version, cardLabel }) {
             </div>
             <ul className="auth-bullets">
               <li><span aria-hidden="true">1</span> Sign in with email or Google</li>
-              <li><span aria-hidden="true">2</span> 7-day trial · card required · then {productConfig.priceRangeLabel}/mo</li>
+              <li><span aria-hidden="true">2</span> 7-day trial · card required · then $7/mo (upgrade capacity or cadence anytime in-app)</li>
               <li><span aria-hidden="true">3</span> You own the capsule vault. Keys are never posted to Portabase servers.</li>
             </ul>
             <div className="auth-keys-note">
@@ -374,7 +374,7 @@ export function LoginPage() {
     <AuthShell
       version={version}
       title={mode === 'signup' ? 'Create your Cloud account' : mode === 'forgot' ? 'Reset password' : mode === 'update-password' ? 'Choose a new password' : 'Sign in to Cloud'}
-      lead="Email, magic link, or Google. Cloud Free 100 MB, then $7 or $17 via Square. You bring capsule storage. Keys are never posted to Portabase servers."
+      lead="Email, magic link, or Google. Cloud Free 100 MB, or $7/mo via Square — upgrade cadence or capacity anytime in-app. You bring capsule storage. Keys are never posted to Portabase servers."
       cardLabel={mode === 'signup' ? 'Create account' : mode === 'forgot' || mode === 'update-password' ? 'Reset password' : 'Sign in'}
     >
       <VersionPicker version={version} onChange={selectVersion} />
@@ -624,7 +624,7 @@ export function LoginPage() {
       {error && <p className="auth-error" id="auth-error" role="alert">{error}</p>}
       <p className="auth-legal">
         Launch scope: <strong>Supabase projects only</strong> (database, Auth, Storage, Edge Functions).
-        Identity: hosted Supabase Auth (email, magic link, Google). Trial requires a card and becomes {productConfig.priceRangeLabel}/mo after {productConfig.trialDays} days unless canceled.
+        Identity: hosted Supabase Auth (email, magic link, Google). Trial requires a card and becomes $7/mo after {productConfig.trialDays} days unless canceled, with an optional +$10/mo in-app upgrade for unlimited projects, incremental capsules up to 10 GB, and 3 capsules / day cadence.
         Keys are never posted to Portabase servers. Telemetry is status and hashes only — designed and tested in this repo, not a third-party audit.
         {AWS_CLOUD_VERSION_ENABLED ? '' : ' AWS Cognito Cloud is not offered yet.'}
       </p>

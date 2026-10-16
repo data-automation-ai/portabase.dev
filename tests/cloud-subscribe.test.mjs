@@ -21,9 +21,9 @@ test('subscription payment link is $0 trial with plan variation id', () => {
   assert.equal(PRICE_MONTHLY_CENTS, 1700);
   assert.equal(CLOUD_PRICE_MONTHLY_CENTS, 1700);
   assert.equal(CLOUD_PAYMENT_GATEWAY, 'square');
-  assert.match(body.description, /\$17\/mo|17\/mo/i);
+  assert.match(body.description, /\$7\/mo|7\/mo/i);
   assert.match(body.payment_note, /byo_storage=true/);
-  assert.match(body.payment_note, /25 GB/);
+  assert.match(body.payment_note, /500 MB/);
   assert.match(body.quick_pay.name, /BYO storage|12 agents/i);
   assert.equal(STORAGE_POLICY.includedInCloud, false);
   assert.equal(STORAGE_POLICY.owner, 'customer');
@@ -35,8 +35,8 @@ test('Scale Escape plan is hidden legacy $37 with 100 GB cap', () => {
   assert.equal(plan.priceMonthlyCents, 3700);
   assert.equal(plan.storageCapGb, 100);
   assert.equal(plan.customerFacing, false);
-  assert.equal(CLOUD_PLANS['cloud-7'].storageCapGb, 10);
-  assert.equal(CLOUD_PLANS['cloud-17'].storageCapGb, 25);
+  assert.equal(CLOUD_PLANS['cloud-7'].storageCapLabel, '500 MB');
+  assert.equal(CLOUD_PLANS['cloud-17'].storageCapGb, 10);
   assert.match(plan.cadenceLabel, /legacy hidden/i);
   const body = buildSubscriptionPaymentLinkRequest({
     locationId: 'LOC',

@@ -1226,7 +1226,7 @@ function CloudTeaser() {
       <div>
         <div className="section-kicker green">ESCAPE OPS</div>
         <h2>Open source is the Escape.<br />Cloud keeps the Escape running.</h2>
-        <p><strong>Supabase only.</strong> GitHub = free Escape engine. <strong>This site</strong> = hosted <strong>GUI</strong>, guided configuration, <strong>telemetry</strong>, and optional SMS on $17 — so the Escape is not a forgotten cron job. <strong>Cloud Free</strong> is 100 MB, manual only. Paid: <strong>$7</strong> (one database, 10 GB, 1 capsule / 24h) or <strong>$17</strong> (unlimited databases, 25 GB, 3 capsules / day). You provide capsule storage. Zero knowledge of your encryption keys. Restore into your <strong>contingency account</strong> — a free second Supabase account that the incident cannot touch. Refunds are self-serve: full within 8 days, prorated after, one button, no email required.</p>
+        <p><strong>Supabase only.</strong> GitHub = free Escape engine. <strong>This site</strong> = hosted <strong>GUI</strong>, guided configuration, <strong>telemetry</strong>, and optional SMS on $17 — so the Escape is not a forgotten cron job. <strong>Cloud Free</strong> is 100 MB, manual only. Paid: <strong>$7/mo</strong> (1 project, up to 500 MB, 1 capsule / 24h) or <strong>$17/mo</strong> (unlimited projects, incremental capsules up to 10 GB, 3 capsules / day). You provide capsule storage. Zero knowledge of your encryption keys. Restore into your <strong>contingency account</strong> — a free second Supabase account that the incident cannot touch. Refunds are self-serve: full within 8 days, prorated after, one button, no email required.</p>
         <p className="cloud-insurance"><strong>Both versions are fire insurance — and insurance only works before the fire.</strong> The free CLI is the policy you write yourself: one snapshot, taken before any lockout, that the incident cannot reach. Cloud is the premium: a few dollars a month to keep that policy current, tested, and watched. A proven restore is the payout — your business rebuilt in a new account while the old one is still locked. Nobody is glad they paid the premium. Everyone is glad they had the policy.</p>
         <div className="cloud-teaser-actions">
           <a className="button button-primary" href="/login?mode=signup&next=/app">Start free trial <Arrow /></a>
@@ -1236,8 +1236,8 @@ function CloudTeaser() {
       </div>
       <div className="cloud-teaser-price">
         <span>GUI · CONFIG · TELEMETRY · SMS</span>
-        <b>$7–17<small>/mo</small></b>
-        <em>Card required · auto-converts</em>
+        <b>$7<small>/mo</small></b>
+        <em>Card required · upgrade anytime in-app</em>
         <p>After 7-day free trial</p>
       </div>
     </div>
@@ -1333,7 +1333,7 @@ function CloudPage() {
           </p>
           <div className="cloud-hero-actions">
             <a className="button button-primary" href={signedIn ? '/dashboard' : '/login?mode=signup&next=/dashboard'}>Start 7-day free trial <Arrow /></a>
-            <a className="button button-ghost" href="#subscribe">View plans ($0 · $7 · $17) <Arrow /></a>
+            <a className="button button-ghost" href="#subscribe">View plans ($0 · $7/mo) <Arrow /></a>
             <a className="button button-ghost" href="/dashboard?demo=1">Interactive demo <Arrow /></a>
             <a className="button button-ghost" href="https://github.com/data-automation-ai/portabase.dev" target="_blank" rel="noreferrer">Open-source CLI (`npx portabase`) <Arrow /></a>
           </div>
@@ -1344,12 +1344,12 @@ function CloudPage() {
         <div className="shell">
           <div className="price-copy" style={{ maxWidth: 820, marginBottom: 28 }}>
             <div className="section-kicker green">PLANS &amp; PRICING · BYO VAULT · ZERO-KNOWLEDGE KEYS</div>
-            <h2>Cloud Free 100 MB, then $7 or $17/mo.</h2>
+            <h2>Cloud Free 100 MB, then $7/mo — upgrade anytime in-app.</h2>
             <p>
               The open-source CLI engine (<code>npx portabase</code>) is free forever on your own machine.
               <strong> Portabase Cloud</strong> adds the web dashboard, table &amp; bucket sizer, automated schedules, cross-account restore orchestration, and SMS alerts.
               <strong> Cloud Free</strong> includes up to 100 MB for manual runs (The free plan has no scheduled service).
-              Paid plans include a <strong>7-day free trial</strong> via Square.
+              Paid plans start with a <strong>7-day free trial</strong> at <strong>$7/mo</strong> via Square, with an anytime <strong>+$10/mo in-app expansion</strong> ($17/mo total) for unlimited projects, incremental capsules up to 10 GB, and 3 capsules / day.
             </p>
           </div>
           <div className="plan-grid plan-grid-3">
@@ -1375,31 +1375,44 @@ function CloudPage() {
                 {signedIn ? 'Open dashboard' : 'Start Cloud Free'} <Arrow />
               </a>
             </article>
-            {publicCloudPlans().map((plan) => (
-              <article className={`price-card plan-card${plan.id === 'cloud-17' ? ' is-featured' : ''}`} key={plan.id}>
-                {plan.id === 'cloud-17' && <div className="price-ribbon">MOST TEAMS</div>}
-                <div className="price-top">
-                  <span>{plan.title.toUpperCase()}</span>
-                  <div className="price-stack">
-                    <b>${plan.priceMonthlyUsd}<span className="per">/mo</span></b>
-                    <small className="list-price">up to {plan.storageCapLabel} · 7-day free trial</small>
+            {publicCloudPlans().map((plan) => {
+              const isBase = plan.id === 'cloud-7';
+              return (
+                <article className={`price-card plan-card${isBase ? ' is-featured' : ''}`} key={plan.id}>
+                  {isBase ? (
+                    <div className="price-ribbon">MOST TEAMS · START HERE</div>
+                  ) : (
+                    <div className="price-ribbon price-ribbon-free">IN-APP EXPANSION · +$10/MO</div>
+                  )}
+                  <div className="price-top">
+                    <span>{isBase ? 'STARTER ESCAPE' : 'DAILY ESCAPE (IN-APP UPGRADE)'}</span>
+                    <div className="price-stack">
+                      <b>${plan.priceMonthlyUsd}<span className="per">/mo</span></b>
+                      <small className="list-price">
+                        {isBase ? `up to ${plan.storageCapLabel} · 7-day free trial` : `+$10/mo expansion ($17/mo total) · 7-day free trial`}
+                      </small>
+                    </div>
+                    <p>
+                      {isBase
+                        ? `${plan.cadenceLabel}. Automated schedules, cross-account restore readiness, and encrypted capsules in your vault.`
+                        : `${plan.cadenceLabel}. Unlimited projects and larger capacity for growing teams — upgrade anytime in-app.`}
+                    </p>
                   </div>
-                  <p>{plan.cadenceLabel}. Automated schedules, cross-account restore readiness, and encrypted capsules in <strong>your</strong> vault.</p>
-                </div>
-                <ul>
-                  <li><span>✓</span> {plan.databasesLabel} (up to {plan.storageCapLabel})</li>
-                  <li><span>✓</span> {plan.transfersPer24h} automated capsule{plan.transfersPer24h === 1 ? '' : 's'} / 24h</li>
-                  <li><span>✓</span> Restore to a brand-new account &amp; email</li>
-                  <li><span>✓</span> Scheduled service · 7-day trial</li>
-                  <li><span>✓</span> {plan.smsOptional ? 'Automated SMS alerts on success & failure' : 'Email & dashboard status telemetry'}</li>
-                  <li><span>✓</span> Selective table + bucket sizer</li>
-                  <li><span>✓</span> Keys remain invisible to Portabase.dev</li>
-                </ul>
-                <a className="button button-primary purchase" href={signedIn ? `/app/account?tab=billing&plan=${plan.id}` : `/login?mode=signup&next=${encodeURIComponent(`/app/account?tab=billing&plan=${plan.id}`)}`}>
-                  {signedIn ? `Subscribe to ${plan.title}` : 'Start 7-day free trial'} <Arrow />
-                </a>
-              </article>
-            ))}
+                  <ul>
+                    <li><span>✓</span> {plan.databasesLabel} (up to {plan.storageCapLabel})</li>
+                    <li><span>✓</span> {plan.transfersPer24h} automated capsule{plan.transfersPer24h === 1 ? '' : 's'} / 24h</li>
+                    <li><span>✓</span> Restore to a brand-new account &amp; email</li>
+                    <li><span>✓</span> {isBase ? 'Scheduled service · 7-day trial' : 'Incremental capsule creation up to 10 GB'}</li>
+                    <li><span>✓</span> {plan.smsOptional ? 'Automated SMS alerts on success & failure' : 'Email & dashboard status telemetry'}</li>
+                    <li><span>✓</span> Selective table + bucket sizer</li>
+                    <li><span>✓</span> Keys remain invisible to Portabase.dev</li>
+                  </ul>
+                  <a className={`button ${isBase ? 'button-primary' : 'button-ghost'} purchase`} href={signedIn ? `/app/account?tab=billing&plan=${plan.id}` : `/login?mode=signup&next=${encodeURIComponent(`/app/account?tab=billing&plan=${plan.id}`)}`}>
+                    {signedIn ? (isBase ? 'Subscribe to Starter ($7/mo)' : 'Upgrade to Daily (+$10/mo)') : 'Start 7-day free trial'} <Arrow />
+                  </a>
+                </article>
+              );
+            })}
           </div>
           <p className="checkout-hint" style={{ marginTop: 16 }}>
             Already have an account? <a href="/login">Sign in</a> · Need manual secret contingency details? Read the <a href="/docs/manual-contingency">Manual effort contingency guide</a>.
@@ -1459,7 +1472,7 @@ function CloudPage() {
                 <tr>
                   <th>Capability</th>
                   <th>Free CLI (<code>npx portabase</code>)<br /><span>Apache-2.0 · Run on your machine</span></th>
-                  <th>Portabase Cloud<br /><span>Free 100 MB · $7 (10 GB) · $17 (25 GB)</span></th>
+                  <th>Portabase Cloud<br /><span>Free 100 MB · $7 (500 MB) · $17 (10 GB)</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -1509,11 +1522,11 @@ function CloudPage() {
 }
 
 function LegacyPurchaseNotice() {
-  return <div className="thanks"><div className="thanks-card"><Logo href="/" /><div className="section-kicker green">MODEL UPDATE</div><h1>Portabase is open core + Cloud subscription.</h1><p>There is no $147 software unlock. The recovery engine is free on GitHub. Portabase Cloud is Cloud Free 100 MB, then $7 or $17 per month (10 GB / 25 GB) — console, table sizer, telemetry, and alert chains. We do not host your capsules or learn your keys.</p><a className="button button-primary" href="/cloud">Open source vs Cloud <Arrow /></a><a className="button button-ghost" href="mailto:escape@portabase.dev?subject=Legacy Portabase purchase">Legacy purchase help <Arrow /></a></div></div>;
+  return <div className="thanks"><div className="thanks-card"><Logo href="/" /><div className="section-kicker green">MODEL UPDATE</div><h1>Portabase is open core + Cloud subscription.</h1><p>There is no $147 software unlock. The recovery engine is free on GitHub. Portabase Cloud is Cloud Free 100 MB, then $7/mo (500 MB) or $17/mo (10 GB) — console, table sizer, telemetry, and alert chains. We do not host your capsules or learn your keys.</p><a className="button button-primary" href="/cloud">Open source vs Cloud <Arrow /></a><a className="button button-ghost" href="mailto:escape@portabase.dev?subject=Legacy Portabase purchase">Legacy purchase help <Arrow /></a></div></div>;
 }
 
 function Footer() {
-  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#never-hold-keys">Keys</a><a href="/#faq">FAQ</a><a href="/#reality">The reality</a><a href="/#stories">Real incidents</a><a href="/#escape">Escape plan</a><a href="/#audit">Risk check</a><a href="/docs">Docs</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · {planPriceRangeLabel()}</a><a href="/legal">Legal</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/DataAutomation-ai/portabase-CLI" target="_blank" rel="noreferrer">GitHub · portabase-CLI</a><span>Independent product.<br />Not affiliated with Supabase, Inc.</span><span>Apache-2.0 open core. Cloud is ops subscription — designed so we never hold keys, never custody of capsule contents. Cloud Free 100 MB · $7 · 10 GB · $17 · 25 GB.</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your vault. Your way out.</span></div></footer>;
+  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#never-hold-keys">Keys</a><a href="/#faq">FAQ</a><a href="/#reality">The reality</a><a href="/#stories">Real incidents</a><a href="/#escape">Escape plan</a><a href="/#audit">Risk check</a><a href="/docs">Docs</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · {planPriceRangeLabel()}</a><a href="/legal">Legal</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/DataAutomation-ai/portabase-CLI" target="_blank" rel="noreferrer">GitHub · portabase-CLI</a><span>Independent product.<br />Not affiliated with Supabase, Inc.</span><span>Apache-2.0 open core. Cloud is ops subscription — designed so we never hold keys, never custody of capsule contents. Cloud Free 100 MB · $7 (500 MB) · $17 (10 GB).</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your vault. Your way out.</span></div></footer>;
 }
 
 /**

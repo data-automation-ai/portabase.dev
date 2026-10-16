@@ -59,16 +59,16 @@ test('selection omit is loud NOT COVERED and maps to existing --exclude-table-li
   assert.equal(included.buckets.filter((row) => row.included).map((row) => row.key).join(), 'avatars');
 });
 
-test('plan fit uses Free 100 MB / $7 10 GB / $17 25 GB', () => {
+test('plan fit uses Free 100 MB / $7 500 MB / $17 10 GB', () => {
   const mb = 1024 * 1024;
   const gb = 1024 * mb;
   assert.equal(planFit(80 * mb, 'cloud-free').fits, true);
   assert.equal(planFit(120 * mb, 'cloud-free').overCap, true);
   assert.equal(planFit(120 * mb, 'cloud-free').capLabel, '100 MB');
-  assert.equal(planFit(2 * gb, 'cloud-7').fits, true);
-  assert.equal(planFit(11 * gb, 'cloud-7').overCap, true);
-  assert.equal(planFit(11 * gb, 'cloud-17').fits, true);
-  assert.equal(planFit(26 * gb, 'cloud-17').overCap, true);
+  assert.equal(planFit(400 * mb, 'cloud-7').fits, true);
+  assert.equal(planFit(600 * mb, 'cloud-7').overCap, true);
+  assert.equal(planFit(600 * mb, 'cloud-17').fits, true);
+  assert.equal(planFit(11 * gb, 'cloud-17').overCap, true);
 });
 
 test('empty include list is omit-all and stays NOT COVERED', () => {
@@ -116,13 +116,13 @@ test('sizer UI stamps NOT COVERED on omitted rows and the loud banner', () => {
   assert.match(ui, /Fit this plan/);
 });
 
-test('recommendPlan picks Free 100 MB / $7 10 GB / $17 25 GB', () => {
+test('recommendPlan picks Free 100 MB / $7 500 MB / $17 10 GB', () => {
   const mb = 1024 * 1024;
   const gb = 1024 * mb;
   assert.equal(recommendPlan(40 * mb).planId, 'cloud-free');
-  assert.equal(recommendPlan(2 * gb).planId, 'cloud-7');
-  assert.equal(recommendPlan(12 * gb).planId, 'cloud-17');
-  assert.equal(recommendPlan(30 * gb).stillOver, true);
+  assert.equal(recommendPlan(300 * mb).planId, 'cloud-7');
+  assert.equal(recommendPlan(2 * gb).planId, 'cloud-17');
+  assert.equal(recommendPlan(12 * gb).stillOver, true);
 });
 
 test('suggestExcludesToFit omits the largest bucket so Cloud Free fits', () => {

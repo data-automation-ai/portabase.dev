@@ -19,8 +19,8 @@ import {
 export const SQUARE_API_VERSION = '2026-05-20';
 export const PLAN_NAME = 'Portabase Cloud';
 export const VARIATION_NAMES = Object.freeze({
-  'cloud-7': 'Portabase Cloud · Starter Escape · 7-day trial → $7/mo (one DB · up to 10 GB · 1 capsule/24h · BYO storage)',
-  'cloud-17': 'Portabase Cloud · Daily Escape · 7-day trial → $17/mo (unlimited DBs · up to 25 GB · 3 capsules/day · BYO storage)',
+  'cloud-7': 'Portabase Cloud · Starter Escape · 7-day trial → $7/mo (1 project · up to 500 MB · 1 capsule/24h · BYO storage)',
+  'cloud-17': 'Portabase Cloud · Daily Escape · 7-day trial → $17/mo (unlimited projects · up to 10 GB · 3 capsules/day · BYO storage)',
   'cloud-37': 'Portabase Cloud · Scale Escape · legacy hidden · $37/mo (up to 100 GB · BYO storage)',
 });
 export const ADDON_VARIATION_NAMES = Object.freeze({

@@ -306,7 +306,7 @@ function AccountStrip({ model, plan, me, state, startTrial, startAddon, busy, na
           {next ? (
             <>
               <div className="pb-kpi-value pb-kpi-tight">{next.title}</div>
-              <p className="pb-muted pb-strip-note">${next.priceMonthlyUsd}/mo · {next.storageCapLabel}</p>
+              <p className="pb-muted pb-strip-note">{plan.id === 'cloud-7' ? '+$10/mo upgrade ($17/mo total)' : `$${next.priceMonthlyUsd}/mo`} · {next.storageCapLabel}</p>
             </>
           ) : (
             <p className="pb-muted pb-strip-note">Daily Escape is the top public plan.</p>

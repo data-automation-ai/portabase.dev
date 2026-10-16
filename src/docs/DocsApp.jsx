@@ -226,7 +226,7 @@ function CloudDocs() {
       <p>
         Before a Cloud job, the dashboard sizer shows per-table sizes and per-bucket sizes / object counts from the free engine
         doctor / size inventory. You selectively <strong>include or exclude</strong> tables and Storage buckets so the capsule fits
-        Cloud Free 100 MB, $7 10 GB, or $17 25 GB. Anything omitted is called out as <strong>NOT COVERED</strong>.
+        Cloud Free 100 MB, $7 500 MB, or $17 10 GB. Anything omitted is called out as <strong>NOT COVERED</strong>.
         Table omit uses existing <code>--exclude-table-list</code>. No new CLI capture flags.
         The control plane stores the include list, size estimates, and job metadata / hashes — never keys or row bodies.
       </p>
@@ -239,8 +239,8 @@ function CloudDocs() {
           <tbody>
             <tr><td>Price</td><td>$0 · no card</td><td>Square after a 7-day trial (card on file)</td></tr>
             <tr><td>Projects</td><td>1</td><td>Plan caps, up to 12 agents</td></tr>
-            <tr><td>Capsule usage Cloud may meter</td><td>Up to {CLOUD_FREE.storageCapLabel}</td><td>$7 · 10 GB · $17 · 25 GB</td></tr>
-            <tr><td>Databases</td><td>1 project</td><td>$7 one database · $17 unlimited</td></tr>
+            <tr><td>Capsule usage Cloud may meter</td><td>Up to {CLOUD_FREE.storageCapLabel}</td><td>$7 · 500 MB · $17 · 10 GB</td></tr>
+            <tr><td>Databases</td><td>1 project</td><td>$7 · 1 project · $17 · unlimited projects &amp; databases</td></tr>
             <tr><td>Capsules</td><td>Manual only</td><td>$7 · 1 / 24h · $17 · 3 / day</td></tr>
             <tr><td>Scheduled service</td><td><strong>The free plan has no scheduled service</strong></td><td>Yes · managed schedules</td></tr>
             <tr><td>SMS status</td><td>No</td><td>Optional on $17 — status only</td></tr>

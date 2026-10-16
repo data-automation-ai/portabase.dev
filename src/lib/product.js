@@ -4,8 +4,8 @@
  * Launch target: Supabase projects only (DB, Auth, Storage, Edge Functions).
  * Payment: Square · public paid plans:
  *   Cloud Free — 100 MB, manual only (no scheduled service)
- *   $7/mo  — one database, up to 10 GB, 1 capsule / 24h
- *   $17/mo — unlimited databases, up to 25 GB, 3 capsules / day
+ *   $7/mo  — 1 project, up to 500 MB, 1 capsule / 24h
+ *   $17/mo — unlimited projects & databases, incremental capsules up to 10 GB, 3 capsules / day
  * Hidden legacy `cloud-37` stays in the table for compile / existing Square pins only.
  * Capsule vault: ALWAYS customer-provided — never hosted by Portabase Cloud.
  * Encryption passphrases: customer-side only. Cloud is provably zero-knowledge of keys and capsule contents.
@@ -41,20 +41,22 @@ export const CLOUD_PLANS = Object.freeze({
     id: 'cloud-7',
     priceMonthlyUsd: 7,
     priceMonthlyCents: 700,
-    storageCapGb: 10,
-    storageCapBytes: 10 * GB,
-    storageCapLabel: '10 GB',
+    storageCapMb: 500,
+    storageCapGb: 500 / 1024,
+    storageCapBytes: 500 * MB,
+    storageCapLabel: '500 MB',
+    projects: 1,
     databases: 1,
     databasesUnlimited: false,
-    databasesLabel: 'one database',
+    databasesLabel: '1 project',
     transfersPer24h: 1,
     escapesPerDay: 1,
     cyclesPerDay: 1,
     scheduled: true,
     customerFacing: true,
     title: 'Starter Escape',
-    cadenceLabel: 'one database · up to 10 GB · 1 capsule / 24h',
-    shortLabel: '$7/mo · 1 DB · 10 GB',
+    cadenceLabel: '1 project · up to 500 MB · 1 capsule / 24h',
+    shortLabel: '$7/mo · 1 project · 500 MB',
     squareEnvKey: 'SQUARE_CLOUD_PLAN_VARIATION_ID_7',
     smsOptional: false,
   }),
@@ -62,20 +64,21 @@ export const CLOUD_PLANS = Object.freeze({
     id: 'cloud-17',
     priceMonthlyUsd: 17,
     priceMonthlyCents: 1700,
-    storageCapGb: 25,
-    storageCapBytes: 25 * GB,
-    storageCapLabel: '25 GB',
+    storageCapGb: 10,
+    storageCapBytes: 10 * GB,
+    storageCapLabel: '10 GB',
+    projects: null,
     databases: null,
     databasesUnlimited: true,
-    databasesLabel: 'unlimited databases',
+    databasesLabel: 'unlimited projects & databases',
     transfersPer24h: 3,
     escapesPerDay: 3,
     cyclesPerDay: 3,
     scheduled: true,
     customerFacing: true,
     title: 'Daily Escape',
-    cadenceLabel: 'unlimited databases · up to 25 GB · 3 capsules / day',
-    shortLabel: '$17/mo · unlimited DB · 25 GB',
+    cadenceLabel: 'unlimited projects · incremental capsules up to 10 GB · 3 capsules / day',
+    shortLabel: '$17/mo (+$10) · unlimited projects · 10 GB',
     squareEnvKey: 'SQUARE_CLOUD_PLAN_VARIATION_ID',
     smsOptional: true,
   }),
@@ -127,7 +130,7 @@ export function publicCloudPlans() {
   return Object.values(CLOUD_PLANS).filter((plan) => plan.customerFacing !== false);
 }
 
-export const CLOUD_DEFAULT_PLAN_ID = 'cloud-17';
+export const CLOUD_DEFAULT_PLAN_ID = 'cloud-7';
 export const CLOUD_PLAN_ID = CLOUD_DEFAULT_PLAN_ID;
 
 /** Legacy Triple Escape ($27) maps to the current top public plan. */
@@ -468,7 +471,7 @@ export function whatCloudDoesNotInclude() {
     'Encryption passphrases or Supabase service keys — designed so Cloud never holds customer keys',
     'Capsule ciphertext (never lands in Portabase Cloud)',
     'Managed object store billed by Portabase',
-    'Unlimited vault size (choose Cloud Free 100 MB, $7 · 10 GB, or $17 · 25 GB)',
+    'Unlimited vault size (choose Cloud Free 100 MB, $7 · 500 MB, or $17 · 10 GB)',
     'Scheduled service on Cloud Free (manual runs only)',
     'Capsule plaintext, object names, or sealing keys (control plane: status and hashes only)',
   ];

@@ -2208,7 +2208,7 @@ export function BillingPage({ state, setState, me, setMe, startTrial, startAddon
         <div>
           <strong>You provide capsule storage</strong>
           <p>
-            Public plans: <strong>Cloud Free 100 MB</strong> (manual only), <strong>$7/mo · one DB · 10 GB · 1 capsule / 24h</strong>, <strong>$17/mo · unlimited DBs · 25 GB · 3 capsules / day</strong>.
+            Public plans: <strong>Cloud Free 100 MB</strong> (manual only), <strong>$7/mo · 1 project · up to 500 MB · 1 capsule / 24h</strong>, and <strong>+$10/mo expansion ($17/mo total) · unlimited projects · incremental capsules up to 10 GB · 3 capsules / day</strong>.
             Use the table sizer to include or exclude tables and Storage buckets so the capsule fits.
             Capsules land in <em>your</em> S3, Dropbox, NAS, or Local Starter folder.
             The paid service is designed to be blind to encryption keys and capsule contents — status and hashes only.
@@ -2229,14 +2229,19 @@ export function BillingPage({ state, setState, me, setMe, startTrial, startAddon
             }}
             onClick={() => selectPlan(p.id)}
           >
-            <div className="pb-kpi-label">{p.title}</div>
-            <div className="pb-kpi-value" style={{ fontSize: 28 }}>${p.priceMonthlyUsd}<span style={{ fontSize: 14 }}>/mo</span></div>
+            <div className="pb-kpi-label">
+              {p.id === 'cloud-7' ? 'Base Plan · Starter' : 'In-App Expansion (+$10/mo · $17/mo total)'}
+            </div>
+            <div className="pb-kpi-value" style={{ fontSize: 28 }}>
+              ${p.priceMonthlyUsd}<span style={{ fontSize: 14 }}>/mo</span>
+              {p.id === 'cloud-17' && <span style={{ fontSize: 13, color: 'var(--c-muted)', marginLeft: 8 }}>(+$10/mo upgrade)</span>}
+            </div>
             <div className="pb-kpi-meta">{p.cadenceLabel}</div>
             {checkoutPlan.id === p.id && <Badge tone="acid">Selected for checkout</Badge>}
           </button>
         ))}
       </div>
-      <p className="pb-muted">Selected for checkout: {checkoutPlan.title} · ${checkoutPlan.priceMonthlyUsd}/mo. Paid access starts after Square verifies the subscription.</p>
+      <p className="pb-muted">Selected for checkout: {checkoutPlan.title} · ${checkoutPlan.priceMonthlyUsd}/mo{checkoutPlan.id === 'cloud-17' ? ' (+$10/mo in-app expansion)' : ''}. Paid access starts after Square verifies the subscription.</p>
       <div className="pb-grid pb-grid-2">
         <div className="pb-card">
           <div className="pb-kpi-label">Plan · Square</div>
@@ -2296,7 +2301,7 @@ export function BillingPage({ state, setState, me, setMe, startTrial, startAddon
           <TransferWindowPanel state={state} me={me} onUpgrade={startAddon} busy={busy} compact />
           <ul className="pb-muted" style={{ margin: '14px 0 0', paddingLeft: 18, lineHeight: 1.55, fontSize: 13 }}>
             <li>Console · notification preferences · ≤{CLOUD_MAX_AGENTS} agents</li>
-            <li>Cloud Free 100 MB · $7 · 10 GB · 1 / 24h · $17 · 25 GB · 3 / day</li>
+            <li>Cloud Free 100 MB · $7 · 500 MB · 1 / 24h · $17 · 10 GB · 3 / day</li>
             <li>Table sizer include/exclude before a job · loud NOT COVERED when omitted</li>
             <li>Not capsule storage (you provide)</li>
             <li>Zero knowledge of encryption keys, object names, or capsule plaintext</li>
@@ -2373,7 +2378,7 @@ export function BillingPage({ state, setState, me, setMe, startTrial, startAddon
     </>
   );
   if (embedded) return body;
-  return (<><PageHead title="Plan" subtitle={`Square · ${planPriceRangeLabel()} · Cloud Free 100 MB · $7 10 GB 1/24h · $17 25 GB 3/day.`} />{body}</>);
+  return (<><PageHead title="Plan" subtitle={`Square · ${planPriceRangeLabel()} · Cloud Free 100 MB · $7 500 MB 1/24h · $17 10 GB 3/day.`} />{body}</>);
 }
 
 export function SettingsPage({ state, setState, toast, resetDemo, embedded }) {

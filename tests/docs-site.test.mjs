@@ -91,8 +91,8 @@ test('Cloud Free is 100 MB with no scheduled service', () => {
   assert.match(src, /No scheduled service/);
   assert.match(src, /The free plan has no scheduled service/);
   assert.match(src, /100 MB/);
+  assert.match(src, /500 MB/);
   assert.match(src, /10 GB/);
-  assert.match(src, /25 GB/);
   assert.doesNotMatch(src, /Cloud Free, then \$7, \$17, or \$37/);
 });
 
@@ -116,8 +116,8 @@ test('docs copy says open source, praises Supabase, never fake MATCH green', () 
   assert.match(app, /table \+ bucket sizer/i);
   assert.match(app, /NOT COVERED/);
   assert.match(app, /100 MB/);
+  assert.match(app, /500 MB/);
   assert.match(app, /10 GB/);
-  assert.match(app, /25 GB/);
 });
 
 test('rls-check page resolves, sits in nav, and blames the default', () => {

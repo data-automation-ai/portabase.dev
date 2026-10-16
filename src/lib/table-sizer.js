@@ -336,14 +336,14 @@ export function controlPlaneJobSpec({
 export function meterPlanCards() {
   return [
     { id: CLOUD_FREE.id, title: CLOUD_FREE.title, capLabel: CLOUD_FREE.storageCapLabel, cadence: CLOUD_FREE.summary },
-    { id: 'cloud-7', title: 'Starter Escape', capLabel: '10 GB', cadence: 'one database · 1 capsule / 24h' },
-    { id: 'cloud-17', title: 'Daily Escape', capLabel: '25 GB', cadence: 'unlimited databases · 3 capsules / day' },
+    { id: 'cloud-7', title: 'Starter Escape', capLabel: '500 MB', cadence: '1 project · 1 capsule / 24h' },
+    { id: 'cloud-17', title: 'Daily Escape', capLabel: '10 GB', cadence: 'unlimited projects · incremental capsules up to 10 GB · 3 capsules / day' },
   ];
 }
 
 const PLAN_ORDER = ['cloud-free', 'cloud-7', 'cloud-17'];
 
-/** Smallest public cap that fits `bytes`. Over 25 GB returns cloud-17 still-over. */
+/** Smallest public cap that fits `bytes`. Over 10 GB returns cloud-17 still-over. */
 export function recommendPlan(bytes) {
   const used = Math.max(0, Number(bytes) || 0);
   for (const id of PLAN_ORDER) {
