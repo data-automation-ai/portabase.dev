@@ -222,28 +222,80 @@ function ProvenVsNot() {
   return (
     <>
       <p className="docs-lead">
-        What this repo actually proves, and what it does not. Copied from <code>docs/CLOUD.md</code>.
-        No invented stats. No fake MATCH green.
+        A recovery tool is only useful if you know exactly what is automated inside the encrypted capsule and what requires your manual action during cutover into a new Supabase account.
       </p>
+      <h2>1 · What Portabase captures, encrypts, and restores automatically</h2>
       <div className="docs-table-wrap">
         <table className="docs-table">
           <thead>
-            <tr><th>Proven in repo (unit / wiring)</th><th>Not proven</th></tr>
+            <tr><th>Recovery layer</th><th>What is guaranteed by the engine</th><th>How it is verified</th></tr>
           </thead>
           <tbody>
-            <tr><td>Product constants Cloud Free 100 MB · $7 / 10 GB · $17 / 25 GB</td><td>Live Square catalog IDs until Louis pins them</td></tr>
-            <tr><td>Cloud Free designed as 100 MB, no scheduled service</td><td>Live entitlement enforcement of Cloud Free caps</td></tr>
-            <tr><td>Table + bucket sizer include list (metadata + estimates only)</td><td>Live runner inventory ingest on portabase.dev</td></tr>
-            <tr><td>Checkout fails closed with exact env var names when Square is missing</td><td>Live charge in production</td></tr>
-            <tr><td>Dashboard lamp stays red unless a real dry-run/compare is MATCH</td><td>A green lamp on demo or empty data (forbidden)</td></tr>
-            <tr><td>Runner sketch: sleeping container + free-engine argv + seal-to-runner</td><td>Production ECS/Fargate isolation audit</td></tr>
-            <tr><td>Telemetry allowlist + SMS status-only builder</td><td>Twilio delivery in production</td></tr>
-            <tr><td>Control plane store: hosted Supabase primary + one SQLite replica</td><td>Live outage drill</td></tr>
+            <tr>
+              <td><strong>Postgres schema &amp; data</strong></td>
+              <td>Full dump of tables, views, sequences, functions, triggers, RLS policies, and rows (including subscriber, membership, and billing tables).</td>
+              <td>Restored into a blank target project in a separate Supabase account and verified with per-table row-count parity checks.</td>
+            </tr>
+            <tr>
+              <td><strong>Auth user directory</strong></td>
+              <td><code>auth.users</code> and <code>auth.identities</code> (UUIDs, emails, phone numbers, metadata, and provider links) so foreign keys in your public tables never break.</td>
+              <td>Verified against <code>auth-inventory.json</code> during preflight and post-restore parity checks.</td>
+            </tr>
+            <tr>
+              <td><strong>Storage buckets &amp; object bytes</strong></td>
+              <td>Bucket definitions, public/private flags, MIME limits, RLS policies, and the actual binary files inside every included bucket.</td>
+              <td>SHA-256 checksums and object counts verified before sealing and after upload to the target project.</td>
+            </tr>
+            <tr>
+              <td><strong>Edge Function source code</strong></td>
+              <td>TypeScript / JavaScript entrypoints, import maps, and per-function <code>verify_jwt</code> configuration.</td>
+              <td>Captured into the capsule and redeployed via the Supabase Management API to the target project.</td>
+            </tr>
+            <tr>
+              <td><strong>Client-side AES-256-GCM encryption</strong></td>
+              <td>Capsules are sealed locally using <code>scrypt</code> key derivation + <code>AES-256-GCM</code> authenticated encryption before touching your vault.</td>
+              <td><code>portabase verify</code> validates the manifest signature and every artifact SHA-256 digest; wrong passphrases fail closed.</td>
+            </tr>
+            <tr>
+              <td><strong>Customer-owned vault connectors</strong></td>
+              <td>Direct upload to Google Drive (API v3), Dropbox (API v2), AWS S3, rclone remotes, or local disk.</td>
+              <td>Capsules live in storage you control outside Supabase; Portabase.dev never stores your capsule bytes or keys.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <h2>2 · What requires your action during cutover (Platform &amp; operational limits)</h2>
+      <div className="docs-table-wrap">
+        <table className="docs-table">
+          <thead>
+            <tr><th>Boundary</th><th>Why it is not automatic</th><th>What you must do</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Edge Function secret values &amp; Vault keys</strong></td>
+              <td>Supabase's Management API returns only secret names and SHA-256 digests — never plaintext values.</td>
+              <td>Store non-regenerable secrets in an external vault and re-inject them with <code>supabase secrets set</code> or our <a href="/docs/manual-contingency">Python contingency bridge</a>.</td>
+            </tr>
+            <tr>
+              <td><strong>OAuth redirect URIs &amp; provider secrets</strong></td>
+              <td>Google, GitHub, and Apple OAuth callbacks are bound to <code>https://&lt;PROJECT_REF&gt;.supabase.co/auth/v1/callback</code>.</td>
+              <td>Update the callback URL in your OAuth provider console to your new project ref (see <a href="/docs/auth-cutover">Auth cutover</a>).</td>
+            </tr>
+            <tr>
+              <td><strong>Stripe / Square webhook URLs &amp; app env vars</strong></td>
+              <td>External services still point to your old project URL until updated.</td>
+              <td>Point your billing webhooks and hosting env vars (Netlify, Vercel, Cloudflare) to the new project's URL and anon/service keys.</td>
+            </tr>
+            <tr>
+              <td><strong>Recovery speed (Warm/Cold vs. Hot)</strong></td>
+              <td>Portabase is an encrypted cross-account escape capsule and restore engine, not an active-active millisecond database proxy.</td>
+              <td>Plan for a 15–60 minute guarded restore and DNS/env cutover window into your new Supabase account.</td>
+            </tr>
           </tbody>
         </table>
       </div>
       <div className="docs-callout danger">
-        <strong>Proof lamp.</strong> Stays RED until a real MATCH. Demo / empty / mocked reports cannot turn it green.
+        <strong>Proof lamp (Readiness status).</strong> The dashboard readiness lamp stays <strong>RED</strong> until a real restore preflight, dry-run, or cross-account replay reports <strong>MATCH</strong>. Demo data and unverified backups cannot turn the lamp green.
       </div>
     </>
   );

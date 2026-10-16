@@ -34,7 +34,7 @@ export const DOCS_NAV = Object.freeze([
     label: 'Trust',
     items: Object.freeze([
       Object.freeze({ slug: 'threat-model', href: '/docs/threat-model', title: 'Threat model' }),
-      Object.freeze({ slug: 'proven', href: '/docs/proven', title: 'Proven vs not' }),
+      Object.freeze({ slug: 'proven', href: '/docs/proven', title: 'Guarantees & limits' }),
     ]),
   }),
   Object.freeze({
@@ -56,7 +56,7 @@ export const DOCS_TITLES = Object.freeze({
   'rls-check': 'RLS exposure check',
   cloud: 'Cloud',
   'threat-model': 'Threat model',
-  proven: 'Proven vs not',
+  proven: 'Recovery guarantees & limits',
   cli: 'CLI reference',
 });
 
