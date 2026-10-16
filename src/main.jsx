@@ -199,6 +199,17 @@ function Header() {
 }
 
 function Hero() {
+  const heroChecklist = [
+    ['Open Source NPM Package', 'Install via npx portabase (Apache-2.0) — audit every line of code yourself.'],
+    ['Your Keys are INVISIBLE to Portabase.dev', 'AES-256-GCM encryption runs on your side; we never see your keys or data.'],
+    ['Backup your Supabase to a New or Separate Account', 'Rebuild into a clean contingency Supabase account when locked out.'],
+    ['You Own the Backup Capsules', 'Stored in your Dropbox, Google Drive, S3, or local disk — never held by us.'],
+    ['Fully Automated Schedule with SMS Alerts', 'Unattended scheduled runs with instant SMS & email status notifications.'],
+    ['Captures What Platform Backups Miss', 'Full Database + Auth users + Storage file bytes + Edge Function source.'],
+    ['Cryptographically Verified Restore', 'SHA-256 + row-count & storage-hash proof so you know your backup actually works.'],
+    ['100% Offline Escape Guarantee', 'Restore directly from your capsule + passphrase even if Portabase.dev is offline.'],
+  ];
+
   return <section className="hero recovery-hero" id="top">
     <div className="shell recovery-layout">
       <div className="recovery-copy">
@@ -206,10 +217,21 @@ function Hero() {
         <h1>Could your business survive 48 hours offline?</h1>
         <p className="recovery-question">What if you lost your Supabase account for good?</p>
         <p className="recovery-lead">Your side project has real customers now. A locked account could put their data, your app, and the backups you need out of reach.</p>
-        <p className="recovery-answer">Portabase helps you keep an encrypted recovery copy outside Supabase, in storage you control—so you can rebuild in a separate account.</p>
-        <p className="recovery-answer">The runner is open source. Take the code and self-host it yourself, free, forever—no account, no subscription. Or skip the setup and let us handle scheduling and alerts for about the price of a large specialty coffee: $7/month.</p>
+        <p className="recovery-answer">Portabase keeps an encrypted recovery copy outside Supabase, in storage you control — free forever via the open-source CLI, or automated with scheduling and alerts from $7/month.</p>
+        <ul className="hero-checklist" aria-label="Portabase core guarantees">
+          {heroChecklist.map(([title, desc]) => (
+            <li key={title} className="hero-checklist-item">
+              <span className="hero-check-icon" aria-hidden="true">✓</span>
+              <div>
+                <strong>{title}</strong>
+                <span>{desc}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
         <div className="recovery-actions">
           <a className="button button-primary" href="#escape">See how recovery works <Arrow /></a>
+          <a className="button button-ghost" href="https://www.npmjs.com/package/portabase" target="_blank" rel="noreferrer">View on npm <Arrow /></a>
           <a className="recovery-evidence-link" href="#stories">Read the real cases <span aria-hidden="true">↓</span></a>
         </div>
         <p className="recovery-note">Set it up before a lockout. Keep the copy. Test the restore.</p>
