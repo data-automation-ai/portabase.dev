@@ -19,6 +19,13 @@ const ENV_KEYS = Object.freeze([
   'PORTABASE_TARGET_SUPABASE_URL',
   'PORTABASE_TARGET_SERVICE_ROLE_KEY',
   'PORTABASE_TARGET_DB_URL',
+  'GOOGLE_DRIVE_REFRESH_TOKEN',
+  'GOOGLE_DRIVE_CLIENT_ID',
+  'DROPBOX_REFRESH_TOKEN',
+  'DROPBOX_CLIENT_ID',
+  'GCS_BUCKET_URI',
+  'AWS_S3_ROLE_ARN',
+  'AWS_S3_BUCKET',
 ]);
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
@@ -87,6 +94,30 @@ function validatedEnvironment(value, expectedProjectRef) {
   if (value.PORTABASE_TARGET_DB_URL !== undefined) {
     env.PORTABASE_TARGET_DB_URL = postgresUrl(value.PORTABASE_TARGET_DB_URL, 'invalid_target_database_url');
   }
+  if (value.GOOGLE_DRIVE_REFRESH_TOKEN !== undefined) {
+    env.GOOGLE_DRIVE_REFRESH_TOKEN = secret(value.GOOGLE_DRIVE_REFRESH_TOKEN, 'invalid_gdrive_refresh_token', 8);
+  }
+  if (value.GOOGLE_DRIVE_CLIENT_ID !== undefined) {
+    env.GOOGLE_DRIVE_CLIENT_ID = secret(value.GOOGLE_DRIVE_CLIENT_ID, 'invalid_gdrive_client_id', 4);
+  }
+  if (value.DROPBOX_REFRESH_TOKEN !== undefined) {
+    env.DROPBOX_REFRESH_TOKEN = secret(value.DROPBOX_REFRESH_TOKEN, 'invalid_dropbox_refresh_token', 8);
+  }
+  if (value.DROPBOX_CLIENT_ID !== undefined) {
+    env.DROPBOX_CLIENT_ID = secret(value.DROPBOX_CLIENT_ID, 'invalid_dropbox_client_id', 4);
+  }
+  if (value.GCS_BUCKET_URI !== undefined) {
+    if (!bounded(value.GCS_BUCKET_URI, 1024) || !/^gs:\/\/[a-z0-9][a-z0-9._-]{1,250}$/i.test(value.GCS_BUCKET_URI)) fail('invalid_gcs_bucket_uri');
+    env.GCS_BUCKET_URI = value.GCS_BUCKET_URI;
+  }
+  if (value.AWS_S3_ROLE_ARN !== undefined) {
+    if (!bounded(value.AWS_S3_ROLE_ARN, 512) || !/^arn:aws[a-z0-9-]*:iam::[0-9]{12}:role\/[a-zA-Z0-9+=,.@_-]+$/.test(value.AWS_S3_ROLE_ARN)) fail('invalid_aws_s3_role_arn');
+    env.AWS_S3_ROLE_ARN = value.AWS_S3_ROLE_ARN;
+  }
+  if (value.AWS_S3_BUCKET !== undefined) {
+    if (!bounded(value.AWS_S3_BUCKET, 128) || !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(value.AWS_S3_BUCKET)) fail('invalid_aws_s3_bucket');
+    env.AWS_S3_BUCKET = value.AWS_S3_BUCKET;
+  }
   return env;
 }
 
@@ -103,6 +134,11 @@ function statusFor(env, updatedAt = null) {
     passphraseConfigured: Boolean(env.PORTABASE_ENCRYPTION_PASSPHRASE),
     targetConfigured: target,
     targetRef: target ? env.PORTABASE_TARGET_PROJECT_REF : null,
+    hasGoogleDrive: Boolean(env.GOOGLE_DRIVE_REFRESH_TOKEN),
+    hasDropbox: Boolean(env.DROPBOX_REFRESH_TOKEN),
+    hasGcs: Boolean(env.GCS_BUCKET_URI),
+    hasAwsOidc: Boolean(env.AWS_S3_ROLE_ARN && env.AWS_S3_BUCKET),
+    storageConfigured: Boolean(env.GOOGLE_DRIVE_REFRESH_TOKEN || env.DROPBOX_REFRESH_TOKEN || env.GCS_BUCKET_URI || (env.AWS_S3_ROLE_ARN && env.AWS_S3_BUCKET)),
     updatedAt,
   };
 }
@@ -190,6 +226,20 @@ export function runtimeSecretUpdates(body, sourceProjectRef) {
     capsulePassphrase: 'PORTABASE_ENCRYPTION_PASSPHRASE',
     targetRef: 'PORTABASE_TARGET_PROJECT_REF',
     targetServiceRoleKey: 'PORTABASE_TARGET_SERVICE_ROLE_KEY',
+    googleDriveRefreshToken: 'GOOGLE_DRIVE_REFRESH_TOKEN',
+    googleDriveClientId: 'GOOGLE_DRIVE_CLIENT_ID',
+    dropboxRefreshToken: 'DROPBOX_REFRESH_TOKEN',
+    dropboxClientId: 'DROPBOX_CLIENT_ID',
+    gcsBucketUri: 'GCS_BUCKET_URI',
+    awsS3RoleArn: 'AWS_S3_ROLE_ARN',
+    awsS3Bucket: 'AWS_S3_BUCKET',
+    GOOGLE_DRIVE_REFRESH_TOKEN: 'GOOGLE_DRIVE_REFRESH_TOKEN',
+    GOOGLE_DRIVE_CLIENT_ID: 'GOOGLE_DRIVE_CLIENT_ID',
+    DROPBOX_REFRESH_TOKEN: 'DROPBOX_REFRESH_TOKEN',
+    DROPBOX_CLIENT_ID: 'DROPBOX_CLIENT_ID',
+    GCS_BUCKET_URI: 'GCS_BUCKET_URI',
+    AWS_S3_ROLE_ARN: 'AWS_S3_ROLE_ARN',
+    AWS_S3_BUCKET: 'AWS_S3_BUCKET',
   };
   const accepted = new Set([
     ...Object.keys(allowed),
@@ -201,12 +251,24 @@ export function runtimeSecretUpdates(body, sourceProjectRef) {
     'accessToken',
     'clientId',
     'clientSecret',
+    'gdriveRefreshToken',
+    'gdriveClientId',
+    'dropboxToken',
   ]);
   if (!body || typeof body !== 'object' || Array.isArray(body)
     || Object.keys(body).some(key => !accepted.has(key))) fail('invalid_runtime_secrets');
   const updates = {};
   for (const [key, envKey] of Object.entries(allowed)) {
     if (body[key] !== undefined && body[key] !== '') updates[envKey] = body[key];
+  }
+  if (body.gdriveRefreshToken !== undefined && body.gdriveRefreshToken !== '') {
+    updates.GOOGLE_DRIVE_REFRESH_TOKEN = body.gdriveRefreshToken;
+  }
+  if (body.gdriveClientId !== undefined && body.gdriveClientId !== '') {
+    updates.GOOGLE_DRIVE_CLIENT_ID = body.gdriveClientId;
+  }
+  if (body.dropboxToken !== undefined && body.dropboxToken !== '') {
+    updates.DROPBOX_REFRESH_TOKEN = body.dropboxToken;
   }
   if (body.supabaseRefreshToken !== undefined && body.supabaseRefreshToken !== '') {
     updates.SUPABASE_REFRESH_TOKEN = body.supabaseRefreshToken;

@@ -16,6 +16,13 @@ COPY utility ./utility
 COPY cloud/runner ./cloud/runner
 
 ENV NODE_ENV=production
+# Google Cloud Run Jobs & Services execution configuration:
+# Scales to zero between scheduled backups. Customer keys arrive via sealed payload
+# or keyless GCP Workload Identity / OIDC federation.
+ENV PORT=8080
+ENV PORTABASE_RUNNER_PLATFORM=google-cloud-run
+ENV PORTABASE_GCP_REGION=us-central1
+
 # Runtime credentials are supplied inside the private runner boundary.
 # This image does not implement key sealing, attestation or subscription provisioning.
 USER node

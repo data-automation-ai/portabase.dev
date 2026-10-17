@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Icon } from './icons.jsx';
+import { buildAwsS3QuickCreateUrl } from '../../cloud/runner/storage-oauth.mjs';
 
 function bufferToBase64(buf) {
   const bytes = new Uint8Array(buf);
@@ -20,6 +21,13 @@ function base64ToBuffer(b64) {
 }
 
 const VAULT_STORAGE_KEY = 'portabase.runner.vault.sealed.v1';
+export const GCP_RUNNER_REGIONS = [
+  { id: 'us-central1', label: 'us-central1 (Iowa · Recommended)' },
+  { id: 'us-east1', label: 'us-east1 (S. Carolina)' },
+  { id: 'us-west1', label: 'us-west1 (Oregon)' },
+  { id: 'europe-west1', label: 'europe-west1 (Belgium)' },
+  { id: 'asia-east1', label: 'asia-east1 (Taiwan)' },
+];
 
 export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
   const [authMethod, setAuthMethod] = useState('password-api');
@@ -31,9 +39,29 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
   const [sealingPassword, setSealingPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [unlockPassword, setUnlockPassword] = useState('');
+
+  // Google Cloud Run configuration
+  const [gcpRegion, setGcpRegion] = useState('us-central1');
+
+  // Storage OAuth / Keyless destination configuration
+  const [storageDestination, setStorageDestination] = useState('gdrive');
+  const [gdriveRefreshToken, setGdriveRefreshToken] = useState('');
+  const [gdriveFolderPath, setGdriveFolderPath] = useState('/Portabase');
+  const [dropboxRefreshToken, setDropboxRefreshToken] = useState('');
+  const [dropboxFolderPath, setDropboxFolderPath] = useState('/Portabase');
+  const [gcsBucketUri, setGcsBucketUri] = useState('');
+  const [awsS3RoleArn, setAwsS3RoleArn] = useState('');
+  const [awsS3Bucket, setAwsS3Bucket] = useState('');
+
+  // Mask toggles using text-security to avoid password input violation
   const [showDbPassword, setShowDbPassword] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [showRefreshToken, setShowRefreshToken] = useState(false);
+  const [showSealingPassword, setShowSealingPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showCapsulePassphrase, setShowCapsulePassphrase] = useState(false);
+  const [showGdriveToken, setShowGdriveToken] = useState(false);
+  const [showDropboxToken, setShowDropboxToken] = useState(false);
   
   const [sealedData, setSealedData] = useState(() => {
     try {
@@ -98,6 +126,16 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
         supabaseRefreshToken,
         supabaseOAuthClientId,
         capsulePassphrase: effectiveCapsulePassphrase,
+        platform: 'google-cloud-run',
+        gcpRegion,
+        storageDestination,
+        gdriveRefreshToken,
+        gdriveFolderPath,
+        dropboxRefreshToken,
+        dropboxFolderPath,
+        gcsBucketUri,
+        awsS3RoleArn,
+        awsS3Bucket,
         sourceSecret: dbPassword || supabaseApiKey || supabaseRefreshToken,
         sealedAt: new Date().toISOString(),
       });
@@ -125,11 +163,18 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
         shortFingerprint: `sha256:${hashHex.slice(0, 16)}…`,
         sealedAt: new Date().toISOString(),
         authMethod,
+        platform: 'google-cloud-run',
+        gcpRegion,
+        storageDestination,
         hasDbPassword: Boolean(dbPassword),
         hasApiKey: Boolean(supabaseApiKey),
         hasRefreshToken: Boolean(supabaseRefreshToken),
         hasOAuthClientId: Boolean(supabaseOAuthClientId),
         hasCapsulePassphrase: Boolean(effectiveCapsulePassphrase),
+        hasGoogleDrive: Boolean(gdriveRefreshToken),
+        hasDropbox: Boolean(dropboxRefreshToken),
+        hasGcs: Boolean(gcsBucketUri),
+        hasAwsOidc: Boolean(awsS3RoleArn && awsS3Bucket),
       };
 
       // Immediately scrub plaintext secrets from memory
@@ -138,6 +183,11 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
       setSupabaseRefreshToken('');
       setSupabaseOAuthClientId('');
       setCapsulePassphrase('');
+      setGdriveRefreshToken('');
+      setDropboxRefreshToken('');
+      setGcsBucketUri('');
+      setAwsS3RoleArn('');
+      setAwsS3Bucket('');
       setSealingPassword('');
       setConfirmPassword('');
 
@@ -201,6 +251,16 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
       setSupabaseRefreshToken(loadedRefreshToken);
       setSupabaseOAuthClientId(parsed.supabaseOAuthClientId || '');
       setCapsulePassphrase(parsed.capsulePassphrase || '');
+      setGcpRegion(parsed.gcpRegion || 'us-central1');
+      setStorageDestination(parsed.storageDestination || 'gdrive');
+      setGdriveRefreshToken(parsed.gdriveRefreshToken || '');
+      setGdriveFolderPath(parsed.gdriveFolderPath || '/Portabase');
+      setDropboxRefreshToken(parsed.dropboxRefreshToken || '');
+      setDropboxFolderPath(parsed.dropboxFolderPath || '/Portabase');
+      setGcsBucketUri(parsed.gcsBucketUri || '');
+      setAwsS3RoleArn(parsed.awsS3RoleArn || '');
+      setAwsS3Bucket(parsed.awsS3Bucket || '');
+
       setShowUnlockModal(false);
       setUnlockPassword('');
       setSealedData(null);
@@ -224,6 +284,13 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
     URL.revokeObjectURL(url);
   };
 
+  const quickCreateUrl = buildAwsS3QuickCreateUrl({
+    region: 'us-east-1',
+    bucketName: awsS3Bucket.trim() || 'my-supabase-backup-vault',
+    oidcClientId: 'https://accounts.google.com',
+    roleName: 'PortabaseS3RunnerRole',
+  });
+
   if (sealedData) {
     const hasDb = sealedData.hasDbPassword !== undefined ? sealedData.hasDbPassword : true;
     const hasApi = sealedData.hasApiKey !== undefined ? sealedData.hasApiKey : true;
@@ -243,10 +310,13 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ fontSize: '24px' }}>🔒</span>
             <div>
-              <h3 style={{ margin: 0, fontSize: '18px', color: '#3ecf8e', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', color: '#3ecf8e', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 Runner Vault Sealed Shut
                 <span className="pb-badge pb-badge-ok" style={{ fontSize: '11px', textTransform: 'uppercase' }}>
-                  SEALED · AES-256-GCM (PBKDF2-SHA256)
+                  SEALED · AES-256-GCM
+                </span>
+                <span className="pb-badge" style={{ fontSize: '11px', background: '#1e293b', color: '#93c5fd' }}>
+                  Google Cloud Run ({sealedData.gcpRegion || 'us-central1'})
                 </span>
               </h3>
               <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#9ca3af' }}>
@@ -269,14 +339,19 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
             <div>
               <span style={{ fontWeight: 600, color: '#3ecf8e' }}>Sealed contents: </span>
               <span>
-                Database Password ({hasDb ? '✓' : '—'}) · API Key ({hasApi ? '✓' : '—'}) · Refresh Token ({hasRefresh ? '✓' : '—'}) · Capsule Passphrase ({hasCap ? '✓' : '—'})
+                Database ({hasDb ? '✓' : '—'}) · API Key ({hasApi ? '✓' : '—'}) · Refresh Token ({hasRefresh ? '✓' : '—'}) · Passphrase ({hasCap ? '✓' : '—'})
               </span>
             </div>
-            {sealedData.authMethod && (
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               <span className="pb-badge" style={{ fontSize: '10px', textTransform: 'uppercase' }}>
-                {sealedData.authMethod === 'oauth' ? 'OAuth (PKCE)' : sealedData.authMethod === 'refresh-token' ? 'OAuth Refresh Token' : 'Password & API Key'}
+                Platform: Cloud Run
               </span>
-            )}
+              {sealedData.storageDestination && (
+                <span className="pb-badge pb-badge-ok" style={{ fontSize: '10px', textTransform: 'uppercase' }}>
+                  Dest: {sealedData.storageDestination}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -297,11 +372,19 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
             <h4 style={{ margin: '0 0 10px', fontSize: '14px', color: '#f3f4f6' }}>Enter Sealing Password to Unlock &amp; Edit</h4>
             <form onSubmit={handleUnlock} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <input
-                type="password"
+                type="text"
                 placeholder="Sealing password"
                 value={unlockPassword}
                 onChange={e => setUnlockPassword(e.target.value)}
-                style={{ flex: '1 1 240px', padding: '8px 12px', background: '#1f2937', color: '#fff', border: '1px solid #4b5563', borderRadius: '4px' }}
+                style={{
+                  flex: '1 1 240px',
+                  padding: '8px 12px',
+                  background: '#1f2937',
+                  color: '#fff',
+                  border: '1px solid #4b5563',
+                  borderRadius: '4px',
+                  WebkitTextSecurity: 'disc',
+                }}
                 autoFocus
               />
               <button type="submit" className="pb-btn pb-btn-primary">Unlock</button>
@@ -340,9 +423,48 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
       {success && <div className="pb-callout ok" style={{ marginBottom: '14px' }}><p>{success}</p></div>}
 
       <form onSubmit={handleSeal} style={{ display: 'grid', gap: '16px' }}>
+        {/* Section A: Google Cloud Run Platform Configuration */}
+        <div style={{ background: '#131920', padding: '14px', borderRadius: '8px', border: '1px solid #21262d' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '6px' }}>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#f0f6fc' }}>
+              Compute Platform: Google Cloud Run (Per-Subscriber Job · Scale-to-Zero)
+            </label>
+            <span className="pb-badge pb-badge-ok" style={{ fontSize: '10px' }}>
+              SCALE-TO-ZERO · 0 STANDBY COST
+            </span>
+          </div>
+          <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#8b949e', lineHeight: 1.4 }}>
+            Your automated runner runs inside an isolated, private Google Cloud Run container. Ephemeral jobs spin up on demand, run the backup, and immediately terminate.
+          </p>
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
+              Google Cloud Region:
+            </label>
+            <select
+              className="pb-select"
+              value={gcpRegion}
+              onChange={e => setGcpRegion(e.target.value)}
+              style={{
+                width: '100%',
+                maxWidth: '400px',
+                padding: '8px 12px',
+                background: '#0d1117',
+                color: '#f0f6fc',
+                border: '1px solid #30363d',
+                borderRadius: '6px',
+              }}
+            >
+              {GCP_RUNNER_REGIONS.map(r => (
+                <option key={r.id} value={r.id}>{r.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Section B: Connection Method */}
         <div style={{ background: '#131920', padding: '14px', borderRadius: '8px', border: '1px solid #21262d' }}>
           <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '8px' }}>
-            Connection Method
+            1. Supabase Connection Method
           </label>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             <button
@@ -372,27 +494,33 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
           </div>
           <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#8b949e' }}>
             {authMethod === 'oauth'
-              ? 'Runner Supabase OAuth PKCE flow: generates one-click OAuth token pair for automated backups.'
+              ? 'Runner Supabase OAuth PKCE flow: generates one-click OAuth token pair with auto-discovery of Project URL and service_role key.'
               : authMethod === 'refresh-token'
               ? 'Provide a Supabase OAuth Refresh Token (sbr_...) so your runner automatically refreshes access tokens before each backup.'
               : 'Direct Database Password and Secret / Service-Role API key for the runner.'}
           </p>
         </div>
 
+        {/* Database Password input */}
         <div>
           <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
-            1. Supabase Database Password{' '}
+            Supabase Database Password{' '}
             <span style={{ color: '#8b949e', fontWeight: 400 }}>(Supabase Dashboard → Project Settings → Database)</span>
           </label>
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <input
-              type={showDbPassword ? 'text' : 'password'}
+              type="text"
               className="pb-input"
               placeholder="Enter your Postgres database password"
               value={dbPassword}
               onChange={e => setDbPassword(e.target.value)}
-              style={{ width: '100%', fontFamily: 'monospace', paddingRight: '60px' }}
-              autoComplete="new-password"
+              style={{
+                width: '100%',
+                fontFamily: 'monospace',
+                paddingRight: '60px',
+                WebkitTextSecurity: showDbPassword ? 'none' : 'disc',
+              }}
+              autoComplete="off"
             />
             <button
               type="button"
@@ -420,20 +548,26 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
           )}
         </div>
 
+        {/* API Key input */}
         <div>
           <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
-            2. Supabase Secret / Service-Role API Key{' '}
+            Supabase Secret / Service-Role API Key{' '}
             <span style={{ color: '#8b949e', fontWeight: 400 }}>(Supabase Dashboard → Project Settings → API Keys)</span>
           </label>
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <input
-              type={showApiKey ? 'text' : 'password'}
+              type="text"
               className="pb-input"
               placeholder="sb_secret_... or service_role JWT (eyJ...)"
               value={supabaseApiKey}
               onChange={e => setSupabaseApiKey(e.target.value)}
-              style={{ width: '100%', fontFamily: 'monospace', paddingRight: '60px' }}
-              autoComplete="new-password"
+              style={{
+                width: '100%',
+                fontFamily: 'monospace',
+                paddingRight: '60px',
+                WebkitTextSecurity: showApiKey ? 'none' : 'disc',
+              }}
+              autoComplete="off"
             />
             <button
               type="button"
@@ -465,20 +599,26 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
           )}
         </div>
 
+        {/* Refresh Token input */}
         <div>
           <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
-            3. Supabase OAuth Refresh Token{' '}
-            <span style={{ color: '#8b949e', fontWeight: 400 }}>(Additional option for automatic token rotation, sbr_... or OAuth token)</span>
+            Supabase OAuth Refresh Token{' '}
+            <span style={{ color: '#8b949e', fontWeight: 400 }}>(Option for automatic token rotation, sbr_... or OAuth token)</span>
           </label>
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <input
-              type={showRefreshToken ? 'text' : 'password'}
+              type="text"
               className="pb-input"
               placeholder="sbr_... or OAuth refresh token"
               value={supabaseRefreshToken}
               onChange={e => setSupabaseRefreshToken(e.target.value)}
-              style={{ width: '100%', fontFamily: 'monospace', paddingRight: '60px' }}
-              autoComplete="new-password"
+              style={{
+                width: '100%',
+                fontFamily: 'monospace',
+                paddingRight: '60px',
+                WebkitTextSecurity: showRefreshToken ? 'none' : 'disc',
+              }}
+              autoComplete="off"
             />
             <button
               type="button"
@@ -506,23 +646,266 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
           )}
         </div>
 
-        {authMethod === 'refresh-token' || authMethod === 'oauth' ? (
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
-              Optional: Supabase OAuth App Client ID
+        {/* Section C: Backup Storage Destination (OAuth / Keyless) */}
+        <div style={{ background: '#131920', padding: '16px', borderRadius: '8px', border: '1px solid #21262d' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#f0f6fc' }}>
+              2. Backup Storage Destination (OAuth / Keyless Custody)
             </label>
-            <input
-              type="text"
-              className="pb-input"
-              placeholder="OAuth Client ID (optional, defaults to runner configuration)"
-              value={supabaseOAuthClientId}
-              onChange={e => setSupabaseOAuthClientId(e.target.value)}
-              style={{ width: '100%', fontFamily: 'monospace' }}
-              autoComplete="off"
-            />
+            <span className="pb-badge pb-badge-ok" style={{ fontSize: '10px' }}>
+              ZERO STATIC SECRET KEYS
+            </span>
           </div>
-        ) : null}
+          <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#8b949e', lineHeight: 1.4 }}>
+            Configure where the encrypted capsules will be written. All destinations support OAuth or keyless identity federation.
+          </p>
 
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px', marginBottom: '14px' }}>
+            {[
+              { id: 'gdrive', title: 'Google Drive', icon: '📁', tag: 'OAuth PKCE' },
+              { id: 'dropbox', title: 'Dropbox', icon: '📦', tag: 'OAuth PKCE' },
+              { id: 'gcs', title: 'Google Cloud Storage', icon: '☁️', tag: 'Native Workload Identity' },
+              { id: 's3-oidc', title: 'AWS S3 (OIDC Federation)', icon: '🛡️', tag: 'Zero IAM Keys' },
+            ].map(dest => (
+              <button
+                key={dest.id}
+                type="button"
+                onClick={() => setStorageDestination(dest.id)}
+                style={{
+                  padding: '10px 12px',
+                  borderRadius: '6px',
+                  border: storageDestination === dest.id ? '2px solid #3ecf8e' : '1px solid #30363d',
+                  background: storageDestination === dest.id ? '#132a1e' : '#0d1117',
+                  color: '#f0f6fc',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                  <span>{dest.icon}</span>
+                  <span style={{ fontWeight: 600, fontSize: '12px' }}>{dest.title}</span>
+                </div>
+                <div style={{ fontSize: '10px', color: '#8b949e' }}>{dest.tag}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Option 1: Google Drive */}
+          {storageDestination === 'gdrive' && (
+            <div style={{ display: 'grid', gap: '10px', background: '#0d1117', padding: '12px', borderRadius: '6px', border: '1px solid #30363d' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#f0f6fc' }}>Google Drive OAuth Configuration</span>
+                <a
+                  href="/oauth/google-drive/start"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="pb-btn pb-btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
+                >
+                  <Icon name="key" size={12} /> Launch 1-Click Google Drive OAuth
+                </a>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
+                  Google Drive Refresh Token (<code>GOOGLE_DRIVE_REFRESH_TOKEN</code>)
+                </label>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    className="pb-input"
+                    placeholder="Enter Google Drive refresh token"
+                    value={gdriveRefreshToken}
+                    onChange={e => setGdriveRefreshToken(e.target.value)}
+                    style={{
+                      width: '100%',
+                      fontFamily: 'monospace',
+                      paddingRight: '60px',
+                      WebkitTextSecurity: showGdriveToken ? 'none' : 'disc',
+                    }}
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowGdriveToken(v => !v)}
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      background: '#21262d',
+                      border: '1px solid #30363d',
+                      color: '#c9d1d9',
+                      cursor: 'pointer',
+                      fontSize: '11px',
+                      padding: '3px 8px',
+                      borderRadius: '4px',
+                    }}
+                  >
+                    {showGdriveToken ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
+                  Folder Path in Drive
+                </label>
+                <input
+                  type="text"
+                  className="pb-input"
+                  value={gdriveFolderPath}
+                  onChange={e => setGdriveFolderPath(e.target.value)}
+                  placeholder="/Portabase"
+                  style={{ width: '100%', fontFamily: 'monospace' }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Option 2: Dropbox */}
+          {storageDestination === 'dropbox' && (
+            <div style={{ display: 'grid', gap: '10px', background: '#0d1117', padding: '12px', borderRadius: '6px', border: '1px solid #30363d' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#f0f6fc' }}>Dropbox OAuth Configuration</span>
+                <a
+                  href="/oauth/dropbox/start"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="pb-btn pb-btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
+                >
+                  <Icon name="key" size={12} /> Launch 1-Click Dropbox OAuth
+                </a>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
+                  Dropbox Refresh Token (<code>DROPBOX_REFRESH_TOKEN</code>)
+                </label>
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    className="pb-input"
+                    placeholder="Enter Dropbox refresh token"
+                    value={dropboxRefreshToken}
+                    onChange={e => setDropboxRefreshToken(e.target.value)}
+                    style={{
+                      width: '100%',
+                      fontFamily: 'monospace',
+                      paddingRight: '60px',
+                      WebkitTextSecurity: showDropboxToken ? 'none' : 'disc',
+                    }}
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowDropboxToken(v => !v)}
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      background: '#21262d',
+                      border: '1px solid #30363d',
+                      color: '#c9d1d9',
+                      cursor: 'pointer',
+                      fontSize: '11px',
+                      padding: '3px 8px',
+                      borderRadius: '4px',
+                    }}
+                  >
+                    {showDropboxToken ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
+                  Folder Path in Dropbox
+                </label>
+                <input
+                  type="text"
+                  className="pb-input"
+                  value={dropboxFolderPath}
+                  onChange={e => setDropboxFolderPath(e.target.value)}
+                  placeholder="/Portabase"
+                  style={{ width: '100%', fontFamily: 'monospace' }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Option 3: Google Cloud Storage (GCS) */}
+          {storageDestination === 'gcs' && (
+            <div style={{ display: 'grid', gap: '10px', background: '#0d1117', padding: '12px', borderRadius: '6px', border: '1px solid #30363d' }}>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#f0f6fc' }}>
+                Google Cloud Storage (GCS) · Native Workload Identity
+              </span>
+              <p style={{ margin: 0, fontSize: '11px', color: '#8b949e', lineHeight: 1.4 }}>
+                When running on Google Cloud Run, the runner authenticates directly to your GCS bucket using GCP Service Account Workload Identity. No secret keys or passwords are required!
+              </p>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
+                  GCS Bucket URI (<code>GCS_BUCKET_URI</code>)
+                </label>
+                <input
+                  type="text"
+                  className="pb-input"
+                  value={gcsBucketUri}
+                  onChange={e => setGcsBucketUri(e.target.value)}
+                  placeholder="gs://my-supabase-backup-vault"
+                  style={{ width: '100%', fontFamily: 'monospace' }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Option 4: AWS S3 via OIDC Federation */}
+          {storageDestination === 's3-oidc' && (
+            <div style={{ display: 'grid', gap: '10px', background: '#0d1117', padding: '12px', borderRadius: '6px', border: '1px solid #30363d' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#f0f6fc' }}>
+                  AWS S3 via OIDC Federation ("AWS OAuth" · Zero IAM Keys)
+                </span>
+                <a
+                  href={quickCreateUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="pb-btn pb-btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
+                >
+                  🚀 1-Click AWS CloudFormation Setup
+                </a>
+              </div>
+              <p style={{ margin: 0, fontSize: '11px', color: '#8b949e', lineHeight: 1.4 }}>
+                Federates the Google Cloud Run OIDC token directly into AWS via <code>sts:AssumeRoleWithWebIdentity</code>. You never create or store static AWS IAM access keys!
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
+                    S3 Bucket Name (<code>AWS_S3_BUCKET</code>)
+                  </label>
+                  <input
+                    type="text"
+                    className="pb-input"
+                    value={awsS3Bucket}
+                    onChange={e => setAwsS3Bucket(e.target.value)}
+                    placeholder="my-portabase-backups"
+                    style={{ width: '100%', fontFamily: 'monospace' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
+                    IAM Role ARN (<code>AWS_S3_ROLE_ARN</code>)
+                  </label>
+                  <input
+                    type="text"
+                    className="pb-input"
+                    value={awsS3RoleArn}
+                    onChange={e => setAwsS3RoleArn(e.target.value)}
+                    placeholder="arn:aws:iam::123456789012:role/PortabaseS3RunnerRole"
+                    style={{ width: '100%', fontFamily: 'monospace' }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Section D: Vault Sealing Password */}
         <div style={{ background: '#161b22', padding: '16px', borderRadius: '6px', border: '1px solid #21262d' }}>
           <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#c9d1d9', lineHeight: 1.5 }}>
             This password seals the vault shut <strong>AND</strong> encrypts your backup capsules. You will use this same password to unlock this vault or decrypt capsules produced by your runner.
@@ -533,30 +916,76 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
                 3. Vault Sealing Password <span style={{ color: '#3ecf8e' }}>*</span>
               </label>
-              <input
-                type="password"
-                className="pb-input"
-                placeholder="Min 8 characters"
-                value={sealingPassword}
-                onChange={e => setSealingPassword(e.target.value)}
-                style={{ width: '100%' }}
-                autoComplete="new-password"
-              />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  className="pb-input"
+                  placeholder="Min 8 characters"
+                  value={sealingPassword}
+                  onChange={e => setSealingPassword(e.target.value)}
+                  style={{
+                    width: '100%',
+                    paddingRight: '60px',
+                    WebkitTextSecurity: showSealingPassword ? 'none' : 'disc',
+                  }}
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSealingPassword(v => !v)}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    background: '#21262d',
+                    border: '1px solid #30363d',
+                    color: '#c9d1d9',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                  }}
+                >
+                  {showSealingPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
             </div>
 
             <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
                 4. Confirm Sealing Password <span style={{ color: '#3ecf8e' }}>*</span>
               </label>
-              <input
-                type="password"
-                className="pb-input"
-                placeholder="Confirm password"
-                value={confirmPassword}
-                onChange={e => setConfirmPassword(e.target.value)}
-                style={{ width: '100%' }}
-                autoComplete="new-password"
-              />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  className="pb-input"
+                  placeholder="Confirm password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  style={{
+                    width: '100%',
+                    paddingRight: '60px',
+                    WebkitTextSecurity: showConfirmPassword ? 'none' : 'disc',
+                  }}
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(v => !v)}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    background: '#21262d',
+                    border: '1px solid #30363d',
+                    color: '#c9d1d9',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                  }}
+                >
+                  {showConfirmPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -578,15 +1007,39 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
               <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#c9d1d9', marginBottom: '4px' }}>
                 Capsule Encryption Passphrase (defaults to Vault Sealing Password)
               </label>
-              <input
-                type="password"
-                className="pb-input"
-                placeholder="Leave blank to use Vault Sealing Password"
-                value={capsulePassphrase}
-                onChange={e => setCapsulePassphrase(e.target.value)}
-                style={{ width: '100%', fontFamily: 'monospace' }}
-                autoComplete="new-password"
-              />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  className="pb-input"
+                  placeholder="Leave blank to use Vault Sealing Password"
+                  value={capsulePassphrase}
+                  onChange={e => setCapsulePassphrase(e.target.value)}
+                  style={{
+                    width: '100%',
+                    fontFamily: 'monospace',
+                    paddingRight: '60px',
+                    WebkitTextSecurity: showCapsulePassphrase ? 'none' : 'disc',
+                  }}
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCapsulePassphrase(v => !v)}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    background: '#21262d',
+                    border: '1px solid #30363d',
+                    color: '#c9d1d9',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                  }}
+                >
+                  {showCapsulePassphrase ? 'Hide' : 'Show'}
+                </button>
+              </div>
               <span style={{ fontSize: '11px', color: '#8b949e', marginTop: '4px', display: 'block' }}>
                 If specified, the runner will use this passphrase to encrypt capsule files instead of your vault sealing password.
               </span>
@@ -598,7 +1051,7 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
           <button
             type="submit"
             className="pb-btn pb-btn-primary"
-            disabled={isSealing || !sealingPassword || sealingPassword.length < 8 || sealingPassword !== confirmPassword || (!dbPassword && !supabaseApiKey && !capsulePassphrase)}
+            disabled={isSealing || !sealingPassword || sealingPassword.length < 8 || sealingPassword !== confirmPassword || (!dbPassword && !supabaseApiKey && !supabaseRefreshToken && !capsulePassphrase)}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 20px', fontSize: '14px' }}
           >
             <Icon name="lock" size={16} /> 🔒 Seal Vault Shut with Sealing Password

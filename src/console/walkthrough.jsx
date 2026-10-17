@@ -280,9 +280,10 @@ export function GuidedWalkthrough({
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginBottom: '16px' }}>
               {[
                 { id: 'local', title: 'Local Folder (PC / NAS)', icon: '🖥️', defaultPath: 'C:\\PortabaseBackups' },
-                { id: 's3', title: 'Amazon S3 Bucket', icon: '☁️', defaultPath: 'my-supabase-backup-bucket' },
-                { id: 'dropbox', title: 'Dropbox Vault', icon: '📦', defaultPath: '/Portabase/Capsules' },
-                { id: 'gdrive', title: 'Google Drive', icon: '📁', defaultPath: 'Portabase Backups' },
+                { id: 'gdrive', title: 'Google Drive (OAuth PKCE)', icon: '📁', defaultPath: '/Portabase' },
+                { id: 'dropbox', title: 'Dropbox Vault (OAuth PKCE)', icon: '📦', defaultPath: '/Portabase' },
+                { id: 'gcs', title: 'Google Cloud Storage (GCS)', icon: '☁️', defaultPath: 'gs://my-supabase-backup-vault' },
+                { id: 's3', title: 'AWS S3 (OIDC Federation)', icon: '🛡️', defaultPath: 'my-supabase-backup-bucket' },
               ].map((v) => (
                 <button
                   key={v.id}
@@ -306,7 +307,7 @@ export function GuidedWalkthrough({
 
             <div>
               <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
-                {vaultKind === 'local' ? 'Folder Path on your computer or server' : vaultKind === 's3' ? 'S3 Bucket Name' : 'Folder Path'}
+                {vaultKind === 'local' ? 'Folder Path on your computer or server' : vaultKind === 'gcs' ? 'GCS Bucket URI (gs://...)' : vaultKind === 's3' ? 'S3 Bucket Name' : 'Folder Path'}
               </label>
               <input
                 type="text"
@@ -422,6 +423,20 @@ export function GuidedWalkthrough({
               Your database credentials and encryption keys never leave your machine or runner.
               PortaBase cloud never holds or receives your database password or encryption keys.
             </p>
+
+            <div style={{ background: '#0d1117', padding: '12px 14px', borderRadius: '6px', border: '1px solid #21262d', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#f0f6fc' }}>
+                  Runner Platform: Google Cloud Run (Isolated Per-Subscriber Job)
+                </span>
+                <span className="pb-badge pb-badge-ok" style={{ marginLeft: '8px', fontSize: '10px' }}>
+                  SCALE-TO-ZERO · ZERO STANDBY
+                </span>
+                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#8b949e' }}>
+                  Executes inside private Google Cloud Run containers (us-central1, us-east1, us-west1, europe-west1). Plaintext keys purged upon job completion.
+                </p>
+              </div>
+            </div>
 
             <div style={{ display: 'grid', gap: '12px', marginBottom: '18px' }}>
               <div>

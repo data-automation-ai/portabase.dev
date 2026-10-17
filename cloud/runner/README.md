@@ -8,6 +8,16 @@ does not need a customer login token. Registration and credential upgrades are
 available in the account console. An older telemetry-only credential needs an
 explicit upgrade before jobs can be queued or claimed.
 
+## Google Cloud Run Execution (Scale-to-Zero Jobs & Services)
+
+The runner container is built for execution on **Google Cloud Run Jobs and Services**:
+- Default listen port: `PORT=8080`
+- Platform identifier: `PORTABASE_RUNNER_PLATFORM=google-cloud-run`
+- Primary GCP region: `PORTABASE_GCP_REGION=us-central1` (also supports `us-east1`, `us-west1`, `europe-west1`, `asia-east1`)
+- Scale-to-zero: Each subscriber runner can run as an ephemeral Cloud Run Job that spins up on demand, pulls and executes the sealed transfer task, writes the encrypted capsule to destination storage, and terminates cleanly.
+- Keyless IAM & OIDC Federation: Cloud Run workloads can fetch Google Cloud OIDC identity tokens (`fetchGcpIdentityToken`) from the GCP metadata server (`http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity`), which directly federate into AWS STS (`AssumeRoleWithWebIdentity`) or authenticate to Google Cloud Storage (GCS) without static keys.
+
+
 ## Deployment requirements
 
 - Set `PORTABASE_CLOUD_URL`, `PORTABASE_AGENT_TOKEN`,

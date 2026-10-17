@@ -341,3 +341,113 @@ export async function resolveRunnerAccessToken(secrets = {}, options = {}) {
     rotated: true,
   };
 }
+
+/**
+ * Auto-discovers Supabase project credentials (URL, service_role key, anon key)
+ * using an OAuth Access Token via the Supabase Management API.
+ *
+ * This enables one-click Supabase OAuth connection where the customer does NOT need
+ * to manually copy and paste their Project URL or Service-Role API Key from the dashboard!
+ *
+ * @param {object} params
+ * @param {string} params.accessToken - Supabase OAuth access token (or Personal Access Token)
+ * @param {string} [params.projectRef] - Optional project ref; if omitted, queries /v1/projects
+ * @param {string} [params.apiUrl='https://api.supabase.com'] - Supabase Management API URL
+ * @param {typeof fetch} [params.fetchImpl=globalThis.fetch] - Fetch implementation
+ * @returns {Promise<{ projectRef: string, supabaseUrl: string, serviceRoleKey: string, anonKey: string|null }>}
+ */
+export async function discoverSupabaseProjectCredentials({
+  accessToken,
+  projectRef = null,
+  apiUrl = 'https://api.supabase.com',
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  if (!accessToken || typeof accessToken !== 'string') {
+    fail('missing_access_token', 'accessToken is required for Supabase credential discovery');
+  }
+
+  const base = apiUrl.replace(/\/+$/, '');
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    Accept: 'application/json',
+  };
+
+  let targetRef = projectRef;
+
+  // If no projectRef specified, query /v1/projects to resolve the customer's project
+  if (!targetRef) {
+    let projectsRes;
+    try {
+      projectsRes = await fetchImpl(`${base}/v1/projects`, { method: 'GET', headers });
+    } catch (err) {
+      fail('oauth_network_error', `Could not reach Supabase Management API: ${err.message}`, 502);
+    }
+    if (!projectsRes.ok) {
+      fail('projects_discovery_failed', `Failed to list projects (HTTP ${projectsRes.status})`, projectsRes.status);
+    }
+    let projects;
+    try {
+      projects = await projectsRes.json();
+    } catch {
+      fail('invalid_api_response', 'Supabase Management API returned non-JSON projects response');
+    }
+    if (!Array.isArray(projects) || projects.length === 0) {
+      fail('no_projects_found', 'No Supabase projects found for this account', 404);
+    }
+    targetRef = projects[0].id || projects[0].ref;
+    if (!targetRef) {
+      fail('project_ref_unresolved', 'Could not resolve project ref from projects response');
+    }
+  }
+
+  // Fetch API keys for targetRef
+  let keysRes;
+  try {
+    keysRes = await fetchImpl(`${base}/v1/projects/${encodeURIComponent(targetRef)}/api-keys?reveal=true`, {
+      method: 'GET',
+      headers,
+    });
+  } catch (err) {
+    fail('oauth_network_error', `Could not fetch API keys: ${err.message}`, 502);
+  }
+
+  if (!keysRes.ok) {
+    fail('api_keys_discovery_failed', `Failed to retrieve API keys for project ${targetRef} (HTTP ${keysRes.status})`, keysRes.status);
+  }
+
+  let keysData;
+  try {
+    keysData = await keysRes.json();
+  } catch {
+    fail('invalid_api_response', 'Supabase Management API returned non-JSON keys response');
+  }
+
+  let serviceRoleKey = null;
+  let anonKey = null;
+
+  if (Array.isArray(keysData)) {
+    for (const item of keysData) {
+      const name = String(item.name || item.tag || '').toLowerCase();
+      const val = item.api_key || item.key || item.value || item.secret;
+      if (name.includes('service_role') || name.includes('service-role') || name.includes('secret')) {
+        serviceRoleKey = val;
+      } else if (name.includes('anon') || name.includes('publishable')) {
+        anonKey = val;
+      }
+    }
+  } else if (keysData && typeof keysData === 'object') {
+    serviceRoleKey = keysData.service_role || keysData.serviceRole || keysData.service_role_key || null;
+    anonKey = keysData.anon || keysData.anonKey || keysData.publishable || null;
+  }
+
+  if (!serviceRoleKey) {
+    fail('service_role_key_not_found', `Could not find service_role API key for project ${targetRef}`, 404);
+  }
+
+  return {
+    projectRef: targetRef,
+    supabaseUrl: `https://${targetRef}.supabase.co`,
+    serviceRoleKey,
+    anonKey: anonKey || null,
+  };
+}

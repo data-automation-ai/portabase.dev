@@ -13,6 +13,12 @@ import {
   exchangeSupabaseOAuthCode,
   refreshSupabaseAccessToken,
 } from '../../cloud/runner/supabase-oauth.mjs';
+import {
+  buildGoogleDriveAuthorizeUrl,
+  exchangeGoogleDriveOAuthCode,
+  buildDropboxAuthorizeUrl,
+  exchangeDropboxOAuthCode,
+} from '../../cloud/runner/storage-oauth.mjs';
 
 const assets = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/app.css': ['app.css', 'text/css'] };
 const safeErrors = new Set(['inventory_unavailable', 'inventory_changed', 'private_setup_busy', 'invalid_selection',
@@ -22,6 +28,10 @@ const safeErrors = new Set(['inventory_unavailable', 'inventory_changed', 'priva
   'invalid_capsule_passphrase', 'invalid_target_project', 'invalid_target_url',
   'invalid_target_service_key', 'invalid_target_database_url', 'invalid_target_database_password', 'incomplete_target_configuration',
   'runtime_secrets_too_large', 'bucket_objects_unavailable', 'invalid_bucket',
+  'invalid_gdrive_refresh_token', 'invalid_gdrive_client_id',
+  'invalid_dropbox_refresh_token', 'invalid_dropbox_client_id',
+  'invalid_gcs_bucket_uri', 'invalid_aws_s3_role_arn', 'invalid_aws_s3_bucket',
+  'invalid_provider',
   'oauth_state_mismatch', 'oauth_exchange_failed', 'refresh_token_failed', 'missing_refresh_token',
   'missing_code', 'missing_code_verifier', 'invalid_oauth_callback']);
 const safeError = error => safeErrors.has(error?.code) ? error.code : 'private_setup_unavailable';
@@ -97,6 +107,98 @@ export async function startPrivateSetupUiServer({ collect, collectBucketObjects,
         response.end();
         return;
       }
+      if (request.method === 'GET' && url.pathname === '/oauth/google-drive/start') {
+        const supplied = url.searchParams.get('t') || request.headers['x-portabase-session'];
+        if (supplied && !matches(token, supplied)) return send(401, { error: 'session_required' });
+        const clientId = url.searchParams.get('clientId') || process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_DRIVE_CLIENT_ID || 'portabase-runner-gdrive';
+        const redirectUri = url.searchParams.get('redirectUri') || `http://${UI_HOST}:${boundPort}/oauth/google-drive/callback`;
+        const { codeVerifier, codeChallenge } = generatePkcePair();
+        const state = generateOAuthState();
+        pkceStore.set(state, { codeVerifier, redirectUri, clientId, provider: 'google-drive', createdAt: Date.now() });
+        const authorizeUrl = buildGoogleDriveAuthorizeUrl({ clientId, redirectUri, codeChallenge, state });
+        if (url.searchParams.get('format') === 'json' || (request.headers.accept && request.headers.accept.includes('application/json'))) {
+          return send(200, { authorizeUrl, state, redirectUri });
+        }
+        response.writeHead(302, { ...SECURITY_HEADERS, Location: authorizeUrl, 'Cache-Control': 'no-store' });
+        response.end();
+        return;
+      }
+      if (request.method === 'GET' && url.pathname === '/oauth/google-drive/callback') {
+        const code = url.searchParams.get('code');
+        const state = url.searchParams.get('state');
+        const oauthErr = url.searchParams.get('error');
+        if (oauthErr) return send(400, { error: `oauth_error: ${oauthErr}` });
+        if (!code || !state) return send(400, { error: 'invalid_oauth_callback' });
+        if (!pkceStore.has(state)) return send(400, { error: 'oauth_state_mismatch' });
+        const { codeVerifier, redirectUri, clientId } = pkceStore.get(state);
+        pkceStore.delete(state);
+        const tokens = await exchangeGoogleDriveOAuthCode({
+          code,
+          codeVerifier,
+          redirectUri,
+          clientId,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        });
+        const saved = await savePrivateRuntimeSecrets(privateSetup, {
+          GOOGLE_DRIVE_REFRESH_TOKEN: tokens.refreshToken,
+          GOOGLE_DRIVE_CLIENT_ID: clientId,
+        });
+        Object.assign(process.env, saved.env);
+        stateStore.recordEvent('oauth.connected', 'ready', { provider: 'google-drive' });
+        response.writeHead(302, {
+          ...SECURITY_HEADERS,
+          Location: `/#t=${token}&oauth=google-drive-connected`,
+          'Cache-Control': 'no-store',
+        });
+        response.end();
+        return;
+      }
+      if (request.method === 'GET' && url.pathname === '/oauth/dropbox/start') {
+        const supplied = url.searchParams.get('t') || request.headers['x-portabase-session'];
+        if (supplied && !matches(token, supplied)) return send(401, { error: 'session_required' });
+        const clientId = url.searchParams.get('clientId') || process.env.DROPBOX_APP_KEY || process.env.DROPBOX_CLIENT_ID || 'portabase-runner-dropbox';
+        const redirectUri = url.searchParams.get('redirectUri') || `http://${UI_HOST}:${boundPort}/oauth/dropbox/callback`;
+        const { codeVerifier, codeChallenge } = generatePkcePair();
+        const state = generateOAuthState();
+        pkceStore.set(state, { codeVerifier, redirectUri, clientId, provider: 'dropbox', createdAt: Date.now() });
+        const authorizeUrl = buildDropboxAuthorizeUrl({ clientId, redirectUri, codeChallenge, state });
+        if (url.searchParams.get('format') === 'json' || (request.headers.accept && request.headers.accept.includes('application/json'))) {
+          return send(200, { authorizeUrl, state, redirectUri });
+        }
+        response.writeHead(302, { ...SECURITY_HEADERS, Location: authorizeUrl, 'Cache-Control': 'no-store' });
+        response.end();
+        return;
+      }
+      if (request.method === 'GET' && url.pathname === '/oauth/dropbox/callback') {
+        const code = url.searchParams.get('code');
+        const state = url.searchParams.get('state');
+        const oauthErr = url.searchParams.get('error');
+        if (oauthErr) return send(400, { error: `oauth_error: ${oauthErr}` });
+        if (!code || !state) return send(400, { error: 'invalid_oauth_callback' });
+        if (!pkceStore.has(state)) return send(400, { error: 'oauth_state_mismatch' });
+        const { codeVerifier, redirectUri, clientId } = pkceStore.get(state);
+        pkceStore.delete(state);
+        const tokens = await exchangeDropboxOAuthCode({
+          code,
+          codeVerifier,
+          redirectUri,
+          clientId,
+          clientSecret: process.env.DROPBOX_APP_SECRET || process.env.DROPBOX_CLIENT_SECRET,
+        });
+        const saved = await savePrivateRuntimeSecrets(privateSetup, {
+          DROPBOX_REFRESH_TOKEN: tokens.refreshToken,
+          DROPBOX_CLIENT_ID: clientId,
+        });
+        Object.assign(process.env, saved.env);
+        stateStore.recordEvent('oauth.connected', 'ready', { provider: 'dropbox' });
+        response.writeHead(302, {
+          ...SECURITY_HEADERS,
+          Location: `/#t=${token}&oauth=dropbox-connected`,
+          'Cache-Control': 'no-store',
+        });
+        response.end();
+        return;
+      }
       if (!matches(token, request.headers['x-portabase-session'])) return send(401, { error: 'session_required' });
       if (request.method === 'GET' && url.pathname === '/api/bootstrap') {
         const current = await loadPrivateRuntimeSecrets(privateSetup);
@@ -130,6 +232,8 @@ export async function startPrivateSetupUiServer({ collect, collectBucketObjects,
         '/api/oauth/supabase/start',
         '/api/oauth/supabase/exchange',
         '/api/oauth/supabase/refresh',
+        '/api/oauth/storage/start',
+        '/api/oauth/storage/exchange',
       ];
       if (request.method !== 'POST' || !allowedPostPaths.includes(url.pathname)) return send(405, { error: 'method_refused' });
       if (request.headers.origin !== origin || !matches(csrf, request.headers['x-portabase-csrf'])
@@ -168,6 +272,62 @@ export async function startPrivateSetupUiServer({ collect, collectBucketObjects,
         Object.assign(process.env, saved.env);
         stateStore.recordEvent('oauth.connected', 'ready', { provider: 'supabase' });
         return send(200, { ok: true, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, expiresAt: tokens.expiresAt, connections: saved.status });
+      }
+      if (url.pathname === '/api/oauth/storage/start') {
+        const provider = body?.provider || 'google-drive';
+        const { codeVerifier, codeChallenge } = generatePkcePair();
+        const state = generateOAuthState();
+        if (provider === 'google-drive' || provider === 'gdrive') {
+          const clientId = body?.clientId || process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_DRIVE_CLIENT_ID || 'portabase-runner-gdrive';
+          const redirectUri = body?.redirectUri || `http://${UI_HOST}:${boundPort}/oauth/google-drive/callback`;
+          pkceStore.set(state, { codeVerifier, redirectUri, clientId, provider: 'google-drive', createdAt: Date.now() });
+          const authorizeUrl = buildGoogleDriveAuthorizeUrl({ clientId, redirectUri, codeChallenge, state });
+          return send(200, { ok: true, provider: 'google-drive', authorizeUrl, state, redirectUri, codeVerifier });
+        } else if (provider === 'dropbox') {
+          const clientId = body?.clientId || process.env.DROPBOX_APP_KEY || process.env.DROPBOX_CLIENT_ID || 'portabase-runner-dropbox';
+          const redirectUri = body?.redirectUri || `http://${UI_HOST}:${boundPort}/oauth/dropbox/callback`;
+          pkceStore.set(state, { codeVerifier, redirectUri, clientId, provider: 'dropbox', createdAt: Date.now() });
+          const authorizeUrl = buildDropboxAuthorizeUrl({ clientId, redirectUri, codeChallenge, state });
+          return send(200, { ok: true, provider: 'dropbox', authorizeUrl, state, redirectUri, codeVerifier });
+        } else {
+          return send(400, { error: 'invalid_provider' });
+        }
+      }
+      if (url.pathname === '/api/oauth/storage/exchange') {
+        const provider = body?.provider || 'google-drive';
+        if (provider === 'google-drive' || provider === 'gdrive') {
+          const tokens = await exchangeGoogleDriveOAuthCode({
+            code: body?.code,
+            codeVerifier: body?.codeVerifier,
+            redirectUri: body?.redirectUri || `http://${UI_HOST}:${boundPort}/oauth/google-drive/callback`,
+            clientId: body?.clientId || process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_DRIVE_CLIENT_ID,
+            clientSecret: body?.clientSecret || process.env.GOOGLE_CLIENT_SECRET,
+          });
+          const saved = await savePrivateRuntimeSecrets(privateSetup, {
+            GOOGLE_DRIVE_REFRESH_TOKEN: tokens.refreshToken,
+            GOOGLE_DRIVE_CLIENT_ID: body?.clientId || process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_DRIVE_CLIENT_ID || undefined,
+          });
+          Object.assign(process.env, saved.env);
+          stateStore.recordEvent('oauth.connected', 'ready', { provider: 'google-drive' });
+          return send(200, { ok: true, provider: 'google-drive', accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, expiresAt: tokens.expiresAt, connections: saved.status });
+        } else if (provider === 'dropbox') {
+          const tokens = await exchangeDropboxOAuthCode({
+            code: body?.code,
+            codeVerifier: body?.codeVerifier,
+            redirectUri: body?.redirectUri || `http://${UI_HOST}:${boundPort}/oauth/dropbox/callback`,
+            clientId: body?.clientId || process.env.DROPBOX_APP_KEY || process.env.DROPBOX_CLIENT_ID,
+            clientSecret: body?.clientSecret || process.env.DROPBOX_APP_SECRET || process.env.DROPBOX_CLIENT_SECRET,
+          });
+          const saved = await savePrivateRuntimeSecrets(privateSetup, {
+            DROPBOX_REFRESH_TOKEN: tokens.refreshToken,
+            DROPBOX_CLIENT_ID: body?.clientId || process.env.DROPBOX_APP_KEY || process.env.DROPBOX_CLIENT_ID || undefined,
+          });
+          Object.assign(process.env, saved.env);
+          stateStore.recordEvent('oauth.connected', 'ready', { provider: 'dropbox' });
+          return send(200, { ok: true, provider: 'dropbox', accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, expiresAt: tokens.expiresAt, connections: saved.status });
+        } else {
+          return send(400, { error: 'invalid_provider' });
+        }
       }
       if (url.pathname === '/api/oauth/supabase/refresh') {
         const refreshToken = body?.refreshToken || body?.sourceRefreshToken || body?.supabaseRefreshToken || process.env.SUPABASE_REFRESH_TOKEN;
