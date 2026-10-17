@@ -1,6 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { Icon } from './icons.jsx';
 import { PrivateSealedVault } from './private-vault.jsx';
+import { DatabaseScopeSelector } from './database-scope-selector.jsx';
+import {
+  createDefaultDatabaseScope,
+  computeDatabaseScopeSummary,
+  buildPgDumpArgsForDatabase,
+} from '../../cloud/runner/database-scope.mjs';
 
 export function extractProjectRef(input) {
   if (!input) return '';
@@ -27,27 +33,30 @@ export function GuidedWalkthrough({
   const [step, setStep] = useState(1);
   const [projectInput, setProjectInput] = useState(currentProject?.ref || '');
   const [projectName, setProjectName] = useState(currentProject?.name || 'Primary Supabase App');
-  
-  const [vaultKind, setVaultKind] = useState(currentDest?.destinationKind || 'local');
-  const [vaultPath, setVaultPath] = useState(currentDest?.path || 'C:\\PortabaseBackups');
+  const [connectMethod, setConnectMethod] = useState('oauth');
+  const [manualDbPass, setManualDbPass] = useState('');
+  const [manualApiKey, setManualApiKey] = useState('');
+  const [manualRefreshToken, setManualRefreshToken] = useState('');
 
-  const [layers, setLayers] = useState({
-    database: true,
-    auth: true,
-    storage: true,
-    functions: true,
+  // Step 2: Multi-Database Scope State
+  const cleanRef = useMemo(() => extractProjectRef(projectInput), [projectInput]);
+  const [databaseScope, setDatabaseScope] = useState(() => {
+    return createDefaultDatabaseScope(currentProject?.ref || '', currentProject?.name || 'Primary Supabase App');
   });
+
+  // Step 3: Vault storage kind
+  const [vaultKind, setVaultKind] = useState(currentDest?.destinationKind || 'gdrive');
+  const [vaultPath, setVaultPath] = useState(currentDest?.path || '/Portabase');
 
   const [copiedDoctor, setCopiedDoctor] = useState(false);
   const [copiedBackup, setCopiedBackup] = useState(false);
 
   // Validation statuses
   const [step1Valid, setStep1Valid] = useState(Boolean(currentProject?.ref && /^[a-z0-9]{20}$/i.test(currentProject.ref)));
-  const [step2Valid, setStep2Valid] = useState(Boolean(currentDest));
-  const [step3Valid, setStep3Valid] = useState(true);
-  const [step4Valid, setStep4Valid] = useState(Boolean(state?.onboarding?.completed));
+  const [step2Valid, setStep2Valid] = useState(true);
+  const [step3Valid, setStep3Valid] = useState(Boolean(state?.onboarding?.completed));
 
-  const cleanRef = useMemo(() => extractProjectRef(projectInput), [projectInput]);
+  const scopeSummary = useMemo(() => computeDatabaseScopeSummary(databaseScope), [databaseScope]);
 
   const validateStep1 = () => {
     if (!cleanRef || !/^[a-z0-9]{20}$/i.test(cleanRef)) {
@@ -65,56 +74,40 @@ export function GuidedWalkthrough({
         region: 'us-east-1',
         status: 'ready',
         scheduleEveryHours: 24,
-        layers: { ...layers },
+        layers: { database: true, auth: true, storage: true, functions: true },
         createdAt: new Date().toISOString(),
       };
       if (existing >= 0) projects[existing] = { ...projects[existing], ...updated };
       else projects.unshift(updated);
       return { ...s, projects };
     });
+
+    // Sync database scope if still default
+    setDatabaseScope((prev) => {
+      if (prev.length === 1 && prev[0].id === 'db_primary') {
+        return createDefaultDatabaseScope(cleanRef, name);
+      }
+      return prev;
+    });
+
     setStep1Valid(true);
-    toast?.('Step 1 Validated: Supabase project reference saved!', 'ok');
+    toast?.('Step 1 Complete: Supabase account connected!', 'ok');
     setStep(2);
   };
 
   const validateStep2 = () => {
-    if (!vaultPath.trim()) {
-      toast?.('Please provide a destination folder path or bucket name.', 'danger');
-      return;
-    }
-    setState?.((s) => {
-      const destinations = [...(s.destinations || [])];
-      const dest = {
-        id: `dest_${vaultKind}_${Date.now().toString(36)}`,
-        name: vaultKind === 'local' ? 'Local Drive / NAS' : vaultKind === 's3' ? 'Amazon S3' : vaultKind === 'dropbox' ? 'Dropbox Vault' : 'Google Drive',
-        destinationKind: vaultKind,
-        path: vaultPath.trim(),
-        verified: true,
-        createdAt: new Date().toISOString(),
-      };
-      destinations.unshift(dest);
-      return { ...s, destinations };
-    });
-    setStep2Valid(true);
-    toast?.('Step 2 Validated: Capsule vault saved!', 'ok');
-    setStep(3);
-  };
-
-  const validateStep3 = () => {
-    if (!layers.database && !layers.auth && !layers.storage && !layers.functions) {
-      toast?.('Select at least one layer to back up.', 'danger');
+    if (scopeSummary.selectedCount === 0) {
+      toast?.('Please select at least one database to back up.', 'danger');
       return;
     }
     setState?.((s) => ({
       ...s,
-      jobInclude: {
-        ...(s.jobInclude || {}),
-        layers: { ...layers },
-      },
+      databaseScope,
+      databaseSummary: scopeSummary,
     }));
-    setStep3Valid(true);
-    toast?.('Step 3 Validated: Backup layers confirmed!', 'ok');
-    setStep(4);
+    setStep2Valid(true);
+    toast?.('Step 2 Complete: Database backup scope saved!', 'ok');
+    setStep(3);
   };
 
   const copyDoctorCommand = () => {
@@ -141,41 +134,48 @@ export function GuidedWalkthrough({
         steps: { workspace: true, project: true, agent: true, destination: true, schedule: true, alert: true, drill: true },
       },
     }));
-    setStep4Valid(true);
-    toast?.('🎉 Guided setup complete! Your project is configured for backup protection.', 'ok');
+    setStep3Valid(true);
+    toast?.('🎉 Guided setup complete! Your project is protected.', 'ok');
   };
 
-  const planCapLabel = plan?.id === 'cloud-free' ? '100 MB' : plan?.id === 'cloud-7' ? '500 MB' : '10 GB';
-
   return (
-    <section className="pb-card pb-walkthrough-card" style={{
-      background: 'linear-gradient(180deg, #12181f 0%, #0d1117 100%)',
-      border: '1px solid #30363d',
-      borderRadius: '12px',
-      padding: '24px',
-      marginBottom: '24px',
-      boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-    }} aria-label="Step-by-step setup walkthrough">
-      {/* Header & Stepper */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
+    <section
+      className="pb-card pb-walkthrough-card"
+      style={{
+        background: 'linear-gradient(180deg, #12181f 0%, #0d1117 100%)',
+        border: '1px solid #30363d',
+        borderRadius: '12px',
+        padding: '24px',
+        marginBottom: '24px',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+        overflowWrap: 'break-word',
+        minWidth: 0,
+      }}
+      aria-label="Step-by-step setup walkthrough"
+    >
+      {/* Friendly 1-2-3 Stepper Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px', marginBottom: '22px' }}>
         <div>
-          <span className="pb-badge pb-badge-ok" style={{ textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.06em', marginBottom: '6px', display: 'inline-block' }}>
-            BEGINNER WALKTHROUGH · STEP {step} OF 4
+          <span
+            className="pb-badge pb-badge-ok"
+            style={{ textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.06em', marginBottom: '6px', display: 'inline-block' }}
+          >
+            QUICK ONBOARDING · STEP {step} OF 3
           </span>
           <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: '#f0f6fc' }}>
-            Step-by-Step Portabase Setup
+            Portabase 1-2-3 Quick Setup
           </h2>
           <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#8b949e' }}>
-            Follow these 4 simple steps to protect your Supabase database into self-owned encrypted capsules.
+            Set up automatic, self-owned encrypted backups of your Supabase databases in 3 simple steps.
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* 1-2-3 Step Pills */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           {[
-            { num: 1, label: 'Supabase Ref', valid: step1Valid },
-            { num: 2, label: 'Vault', valid: step2Valid },
-            { num: 3, label: 'Scope', valid: step3Valid },
-            { num: 4, label: 'Run & Seal', valid: step4Valid },
+            { num: 1, label: '1. Connect Supabase', valid: step1Valid },
+            { num: 2, label: '2. Pick Databases', valid: step2Valid },
+            { num: 3, label: '3. Save & Lock Vault', valid: step3Valid },
           ].map((item) => (
             <button
               key={item.num}
@@ -184,318 +184,414 @@ export function GuidedWalkthrough({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
-                padding: '6px 12px',
+                gap: '8px',
+                padding: '8px 14px',
                 borderRadius: '999px',
                 border: step === item.num ? '1px solid #3ecf8e' : '1px solid #30363d',
                 background: step === item.num ? '#132a1e' : item.valid ? '#161b22' : '#0d1117',
                 color: step === item.num ? '#3ecf8e' : item.valid ? '#7ee787' : '#8b949e',
-                fontSize: '12px',
+                fontSize: '13px',
                 fontWeight: 600,
                 cursor: 'pointer',
+                transition: 'all 0.15s ease',
               }}
             >
-              <span>{item.valid ? '✓' : item.num}</span>
+              <span style={{
+                width: '18px',
+                height: '18px',
+                borderRadius: '50%',
+                background: item.valid ? '#238636' : step === item.num ? '#3ecf8e' : '#30363d',
+                color: step === item.num && !item.valid ? '#0d1117' : '#ffffff',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '11px',
+                fontWeight: 700,
+              }}>
+                {item.valid ? '✓' : item.num}
+              </span>
               <span>{item.label}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Step 1: Connect Supabase */}
+      {/* STEP 1: Connect Your Supabase Account */}
       {step === 1 && (
         <div className="pb-walkthrough-step">
-          <div style={{ background: '#161b22', padding: '16px', borderRadius: '8px', border: '1px solid #30363d', marginBottom: '16px' }}>
-            <h3 style={{ margin: '0 0 8px', fontSize: '16px', color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>1️⃣</span> Connect your Supabase Project
-              {step1Valid && <span className="pb-badge pb-badge-ok">✓ Validated</span>}
-            </h3>
-            <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#8b949e', lineHeight: 1.5 }}>
-              Paste your Supabase URL (e.g. <code>https://abcdefghijklmnopqrst.supabase.co</code>) or your 20-character project ref.
-              We use this solely to structure your backup commands — we never ask for or receive your password here.
-            </p>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
-                  Supabase Project URL or 20-char Reference
-                </label>
-                <input
-                  type="text"
-                  className="pb-input"
-                  placeholder="https://xyzabcdefghijklmnopq.supabase.co"
-                  value={projectInput}
-                  onChange={(e) => setProjectInput(e.target.value)}
-                  style={{ width: '100%', fontFamily: 'monospace' }}
-                />
-                {cleanRef && (
-                  <div style={{ marginTop: '6px', fontSize: '12px', color: /^[a-z0-9]{20}$/i.test(cleanRef) ? '#3ecf8e' : '#f85149' }}>
-                    {/^[a-z0-9]{20}$/i.test(cleanRef) ? `✓ Extracted Ref: ${cleanRef}` : 'Ref must be exactly 20 lowercase letters and numbers'}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
-                  Friendly Project Name
-                </label>
-                <input
-                  type="text"
-                  className="pb-input"
-                  placeholder="e.g. My Production App"
-                  value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)}
-                  style={{ width: '100%' }}
-                />
-              </div>
+          <div style={{ background: '#161b22', padding: '20px', borderRadius: '10px', border: '1px solid #30363d', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+              <h3 style={{ margin: 0, fontSize: '17px', color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  background: '#238636',
+                  color: '#fff',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                }}>1</span>
+                Connect Your Supabase Account
+              </h3>
+              {step1Valid && <span className="pb-badge pb-badge-ok">✓ Connected</span>}
             </div>
 
-            <div style={{ marginTop: '16px', display: 'flex', gap: '10px' }}>
-              <button
-                type="button"
-                className="pb-btn pb-btn-primary"
-                onClick={validateStep1}
-                disabled={!cleanRef || !/^[a-z0-9]{20}$/i.test(cleanRef)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-              >
-                <Icon name="check" size={14} /> Validate &amp; Continue to Step 2 &rarr;
-              </button>
+            <p style={{ margin: '0 0 18px 38px', fontSize: '13px', color: '#8b949e', lineHeight: 1.5 }}>
+              Connect securely with official 1-Click Supabase OAuth, or paste your project URL / reference below.
+              Portabase Cloud never sees or stores your database password.
+            </p>
+
+            <div style={{ marginLeft: '38px', display: 'grid', gap: '16px' }}>
+              {/* Big Friendly 1-Click OAuth Banner */}
+              <div style={{
+                background: 'linear-gradient(180deg, #132a1e 0%, #0d1e15 100%)',
+                border: '1px solid #238636',
+                borderRadius: '8px',
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+              }}>
+                <div>
+                  <div style={{ fontSize: '15px', fontWeight: 600, color: '#3ecf8e', marginBottom: '4px' }}>
+                    Sign in with Supabase (1-Click)
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#8b949e' }}>
+                    Connects automatically — no API keys or passwords to copy.
+                  </div>
+                </div>
+
+                <a
+                  href={`/oauth/supabase/start?project=${cleanRef || ''}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="pb-btn pb-btn-primary"
+                  style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '14px' }}
+                >
+                  🚀 Connect with Supabase OAuth (1-Click)
+                </a>
+              </div>
+
+              {/* Project Reference Input */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', marginTop: '6px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
+                    Supabase Project URL or 20-character Reference
+                  </label>
+                  <input
+                    type="text"
+                    className="pb-input"
+                    placeholder="https://xyzabcdefghijklmnopq.supabase.co"
+                    value={projectInput}
+                    onChange={(e) => setProjectInput(e.target.value)}
+                    style={{ width: '100%', fontFamily: 'monospace' }}
+                  />
+                  {cleanRef && (
+                    <div style={{ marginTop: '6px', fontSize: '12px', color: /^[a-z0-9]{20}$/i.test(cleanRef) ? '#3ecf8e' : '#f85149' }}>
+                      {/^[a-z0-9]{20}$/i.test(cleanRef) ? `✓ Project Ref: ${cleanRef}` : 'Ref must be 20 lowercase letters and digits'}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
+                    Friendly Project Name
+                  </label>
+                  <input
+                    type="text"
+                    className="pb-input"
+                    placeholder="e.g. My Production App"
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              </div>
+
+              {/* Gentle Secondary Options Tab */}
+              <details style={{ marginTop: '4px', fontSize: '12px', color: '#8b949e' }}>
+                <summary style={{ cursor: 'pointer', color: '#58a6ff', userSelect: 'none', fontWeight: 500 }}>
+                  Need to enter credentials manually? (Refresh Token or DB Password) ▾
+                </summary>
+                <div style={{ marginTop: '10px', padding: '12px', background: '#0d1117', borderRadius: '6px', border: '1px solid #30363d', display: 'grid', gap: '10px' }}>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className={`pb-btn pb-btn-sm ${connectMethod === 'oauth' ? 'pb-btn-primary' : ''}`}
+                      onClick={() => setConnectMethod('oauth')}
+                    >
+                      OAuth (Recommended)
+                    </button>
+                    <button
+                      type="button"
+                      className={`pb-btn pb-btn-sm ${connectMethod === 'refresh-token' ? 'pb-btn-primary' : ''}`}
+                      onClick={() => setConnectMethod('refresh-token')}
+                    >
+                      Refresh Token (sbr_...)
+                    </button>
+                    <button
+                      type="button"
+                      className={`pb-btn pb-btn-sm ${connectMethod === 'password-api' ? 'pb-btn-primary' : ''}`}
+                      onClick={() => setConnectMethod('password-api')}
+                    >
+                      Password &amp; API Key
+                    </button>
+                  </div>
+
+                  {connectMethod === 'refresh-token' && (
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
+                        OAuth Refresh Token (<code>sbr_...</code>)
+                      </label>
+                      <input
+                        type="text"
+                        className="pb-input"
+                        placeholder="sbr_..."
+                        value={manualRefreshToken}
+                        onChange={(e) => setManualRefreshToken(e.target.value)}
+                        style={{ width: '100%', fontFamily: 'monospace', fontSize: '11px' }}
+                      />
+                    </div>
+                  )}
+
+                  {connectMethod === 'password-api' && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
+                          Database Password
+                        </label>
+                        <input
+                          type="text"
+                          className="pb-input"
+                          placeholder="Postgres password"
+                          value={manualDbPass}
+                          onChange={(e) => setManualDbPass(e.target.value)}
+                          style={{ width: '100%', fontFamily: 'monospace', fontSize: '11px', WebkitTextSecurity: 'disc' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
+                          Secret API Key (<code>sb_secret_...</code>)
+                        </label>
+                        <input
+                          type="text"
+                          className="pb-input"
+                          placeholder="sb_secret_..."
+                          value={manualApiKey}
+                          onChange={(e) => setManualApiKey(e.target.value)}
+                          style={{ width: '100%', fontFamily: 'monospace', fontSize: '11px', WebkitTextSecurity: 'disc' }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </details>
+
+              <div style={{ marginTop: '8px', display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  className="pb-btn pb-btn-primary"
+                  onClick={validateStep1}
+                  disabled={!cleanRef || !/^[a-z0-9]{20}$/i.test(cleanRef)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 20px', fontSize: '14px' }}
+                >
+                  <Icon name="check" size={14} /> Continue to Step 2: Pick Databases &rarr;
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Step 2: Choose Storage Vault */}
+      {/* STEP 2: Pick Databases (Structure + Data vs. Structure Only) */}
       {step === 2 && (
         <div className="pb-walkthrough-step">
-          <div style={{ background: '#161b22', padding: '16px', borderRadius: '8px', border: '1px solid #30363d', marginBottom: '16px' }}>
-            <h3 style={{ margin: '0 0 8px', fontSize: '16px', color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>2️⃣</span> Choose Your Capsule Storage Vault
-              {step2Valid && <span className="pb-badge pb-badge-ok">✓ Validated</span>}
-            </h3>
-            <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#8b949e', lineHeight: 1.5 }}>
-              Where do you want your encrypted backup files to be saved? You retain 100% custody of the encrypted capsules.
+          <div style={{ background: '#161b22', padding: '20px', borderRadius: '10px', border: '1px solid #30363d', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+              <h3 style={{ margin: 0, fontSize: '17px', color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  background: '#238636',
+                  color: '#fff',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                }}>2</span>
+                Choose Which Databases to Back Up
+              </h3>
+              {step2Valid && <span className="pb-badge pb-badge-ok">✓ Scope Ready</span>}
+            </div>
+
+            <p style={{ margin: '0 0 18px 38px', fontSize: '13px', color: '#8b949e', lineHeight: 1.5 }}>
+              Choose whether each database gets a full backup with all row data, or a fast structure-only blueprint.
+              You can protect multiple databases under your plan.
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginBottom: '16px' }}>
-              {[
-                { id: 'local', title: 'Local Folder (PC / NAS)', icon: '🖥️', defaultPath: 'C:\\PortabaseBackups' },
-                { id: 'gdrive', title: 'Google Drive (OAuth PKCE)', icon: '📁', defaultPath: '/Portabase' },
-                { id: 'dropbox', title: 'Dropbox Vault (OAuth PKCE)', icon: '📦', defaultPath: '/Portabase' },
-                { id: 'gcs', title: 'Google Cloud Storage (GCS)', icon: '☁️', defaultPath: 'gs://my-supabase-backup-vault' },
-                { id: 's3', title: 'AWS S3 (OIDC Federation)', icon: '🛡️', defaultPath: 'my-supabase-backup-bucket' },
-              ].map((v) => (
-                <button
-                  key={v.id}
-                  type="button"
-                  onClick={() => { setVaultKind(v.id); setVaultPath(v.defaultPath); }}
-                  style={{
-                    padding: '12px',
-                    borderRadius: '8px',
-                    border: vaultKind === v.id ? '2px solid #3ecf8e' : '1px solid #30363d',
-                    background: vaultKind === v.id ? '#132a1e' : '#0d1117',
-                    color: '#f0f6fc',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <div style={{ fontSize: '20px', marginBottom: '6px' }}>{v.icon}</div>
-                  <div style={{ fontWeight: 600, fontSize: '13px' }}>{v.title}</div>
-                </button>
-              ))}
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
-                {vaultKind === 'local' ? 'Folder Path on your computer or server' : vaultKind === 'gcs' ? 'GCS Bucket URI (gs://...)' : vaultKind === 's3' ? 'S3 Bucket Name' : 'Folder Path'}
-              </label>
-              <input
-                type="text"
-                className="pb-input"
-                value={vaultPath}
-                onChange={(e) => setVaultPath(e.target.value)}
-                style={{ width: '100%', fontFamily: 'monospace' }}
+            <div style={{ marginLeft: '38px', display: 'grid', gap: '16px' }}>
+              {/* Embedded Multi-Database Scope Selector */}
+              <DatabaseScopeSelector
+                databases={databaseScope}
+                onChange={setDatabaseScope}
               />
-            </div>
 
-            <div style={{ marginTop: '16px', display: 'flex', gap: '10px' }}>
-              <button
-                type="button"
-                className="pb-btn pb-btn-primary"
-                onClick={validateStep2}
-                disabled={!vaultPath.trim()}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-              >
-                <Icon name="check" size={14} /> Validate &amp; Continue to Step 3 &rarr;
-              </button>
-              <button type="button" className="pb-btn" onClick={() => setStep(1)}>
-                &larr; Back to Step 1
-              </button>
+              <div style={{ marginTop: '8px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="pb-btn pb-btn-primary"
+                  onClick={validateStep2}
+                  disabled={scopeSummary.selectedCount === 0}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 20px', fontSize: '14px' }}
+                >
+                  <Icon name="check" size={14} /> Continue to Step 3: Save &amp; Lock Vault &rarr;
+                </button>
+                <button type="button" className="pb-btn" onClick={() => setStep(1)}>
+                  &larr; Back to Step 1
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Step 3: Select Scope & Check Size Cap */}
+      {/* STEP 3: Choose Backup Storage & Lock Vault */}
       {step === 3 && (
         <div className="pb-walkthrough-step">
-          <div style={{ background: '#161b22', padding: '16px', borderRadius: '8px', border: '1px solid #30363d', marginBottom: '16px' }}>
-            <h3 style={{ margin: '0 0 8px', fontSize: '16px', color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>3️⃣</span> Select What to Back Up &amp; Check Size Cap
-              {step3Valid && <span className="pb-badge pb-badge-ok">✓ Validated</span>}
-            </h3>
-            <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#8b949e', lineHeight: 1.5 }}>
-              Choose which Supabase components to include in each capsule. Your current plan includes up to <strong>{planCapLabel}</strong>.
+          <div style={{ background: '#161b22', padding: '20px', borderRadius: '10px', border: '1px solid #30363d', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+              <h3 style={{ margin: 0, fontSize: '17px', color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  background: '#238636',
+                  color: '#fff',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '14px',
+                  fontWeight: 700,
+                }}>3</span>
+                Choose Where to Save &amp; Lock Your Vault
+              </h3>
+              {step3Valid && <span className="pb-badge pb-badge-ok">✓ Protected</span>}
+            </div>
+
+            <p style={{ margin: '0 0 18px 38px', fontSize: '13px', color: '#8b949e', lineHeight: 1.5 }}>
+              All backup files are encrypted on your side before writing to your chosen cloud destination.
+              Lock your vault below to generate the encrypted runner configuration.
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', marginBottom: '16px' }}>
-              {[
-                { key: 'database', title: '🗄️ Database & Schema', desc: 'PostgreSQL tables, schemas, views, RLS policies' },
-                { key: 'auth', title: '👥 Auth Users & Identities', desc: 'Supabase Auth users, passwords, MFA' },
-                { key: 'storage', title: '📦 Storage Buckets', desc: 'Storage files, avatars, public & private uploads' },
-                { key: 'functions', title: '⚡ Edge Functions', desc: 'Function source code, configs, dependencies' },
-              ].map((layer) => (
-                <label
-                  key={layer.key}
-                  style={{
-                    display: 'block',
-                    padding: '12px',
-                    borderRadius: '8px',
-                    border: layers[layer.key] ? '1px solid #3ecf8e' : '1px solid #30363d',
-                    background: layers[layer.key] ? '#132a1e' : '#0d1117',
-                    cursor: 'pointer',
-                  }}
+            <div style={{ marginLeft: '38px', display: 'grid', gap: '16px' }}>
+              {/* Embedded Private Sealed Vault */}
+              <PrivateSealedVault
+                projectRef={cleanRef}
+                initialDatabaseScope={databaseScope}
+                onVaultSealed={completeWalkthrough}
+              />
+
+              <div style={{ marginTop: '12px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="pb-btn pb-btn-primary"
+                  onClick={completeWalkthrough}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <input
-                      type="checkbox"
-                      checked={layers[layer.key]}
-                      onChange={(e) => setLayers({ ...layers, [layer.key]: e.target.checked })}
-                    />
-                    <strong style={{ fontSize: '13px', color: '#f0f6fc' }}>{layer.title}</strong>
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#8b949e', marginLeft: '22px' }}>{layer.desc}</div>
-                </label>
-              ))}
-            </div>
-
-            <div style={{ background: '#0d1117', padding: '12px 14px', borderRadius: '6px', border: '1px solid #21262d', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-              <div>
-                <span style={{ fontSize: '12px', color: '#8b949e' }}>Current Plan Cap:</span>
-                <span style={{ fontSize: '14px', fontWeight: 700, color: '#3ecf8e', marginLeft: '6px' }}>{planCapLabel}</span>
+                  <Icon name="check" size={14} /> Mark Setup Complete ✓
+                </button>
+                <button type="button" className="pb-btn" onClick={() => setStep(2)}>
+                  &larr; Back to Step 2
+                </button>
               </div>
-              <button
-                type="button"
-                className="pb-btn pb-btn-sm"
-                onClick={onOpenSizer}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-              >
-                <Icon name="table" size={12} /> Open Table Sizer
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                type="button"
-                className="pb-btn pb-btn-primary"
-                onClick={validateStep3}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-              >
-                <Icon name="check" size={14} /> Validate &amp; Continue to Step 4 &rarr;
-              </button>
-              <button type="button" className="pb-btn" onClick={() => setStep(2)}>
-                &larr; Back to Step 2
-              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Step 4: Run & Verify + Private Sealed Runner Vault */}
-      {step === 4 && (
-        <div className="pb-walkthrough-step">
-          <div style={{ background: '#161b22', padding: '16px', borderRadius: '8px', border: '1px solid #30363d', marginBottom: '16px' }}>
-            <h3 style={{ margin: '0 0 8px', fontSize: '16px', color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span>4️⃣</span> Run &amp; Verify Your First Capsule
-              {step4Valid && <span className="pb-badge pb-badge-ok">✓ Completed</span>}
-            </h3>
-            <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#8b949e', lineHeight: 1.5 }}>
-              Your database credentials and encryption keys never leave your machine or runner.
-              PortaBase cloud never holds or receives your database password or encryption keys.
-            </p>
-
-            <div style={{ background: '#0d1117', padding: '12px 14px', borderRadius: '6px', border: '1px solid #21262d', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-              <div>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: '#f0f6fc' }}>
-                  Runner Platform: Google Cloud Run (Isolated Per-Subscriber Job)
-                </span>
-                <span className="pb-badge pb-badge-ok" style={{ marginLeft: '8px', fontSize: '10px' }}>
-                  SCALE-TO-ZERO · ZERO STANDBY
-                </span>
-                <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#8b949e' }}>
-                  Executes inside private Google Cloud Run containers (us-central1, us-east1, us-west1, europe-west1). Plaintext keys purged upon job completion.
-                </p>
-              </div>
+      {/* Developer & Advanced Settings Collapsible */}
+      <details
+        style={{
+          marginTop: '12px',
+          background: '#0d1117',
+          border: '1px solid #21262d',
+          borderRadius: '8px',
+          padding: '14px 18px',
+          fontSize: '12px',
+          color: '#8b949e',
+        }}
+      >
+        <summary style={{ cursor: 'pointer', fontWeight: 600, color: '#58a6ff', userSelect: 'none' }}>
+          Developer &amp; Advanced Settings (Optional) ▾
+        </summary>
+        <div style={{ marginTop: '14px', display: 'grid', gap: '16px' }}>
+          {/* CLI Commands */}
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#f0f6fc', marginBottom: '6px' }}>
+              Direct CLI Commands (Optional for Terminal Users)
             </div>
-
-            <div style={{ display: 'grid', gap: '12px', marginBottom: '18px' }}>
+            <div style={{ display: 'grid', gap: '10px' }}>
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#c9d1d9' }}>
-                    1. Check project connectivity:
-                  </label>
+                  <label style={{ fontSize: '11px', color: '#c9d1d9' }}>1. Check project connectivity:</label>
                   <button type="button" className="pb-btn pb-btn-sm" onClick={copyDoctorCommand}>
-                    {copiedDoctor ? '✓ Copied' : 'Copy command'}
+                    {copiedDoctor ? '✓ Copied' : 'Copy'}
                   </button>
                 </div>
-                <pre style={{ margin: 0, padding: '10px 14px', background: '#0d1117', border: '1px solid #30363d', borderRadius: '6px', color: '#58a6ff', fontSize: '13px', overflowX: 'auto' }}>
+                <pre style={{ margin: 0, padding: '8px 12px', background: '#161b22', border: '1px solid #30363d', borderRadius: '4px', color: '#58a6ff', fontSize: '12px', overflowX: 'auto' }}>
                   npx portabase doctor --project {cleanRef || '&lt;ref&gt;'}
                 </pre>
               </div>
 
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#c9d1d9' }}>
-                    2. Take your first encrypted backup:
-                  </label>
+                  <label style={{ fontSize: '11px', color: '#c9d1d9' }}>2. Run manual backup from terminal:</label>
                   <button type="button" className="pb-btn pb-btn-sm" onClick={copyBackupCommand}>
-                    {copiedBackup ? '✓ Copied' : 'Copy command'}
+                    {copiedBackup ? '✓ Copied' : 'Copy'}
                   </button>
                 </div>
-                <pre style={{ margin: 0, padding: '10px 14px', background: '#0d1117', border: '1px solid #30363d', borderRadius: '6px', color: '#58a6ff', fontSize: '13px', overflowX: 'auto' }}>
+                <pre style={{ margin: 0, padding: '8px 12px', background: '#161b22', border: '1px solid #30363d', borderRadius: '4px', color: '#58a6ff', fontSize: '12px', overflowX: 'auto' }}>
                   npx portabase backup --project {cleanRef || '&lt;ref&gt;'}
                 </pre>
               </div>
             </div>
+          </div>
 
-            {/* Private Sealed Runner Vault Embedded */}
-            <div style={{ marginTop: '20px', borderTop: '1px solid #30363d', paddingTop: '16px' }}>
-              <h4 style={{ margin: '0 0 8px', fontSize: '14px', color: '#f0f6fc' }}>
-                Optional: Client-Side Sealed Runner Vault
-              </h4>
-              <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#8b949e' }}>
-                Need to seal credentials for your automated runner? Use the in-browser vault below.
-                It encrypts locally with AES-256-GCM and zero network traffic.
-              </p>
-              <PrivateSealedVault projectRef={cleanRef} />
+          {/* pg_dump Command Preview for All Databases */}
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#f0f6fc', marginBottom: '6px' }}>
+              PostgreSQL pg_dump Engine Arguments:
             </div>
-
-            <div style={{ marginTop: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className="pb-btn pb-btn-primary"
-                onClick={completeWalkthrough}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-              >
-                <Icon name="check" size={14} /> Mark Walkthrough Complete ✓
-              </button>
-              <button type="button" className="pb-btn" onClick={() => setStep(3)}>
-                &larr; Back to Step 3
-              </button>
+            <div style={{ display: 'grid', gap: '6px' }}>
+              {databaseScope.map((db) => {
+                const flags = buildPgDumpArgsForDatabase(db);
+                return (
+                  <div key={db.id} style={{ fontFamily: 'monospace', fontSize: '11px', color: '#58a6ff', background: '#161b22', padding: '6px 10px', borderRadius: '4px', border: '1px solid #30363d' }}>
+                    <span style={{ color: '#8b949e' }}># {db.name}: </span>
+                    pg_dump {flags.length > 0 ? flags.join(' ') : '(full database + rows)'}
+                  </div>
+                );
+              })}
             </div>
           </div>
+
+          {/* Cloud Run Architecture Note */}
+          <div style={{ background: '#161b22', padding: '10px 12px', borderRadius: '6px', border: '1px solid #30363d' }}>
+            <span style={{ fontWeight: 600, color: '#f0f6fc' }}>Platform Architecture: Google Cloud Run</span>
+            <span className="pb-badge pb-badge-ok" style={{ marginLeft: '8px', fontSize: '10px' }}>SCALE-TO-ZERO</span>
+            <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#8b949e' }}>
+              Automated runner container instances spin up on demand and terminate immediately after completion. Zero standby server costs.
+            </p>
+          </div>
         </div>
-      )}
+      </details>
     </section>
   );
 }

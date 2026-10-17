@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Icon } from './icons.jsx';
 import { buildAwsS3QuickCreateUrl } from '../../cloud/runner/storage-oauth.mjs';
+import { DatabaseScopeSelector } from './database-scope-selector.jsx';
+import {
+  createDefaultDatabaseScope,
+  computeDatabaseScopeSummary,
+  buildPgDumpArgsForDatabase,
+} from '../../cloud/runner/database-scope.mjs';
 
 function bufferToBase64(buf) {
   const bytes = new Uint8Array(buf);
@@ -20,7 +26,7 @@ function base64ToBuffer(b64) {
   return bytes.buffer;
 }
 
-const VAULT_STORAGE_KEY = 'portabase.runner.vault.sealed.v1';
+export const VAULT_STORAGE_KEY = 'portabase.runner.vault.sealed.v1';
 export const GCP_RUNNER_REGIONS = [
   { id: 'us-central1', label: 'us-central1 (Iowa · Recommended)' },
   { id: 'us-east1', label: 'us-east1 (S. Carolina)' },
@@ -29,8 +35,12 @@ export const GCP_RUNNER_REGIONS = [
   { id: 'asia-east1', label: 'asia-east1 (Taiwan)' },
 ];
 
-export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
-  const [authMethod, setAuthMethod] = useState('password-api');
+export function PrivateSealedVault({
+  projectRef = '',
+  onVaultSealed = null,
+  initialDatabaseScope = null,
+}) {
+  const [authMethod, setAuthMethod] = useState('oauth');
   const [dbPassword, setDbPassword] = useState('');
   const [supabaseApiKey, setSupabaseApiKey] = useState('');
   const [supabaseRefreshToken, setSupabaseRefreshToken] = useState('');
@@ -39,6 +49,14 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
   const [sealingPassword, setSealingPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [unlockPassword, setUnlockPassword] = useState('');
+
+  // Multi-Database Scope State
+  const [databaseScope, setDatabaseScope] = useState(() => {
+    if (Array.isArray(initialDatabaseScope) && initialDatabaseScope.length > 0) {
+      return initialDatabaseScope;
+    }
+    return createDefaultDatabaseScope(projectRef);
+  });
 
   // Google Cloud Run configuration
   const [gcpRegion, setGcpRegion] = useState('us-central1');
@@ -53,7 +71,7 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
   const [awsS3RoleArn, setAwsS3RoleArn] = useState('');
   const [awsS3Bucket, setAwsS3Bucket] = useState('');
 
-  // Mask toggles using text-security to avoid password input violation
+  // Mask toggles using text-security to avoid password input violation (0 input[type=password])
   const [showDbPassword, setShowDbPassword] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [showRefreshToken, setShowRefreshToken] = useState(false);
@@ -62,7 +80,7 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
   const [showCapsulePassphrase, setShowCapsulePassphrase] = useState(false);
   const [showGdriveToken, setShowGdriveToken] = useState(false);
   const [showDropboxToken, setShowDropboxToken] = useState(false);
-  
+
   const [sealedData, setSealedData] = useState(() => {
     try {
       const raw = localStorage.getItem(VAULT_STORAGE_KEY);
@@ -77,6 +95,15 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
   const [isSealing, setIsSealing] = useState(false);
   const [showUnlockModal, setShowUnlockModal] = useState(false);
 
+  // Keep databaseScope updated if projectRef changes and scope is default
+  useEffect(() => {
+    if (projectRef && (!databaseScope || databaseScope.length === 0 || databaseScope[0].projectRef !== projectRef)) {
+      setDatabaseScope(createDefaultDatabaseScope(projectRef));
+    }
+  }, [projectRef]);
+
+  const scopeSummary = computeDatabaseScopeSummary(databaseScope);
+
   const handleSeal = async (e) => {
     e?.preventDefault();
     setError('');
@@ -90,7 +117,7 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
       setError('Sealing passwords do not match.');
       return;
     }
-    if (!dbPassword && !supabaseApiKey && !supabaseRefreshToken && !capsulePassphrase) {
+    if (authMethod !== 'oauth' && !dbPassword && !supabaseApiKey && !supabaseRefreshToken && !capsulePassphrase) {
       setError('Please provide at least a database password, Supabase API key, or OAuth refresh token to seal.');
       return;
     }
@@ -126,6 +153,7 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
         supabaseRefreshToken,
         supabaseOAuthClientId,
         capsulePassphrase: effectiveCapsulePassphrase,
+        databaseScope,
         platform: 'google-cloud-run',
         gcpRegion,
         storageDestination,
@@ -148,7 +176,7 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
 
       const hashBuffer = await window.crypto.subtle.digest('SHA-256', ciphertext);
       const hashHex = Array.from(new Uint8Array(hashBuffer))
-        .map(b => b.toString(16).padStart(2, '0'))
+        .map((b) => b.toString(16).padStart(2, '0'))
         .join('');
 
       const sealed = {
@@ -163,6 +191,8 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
         shortFingerprint: `sha256:${hashHex.slice(0, 16)}…`,
         sealedAt: new Date().toISOString(),
         authMethod,
+        databaseScope,
+        scopeSummary,
         platform: 'google-cloud-run',
         gcpRegion,
         storageDestination,
@@ -177,7 +207,7 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
         hasAwsOidc: Boolean(awsS3RoleArn && awsS3Bucket),
       };
 
-      // Immediately scrub plaintext secrets from memory
+      // Scrub plaintext secrets from state
       setDbPassword('');
       setSupabaseApiKey('');
       setSupabaseRefreshToken('');
@@ -198,7 +228,7 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
         // ignore
       }
 
-      setSuccess('Vault sealed successfully! 0 secret bytes left this browser.');
+      setSuccess('Vault locked and sealed! 0 secret bytes left this browser.');
       onVaultSealed?.(sealed);
     } catch (err) {
       setError(`Sealing failed: ${err.message}`);
@@ -245,12 +275,13 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
       const loadedDbPassword = parsed.dbPassword || (!parsed.sourceSecret?.startsWith('sb_') && !parsed.sourceSecret?.startsWith('eyJ') && !parsed.sourceSecret?.startsWith('sbr_') ? parsed.sourceSecret || '' : '');
       const loadedApiKey = parsed.supabaseApiKey || (parsed.sourceSecret?.startsWith('sb_') || parsed.sourceSecret?.startsWith('eyJ') ? parsed.sourceSecret || '' : '');
       const loadedRefreshToken = parsed.supabaseRefreshToken || (parsed.sourceSecret?.startsWith('sbr_') ? parsed.sourceSecret || '' : '');
-      setAuthMethod(parsed.authMethod || 'password-api');
+      setAuthMethod(parsed.authMethod || 'oauth');
       setDbPassword(loadedDbPassword);
       setSupabaseApiKey(loadedApiKey);
       setSupabaseRefreshToken(loadedRefreshToken);
       setSupabaseOAuthClientId(parsed.supabaseOAuthClientId || '');
       setCapsulePassphrase(parsed.capsulePassphrase || '');
+      setDatabaseScope(parsed.databaseScope || createDefaultDatabaseScope(parsed.projectRef || projectRef));
       setGcpRegion(parsed.gcpRegion || 'us-central1');
       setStorageDestination(parsed.storageDestination || 'gdrive');
       setGdriveRefreshToken(parsed.gdriveRefreshToken || '');
@@ -291,67 +322,89 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
     roleName: 'PortabaseS3RunnerRole',
   });
 
+  // Locked Vault View
   if (sealedData) {
-    const hasDb = sealedData.hasDbPassword !== undefined ? sealedData.hasDbPassword : true;
-    const hasApi = sealedData.hasApiKey !== undefined ? sealedData.hasApiKey : true;
-    const hasRefresh = sealedData.hasRefreshToken !== undefined ? sealedData.hasRefreshToken : Boolean(sealedData.supabaseRefreshToken);
-    const hasCap = sealedData.hasCapsulePassphrase !== undefined ? sealedData.hasCapsulePassphrase : true;
+    const sealedDbs = sealedData.databaseScope || databaseScope;
+    const summary = sealedData.scopeSummary || computeDatabaseScopeSummary(sealedDbs);
 
     return (
-      <div className="pb-card pb-vault-sealed" style={{
-        background: '#0e1713',
-        border: '2px solid #249361',
-        borderRadius: '10px',
-        padding: '24px',
-        marginTop: '16px',
-        color: '#f0fdf4',
-      }}>
+      <div
+        className="pb-card pb-vault-sealed"
+        style={{
+          background: 'linear-gradient(180deg, #0e1713 0%, #080f0c 100%)',
+          border: '2px solid #249361',
+          borderRadius: '12px',
+          padding: '24px',
+          marginTop: '16px',
+          color: '#f0fdf4',
+          overflowWrap: 'break-word',
+          minWidth: 0,
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '24px' }}>🔒</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '42px',
+              height: '42px',
+              borderRadius: '50%',
+              background: '#132e22',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '22px',
+              border: '1px solid #3ecf8e',
+            }}>
+              🔒
+            </div>
             <div>
               <h3 style={{ margin: 0, fontSize: '18px', color: '#3ecf8e', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                Runner Vault Sealed Shut
+                Runner Vault Sealed &amp; Active
                 <span className="pb-badge pb-badge-ok" style={{ fontSize: '11px', textTransform: 'uppercase' }}>
-                  SEALED · AES-256-GCM
-                </span>
-                <span className="pb-badge" style={{ fontSize: '11px', background: '#1e293b', color: '#93c5fd' }}>
-                  Google Cloud Run ({sealedData.gcpRegion || 'us-central1'})
+                  LOCKED · AES-256-GCM
                 </span>
               </h3>
               <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#9ca3af' }}>
-                Encrypted locally in browser memory. Plaintext keys have been purged.
+                Encrypted in local browser memory. Raw secrets were scrubbed immediately.
               </p>
             </div>
           </div>
-          <span style={{ background: '#132e22', color: '#3ecf8e', padding: '4px 10px', borderRadius: '4px', fontSize: '12px', fontWeight: 600 }}>
+          <span style={{ background: '#132e22', color: '#3ecf8e', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600 }}>
             0 secret bytes sent to Portabase servers
           </span>
         </div>
 
-        <div style={{ background: '#07100b', padding: '14px 16px', borderRadius: '6px', border: '1px solid #1c3d2c', marginBottom: '16px', fontSize: '13px' }}>
-          <div style={{ color: '#9ca3af', marginBottom: '4px', fontSize: '11px', textTransform: 'uppercase', fontFamily: 'monospace' }}>Cryptographic Seal Fingerprint</div>
-          <div style={{ color: '#6ee7b7', wordBreak: 'break-all', fontFamily: 'monospace' }}>{sealedData.fingerprint}</div>
-          <div style={{ color: '#6b7280', fontSize: '11px', marginTop: '6px', fontFamily: 'monospace' }}>
-            Sealed at: {sealedData.sealedAt} · KDF: PBKDF2 (100,000 rounds)
-          </div>
-          <div style={{ borderTop: '1px solid #1c3d2c', marginTop: '10px', paddingTop: '10px', fontSize: '12px', color: '#d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+        {/* Protection Summary Card */}
+        <div style={{ background: '#07100b', padding: '16px', borderRadius: '8px', border: '1px solid #1c3d2c', marginBottom: '18px', fontSize: '13px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '14px' }}>
             <div>
-              <span style={{ fontWeight: 600, color: '#3ecf8e' }}>Sealed contents: </span>
-              <span>
-                Database ({hasDb ? '✓' : '—'}) · API Key ({hasApi ? '✓' : '—'}) · Refresh Token ({hasRefresh ? '✓' : '—'}) · Passphrase ({hasCap ? '✓' : '—'})
-              </span>
+              <div style={{ color: '#9ca3af', fontSize: '11px', textTransform: 'uppercase', marginBottom: '2px' }}>Protected Databases</div>
+              <strong style={{ fontSize: '15px', color: '#f0fdf4' }}>
+                {summary.selectedCount} Database{summary.selectedCount === 1 ? '' : 's'}
+              </strong>
+              <div style={{ fontSize: '11px', color: '#6ee7b7' }}>
+                {summary.structureAndDataCount} Full · {summary.structureOnlyCount} Structure Only
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-              <span className="pb-badge" style={{ fontSize: '10px', textTransform: 'uppercase' }}>
-                Platform: Cloud Run
-              </span>
-              {sealedData.storageDestination && (
-                <span className="pb-badge pb-badge-ok" style={{ fontSize: '10px', textTransform: 'uppercase' }}>
-                  Dest: {sealedData.storageDestination}
-                </span>
-              )}
+
+            <div>
+              <div style={{ color: '#9ca3af', fontSize: '11px', textTransform: 'uppercase', marginBottom: '2px' }}>Storage Destination</div>
+              <strong style={{ fontSize: '15px', color: '#f0fdf4', textTransform: 'capitalize' }}>
+                {sealedData.storageDestination === 'gdrive' ? 'Google Drive' : sealedData.storageDestination === 'dropbox' ? 'Dropbox' : sealedData.storageDestination === 'gcs' ? 'Google Cloud Storage' : 'AWS S3'}
+              </strong>
+              <div style={{ fontSize: '11px', color: '#9ca3af' }}>Customer-owned encrypted custody</div>
             </div>
+
+            <div>
+              <div style={{ color: '#9ca3af', fontSize: '11px', textTransform: 'uppercase', marginBottom: '2px' }}>Estimated Size</div>
+              <strong style={{ fontSize: '15px', color: '#3ecf8e' }}>~{summary.estimatedCompressedMb} MB</strong>
+              {summary.savedMb > 0 && <span style={{ fontSize: '11px', color: '#7ee787', marginLeft: '6px' }}>({summary.savedMb} MB saved)</span>}
+            </div>
+          </div>
+
+          <div style={{ borderTop: '1px solid #1c3d2c', paddingTop: '10px', fontSize: '12px', color: '#9ca3af' }}>
+            <span style={{ fontFamily: 'monospace', color: '#6ee7b7' }}>Seal: {sealedData.shortFingerprint || sealedData.fingerprint?.slice(0, 24)}</span>
+            <span style={{ margin: '0 8px' }}>·</span>
+            <span>Sealed at {new Date(sealedData.sealedAt).toLocaleString()}</span>
           </div>
         </div>
 
@@ -363,26 +416,26 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
             <Icon name="download" size={14} /> Download Sealed Vault (<code style={{ background: 'transparent' }}>portabase-runner.sealed.json</code>)
           </button>
           <button type="button" className="pb-btn" onClick={() => setShowUnlockModal(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-            <Icon name="key" size={14} /> Unlock Vault with Sealing Password
+            <Icon name="key" size={14} /> Unlock Vault to Make Changes
           </button>
         </div>
 
         {showUnlockModal && (
           <div style={{ marginTop: '20px', padding: '16px', background: '#111827', borderRadius: '8px', border: '1px solid #374151' }}>
-            <h4 style={{ margin: '0 0 10px', fontSize: '14px', color: '#f3f4f6' }}>Enter Sealing Password to Unlock &amp; Edit</h4>
+            <h4 style={{ margin: '0 0 10px', fontSize: '14px', color: '#f3f4f6' }}>Enter Vault Sealing Password to Unlock &amp; Edit</h4>
             <form onSubmit={handleUnlock} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <input
                 type="text"
-                placeholder="Sealing password"
+                placeholder="Enter sealing password"
                 value={unlockPassword}
-                onChange={e => setUnlockPassword(e.target.value)}
+                onChange={(e) => setUnlockPassword(e.target.value)}
                 style={{
                   flex: '1 1 240px',
                   padding: '8px 12px',
                   background: '#1f2937',
                   color: '#fff',
                   border: '1px solid #4b5563',
-                  borderRadius: '4px',
+                  borderRadius: '6px',
                   WebkitTextSecurity: 'disc',
                 }}
                 autoFocus
@@ -396,337 +449,138 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
     );
   }
 
+  // Unsealed 1-2-3 Vault Form
   return (
-    <div className="pb-card pb-vault-unsealed" style={{
-      background: '#0d1117',
-      border: '1px solid #30363d',
-      borderRadius: '10px',
-      padding: '24px',
-      marginTop: '16px',
-    }}>
+    <div
+      className="pb-card pb-vault-unsealed"
+      style={{
+        background: '#0d1117',
+        border: '1px solid #30363d',
+        borderRadius: '12px',
+        padding: '24px',
+        marginTop: '16px',
+        overflowWrap: 'break-word',
+        minWidth: 0,
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '20px' }}>🛡️</span>
-          <h3 style={{ margin: 0, fontSize: '16px', color: '#f0f6fc' }}>Private Sealed Runner Vault</h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontSize: '22px' }}>🛡️</span>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '17px', color: '#f0f6fc' }}>
+              Client-Side Private Runner Vault
+            </h3>
+            <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#8b949e' }}>
+              Encrypts locally with AES-256-GCM. 0 secret bytes cross the network.
+            </p>
+          </div>
         </div>
         <span className="pb-badge pb-badge-ok" style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           LOCAL BROWSER VAULT · ZERO NETWORK TRANSMISSION
         </span>
       </div>
 
-      <p style={{ fontSize: '13px', color: '#8b949e', marginTop: 0, marginBottom: '18px', lineHeight: 1.5 }}>
-        Enter credentials below to seal them shut inside an encrypted file using WebCrypto (<code>PBKDF2-SHA256</code> + <code>AES-256-GCM</code>).
-        Your plaintext secrets never cross the network. Once sealed, you can safely copy the sealed vault to your runner.
-      </p>
-
       {error && <div className="pb-callout danger" style={{ marginBottom: '14px' }}><p>{error}</p></div>}
       {success && <div className="pb-callout ok" style={{ marginBottom: '14px' }}><p>{success}</p></div>}
 
-      <form onSubmit={handleSeal} style={{ display: 'grid', gap: '16px' }}>
-        {/* Section A: Google Cloud Run Platform Configuration */}
-        <div style={{ background: '#131920', padding: '14px', borderRadius: '8px', border: '1px solid #21262d' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '6px' }}>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#f0f6fc' }}>
-              Compute Platform: Google Cloud Run (Per-Subscriber Job · Scale-to-Zero)
-            </label>
-            <span className="pb-badge pb-badge-ok" style={{ fontSize: '10px' }}>
-              SCALE-TO-ZERO · 0 STANDBY COST
-            </span>
+      <form onSubmit={handleSeal} style={{ display: 'grid', gap: '20px' }}>
+        {/* Step 1: Connect Supabase */}
+        <div style={{ background: '#161b22', padding: '18px', borderRadius: '10px', border: '1px solid #30363d' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <span style={{
+              width: '24px',
+              height: '24px',
+              borderRadius: '50%',
+              background: '#238636',
+              color: '#fff',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '13px',
+              fontWeight: 700,
+            }}>1</span>
+            <strong style={{ fontSize: '15px', color: '#f0f6fc' }}>Connect Your Supabase Account</strong>
           </div>
-          <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#8b949e', lineHeight: 1.4 }}>
-            Your automated runner runs inside an isolated, private Google Cloud Run container. Ephemeral jobs spin up on demand, run the backup, and immediately terminate.
-          </p>
-          <div>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
-              Google Cloud Region:
-            </label>
-            <select
-              className="pb-select"
-              value={gcpRegion}
-              onChange={e => setGcpRegion(e.target.value)}
-              style={{
-                width: '100%',
-                maxWidth: '400px',
-                padding: '8px 12px',
-                background: '#0d1117',
-                color: '#f0f6fc',
-                border: '1px solid #30363d',
-                borderRadius: '6px',
-              }}
-            >
-              {GCP_RUNNER_REGIONS.map(r => (
-                <option key={r.id} value={r.id}>{r.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Section B: Connection Method */}
-        <div style={{ background: '#131920', padding: '14px', borderRadius: '8px', border: '1px solid #21262d' }}>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '8px' }}>
-            1. Supabase Connection Method
-          </label>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              className={`pb-btn ${authMethod === 'password-api' ? 'pb-btn-primary' : ''}`}
-              onClick={() => setAuthMethod('password-api')}
-              style={{ fontSize: '12px', padding: '6px 12px' }}
-            >
-              Password &amp; API Key
-            </button>
-            <button
-              type="button"
-              className={`pb-btn ${authMethod === 'refresh-token' ? 'pb-btn-primary' : ''}`}
-              onClick={() => setAuthMethod('refresh-token')}
-              style={{ fontSize: '12px', padding: '6px 12px' }}
-            >
-              OAuth Refresh Token (Auto-Rotation)
-            </button>
-            <button
-              type="button"
-              className={`pb-btn ${authMethod === 'oauth' ? 'pb-btn-primary' : ''}`}
-              onClick={() => setAuthMethod('oauth')}
-              style={{ fontSize: '12px', padding: '6px 12px' }}
-            >
-              One-Click Supabase OAuth (PKCE)
-            </button>
-          </div>
-          <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#8b949e' }}>
-            {authMethod === 'oauth'
-              ? 'Runner Supabase OAuth PKCE flow: generates one-click OAuth token pair with auto-discovery of Project URL and service_role key.'
-              : authMethod === 'refresh-token'
-              ? 'Provide a Supabase OAuth Refresh Token (sbr_...) so your runner automatically refreshes access tokens before each backup.'
-              : 'Direct Database Password and Secret / Service-Role API key for the runner.'}
-          </p>
-        </div>
-
-        {/* Database Password input */}
-        <div>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
-            Supabase Database Password{' '}
-            <span style={{ color: '#8b949e', fontWeight: 400 }}>(Supabase Dashboard → Project Settings → Database)</span>
-          </label>
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-            <input
-              type="text"
-              className="pb-input"
-              placeholder="Enter your Postgres database password"
-              value={dbPassword}
-              onChange={e => setDbPassword(e.target.value)}
-              style={{
-                width: '100%',
-                fontFamily: 'monospace',
-                paddingRight: '60px',
-                WebkitTextSecurity: showDbPassword ? 'none' : 'disc',
-              }}
-              autoComplete="off"
-            />
-            <button
-              type="button"
-              onClick={() => setShowDbPassword(v => !v)}
-              style={{
-                position: 'absolute',
-                right: '8px',
-                background: '#21262d',
-                border: '1px solid #30363d',
-                color: '#c9d1d9',
-                cursor: 'pointer',
-                fontSize: '11px',
-                padding: '3px 8px',
-                borderRadius: '4px',
-              }}
-              aria-label={showDbPassword ? 'Hide database password' : 'Show database password'}
-            >
-              {showDbPassword ? 'Hide' : 'Show'}
-            </button>
-          </div>
-          {dbPassword && (
-            <div style={{ fontSize: '12px', color: '#3ecf8e', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              ✓ Database password ready (target: db.{projectRef || '<project-ref>'}.supabase.co:5432/postgres)
-            </div>
-          )}
-        </div>
-
-        {/* API Key input */}
-        <div>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
-            Supabase Secret / Service-Role API Key{' '}
-            <span style={{ color: '#8b949e', fontWeight: 400 }}>(Supabase Dashboard → Project Settings → API Keys)</span>
-          </label>
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-            <input
-              type="text"
-              className="pb-input"
-              placeholder="sb_secret_... or service_role JWT (eyJ...)"
-              value={supabaseApiKey}
-              onChange={e => setSupabaseApiKey(e.target.value)}
-              style={{
-                width: '100%',
-                fontFamily: 'monospace',
-                paddingRight: '60px',
-                WebkitTextSecurity: showApiKey ? 'none' : 'disc',
-              }}
-              autoComplete="off"
-            />
-            <button
-              type="button"
-              onClick={() => setShowApiKey(v => !v)}
-              style={{
-                position: 'absolute',
-                right: '8px',
-                background: '#21262d',
-                border: '1px solid #30363d',
-                color: '#c9d1d9',
-                cursor: 'pointer',
-                fontSize: '11px',
-                padding: '3px 8px',
-                borderRadius: '4px',
-              }}
-              aria-label={showApiKey ? 'Hide API key' : 'Show API key'}
-            >
-              {showApiKey ? 'Hide' : 'Show'}
-            </button>
-          </div>
-          {supabaseApiKey.trim() && (
-            <div style={{ fontSize: '12px', marginTop: '6px' }}>
-              {(supabaseApiKey.trim().startsWith('sb_secret_') || supabaseApiKey.trim().startsWith('eyJ')) ? (
-                <span style={{ color: '#3ecf8e' }}>✓ Valid Supabase secret / service_role key format</span>
-              ) : supabaseApiKey.trim().startsWith('sb_publishable_') ? (
-                <span style={{ color: '#f59e0b' }}>⚠ That looks like a publishable/anon key — use your sb_secret_ or service_role key for full Auth &amp; Storage backup</span>
-              ) : null}
-            </div>
-          )}
-        </div>
-
-        {/* Refresh Token input */}
-        <div>
-          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
-            Supabase OAuth Refresh Token{' '}
-            <span style={{ color: '#8b949e', fontWeight: 400 }}>(Option for automatic token rotation, sbr_... or OAuth token)</span>
-          </label>
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-            <input
-              type="text"
-              className="pb-input"
-              placeholder="sbr_... or OAuth refresh token"
-              value={supabaseRefreshToken}
-              onChange={e => setSupabaseRefreshToken(e.target.value)}
-              style={{
-                width: '100%',
-                fontFamily: 'monospace',
-                paddingRight: '60px',
-                WebkitTextSecurity: showRefreshToken ? 'none' : 'disc',
-              }}
-              autoComplete="off"
-            />
-            <button
-              type="button"
-              onClick={() => setShowRefreshToken(v => !v)}
-              style={{
-                position: 'absolute',
-                right: '8px',
-                background: '#21262d',
-                border: '1px solid #30363d',
-                color: '#c9d1d9',
-                cursor: 'pointer',
-                fontSize: '11px',
-                padding: '3px 8px',
-                borderRadius: '4px',
-              }}
-              aria-label={showRefreshToken ? 'Hide refresh token' : 'Show refresh token'}
-            >
-              {showRefreshToken ? 'Hide' : 'Show'}
-            </button>
-          </div>
-          {supabaseRefreshToken.trim() && (
-            <div style={{ fontSize: '12px', color: '#3ecf8e', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              ✓ Supabase OAuth refresh token configured (automatic access token rotation enabled)
-            </div>
-          )}
-        </div>
-
-        {/* Section C: Backup Storage Destination (OAuth / Keyless) */}
-        <div style={{ background: '#131920', padding: '16px', borderRadius: '8px', border: '1px solid #21262d' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
-            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#f0f6fc' }}>
-              2. Backup Storage Destination (OAuth / Keyless Custody)
-            </label>
-            <span className="pb-badge pb-badge-ok" style={{ fontSize: '10px' }}>
-              ZERO STATIC SECRET KEYS
-            </span>
-          </div>
-          <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#8b949e', lineHeight: 1.4 }}>
-            Configure where the encrypted capsules will be written. All destinations support OAuth or keyless identity federation.
+          <p style={{ margin: '0 0 14px 32px', fontSize: '12px', color: '#8b949e' }}>
+            Choose how your backup runner authenticates to your Supabase project.
           </p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px', marginBottom: '14px' }}>
-            {[
-              { id: 'gdrive', title: 'Google Drive', icon: '📁', tag: 'OAuth PKCE' },
-              { id: 'dropbox', title: 'Dropbox', icon: '📦', tag: 'OAuth PKCE' },
-              { id: 'gcs', title: 'Google Cloud Storage', icon: '☁️', tag: 'Native Workload Identity' },
-              { id: 's3-oidc', title: 'AWS S3 (OIDC Federation)', icon: '🛡️', tag: 'Zero IAM Keys' },
-            ].map(dest => (
+          <div style={{ marginLeft: '32px' }}>
+            {/* Connection Method Selector */}
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '14px' }}>
               <button
-                key={dest.id}
                 type="button"
-                onClick={() => setStorageDestination(dest.id)}
-                style={{
-                  padding: '10px 12px',
-                  borderRadius: '6px',
-                  border: storageDestination === dest.id ? '2px solid #3ecf8e' : '1px solid #30363d',
-                  background: storageDestination === dest.id ? '#132a1e' : '#0d1117',
-                  color: '#f0f6fc',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                }}
+                className={`pb-btn pb-btn-sm ${authMethod === 'oauth' ? 'pb-btn-primary' : ''}`}
+                onClick={() => setAuthMethod('oauth')}
+                style={{ fontSize: '12px', padding: '6px 12px' }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                  <span>{dest.icon}</span>
-                  <span style={{ fontWeight: 600, fontSize: '12px' }}>{dest.title}</span>
-                </div>
-                <div style={{ fontSize: '10px', color: '#8b949e' }}>{dest.tag}</div>
+                Sign in with Supabase (1-Click)
               </button>
-            ))}
-          </div>
+              <button
+                type="button"
+                className={`pb-btn pb-btn-sm ${authMethod === 'refresh-token' ? 'pb-btn-primary' : ''}`}
+                onClick={() => setAuthMethod('refresh-token')}
+                style={{ fontSize: '12px', padding: '6px 12px' }}
+              >
+                Use Refresh Token (sbr_...)
+              </button>
+              <button
+                type="button"
+                className={`pb-btn pb-btn-sm ${authMethod === 'password-api' ? 'pb-btn-primary' : ''}`}
+                onClick={() => setAuthMethod('password-api')}
+                style={{ fontSize: '12px', padding: '6px 12px' }}
+              >
+                Password &amp; API Key
+              </button>
+            </div>
 
-          {/* Option 1: Google Drive */}
-          {storageDestination === 'gdrive' && (
-            <div style={{ display: 'grid', gap: '10px', background: '#0d1117', padding: '12px', borderRadius: '6px', border: '1px solid #30363d' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: '#f0f6fc' }}>Google Drive OAuth Configuration</span>
-                <a
-                  href="/oauth/google-drive/start"
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="pb-btn pb-btn-sm"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
-                >
-                  <Icon name="key" size={12} /> Launch 1-Click Google Drive OAuth
-                </a>
+            {/* 1-Click OAuth */}
+            {authMethod === 'oauth' && (
+              <div style={{ background: '#0d1117', padding: '14px', borderRadius: '8px', border: '1px solid #30363d' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                  <div>
+                    <strong style={{ fontSize: '13px', color: '#3ecf8e' }}>Automatic Supabase OAuth Connection</strong>
+                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#8b949e' }}>
+                      Connects automatically with official Supabase OAuth — no API keys or database passwords to copy manually.
+                    </p>
+                  </div>
+                  <a
+                    href={`/oauth/supabase/start?project=${projectRef || ''}`}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="pb-btn pb-btn-sm pb-btn-primary"
+                    style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    🚀 Sign in with Supabase
+                  </a>
+                </div>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
-                  Google Drive Refresh Token (<code>GOOGLE_DRIVE_REFRESH_TOKEN</code>)
+            )}
+
+            {/* Refresh Token */}
+            {authMethod === 'refresh-token' && (
+              <div style={{ display: 'grid', gap: '10px', background: '#0d1117', padding: '14px', borderRadius: '8px', border: '1px solid #30363d' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9' }}>
+                  Supabase OAuth Refresh Token (<code>sbr_...</code>)
                 </label>
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                   <input
                     type="text"
                     className="pb-input"
-                    placeholder="Enter Google Drive refresh token"
-                    value={gdriveRefreshToken}
-                    onChange={e => setGdriveRefreshToken(e.target.value)}
+                    placeholder="Enter sbr_... refresh token"
+                    value={supabaseRefreshToken}
+                    onChange={(e) => setSupabaseRefreshToken(e.target.value)}
                     style={{
                       width: '100%',
                       fontFamily: 'monospace',
                       paddingRight: '60px',
-                      WebkitTextSecurity: showGdriveToken ? 'none' : 'disc',
+                      WebkitTextSecurity: showRefreshToken ? 'none' : 'disc',
                     }}
                     autoComplete="off"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowGdriveToken(v => !v)}
+                    onClick={() => setShowRefreshToken((v) => !v)}
                     style={{
                       position: 'absolute',
                       right: '8px',
@@ -739,292 +593,523 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
                       borderRadius: '4px',
                     }}
                   >
-                    {showGdriveToken ? 'Hide' : 'Show'}
+                    {showRefreshToken ? 'Hide' : 'Show'}
                   </button>
                 </div>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
-                  Folder Path in Drive
-                </label>
+            )}
+
+            {/* Password & API Key */}
+            {authMethod === 'password-api' && (
+              <div style={{ display: 'grid', gap: '12px', background: '#0d1117', padding: '14px', borderRadius: '8px', border: '1px solid #30363d' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '4px' }}>
+                    Database Password
+                  </label>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      className="pb-input"
+                      placeholder="PostgreSQL database password"
+                      value={dbPassword}
+                      onChange={(e) => setDbPassword(e.target.value)}
+                      style={{
+                        width: '100%',
+                        fontFamily: 'monospace',
+                        paddingRight: '60px',
+                        WebkitTextSecurity: showDbPassword ? 'none' : 'disc',
+                      }}
+                      autoComplete="off"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowDbPassword((v) => !v)}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        background: '#21262d',
+                        border: '1px solid #30363d',
+                        color: '#c9d1d9',
+                        cursor: 'pointer',
+                        fontSize: '11px',
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                      }}
+                    >
+                      {showDbPassword ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '4px' }}>
+                    Secret / Service-Role API Key (<code>sb_secret_...</code> or JWT)
+                  </label>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      className="pb-input"
+                      placeholder="sb_secret_... or eyJ..."
+                      value={supabaseApiKey}
+                      onChange={(e) => setSupabaseApiKey(e.target.value)}
+                      style={{
+                        width: '100%',
+                        fontFamily: 'monospace',
+                        paddingRight: '60px',
+                        WebkitTextSecurity: showApiKey ? 'none' : 'disc',
+                      }}
+                      autoComplete="off"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKey((v) => !v)}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        background: '#21262d',
+                        border: '1px solid #30363d',
+                        color: '#c9d1d9',
+                        cursor: 'pointer',
+                        fontSize: '11px',
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                      }}
+                    >
+                      {showApiKey ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Step 2: Database Scope Selector */}
+        <div style={{ background: '#161b22', padding: '18px', borderRadius: '10px', border: '1px solid #30363d' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <span style={{
+              width: '24px',
+              height: '24px',
+              borderRadius: '50%',
+              background: '#238636',
+              color: '#fff',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '13px',
+              fontWeight: 700,
+            }}>2</span>
+            <strong style={{ fontSize: '15px', color: '#f0f6fc' }}>
+              Choose Which Databases to Back Up
+            </strong>
+          </div>
+          <p style={{ margin: '0 0 14px 32px', fontSize: '12px', color: '#8b949e' }}>
+            Select full backup or fast structure-only blueprints for each database.
+          </p>
+
+          <div style={{ marginLeft: '32px' }}>
+            <DatabaseScopeSelector
+              databases={databaseScope}
+              onChange={setDatabaseScope}
+            />
+          </div>
+        </div>
+
+        {/* Step 3: Choose Backup Storage & Vault Password */}
+        <div style={{ background: '#161b22', padding: '18px', borderRadius: '10px', border: '1px solid #30363d' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <span style={{
+              width: '24px',
+              height: '24px',
+              borderRadius: '50%',
+              background: '#238636',
+              color: '#fff',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '13px',
+              fontWeight: 700,
+            }}>3</span>
+            <strong style={{ fontSize: '15px', color: '#f0f6fc' }}>
+              Choose Where to Save &amp; Lock Your Vault
+            </strong>
+          </div>
+          <p style={{ margin: '0 0 14px 32px', fontSize: '12px', color: '#8b949e' }}>
+            Encrypted capsules are written directly to the storage destination you own.
+          </p>
+
+          <div style={{ marginLeft: '32px', display: 'grid', gap: '14px' }}>
+            {/* Storage Destinations Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px' }}>
+              {[
+                { id: 'gdrive', title: 'Google Drive', icon: '📁', tag: '1-Click OAuth' },
+                { id: 'dropbox', title: 'Dropbox', icon: '📦', tag: '1-Click OAuth' },
+                { id: 'gcs', title: 'Google Cloud Storage', icon: '☁️', tag: 'Native Bucket' },
+                { id: 's3-oidc', title: 'AWS S3', icon: '🛡️', tag: 'Keyless OIDC' },
+              ].map((dest) => (
+                <button
+                  key={dest.id}
+                  type="button"
+                  onClick={() => setStorageDestination(dest.id)}
+                  style={{
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: storageDestination === dest.id ? '2px solid #3ecf8e' : '1px solid #30363d',
+                    background: storageDestination === dest.id ? '#132a1e' : '#0d1117',
+                    color: '#f0f6fc',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '18px' }}>{dest.icon}</span>
+                    <strong style={{ fontSize: '13px' }}>{dest.title}</strong>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#8b949e' }}>{dest.tag}</div>
+                </button>
+              ))}
+            </div>
+
+            {/* Destination Detail Inputs */}
+            {storageDestination === 'gdrive' && (
+              <div style={{ background: '#0d1117', padding: '12px', borderRadius: '6px', border: '1px solid #30363d' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#f0f6fc' }}>Google Drive Destination</span>
+                  <a
+                    href="/oauth/google-drive/start"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="pb-btn pb-btn-sm"
+                    style={{ textDecoration: 'none' }}
+                  >
+                    1-Click Google Drive Sign-In
+                  </a>
+                </div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>Folder Path</label>
                 <input
                   type="text"
                   className="pb-input"
                   value={gdriveFolderPath}
-                  onChange={e => setGdriveFolderPath(e.target.value)}
-                  placeholder="/Portabase"
-                  style={{ width: '100%', fontFamily: 'monospace' }}
+                  onChange={(e) => setGdriveFolderPath(e.target.value)}
+                  style={{ width: '100%', fontFamily: 'monospace', fontSize: '12px' }}
                 />
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Option 2: Dropbox */}
-          {storageDestination === 'dropbox' && (
-            <div style={{ display: 'grid', gap: '10px', background: '#0d1117', padding: '12px', borderRadius: '6px', border: '1px solid #30363d' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: '#f0f6fc' }}>Dropbox OAuth Configuration</span>
-                <a
-                  href="/oauth/dropbox/start"
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="pb-btn pb-btn-sm"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
-                >
-                  <Icon name="key" size={12} /> Launch 1-Click Dropbox OAuth
-                </a>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
-                  Dropbox Refresh Token (<code>DROPBOX_REFRESH_TOKEN</code>)
-                </label>
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <input
-                    type="text"
-                    className="pb-input"
-                    placeholder="Enter Dropbox refresh token"
-                    value={dropboxRefreshToken}
-                    onChange={e => setDropboxRefreshToken(e.target.value)}
-                    style={{
-                      width: '100%',
-                      fontFamily: 'monospace',
-                      paddingRight: '60px',
-                      WebkitTextSecurity: showDropboxToken ? 'none' : 'disc',
-                    }}
-                    autoComplete="off"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowDropboxToken(v => !v)}
-                    style={{
-                      position: 'absolute',
-                      right: '8px',
-                      background: '#21262d',
-                      border: '1px solid #30363d',
-                      color: '#c9d1d9',
-                      cursor: 'pointer',
-                      fontSize: '11px',
-                      padding: '3px 8px',
-                      borderRadius: '4px',
-                    }}
+            {storageDestination === 'dropbox' && (
+              <div style={{ background: '#0d1117', padding: '12px', borderRadius: '6px', border: '1px solid #30363d' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#f0f6fc' }}>Dropbox Destination</span>
+                  <a
+                    href="/oauth/dropbox/start"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="pb-btn pb-btn-sm"
+                    style={{ textDecoration: 'none' }}
                   >
-                    {showDropboxToken ? 'Hide' : 'Show'}
-                  </button>
+                    1-Click Dropbox Sign-In
+                  </a>
                 </div>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
-                  Folder Path in Dropbox
-                </label>
+                <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>Folder Path</label>
                 <input
                   type="text"
                   className="pb-input"
                   value={dropboxFolderPath}
-                  onChange={e => setDropboxFolderPath(e.target.value)}
-                  placeholder="/Portabase"
-                  style={{ width: '100%', fontFamily: 'monospace' }}
+                  onChange={(e) => setDropboxFolderPath(e.target.value)}
+                  style={{ width: '100%', fontFamily: 'monospace', fontSize: '12px' }}
                 />
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Option 3: Google Cloud Storage (GCS) */}
-          {storageDestination === 'gcs' && (
-            <div style={{ display: 'grid', gap: '10px', background: '#0d1117', padding: '12px', borderRadius: '6px', border: '1px solid #30363d' }}>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: '#f0f6fc' }}>
-                Google Cloud Storage (GCS) · Native Workload Identity
-              </span>
-              <p style={{ margin: 0, fontSize: '11px', color: '#8b949e', lineHeight: 1.4 }}>
-                When running on Google Cloud Run, the runner authenticates directly to your GCS bucket using GCP Service Account Workload Identity. No secret keys or passwords are required!
-              </p>
-              <div>
+            {storageDestination === 'gcs' && (
+              <div style={{ background: '#0d1117', padding: '12px', borderRadius: '6px', border: '1px solid #30363d' }}>
                 <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
-                  GCS Bucket URI (<code>GCS_BUCKET_URI</code>)
+                  GCS Bucket URI (<code>gs://...</code>)
                 </label>
                 <input
                   type="text"
                   className="pb-input"
-                  value={gcsBucketUri}
-                  onChange={e => setGcsBucketUri(e.target.value)}
                   placeholder="gs://my-supabase-backup-vault"
-                  style={{ width: '100%', fontFamily: 'monospace' }}
+                  value={gcsBucketUri}
+                  onChange={(e) => setGcsBucketUri(e.target.value)}
+                  style={{ width: '100%', fontFamily: 'monospace', fontSize: '12px' }}
                 />
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Option 4: AWS S3 via OIDC Federation */}
-          {storageDestination === 's3-oidc' && (
-            <div style={{ display: 'grid', gap: '10px', background: '#0d1117', padding: '12px', borderRadius: '6px', border: '1px solid #30363d' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: '#f0f6fc' }}>
-                  AWS S3 via OIDC Federation ("AWS OAuth" · Zero IAM Keys)
-                </span>
-                <a
-                  href={quickCreateUrl}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="pb-btn pb-btn-sm"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
-                >
-                  🚀 1-Click AWS CloudFormation Setup
-                </a>
+            {storageDestination === 's3-oidc' && (
+              <div style={{ background: '#0d1117', padding: '12px', borderRadius: '6px', border: '1px solid #30363d', display: 'grid', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 600, color: '#f0f6fc' }}>AWS S3 Bucket</span>
+                  <a href={quickCreateUrl} target="_blank" rel="noreferrer noopener" className="pb-btn pb-btn-sm" style={{ textDecoration: 'none' }}>
+                    1-Click AWS S3 Template
+                  </a>
+                </div>
+                <input
+                  type="text"
+                  className="pb-input"
+                  placeholder="S3 Bucket Name"
+                  value={awsS3Bucket}
+                  onChange={(e) => setAwsS3Bucket(e.target.value)}
+                  style={{ width: '100%', fontFamily: 'monospace', fontSize: '12px' }}
+                />
               </div>
-              <p style={{ margin: 0, fontSize: '11px', color: '#8b949e', lineHeight: 1.4 }}>
-                Federates the Google Cloud Run OIDC token directly into AWS via <code>sts:AssumeRoleWithWebIdentity</code>. You never create or store static AWS IAM access keys!
+            )}
+
+            {/* Create Sealing Password */}
+            <div style={{ background: '#0d1117', padding: '14px', borderRadius: '8px', border: '1px solid #30363d' }}>
+              <strong style={{ fontSize: '13px', color: '#f0f6fc', display: 'block', marginBottom: '4px' }}>
+                Create a Vault Password
+              </strong>
+              <p style={{ margin: '0 0 10px', fontSize: '12px', color: '#8b949e' }}>
+                This password locks your vault and encrypts your backup files. Only you have this password.
               </p>
+
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
-                    S3 Bucket Name (<code>AWS_S3_BUCKET</code>)
+                    Vault Password (min 8 characters)
                   </label>
-                  <input
-                    type="text"
-                    className="pb-input"
-                    value={awsS3Bucket}
-                    onChange={e => setAwsS3Bucket(e.target.value)}
-                    placeholder="my-portabase-backups"
-                    style={{ width: '100%', fontFamily: 'monospace' }}
-                  />
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      className="pb-input"
+                      placeholder="Enter a strong password"
+                      value={sealingPassword}
+                      onChange={(e) => setSealingPassword(e.target.value)}
+                      style={{
+                        width: '100%',
+                        paddingRight: '60px',
+                        WebkitTextSecurity: showSealingPassword ? 'none' : 'disc',
+                      }}
+                      autoComplete="off"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSealingPassword((v) => !v)}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        background: '#21262d',
+                        border: '1px solid #30363d',
+                        color: '#c9d1d9',
+                        cursor: 'pointer',
+                        fontSize: '11px',
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                      }}
+                    >
+                      {showSealingPassword ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
                 </div>
+
                 <div>
                   <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
-                    IAM Role ARN (<code>AWS_S3_ROLE_ARN</code>)
+                    Confirm Password
                   </label>
-                  <input
-                    type="text"
-                    className="pb-input"
-                    value={awsS3RoleArn}
-                    onChange={e => setAwsS3RoleArn(e.target.value)}
-                    placeholder="arn:aws:iam::123456789012:role/PortabaseS3RunnerRole"
-                    style={{ width: '100%', fontFamily: 'monospace' }}
-                  />
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      className="pb-input"
+                      placeholder="Repeat password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      style={{
+                        width: '100%',
+                        paddingRight: '60px',
+                        WebkitTextSecurity: showConfirmPassword ? 'none' : 'disc',
+                      }}
+                      autoComplete="off"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((v) => !v)}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        background: '#21262d',
+                        border: '1px solid #30363d',
+                        color: '#c9d1d9',
+                        cursor: 'pointer',
+                        fontSize: '11px',
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                      }}
+                    >
+                      {showConfirmPassword ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
 
-        {/* Section D: Vault Sealing Password */}
-        <div style={{ background: '#161b22', padding: '16px', borderRadius: '6px', border: '1px solid #21262d' }}>
-          <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#c9d1d9', lineHeight: 1.5 }}>
-            This password seals the vault shut <strong>AND</strong> encrypts your backup capsules. You will use this same password to unlock this vault or decrypt capsules produced by your runner.
-          </p>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
-                3. Vault Sealing Password <span style={{ color: '#3ecf8e' }}>*</span>
-              </label>
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <input
-                  type="text"
-                  className="pb-input"
-                  placeholder="Min 8 characters"
-                  value={sealingPassword}
-                  onChange={e => setSealingPassword(e.target.value)}
-                  style={{
-                    width: '100%',
-                    paddingRight: '60px',
-                    WebkitTextSecurity: showSealingPassword ? 'none' : 'disc',
-                  }}
-                  autoComplete="off"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowSealingPassword(v => !v)}
-                  style={{
-                    position: 'absolute',
-                    right: '8px',
-                    background: '#21262d',
-                    border: '1px solid #30363d',
-                    color: '#c9d1d9',
-                    cursor: 'pointer',
-                    fontSize: '11px',
-                    padding: '3px 8px',
-                    borderRadius: '4px',
-                  }}
-                >
-                  {showSealingPassword ? 'Hide' : 'Show'}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
-                4. Confirm Sealing Password <span style={{ color: '#3ecf8e' }}>*</span>
-              </label>
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <input
-                  type="text"
-                  className="pb-input"
-                  placeholder="Confirm password"
-                  value={confirmPassword}
-                  onChange={e => setConfirmPassword(e.target.value)}
-                  style={{
-                    width: '100%',
-                    paddingRight: '60px',
-                    WebkitTextSecurity: showConfirmPassword ? 'none' : 'disc',
-                  }}
-                  autoComplete="off"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(v => !v)}
-                  style={{
-                    position: 'absolute',
-                    right: '8px',
-                    background: '#21262d',
-                    border: '1px solid #30363d',
-                    color: '#c9d1d9',
-                    cursor: 'pointer',
-                    fontSize: '11px',
-                    padding: '3px 8px',
-                    borderRadius: '4px',
-                  }}
-                >
-                  {showConfirmPassword ? 'Hide' : 'Show'}
-                </button>
-              </div>
+              {sealingPassword && confirmPassword && (
+                <div style={{ marginTop: '8px', fontSize: '12px' }}>
+                  {sealingPassword === confirmPassword ? (
+                    <span style={{ color: '#3ecf8e' }}>✓ Passwords match</span>
+                  ) : (
+                    <span style={{ color: '#f85149' }}>Passwords do not match</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
+        </div>
 
-          {(confirmPassword || (sealingPassword && sealingPassword.length > 0)) && (
-            <div style={{ marginTop: '8px', fontSize: '12px' }}>
-              {sealingPassword && confirmPassword && sealingPassword === confirmPassword ? (
-                <span style={{ color: '#3ecf8e' }}>✓ Passwords match</span>
-              ) : confirmPassword ? (
-                <span style={{ color: '#f87171' }}>Passwords do not match</span>
-              ) : null}
-            </div>
-          )}
+        {/* Big Friendly Lock Vault Action */}
+        <div>
+          <button
+            type="submit"
+            className="pb-btn pb-btn-primary"
+            disabled={
+              isSealing ||
+              !sealingPassword ||
+              sealingPassword.length < 8 ||
+              sealingPassword !== confirmPassword ||
+              (authMethod !== 'oauth' && !dbPassword && !supabaseApiKey && !supabaseRefreshToken && !capsulePassphrase)
+            }
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '12px 24px',
+              fontSize: '15px',
+              fontWeight: 600,
+            }}
+          >
+            <Icon name="lock" size={16} /> Lock Vault &amp; Turn On Backups
+          </button>
+          <span style={{ fontSize: '12px', color: '#8b949e', marginLeft: '12px' }}>
+            Encrypts in memory and scrubs raw values.
+          </span>
+        </div>
 
-          <details style={{ marginTop: '14px', fontSize: '12px', color: '#8b949e' }}>
-            <summary style={{ cursor: 'pointer', color: '#58a6ff', userSelect: 'none', fontWeight: 500 }}>
-              Optional: Use a different passphrase for capsule files
-            </summary>
-            <div style={{ marginTop: '8px', padding: '10px 12px', background: '#0d1117', borderRadius: '4px', border: '1px solid #30363d' }}>
-              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#c9d1d9', marginBottom: '4px' }}>
-                Capsule Encryption Passphrase (defaults to Vault Sealing Password)
+        {/* Collapsible: Developer & Advanced Settings */}
+        <details
+          style={{
+            marginTop: '10px',
+            background: '#131920',
+            border: '1px solid #21262d',
+            borderRadius: '8px',
+            padding: '14px',
+            fontSize: '12px',
+            color: '#8b949e',
+          }}
+        >
+          <summary style={{ cursor: 'pointer', fontWeight: 600, color: '#58a6ff', userSelect: 'none' }}>
+            Developer &amp; Advanced Settings (Optional) ▾
+          </summary>
+          <div style={{ marginTop: '14px', display: 'grid', gap: '14px' }}>
+            {/* Cloud Run Region */}
+            <div>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '4px' }}>
+                Google Cloud Run Container Region
               </label>
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <select
+                className="pb-select"
+                value={gcpRegion}
+                onChange={(e) => setGcpRegion(e.target.value)}
+                style={{
+                  width: '100%',
+                  maxWidth: '380px',
+                  padding: '6px 10px',
+                  background: '#0d1117',
+                  color: '#f0f6fc',
+                  border: '1px solid #30363d',
+                  borderRadius: '6px',
+                }}
+              >
+                {GCP_RUNNER_REGIONS.map((r) => (
+                  <option key={r.id} value={r.id}>{r.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Custom OAuth Client ID */}
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
+                Custom Supabase OAuth Client ID (Optional)
+              </label>
+              <input
+                type="text"
+                className="pb-input"
+                placeholder="Leave blank to use default public OAuth client"
+                value={supabaseOAuthClientId}
+                onChange={(e) => setSupabaseOAuthClientId(e.target.value)}
+                style={{ width: '100%', maxWidth: '440px', fontFamily: 'monospace', fontSize: '11px' }}
+              />
+            </div>
+
+            {/* AWS Role ARN */}
+            {storageDestination === 's3-oidc' && (
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
+                  AWS IAM Role ARN (<code>AWS_S3_ROLE_ARN</code>)
+                </label>
                 <input
                   type="text"
                   className="pb-input"
-                  placeholder="Leave blank to use Vault Sealing Password"
+                  placeholder="arn:aws:iam::123456789012:role/PortabaseS3RunnerRole"
+                  value={awsS3RoleArn}
+                  onChange={(e) => setAwsS3RoleArn(e.target.value)}
+                  style={{ width: '100%', maxWidth: '440px', fontFamily: 'monospace', fontSize: '11px' }}
+                />
+              </div>
+            )}
+
+            {/* Raw pg_dump Command Preview */}
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#c9d1d9', marginBottom: '4px' }}>
+                Generated pg_dump CLI Arguments Preview:
+              </label>
+              <div style={{ display: 'grid', gap: '6px' }}>
+                {databaseScope.filter((d) => d.enabled !== false).map((db) => {
+                  const flags = buildPgDumpArgsForDatabase(db);
+                  return (
+                    <div
+                      key={db.id}
+                      style={{
+                        background: '#0d1117',
+                        border: '1px solid #30363d',
+                        borderRadius: '4px',
+                        padding: '6px 10px',
+                        fontFamily: 'monospace',
+                        fontSize: '11px',
+                        color: '#58a6ff',
+                        overflowX: 'auto',
+                      }}
+                    >
+                      <span style={{ color: '#8b949e' }}># {db.name}: </span>
+                      pg_dump {flags.length > 0 ? flags.join(' ') : '(full database + rows)'}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Custom Capsule Passphrase */}
+            <div>
+              <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
+                Separate Capsule Passphrase (defaults to Vault Password)
+              </label>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', maxWidth: '440px' }}>
+                <input
+                  type="text"
+                  className="pb-input"
+                  placeholder="Optional separate passphrase"
                   value={capsulePassphrase}
-                  onChange={e => setCapsulePassphrase(e.target.value)}
+                  onChange={(e) => setCapsulePassphrase(e.target.value)}
                   style={{
                     width: '100%',
-                    fontFamily: 'monospace',
                     paddingRight: '60px',
+                    fontFamily: 'monospace',
                     WebkitTextSecurity: showCapsulePassphrase ? 'none' : 'disc',
                   }}
                   autoComplete="off"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowCapsulePassphrase(v => !v)}
+                  onClick={() => setShowCapsulePassphrase((v) => !v)}
                   style={{
                     position: 'absolute',
                     right: '8px',
@@ -1040,26 +1125,9 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
                   {showCapsulePassphrase ? 'Hide' : 'Show'}
                 </button>
               </div>
-              <span style={{ fontSize: '11px', color: '#8b949e', marginTop: '4px', display: 'block' }}>
-                If specified, the runner will use this passphrase to encrypt capsule files instead of your vault sealing password.
-              </span>
             </div>
-          </details>
-        </div>
-
-        <div>
-          <button
-            type="submit"
-            className="pb-btn pb-btn-primary"
-            disabled={isSealing || !sealingPassword || sealingPassword.length < 8 || sealingPassword !== confirmPassword || (!dbPassword && !supabaseApiKey && !supabaseRefreshToken && !capsulePassphrase)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 20px', fontSize: '14px' }}
-          >
-            <Icon name="lock" size={16} /> 🔒 Seal Vault Shut with Sealing Password
-          </button>
-          <span style={{ fontSize: '12px', color: '#8b949e', marginLeft: '12px' }}>
-            Encrypts in browser memory and scrubs raw values.
-          </span>
-        </div>
+          </div>
+        </details>
       </form>
     </div>
   );
