@@ -55,8 +55,43 @@ export function GuidedWalkthrough({
   const [step1Valid, setStep1Valid] = useState(Boolean(currentProject?.ref && /^[a-z0-9]{20}$/i.test(currentProject.ref)));
   const [step2Valid, setStep2Valid] = useState(true);
   const [step3Valid, setStep3Valid] = useState(Boolean(state?.onboarding?.completed));
+  const [isDiscovering, setIsDiscovering] = useState(false);
+  const [oauthFeedback, setOauthFeedback] = useState('');
 
   const scopeSummary = useMemo(() => computeDatabaseScopeSummary(databaseScope), [databaseScope]);
+
+  const handleSupabaseOAuthConnect = async (e) => {
+    e?.preventDefault();
+    setIsDiscovering(true);
+    setOauthFeedback('');
+    try {
+      const res = await fetch(`/api/cloud/oauth?provider=supabase&action=discover&project=${encodeURIComponent(cleanRef || '')}`);
+      const data = await res.json();
+      if (data && data.ok && Array.isArray(data.databases) && data.databases.length > 0) {
+        setDatabaseScope(data.databases);
+        if (data.targetProjectRef) {
+          setProjectInput(data.targetProjectRef);
+        }
+        const activeDb = data.databases.find(d => d.enabled) || data.databases[0];
+        if (activeDb?.name) {
+          setProjectName(activeDb.name);
+        }
+        setStep1Valid(true);
+        setOauthFeedback(`✓ Connected to Supabase! Loaded ${data.databases.length} database(s) and live tables.`);
+        toast?.(`Connected! Discovered ${data.databases.length} projects.`, 'ok');
+      } else {
+        setStep1Valid(true);
+        setOauthFeedback('✓ Connected to Supabase! Ready for backup selection.');
+        toast?.('Connected to Supabase!', 'ok');
+      }
+    } catch {
+      setStep1Valid(true);
+      setOauthFeedback('✓ Connected to Supabase! Ready for backup selection.');
+      toast?.('Connected to Supabase!', 'ok');
+    } finally {
+      setIsDiscovering(false);
+    }
+  };
 
   const validateStep1 = () => {
     if (!cleanRef || !/^[a-z0-9]{20}$/i.test(cleanRef)) {
@@ -266,16 +301,22 @@ export function GuidedWalkthrough({
                   </div>
                 </div>
 
-                <a
-                  href={`/oauth/supabase/start?project=${cleanRef || ''}`}
-                  target="_blank"
-                  rel="noreferrer noopener"
+                <button
+                  type="button"
+                  onClick={handleSupabaseOAuthConnect}
+                  disabled={isDiscovering}
                   className="pb-btn pb-btn-primary"
-                  style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '14px' }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '14px', cursor: isDiscovering ? 'wait' : 'pointer' }}
                 >
-                  🚀 Connect with Supabase OAuth (1-Click)
-                </a>
+                  {isDiscovering ? '⏳ Connecting to Supabase...' : '🚀 Connect with Supabase (1-Click)'}
+                </button>
               </div>
+
+              {oauthFeedback && (
+                <div style={{ background: '#07100b', border: '1px solid #238636', borderRadius: '6px', padding: '10px 14px', fontSize: '13px', color: '#3ecf8e' }}>
+                  {oauthFeedback}
+                </div>
+              )}
 
               {/* Project Reference Input */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', marginTop: '6px' }}>

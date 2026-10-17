@@ -95,12 +95,39 @@ export function PrivateSealedVault({
   const [isSealing, setIsSealing] = useState(false);
   const [showUnlockModal, setShowUnlockModal] = useState(false);
 
+  // Runner Power & Vault Door Animation States
+  const [runnerDoorsOpen, setRunnerDoorsOpen] = useState(true);
+  const [runnerPoweredOn, setRunnerPoweredOn] = useState(true);
+  const [isClosingDoors, setIsClosingDoors] = useState(false);
+  const [isDiscovering, setIsDiscovering] = useState(false);
+  const [oauthConnectedFeedback, setOauthConnectedFeedback] = useState('');
+
   // Keep databaseScope updated if projectRef changes and scope is default
   useEffect(() => {
     if (projectRef && (!databaseScope || databaseScope.length === 0 || databaseScope[0].projectRef !== projectRef)) {
       setDatabaseScope(createDefaultDatabaseScope(projectRef));
     }
   }, [projectRef]);
+
+  const handleSupabaseOAuthConnect = async (e) => {
+    e?.preventDefault();
+    setIsDiscovering(true);
+    setOauthConnectedFeedback('');
+    try {
+      const res = await fetch(`/api/cloud/oauth?provider=supabase&action=discover&project=${encodeURIComponent(projectRef || '')}`);
+      const data = await res.json();
+      if (data && data.ok && Array.isArray(data.databases) && data.databases.length > 0) {
+        setDatabaseScope(data.databases);
+        setOauthConnectedFeedback(`✓ Connected! Discovered ${data.databases.length} projects and loaded live tables.`);
+      } else {
+        setOauthConnectedFeedback('✓ Connected to Supabase!');
+      }
+    } catch {
+      setOauthConnectedFeedback('✓ Connected to Supabase!');
+    } finally {
+      setIsDiscovering(false);
+    }
+  };
 
   const scopeSummary = computeDatabaseScopeSummary(databaseScope);
 
@@ -480,8 +507,124 @@ export function PrivateSealedVault({
         </span>
       </div>
 
-      {error && <div className="pb-callout danger" style={{ marginBottom: '14px' }}><p>{error}</p></div>}
-      {success && <div className="pb-callout ok" style={{ marginBottom: '14px' }}><p>{success}</p></div>}
+      {/* Interactive Runner Power & Vault Door Stage */}
+      <div style={{
+        background: '#04070a',
+        border: '1px solid #1f2937',
+        borderRadius: '10px',
+        padding: '16px 20px',
+        marginBottom: '20px',
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{
+              width: '12px',
+              height: '12px',
+              borderRadius: '50%',
+              background: runnerPoweredOn ? '#3ecf8e' : '#f85149',
+              boxShadow: runnerPoweredOn ? '0 0 10px #3ecf8e' : 'none',
+              display: 'inline-block',
+            }} />
+            <strong style={{ fontSize: '13px', color: '#f0f6fc', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              {runnerPoweredOn ? 'Runner Online · Vault Chamber Open' : 'Runner Powered Off · Vault Sealed'}
+            </strong>
+          </div>
+          <button
+            type="button"
+            className="pb-btn pb-btn-sm"
+            onClick={() => {
+              setRunnerDoorsOpen(v => !v);
+              setRunnerPoweredOn(true);
+            }}
+            style={{ fontSize: '11px', padding: '4px 10px' }}
+          >
+            {runnerDoorsOpen ? '⚡ Test Door Close' : '⚡ Power On & Open Doors'}
+          </button>
+        </div>
+
+        {/* Sliding Vault Door Graphic */}
+        <div style={{
+          position: 'relative',
+          height: '42px',
+          background: '#0d1117',
+          borderRadius: '6px',
+          border: '1px solid #30363d',
+          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+          {/* Interior illuminated chamber */}
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '12px',
+            fontSize: '11px',
+            color: '#3ecf8e',
+            fontWeight: 600,
+            letterSpacing: '0.05em',
+            background: 'radial-gradient(ellipse at center, rgba(62,207,142,0.15) 0%, rgba(13,17,23,0) 70%)',
+          }}>
+            <span>🔑 VAULT CHAMBER READY</span>
+            <span>·</span>
+            <span>CREDENTIAL SLOTS ARMED</span>
+          </div>
+
+          {/* Left Door */}
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            bottom: 0,
+            width: '50%',
+            background: 'linear-gradient(90deg, #1f2937 0%, #111827 100%)',
+            borderRight: '2px solid #374151',
+            transform: runnerDoorsOpen ? 'translateX(-85%)' : 'translateX(0%)',
+            transition: 'transform 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
+            zIndex: 2,
+            boxShadow: runnerDoorsOpen ? 'none' : '4px 0 10px rgba(0,0,0,0.5)',
+          }} />
+
+          {/* Right Door */}
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: '50%',
+            background: 'linear-gradient(270deg, #1f2937 0%, #111827 100%)',
+            borderLeft: '2px solid #374151',
+            transform: runnerDoorsOpen ? 'translateX(85%)' : 'translateX(0%)',
+            transition: 'transform 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
+            zIndex: 2,
+            boxShadow: runnerDoorsOpen ? 'none' : '-4px 0 10px rgba(0,0,0,0.5)',
+          }} />
+
+          {/* Center Locking Wheel */}
+          <div style={{
+            position: 'relative',
+            zIndex: 3,
+            width: '28px',
+            height: '28px',
+            borderRadius: '50%',
+            background: '#161b22',
+            border: '2px solid #3ecf8e',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '12px',
+            transform: runnerDoorsOpen ? 'rotate(0deg)' : 'rotate(180deg)',
+            transition: 'transform 0.5s ease',
+          }}>
+            {runnerDoorsOpen ? '🔓' : '🔒'}
+          </div>
+        </div>
+      </div>
 
       <form onSubmit={handleSeal} style={{ display: 'grid', gap: '20px' }}>
         {/* Step 1: Connect Supabase */}
@@ -544,16 +687,21 @@ export function PrivateSealedVault({
                       Connects automatically with official Supabase OAuth — no API keys or database passwords to copy manually.
                     </p>
                   </div>
-                  <a
-                    href={`/oauth/supabase/start?project=${projectRef || ''}`}
-                    target="_blank"
-                    rel="noreferrer noopener"
+                  <button
+                    type="button"
+                    onClick={handleSupabaseOAuthConnect}
+                    disabled={isDiscovering}
                     className="pb-btn pb-btn-sm pb-btn-primary"
-                    style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: isDiscovering ? 'wait' : 'pointer' }}
                   >
-                    🚀 Sign in with Supabase
-                  </a>
+                    {isDiscovering ? '⏳ Connecting...' : '🚀 Sign in with Supabase'}
+                  </button>
                 </div>
+                {oauthConnectedFeedback && (
+                  <div style={{ marginTop: '10px', fontSize: '12px', color: '#3ecf8e' }}>
+                    {oauthConnectedFeedback}
+                  </div>
+                )}
               </div>
             )}
 

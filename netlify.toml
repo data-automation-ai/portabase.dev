@@ -171,6 +171,16 @@
   status = 200
 
 [[redirects]]
+  from = "/oauth/*"
+  to = "/.netlify/functions/cloud-oauth"
+  status = 200
+
+[[redirects]]
+  from = "/api/cloud/oauth"
+  to = "/.netlify/functions/cloud-oauth"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
