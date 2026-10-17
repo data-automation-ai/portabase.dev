@@ -45,7 +45,7 @@ history.replaceState(null, '', location.pathname);
 
 let inventory = null, bootstrap = null, csrf = '', busy = false, savedIntent = null, selectionSaveVersion = 0;
 let selectionSaveChain = Promise.resolve();
-const sourceFieldIds = ['sourceDatabasePassword', 'sourceServiceRoleKey', 'sourceAccessToken', 'capsulePassphrase'];
+const sourceFieldIds = ['sourceDatabasePassword', 'sourceServiceRoleKey', 'sourceAccessToken', 'sourceRefreshToken', 'capsulePassphrase'];
 const PROJECT_REF_RE = /^[a-z0-9]{20}$/;
 /** Accepts a bare 20-char ref or a full https://<ref>.supabase.co URL; returns the ref or null. */
 function parseProjectRef(raw) {
@@ -700,7 +700,12 @@ $('sourceConnectionsForm').addEventListener('submit', async event => {
   setProbeStage('probeUrl', 'done', 'Valid');
   const fields = [...sourceFieldIds];
   const required = [];
-  if (!bootstrap?.connections?.sourceConfigured) required.push('sourceDatabasePassword', 'sourceServiceRoleKey', 'sourceAccessToken');
+  if (!bootstrap?.connections?.sourceConfigured) {
+    required.push('sourceDatabasePassword', 'sourceServiceRoleKey');
+    if (!$('sourceAccessToken')?.value && !$('sourceRefreshToken')?.value) {
+      required.push('sourceAccessToken');
+    }
+  }
   if (!bootstrap?.connections?.passphraseConfigured) required.push('capsulePassphrase');
   if (!$('capsuleOnly').checked) {
     const parsedTargetRef = parseProjectRef($('targetRef').value);
@@ -733,6 +738,9 @@ $('sourceConnectionsForm').addEventListener('submit', async event => {
     // fault instead of retyping all four blind (see inspectionFailureMessage).
     $('sourceConnectionsForm').hidden = false; $('sourceConfiguredPanel').hidden = true;
   }
+});
+$('startSupabaseOAuth')?.addEventListener('click', () => {
+  window.location.href = `/oauth/supabase/start?t=${token}`;
 });
 $('maskValues').addEventListener('change', event => {
   const type = event.currentTarget.checked ? 'password' : 'text';

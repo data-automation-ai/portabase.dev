@@ -22,14 +22,18 @@ function base64ToBuffer(b64) {
 const VAULT_STORAGE_KEY = 'portabase.runner.vault.sealed.v1';
 
 export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
+  const [authMethod, setAuthMethod] = useState('password-api');
   const [dbPassword, setDbPassword] = useState('');
   const [supabaseApiKey, setSupabaseApiKey] = useState('');
+  const [supabaseRefreshToken, setSupabaseRefreshToken] = useState('');
+  const [supabaseOAuthClientId, setSupabaseOAuthClientId] = useState('');
   const [capsulePassphrase, setCapsulePassphrase] = useState('');
   const [sealingPassword, setSealingPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [unlockPassword, setUnlockPassword] = useState('');
   const [showDbPassword, setShowDbPassword] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showRefreshToken, setShowRefreshToken] = useState(false);
   
   const [sealedData, setSealedData] = useState(() => {
     try {
@@ -58,8 +62,8 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
       setError('Sealing passwords do not match.');
       return;
     }
-    if (!dbPassword && !supabaseApiKey && !capsulePassphrase) {
-      setError('Please provide at least a database password or Supabase API key to seal.');
+    if (!dbPassword && !supabaseApiKey && !supabaseRefreshToken && !capsulePassphrase) {
+      setError('Please provide at least a database password, Supabase API key, or OAuth refresh token to seal.');
       return;
     }
 
@@ -88,10 +92,13 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
       const effectiveCapsulePassphrase = capsulePassphrase || sealingPassword;
       const payload = JSON.stringify({
         projectRef,
+        authMethod,
         dbPassword,
         supabaseApiKey,
+        supabaseRefreshToken,
+        supabaseOAuthClientId,
         capsulePassphrase: effectiveCapsulePassphrase,
-        sourceSecret: dbPassword || supabaseApiKey,
+        sourceSecret: dbPassword || supabaseApiKey || supabaseRefreshToken,
         sealedAt: new Date().toISOString(),
       });
 
@@ -117,14 +124,19 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
         fingerprint: `sha256:${hashHex}`,
         shortFingerprint: `sha256:${hashHex.slice(0, 16)}…`,
         sealedAt: new Date().toISOString(),
+        authMethod,
         hasDbPassword: Boolean(dbPassword),
         hasApiKey: Boolean(supabaseApiKey),
+        hasRefreshToken: Boolean(supabaseRefreshToken),
+        hasOAuthClientId: Boolean(supabaseOAuthClientId),
         hasCapsulePassphrase: Boolean(effectiveCapsulePassphrase),
       };
 
       // Immediately scrub plaintext secrets from memory
       setDbPassword('');
       setSupabaseApiKey('');
+      setSupabaseRefreshToken('');
+      setSupabaseOAuthClientId('');
       setCapsulePassphrase('');
       setSealingPassword('');
       setConfirmPassword('');
@@ -180,10 +192,14 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
       );
 
       const parsed = JSON.parse(dec.decode(decrypted));
-      const loadedDbPassword = parsed.dbPassword || (!parsed.sourceSecret?.startsWith('sb_') && !parsed.sourceSecret?.startsWith('eyJ') ? parsed.sourceSecret || '' : '');
+      const loadedDbPassword = parsed.dbPassword || (!parsed.sourceSecret?.startsWith('sb_') && !parsed.sourceSecret?.startsWith('eyJ') && !parsed.sourceSecret?.startsWith('sbr_') ? parsed.sourceSecret || '' : '');
       const loadedApiKey = parsed.supabaseApiKey || (parsed.sourceSecret?.startsWith('sb_') || parsed.sourceSecret?.startsWith('eyJ') ? parsed.sourceSecret || '' : '');
+      const loadedRefreshToken = parsed.supabaseRefreshToken || (parsed.sourceSecret?.startsWith('sbr_') ? parsed.sourceSecret || '' : '');
+      setAuthMethod(parsed.authMethod || 'password-api');
       setDbPassword(loadedDbPassword);
       setSupabaseApiKey(loadedApiKey);
+      setSupabaseRefreshToken(loadedRefreshToken);
+      setSupabaseOAuthClientId(parsed.supabaseOAuthClientId || '');
       setCapsulePassphrase(parsed.capsulePassphrase || '');
       setShowUnlockModal(false);
       setUnlockPassword('');
@@ -211,6 +227,7 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
   if (sealedData) {
     const hasDb = sealedData.hasDbPassword !== undefined ? sealedData.hasDbPassword : true;
     const hasApi = sealedData.hasApiKey !== undefined ? sealedData.hasApiKey : true;
+    const hasRefresh = sealedData.hasRefreshToken !== undefined ? sealedData.hasRefreshToken : Boolean(sealedData.supabaseRefreshToken);
     const hasCap = sealedData.hasCapsulePassphrase !== undefined ? sealedData.hasCapsulePassphrase : true;
 
     return (
@@ -248,11 +265,18 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
           <div style={{ color: '#6b7280', fontSize: '11px', marginTop: '6px', fontFamily: 'monospace' }}>
             Sealed at: {sealedData.sealedAt} · KDF: PBKDF2 (100,000 rounds)
           </div>
-          <div style={{ borderTop: '1px solid #1c3d2c', marginTop: '10px', paddingTop: '10px', fontSize: '12px', color: '#d1d5db' }}>
-            <span style={{ fontWeight: 600, color: '#3ecf8e' }}>Sealed contents: </span>
-            <span>
-              Database Password ({hasDb ? '✓' : '—'}) · Supabase API Key ({hasApi ? '✓' : '—'}) · Capsule Passphrase ({hasCap ? '✓' : '—'})
-            </span>
+          <div style={{ borderTop: '1px solid #1c3d2c', marginTop: '10px', paddingTop: '10px', fontSize: '12px', color: '#d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+            <div>
+              <span style={{ fontWeight: 600, color: '#3ecf8e' }}>Sealed contents: </span>
+              <span>
+                Database Password ({hasDb ? '✓' : '—'}) · API Key ({hasApi ? '✓' : '—'}) · Refresh Token ({hasRefresh ? '✓' : '—'}) · Capsule Passphrase ({hasCap ? '✓' : '—'})
+              </span>
+            </div>
+            {sealedData.authMethod && (
+              <span className="pb-badge" style={{ fontSize: '10px', textTransform: 'uppercase' }}>
+                {sealedData.authMethod === 'oauth' ? 'OAuth (PKCE)' : sealedData.authMethod === 'refresh-token' ? 'OAuth Refresh Token' : 'Password & API Key'}
+              </span>
+            )}
           </div>
         </div>
 
@@ -316,6 +340,45 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
       {success && <div className="pb-callout ok" style={{ marginBottom: '14px' }}><p>{success}</p></div>}
 
       <form onSubmit={handleSeal} style={{ display: 'grid', gap: '16px' }}>
+        <div style={{ background: '#131920', padding: '14px', borderRadius: '8px', border: '1px solid #21262d' }}>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '8px' }}>
+            Connection Method
+          </label>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className={`pb-btn ${authMethod === 'password-api' ? 'pb-btn-primary' : ''}`}
+              onClick={() => setAuthMethod('password-api')}
+              style={{ fontSize: '12px', padding: '6px 12px' }}
+            >
+              Password &amp; API Key
+            </button>
+            <button
+              type="button"
+              className={`pb-btn ${authMethod === 'refresh-token' ? 'pb-btn-primary' : ''}`}
+              onClick={() => setAuthMethod('refresh-token')}
+              style={{ fontSize: '12px', padding: '6px 12px' }}
+            >
+              OAuth Refresh Token (Auto-Rotation)
+            </button>
+            <button
+              type="button"
+              className={`pb-btn ${authMethod === 'oauth' ? 'pb-btn-primary' : ''}`}
+              onClick={() => setAuthMethod('oauth')}
+              style={{ fontSize: '12px', padding: '6px 12px' }}
+            >
+              One-Click Supabase OAuth (PKCE)
+            </button>
+          </div>
+          <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#8b949e' }}>
+            {authMethod === 'oauth'
+              ? 'Runner Supabase OAuth PKCE flow: generates one-click OAuth token pair for automated backups.'
+              : authMethod === 'refresh-token'
+              ? 'Provide a Supabase OAuth Refresh Token (sbr_...) so your runner automatically refreshes access tokens before each backup.'
+              : 'Direct Database Password and Secret / Service-Role API key for the runner.'}
+          </p>
+        </div>
+
         <div>
           <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
             1. Supabase Database Password{' '}
@@ -401,6 +464,64 @@ export function PrivateSealedVault({ projectRef = '', onVaultSealed = null }) {
             </div>
           )}
         </div>
+
+        <div>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
+            3. Supabase OAuth Refresh Token{' '}
+            <span style={{ color: '#8b949e', fontWeight: 400 }}>(Additional option for automatic token rotation, sbr_... or OAuth token)</span>
+          </label>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <input
+              type={showRefreshToken ? 'text' : 'password'}
+              className="pb-input"
+              placeholder="sbr_... or OAuth refresh token"
+              value={supabaseRefreshToken}
+              onChange={e => setSupabaseRefreshToken(e.target.value)}
+              style={{ width: '100%', fontFamily: 'monospace', paddingRight: '60px' }}
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowRefreshToken(v => !v)}
+              style={{
+                position: 'absolute',
+                right: '8px',
+                background: '#21262d',
+                border: '1px solid #30363d',
+                color: '#c9d1d9',
+                cursor: 'pointer',
+                fontSize: '11px',
+                padding: '3px 8px',
+                borderRadius: '4px',
+              }}
+              aria-label={showRefreshToken ? 'Hide refresh token' : 'Show refresh token'}
+            >
+              {showRefreshToken ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          {supabaseRefreshToken.trim() && (
+            <div style={{ fontSize: '12px', color: '#3ecf8e', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              ✓ Supabase OAuth refresh token configured (automatic access token rotation enabled)
+            </div>
+          )}
+        </div>
+
+        {authMethod === 'refresh-token' || authMethod === 'oauth' ? (
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
+              Optional: Supabase OAuth App Client ID
+            </label>
+            <input
+              type="text"
+              className="pb-input"
+              placeholder="OAuth Client ID (optional, defaults to runner configuration)"
+              value={supabaseOAuthClientId}
+              onChange={e => setSupabaseOAuthClientId(e.target.value)}
+              style={{ width: '100%', fontFamily: 'monospace' }}
+              autoComplete="off"
+            />
+          </div>
+        ) : null}
 
         <div style={{ background: '#161b22', padding: '16px', borderRadius: '6px', border: '1px solid #21262d' }}>
           <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#c9d1d9', lineHeight: 1.5 }}>

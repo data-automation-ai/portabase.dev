@@ -11,6 +11,9 @@ const ENV_KEYS = Object.freeze([
   'SUPABASE_DB_URL',
   'SUPABASE_SERVICE_ROLE_KEY',
   'SUPABASE_ACCESS_TOKEN',
+  'SUPABASE_REFRESH_TOKEN',
+  'SUPABASE_OAUTH_CLIENT_ID',
+  'SUPABASE_OAUTH_CLIENT_SECRET',
   'PORTABASE_ENCRYPTION_PASSPHRASE',
   'PORTABASE_TARGET_PROJECT_REF',
   'PORTABASE_TARGET_SUPABASE_URL',
@@ -64,6 +67,9 @@ function validatedEnvironment(value, expectedProjectRef) {
   if (value.SUPABASE_DB_URL !== undefined) env.SUPABASE_DB_URL = postgresUrl(value.SUPABASE_DB_URL, 'invalid_source_database_url');
   if (value.SUPABASE_SERVICE_ROLE_KEY !== undefined) env.SUPABASE_SERVICE_ROLE_KEY = secret(value.SUPABASE_SERVICE_ROLE_KEY, 'invalid_source_service_key');
   if (value.SUPABASE_ACCESS_TOKEN !== undefined) env.SUPABASE_ACCESS_TOKEN = secret(value.SUPABASE_ACCESS_TOKEN, 'invalid_source_access_token', 8);
+  if (value.SUPABASE_REFRESH_TOKEN !== undefined) env.SUPABASE_REFRESH_TOKEN = secret(value.SUPABASE_REFRESH_TOKEN, 'invalid_source_refresh_token', 8);
+  if (value.SUPABASE_OAUTH_CLIENT_ID !== undefined) env.SUPABASE_OAUTH_CLIENT_ID = secret(value.SUPABASE_OAUTH_CLIENT_ID, 'invalid_oauth_client_id', 4);
+  if (value.SUPABASE_OAUTH_CLIENT_SECRET !== undefined) env.SUPABASE_OAUTH_CLIENT_SECRET = secret(value.SUPABASE_OAUTH_CLIENT_SECRET, 'invalid_oauth_client_secret', 8);
   if (value.PORTABASE_ENCRYPTION_PASSPHRASE !== undefined) {
     env.PORTABASE_ENCRYPTION_PASSPHRASE = secret(value.PORTABASE_ENCRYPTION_PASSPHRASE, 'invalid_capsule_passphrase');
   }
@@ -85,17 +91,27 @@ function validatedEnvironment(value, expectedProjectRef) {
 }
 
 function statusFor(env, updatedAt = null) {
-  const source = Boolean(env.SUPABASE_URL && env.SUPABASE_DB_URL && env.SUPABASE_SERVICE_ROLE_KEY && env.SUPABASE_ACCESS_TOKEN);
+  const hasToken = Boolean(env.SUPABASE_ACCESS_TOKEN || env.SUPABASE_REFRESH_TOKEN);
+  const source = Boolean(env.SUPABASE_URL && env.SUPABASE_DB_URL && env.SUPABASE_SERVICE_ROLE_KEY && hasToken);
   const target = Boolean(env.PORTABASE_TARGET_PROJECT_REF && env.PORTABASE_TARGET_SUPABASE_URL
     && env.PORTABASE_TARGET_SERVICE_ROLE_KEY && env.PORTABASE_TARGET_DB_URL);
   return {
     sourceConfigured: source,
-    sourceManagementAccess: Boolean(env.SUPABASE_ACCESS_TOKEN),
+    sourceManagementAccess: hasToken,
+    hasAccessToken: Boolean(env.SUPABASE_ACCESS_TOKEN),
+    hasRefreshToken: Boolean(env.SUPABASE_REFRESH_TOKEN),
     passphraseConfigured: Boolean(env.PORTABASE_ENCRYPTION_PASSPHRASE),
     targetConfigured: target,
     targetRef: target ? env.PORTABASE_TARGET_PROJECT_REF : null,
     updatedAt,
   };
+}
+
+export function validateRuntimeSecrets(env, expectedProjectRef) {
+  const validated = validatedEnvironment(env, expectedProjectRef);
+  const hasToken = Boolean(validated.SUPABASE_ACCESS_TOKEN || validated.SUPABASE_REFRESH_TOKEN);
+  if (!hasToken) fail('invalid_source_access_token');
+  return validated;
 }
 
 export function privateRuntimeSecretStatus(env = {}, updatedAt = null) {
@@ -165,15 +181,46 @@ export async function savePrivateRuntimeSecrets({ directory, projectRef }, updat
 export function runtimeSecretUpdates(body, sourceProjectRef) {
   const allowed = {
     sourceServiceRoleKey: 'SUPABASE_SERVICE_ROLE_KEY',
-    sourceAccessToken: 'SUPABASE_ACCESS_TOKEN', capsulePassphrase: 'PORTABASE_ENCRYPTION_PASSPHRASE',
-    targetRef: 'PORTABASE_TARGET_PROJECT_REF', targetServiceRoleKey: 'PORTABASE_TARGET_SERVICE_ROLE_KEY',
+    sourceAccessToken: 'SUPABASE_ACCESS_TOKEN',
+    sourceRefreshToken: 'SUPABASE_REFRESH_TOKEN',
+    oauthClientId: 'SUPABASE_OAUTH_CLIENT_ID',
+    sourceOAuthClientId: 'SUPABASE_OAUTH_CLIENT_ID',
+    oauthClientSecret: 'SUPABASE_OAUTH_CLIENT_SECRET',
+    sourceOAuthClientSecret: 'SUPABASE_OAUTH_CLIENT_SECRET',
+    capsulePassphrase: 'PORTABASE_ENCRYPTION_PASSPHRASE',
+    targetRef: 'PORTABASE_TARGET_PROJECT_REF',
+    targetServiceRoleKey: 'PORTABASE_TARGET_SERVICE_ROLE_KEY',
   };
-  const accepted = new Set([...Object.keys(allowed), 'sourceDatabasePassword', 'targetDatabasePassword']);
+  const accepted = new Set([
+    ...Object.keys(allowed),
+    'sourceDatabasePassword',
+    'targetDatabasePassword',
+    'sourceProjectRef',
+    'supabaseRefreshToken',
+    'refreshToken',
+    'accessToken',
+    'clientId',
+    'clientSecret',
+  ]);
   if (!body || typeof body !== 'object' || Array.isArray(body)
     || Object.keys(body).some(key => !accepted.has(key))) fail('invalid_runtime_secrets');
   const updates = {};
   for (const [key, envKey] of Object.entries(allowed)) {
     if (body[key] !== undefined && body[key] !== '') updates[envKey] = body[key];
+  }
+  if (body.supabaseRefreshToken !== undefined && body.supabaseRefreshToken !== '') {
+    updates.SUPABASE_REFRESH_TOKEN = body.supabaseRefreshToken;
+  } else if (body.refreshToken !== undefined && body.refreshToken !== '') {
+    updates.SUPABASE_REFRESH_TOKEN = body.refreshToken;
+  }
+  if (body.accessToken !== undefined && body.accessToken !== '') {
+    updates.SUPABASE_ACCESS_TOKEN = body.accessToken;
+  }
+  if (body.clientId !== undefined && body.clientId !== '') {
+    updates.SUPABASE_OAUTH_CLIENT_ID = body.clientId;
+  }
+  if (body.clientSecret !== undefined && body.clientSecret !== '') {
+    updates.SUPABASE_OAUTH_CLIENT_SECRET = body.clientSecret;
   }
   if (body.sourceDatabasePassword !== undefined && body.sourceDatabasePassword !== '') {
     updates.SUPABASE_URL = hostedSupabaseUrl(sourceProjectRef);

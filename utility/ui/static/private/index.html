@@ -500,7 +500,9 @@
               <label class="saas-field"><span>Supabase URL</span><input id="sourceProjectRef" data-help="source-project-ref" type="text" autocomplete="off" placeholder="https://…supabase.co"></label>
               <label class="saas-field"><span>Database password</span><input id="sourceDatabasePassword" data-help="source-database-password" type="password" autocomplete="new-password" placeholder="Password"></label>
               <label class="saas-field"><span>API key</span><input id="sourceServiceRoleKey" data-help="source-key" type="password" autocomplete="new-password" placeholder="sb_secret_…"></label>
-              <label class="saas-field"><span>Access token</span><input id="sourceAccessToken" data-help="source-token" type="password" autocomplete="new-password" placeholder="sbp_…"></label>
+              <label class="saas-field"><span>Access token (PAT)</span><input id="sourceAccessToken" data-help="source-token" type="password" autocomplete="new-password" placeholder="sbp_…"></label>
+              <label class="saas-field"><span>Refresh token (OAuth)</span><input id="sourceRefreshToken" data-help="source-refresh-token" type="password" autocomplete="new-password" placeholder="sbr_… or OAuth refresh token"></label>
+              <div class="saas-field oauth-connect-box"><button id="startSupabaseOAuth" type="button" class="secondary oauth-btn">Connect with Supabase OAuth</button></div>
             </div>
             <div class="saas-column dest-cell" id="destinationColumn">
               <div class="saas-column-head"><strong>Destination</strong><small>Contingency Supabase project</small></div>

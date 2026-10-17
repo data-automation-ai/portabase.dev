@@ -16,9 +16,13 @@ const fixture = `
   import {emptyWorkspace} from '/src/console/data/store.js';
   import {fetchSupabaseProjects,fetchSupabaseInventory,fetchCloudSelection,saveCloudSelection} from '/src/lib/cloud-api.js';
   window.retiredHelpers=[fetchSupabaseProjects,fetchSupabaseInventory,fetchCloudSelection,saveCloudSelection];
-  if (new URLSearchParams(location.search).get('demo') === '1') sessionStorage.setItem('portabase.console.demo','1');
-  const token='fixture.'+btoa(JSON.stringify({exp:Math.floor(Date.now()/1000)+3600}))+'.fixture';
-  localStorage.setItem('portabase.auth.v1',JSON.stringify({provider:'supabase',cloudVersion:'supabase',accessToken:token,user:${JSON.stringify(user)}}));
+  if (new URLSearchParams(location.search).get('demo') === '1') {
+    sessionStorage.setItem('portabase.console.demo','1');
+    localStorage.removeItem('portabase.auth.v1');
+  } else {
+    const token='fixture.'+btoa(JSON.stringify({exp:Math.floor(Date.now()/1000)+3600}))+'.fixture';
+    localStorage.setItem('portabase.auth.v1',JSON.stringify({provider:'supabase',cloudVersion:'supabase',accessToken:token,user:${JSON.stringify(user)}}));
+  }
   const state=emptyWorkspace(${JSON.stringify(user)});
   state.schedules=[{id:'synthetic-schedule',everyHours:24,timezone:'UTC',enabled:true}];
   localStorage.setItem('portabase.console.live.v1',JSON.stringify(state));

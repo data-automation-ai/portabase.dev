@@ -222,3 +222,5 @@ body:has(#capsuleOnly:checked) .target-node,body:has(#capsuleOnly:checked) .targ
 .saas-advanced summary{color:var(--saas-muted);font-size:13px;font-weight:650;cursor:pointer}
 .saas-advanced[open] summary{margin-bottom:8px}
 @media(max-width:680px){.saas-columns{grid-template-columns:1fr}}
+.oauth-connect-box{margin-top:6px}
+.oauth-btn{width:100%;min-height:38px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px}

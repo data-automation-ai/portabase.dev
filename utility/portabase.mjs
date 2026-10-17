@@ -3406,17 +3406,74 @@ async function ui() {
   await session.close();
 }
 
-async function probeToken() {
+async function resolveCliAccessToken(options = {}) {
+  const refreshTokenFlag = flag('refresh-token', null);
+  if (refreshTokenFlag && !process.env.SUPABASE_REFRESH_TOKEN) {
+    process.env.SUPABASE_REFRESH_TOKEN = refreshTokenFlag;
+  }
+  const clientIdFlag = flag('oauth-client-id', null);
+  if (clientIdFlag && !process.env.SUPABASE_OAUTH_CLIENT_ID) {
+    process.env.SUPABASE_OAUTH_CLIENT_ID = clientIdFlag;
+  }
   const token = process.env.SUPABASE_ACCESS_TOKEN;
+  const refreshToken = process.env.SUPABASE_REFRESH_TOKEN;
+  if (!token && !refreshToken) return null;
+  if (token && !refreshToken && !options.forceRefresh) return token;
+
+  try {
+    const { resolveRunnerAccessToken } = await import('../cloud/runner/supabase-oauth.mjs');
+    const result = await resolveRunnerAccessToken({
+      SUPABASE_ACCESS_TOKEN: token,
+      SUPABASE_REFRESH_TOKEN: refreshToken,
+      SUPABASE_OAUTH_CLIENT_ID: process.env.SUPABASE_OAUTH_CLIENT_ID,
+      SUPABASE_OAUTH_CLIENT_SECRET: process.env.SUPABASE_OAUTH_CLIENT_SECRET,
+    }, options);
+    process.env.SUPABASE_ACCESS_TOKEN = result.accessToken;
+    if (result.refreshToken) process.env.SUPABASE_REFRESH_TOKEN = result.refreshToken;
+    return result.accessToken;
+  } catch (err) {
+    if (token) return token;
+    throw err;
+  }
+}
+
+async function probeToken() {
+  const refreshTokenFlag = flag('refresh-token', null);
+  if (refreshTokenFlag) process.env.SUPABASE_REFRESH_TOKEN = refreshTokenFlag;
+  let token = process.env.SUPABASE_ACCESS_TOKEN;
+  let refreshed = false;
+  if (!token && process.env.SUPABASE_REFRESH_TOKEN) {
+    try {
+      token = await resolveCliAccessToken();
+      refreshed = true;
+    } catch (error) {
+      return { ok: false, detail: `Could not refresh token with SUPABASE_REFRESH_TOKEN: ${error.message}` };
+    }
+  }
   if (!token) return { ok: false, detail: 'SUPABASE_ACCESS_TOKEN is not set.' };
   try {
     const response = await fetch('https://api.supabase.com/v1/projects', {
       headers: { Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(15000),
     });
+    if (!response.ok && !refreshed && process.env.SUPABASE_REFRESH_TOKEN) {
+      try {
+        token = await resolveCliAccessToken({ forceRefresh: true });
+        const retry = await fetch('https://api.supabase.com/v1/projects', {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(15000),
+        });
+        if (retry.ok) {
+          const projects = await retry.json();
+          return { ok: true, detail: `Token refreshed and accepted; ${Array.isArray(projects) ? projects.length : 0} project(s) visible.` };
+        }
+      } catch {
+        // Fall through to report failure below
+      }
+    }
     if (!response.ok) return { ok: false, detail: `Supabase rejected the token (HTTP ${response.status}).` };
     const projects = await response.json();
-    return { ok: true, detail: `Token accepted; ${Array.isArray(projects) ? projects.length : 0} project(s) visible.` };
+    return { ok: true, detail: `Token accepted${refreshed ? ' (via OAuth refresh)' : ''}; ${Array.isArray(projects) ? projects.length : 0} project(s) visible.` };
   } catch (error) {
     return { ok: false, detail: `Could not reach the Supabase Management API: ${error.message}` };
   }

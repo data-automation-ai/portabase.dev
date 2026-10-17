@@ -25,6 +25,7 @@ function PrivateSourceSetup({ navigate, operation }) {
   const replay = operation === 'replay';
   const [agents, setAgents] = useState([]), [loading, setLoading] = useState(true);
   const [error, setError] = useState(''), [selectedId, setSelectedId] = useState(null);
+  const [connMethod, setConnMethod] = useState('oauth');
   const revision = useRef(0);
   async function refresh() {
     const request = ++revision.current;
@@ -51,6 +52,81 @@ function PrivateSourceSetup({ navigate, operation }) {
         <li>Open the printed session URL in a browser in that runner environment. {replay ? 'Inspect the capsule, select table rows, buckets and functions, and save the plan. Confirm a different recovery target to create and download a replay reference.' : 'Inspect the source, select tables and buckets, save the private configuration, then download its job reference.'}</li>
         <li>Select the matching registered runner below, import the reference and explicitly queue the job. The worker must be configured and running separately.</li>
       </ol>
+      <div className="pb-card" style={{ marginTop: 12, marginBottom: 12, padding: 12, background: 'rgba(255,255,255,0.02)' }}>
+        <h4 style={{ margin: '0 0 8px', fontSize: 14 }}>Runner connection options</h4>
+        <p style={{ margin: '0 0 10px', fontSize: 13, opacity: 0.85 }}>Choose how your runner connects to Supabase Management API:</p>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          <button
+            type="button"
+            className={`pb-btn pb-btn-sm ${connMethod === 'oauth' ? 'pb-btn-primary' : ''}`}
+            aria-pressed={connMethod === 'oauth'}
+            style={{ fontSize: 12, whiteSpace: 'normal', textAlign: 'left' }}
+            onClick={() => setConnMethod('oauth')}
+          >
+            Connect with Supabase OAuth (PKCE)
+          </button>
+          <button
+            type="button"
+            className={`pb-btn pb-btn-sm ${connMethod === 'refresh-token' ? 'pb-btn-primary' : ''}`}
+            aria-pressed={connMethod === 'refresh-token'}
+            style={{ fontSize: 12, whiteSpace: 'normal', textAlign: 'left' }}
+            onClick={() => setConnMethod('refresh-token')}
+          >
+            Connect with Refresh Token (sbr_...)
+          </button>
+          <button
+            type="button"
+            className={`pb-btn pb-btn-sm ${connMethod === 'pat' ? 'pb-btn-primary' : ''}`}
+            aria-pressed={connMethod === 'pat'}
+            style={{ fontSize: 12, whiteSpace: 'normal', textAlign: 'left' }}
+            onClick={() => setConnMethod('pat')}
+          >
+            Connect with Personal Access Token (sbp_...)
+          </button>
+        </div>
+        {connMethod === 'oauth' && (
+          <div className="pb-callout" style={{ fontSize: 13 }}>
+            <div>
+              <strong>1-Click Supabase OAuth (PKCE)</strong>
+              <p style={{ margin: '4px 0 6px' }}>
+                Launch runner setup (<code>portabase ui --private-setup</code>) and click <strong>Connect with Supabase OAuth</strong>. Authorize via Supabase in your browser; tokens are stored locally on the runner with automatic refresh.
+              </p>
+              <div style={{ fontFamily: 'monospace', fontSize: 11, background: 'rgba(0,0,0,0.2)', padding: 6, borderRadius: 4, overflowWrap: 'anywhere' }}>
+                PORTABASE_RUNNER_CONFIG_DIR=&lt;private-root&gt;<br />
+                SUPABASE_OAUTH_CLIENT_ID=&lt;custom-client-id-optional&gt;
+              </div>
+            </div>
+          </div>
+        )}
+        {connMethod === 'refresh-token' && (
+          <div className="pb-callout" style={{ fontSize: 13 }}>
+            <div>
+              <strong>OAuth Refresh Token (<code>sbr_...</code>)</strong>
+              <p style={{ margin: '4px 0 6px' }}>
+                Ideal for headless runners or CI/CD without browser interaction. The runner automatically exchanges the refresh token for a short-lived access token before each operation.
+              </p>
+              <div style={{ fontFamily: 'monospace', fontSize: 11, background: 'rgba(0,0,0,0.2)', padding: 6, borderRadius: 4, overflowWrap: 'anywhere' }}>
+                SUPABASE_REFRESH_TOKEN=sbr_...<br />
+                portabase probe --project-ref &lt;project-ref&gt; --refresh-token sbr_...
+              </div>
+            </div>
+          </div>
+        )}
+        {connMethod === 'pat' && (
+          <div className="pb-callout" style={{ fontSize: 13 }}>
+            <div>
+              <strong>Personal Access Token (<code>sbp_...</code>)</strong>
+              <p style={{ margin: '4px 0 6px' }}>
+                Static personal access token generated from your Supabase Dashboard &gt; Account &gt; Access Tokens. Stored strictly within the runner environment.
+              </p>
+              <div style={{ fontFamily: 'monospace', fontSize: 11, background: 'rgba(0,0,0,0.2)', padding: 6, borderRadius: 4, overflowWrap: 'anywhere' }}>
+                SUPABASE_ACCESS_TOKEN=sbp_...<br />
+                portabase probe --project-ref &lt;project-ref&gt; --access-token sbp_...
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
       <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{replay
         ? 'portabase ui --private-capsule-review --capsule <private-root>/capsule --config <private-root>/engine.json --review-max-cipher-bytes <limit> --review-max-expanded-bytes <limit> --no-open'
         : 'portabase ui --private-setup --config <private-root>/engine.json --no-open'}</pre>
