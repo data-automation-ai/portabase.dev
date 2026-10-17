@@ -3,7 +3,7 @@
 // never in this repo. API routes pass through untouched (they carry JWTs).
 export default async function siteGate(request, context) {
   const url = new URL(request.url);
-  if (url.pathname === '/auth/callback' || url.pathname.startsWith('/api/') || url.pathname.startsWith('/.netlify/')) {
+  if (url.pathname === '/auth/callback' || url.pathname.startsWith('/oauth/') || url.pathname.startsWith('/api/') || url.pathname.startsWith('/.netlify/')) {
     return context.next();
   }
   const code = Netlify.env.get('SITE_GATE_CODE');
