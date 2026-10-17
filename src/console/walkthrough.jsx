@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Icon } from './icons.jsx';
 import { PrivateSealedVault } from './private-vault.jsx';
 import { DatabaseScopeSelector } from './database-scope-selector.jsx';
@@ -59,6 +59,35 @@ export function GuidedWalkthrough({
   const [oauthFeedback, setOauthFeedback] = useState('');
 
   const scopeSummary = useMemo(() => computeDatabaseScopeSummary(databaseScope), [databaseScope]);
+
+  // Auto-discover live Supabase projects and tables on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setIsDiscovering(true);
+        const res = await fetch(`/api/cloud/oauth?provider=supabase&action=discover&project=${encodeURIComponent(cleanRef || '')}`);
+        const data = await res.json();
+        if (!cancelled && data && data.ok && Array.isArray(data.databases) && data.databases.length > 0) {
+          setDatabaseScope(data.databases);
+          if (data.targetProjectRef) {
+            setProjectInput(data.targetProjectRef);
+          }
+          const activeDb = data.databases.find(d => d.enabled) || data.databases[0];
+          if (activeDb?.name) {
+            setProjectName(activeDb.name);
+          }
+          setStep1Valid(true);
+          setOauthFeedback(`✓ Connected to Supabase! Loaded ${data.databases.length} database(s) and live tables.`);
+        }
+      } catch {
+        // Leave defaults if discovery fails or offline
+      } finally {
+        if (!cancelled) setIsDiscovering(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []); // Run on mount
 
   const handleSupabaseOAuthConnect = async (e) => {
     e?.preventDefault();

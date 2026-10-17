@@ -126,10 +126,7 @@ export async function handler(event) {
             estimatedSizeMb: isChosen && tables.length > 0 ? tables.reduce((acc, t) => acc + t.sizeMb, 0) : 50,
             enabled: isChosen,
             mode: 'structure_and_data',
-            tables: isChosen ? tables : [
-              { name: 'public.users', rowsEstimate: 1200, sizeMb: 10, mode: 'structure_and_data' },
-              { name: 'public.orders', rowsEstimate: 8500, sizeMb: 35, mode: 'structure_and_data' },
-            ],
+            tables: isChosen ? tables : [],
           };
         });
 
@@ -138,22 +135,7 @@ export async function handler(event) {
           connected: true,
           targetProjectRef: chosenRef,
           projects: projectList.map(p => ({ id: p.id, name: p.name, region: p.region, status: p.status })),
-          databases: databases.length > 0 ? databases : [
-            {
-              id: 'db_default',
-              projectRef: chosenRef || 'ekklokrukxmqlahtonnc',
-              name: 'DataAutomation',
-              region: 'us-east-1',
-              status: 'ready',
-              estimatedSizeMb: 120,
-              enabled: true,
-              mode: 'structure_and_data',
-              tables: tables.length > 0 ? tables : [
-                { name: 'public.accounts_lcmd', rowsEstimate: 45000, sizeMb: 45, mode: 'structure_and_data' },
-                { name: 'public.activity_log', rowsEstimate: 12000, sizeMb: 12, mode: 'structure_and_data' },
-              ],
-            },
-          ],
+          databases,
         });
       } catch (err) {
         return jsonResponse(500, { ok: false, error: err.message });

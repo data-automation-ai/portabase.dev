@@ -461,6 +461,11 @@ export function DatabaseScopeSelector({
                       </div>
 
                       <div style={{ display: 'grid', gap: '6px' }}>
+                        {tables.length === 0 && (
+                          <div style={{ padding: '12px', textAlign: 'center', color: '#8b949e', fontSize: '12px' }}>
+                            Tables discovering or no tables found for this database. Use the input below to add specific tables, or keep Structure + Data for all tables.
+                          </div>
+                        )}
                         {tables.map((table) => (
                           <div
                             key={table.name}

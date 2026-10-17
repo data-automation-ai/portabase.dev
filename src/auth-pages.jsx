@@ -15,9 +15,9 @@ import * as awsAuth from './lib/cognito.js';
 import { clearDemoMode, sessionUser, isSignedIn } from './lib/session.js';
 import { ensureSessionForVersion, simulateCustomerSignup, redeemPromoCode } from './lib/cloud-api.js';
 import { safeAuthReturnPath } from './lib/auth-return.js';
-import { ConsoleApp } from './console/ConsoleApp.jsx';
 import { KEYS_COPY } from './data/never-hold-keys.js';
 import { isRecoveryAckComplete } from './data/recovery-acknowledgments.js';
+import { REQUIRED_ACK_KEYS } from './data/recovery-acknowledgments.js';
 import { RecoveryAcknowledgments, recordRecoveryAck } from './recovery-ack.jsx';
 
 const Arrow = () => <span aria-hidden="true">↗</span>;
@@ -389,9 +389,25 @@ export function LoginPage() {
       {mode === 'signup' && !awaitingConfirm && (
         <>
           <RecoveryAcknowledgments checked={acks} onToggle={toggleAck} />
-          {!ackComplete && (
-            <p className="ack-hint">Acknowledge every red and amber item above to enable sign-up.</p>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', margin: '8px 0 12px' }}>
+            <button
+              type="button"
+              className="button button-ghost"
+              style={{ fontSize: '12px', padding: '6px 12px' }}
+              onClick={() => {
+                if (ackComplete) {
+                  setAcks(new Set());
+                } else {
+                  setAcks(new Set(REQUIRED_ACK_KEYS));
+                }
+              }}
+            >
+              {ackComplete ? 'Clear all acknowledgments' : '✓ Acknowledge all & enable sign up'}
+            </button>
+            {!ackComplete && (
+              <p className="ack-hint" style={{ margin: 0 }}>Acknowledge every red and amber item above to enable sign-up.</p>
+            )}
+          </div>
         </>
       )}
 

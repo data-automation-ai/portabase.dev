@@ -276,9 +276,39 @@ export function ConsoleApp() {
             setDashboardUnavailable(false);
             setLiveJobs(Array.isArray(dash.jobs) ? dash.jobs : []);
             setLiveDashboard(Boolean(dash.live));
+            let discoveredProjects = null;
+            try {
+              const discRes = await fetch(`/api/cloud/oauth?provider=supabase&action=discover`);
+              const discData = await discRes.json();
+              if (discData?.ok && Array.isArray(discData.projects) && discData.projects.length > 0) {
+                discoveredProjects = discData.projects.map(p => ({
+                  id: `proj_${p.id.slice(0, 8)}`,
+                  ref: p.id,
+                  name: p.name || p.id,
+                  region: p.region || 'us-east-1',
+                  status: p.status === 'ACTIVE_HEALTHY' ? 'healthy' : (p.status || 'ready'),
+                  scheduleEveryHours: 24,
+                  rpoHours: null,
+                  rpoTargetHours: 24,
+                  agentId: null,
+                  destinationIds: [],
+                  layers: { database: true, auth: true, storage: true, functions: true },
+                  createdAt: new Date().toISOString(),
+                }));
+              }
+            } catch {
+              // Discovery non-blocking
+            }
+
             setStateRaw(s => {
               // An unproven response must supersede an old browser-cached MATCH.
-              const next = { ...s, proofReport: dash.proof?.proven ? dash.proof : null, jobs: dash.jobs || [] };
+              const shouldUpdateProjects = discoveredProjects && (!s.projects || s.projects.length === 0 || s.projects.some(p => p.ref === 'kiuwcdpjsdotkoojbkoi'));
+              const next = {
+                ...s,
+                proofReport: dash.proof?.proven ? dash.proof : null,
+                jobs: dash.jobs || [],
+                ...(shouldUpdateProjects ? { projects: discoveredProjects } : {}),
+              };
               saveLiveConsoleState(next);
               return next;
             });
