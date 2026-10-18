@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Icon } from './icons.jsx';
 import { buildAwsS3QuickCreateUrl } from '../../cloud/runner/storage-oauth.mjs';
 import { DatabaseScopeSelector } from './database-scope-selector.jsx';
+import { ClientSideProofModal } from './client-side-proof-modal.jsx';
 import {
   createDefaultDatabaseScope,
   computeDatabaseScopeSummary,
@@ -94,6 +95,7 @@ export function PrivateSealedVault({
   const [success, setSuccess] = useState('');
   const [isSealing, setIsSealing] = useState(false);
   const [showUnlockModal, setShowUnlockModal] = useState(false);
+  const [showProofModal, setShowProofModal] = useState(false);
 
   // Runner Power & Vault Door Animation States
   const [runnerDoorsOpen, setRunnerDoorsOpen] = useState(true);
@@ -395,9 +397,28 @@ export function PrivateSealedVault({
               </p>
             </div>
           </div>
-          <span style={{ background: '#132e22', color: '#3ecf8e', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600 }}>
-            0 secret bytes sent to Portabase servers
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="pb-btn pb-btn-sm"
+              onClick={() => setShowProofModal(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '12px',
+                border: '1px solid #3ecf8e',
+                color: '#3ecf8e',
+                background: 'rgba(62, 207, 142, 0.1)',
+                cursor: 'pointer',
+              }}
+            >
+              <Icon name="shield" size={13} /> View Demonstrable Evidence
+            </button>
+            <span style={{ background: '#132e22', color: '#3ecf8e', padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 600 }}>
+              0 secret bytes sent to Portabase servers
+            </span>
+          </div>
         </div>
 
         {/* Protection Summary Card */}
@@ -446,6 +467,14 @@ export function PrivateSealedVault({
           <button type="button" className="pb-btn pb-btn-primary" onClick={downloadSealedJson} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             <Icon name="download" size={14} /> Download Sealed Vault (<code style={{ background: 'transparent' }}>portabase-runner.sealed.json</code>)
           </button>
+          <button
+            type="button"
+            className="pb-btn"
+            onClick={() => setShowProofModal(true)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#3ecf8e', borderColor: '#238636' }}
+          >
+            <Icon name="shield" size={14} /> View Demonstrable Client-Side Proof
+          </button>
           <button type="button" className="pb-btn" onClick={() => setShowUnlockModal(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
             <Icon name="key" size={14} /> Unlock Vault to Make Changes
           </button>
@@ -476,6 +505,13 @@ export function PrivateSealedVault({
             </form>
           </div>
         )}
+
+        <ClientSideProofModal
+          isOpen={showProofModal}
+          onClose={() => setShowProofModal(false)}
+          sealedData={sealedData}
+          projectRef={projectRef}
+        />
       </div>
     );
   }
@@ -506,9 +542,27 @@ export function PrivateSealedVault({
             </p>
           </div>
         </div>
-        <span className="pb-badge pb-badge-ok" style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          LOCAL BROWSER VAULT · ZERO NETWORK TRANSMISSION
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="pb-text-link"
+            onClick={() => setShowProofModal(true)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '12px',
+              color: '#3ecf8e',
+              textDecoration: 'underline',
+              cursor: 'pointer',
+            }}
+          >
+            <Icon name="shield" size={13} /> View Demonstrable Client-Side Proof
+          </button>
+          <span className="pb-badge pb-badge-ok" style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            LOCAL BROWSER VAULT · ZERO NETWORK TRANSMISSION
+          </span>
+        </div>
       </div>
 
       {/* Interactive Runner Power & Vault Door Stage */}
@@ -577,6 +631,23 @@ export function PrivateSealedVault({
             <span>🔑 VAULT CHAMBER READY</span>
             <span>·</span>
             <span>CREDENTIAL SLOTS ARMED</span>
+            <span>·</span>
+            <button
+              type="button"
+              onClick={() => setShowProofModal(true)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#7ee787',
+                fontSize: '11px',
+                textDecoration: 'underline',
+                cursor: 'pointer',
+                fontWeight: 600,
+                padding: 0,
+              }}
+            >
+              Verify Zero-Knowledge Proof
+            </button>
           </div>
 
           {/* Left Door */}
@@ -1281,6 +1352,13 @@ export function PrivateSealedVault({
           </div>
         </details>
       </form>
+
+      <ClientSideProofModal
+        isOpen={showProofModal}
+        onClose={() => setShowProofModal(false)}
+        sealedData={sealedData}
+        projectRef={projectRef}
+      />
     </div>
   );
 }

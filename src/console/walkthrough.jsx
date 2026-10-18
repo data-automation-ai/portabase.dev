@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { Icon } from './icons.jsx';
 import { PrivateSealedVault } from './private-vault.jsx';
 import { DatabaseScopeSelector } from './database-scope-selector.jsx';
+import { ClientSideProofModal } from './client-side-proof-modal.jsx';
 import {
   createDefaultDatabaseScope,
   computeDatabaseScopeSummary,
@@ -57,6 +58,7 @@ export function GuidedWalkthrough({
   const [step3Valid, setStep3Valid] = useState(Boolean(state?.onboarding?.completed));
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [oauthFeedback, setOauthFeedback] = useState('');
+  const [showProofModal, setShowProofModal] = useState(false);
 
   const scopeSummary = useMemo(() => computeDatabaseScopeSummary(databaseScope), [databaseScope]);
 
@@ -232,6 +234,24 @@ export function GuidedWalkthrough({
           <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#8b949e' }}>
             Set up automatic, self-owned encrypted backups of your Supabase databases in 3 simple steps.
           </p>
+          <div style={{ marginTop: '6px' }}>
+            <button
+              type="button"
+              className="pb-text-link"
+              onClick={() => setShowProofModal(true)}
+              style={{
+                fontSize: '12px',
+                color: '#3ecf8e',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+              }}
+            >
+              <Icon name="shield" size={13} /> View Demonstrable Client-Side Evidence (0 Secret Bytes Transmitted)
+            </button>
+          </div>
         </div>
 
         {/* 1-2-3 Step Pills */}
@@ -558,6 +578,15 @@ export function GuidedWalkthrough({
             <p style={{ margin: '0 0 18px 38px', fontSize: '13px', color: '#8b949e', lineHeight: 1.5 }}>
               All backup files are encrypted on your side before writing to your chosen cloud destination.
               Lock your vault below to generate the encrypted runner configuration.
+              {' '}
+              <button
+                type="button"
+                className="pb-text-link"
+                onClick={() => setShowProofModal(true)}
+                style={{ fontSize: '12px', color: '#3ecf8e', cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                Inspect demonstrable proof &rarr;
+              </button>
             </p>
 
             <div style={{ marginLeft: '38px', display: 'grid', gap: '16px' }}>
@@ -662,6 +691,12 @@ export function GuidedWalkthrough({
           </div>
         </div>
       </details>
+
+      <ClientSideProofModal
+        isOpen={showProofModal}
+        onClose={() => setShowProofModal(false)}
+        projectRef={cleanRef}
+      />
     </section>
   );
 }
