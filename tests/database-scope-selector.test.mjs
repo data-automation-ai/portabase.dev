@@ -190,14 +190,33 @@ test('buildPgDumpArgsForDatabase: returns --exclude-table-data for structure_onl
   ]);
 });
 
-test('createDefaultDatabaseScope returns sensible starter configuration', () => {
+test('createDefaultDatabaseScope returns sensible starter configuration with no bogus sizes or mock tables', () => {
   const scope = createDefaultDatabaseScope('abcdefghijklmnopqrst', 'Main Project');
   assert.equal(scope.length, 1);
   assert.equal(scope[0].projectRef, 'abcdefghijklmnopqrst');
   assert.equal(scope[0].name, 'Main Project');
   assert.equal(scope[0].enabled, true);
   assert.equal(scope[0].mode, DATABASE_COPY_MODES.STRUCTURE_AND_DATA);
-  assert.ok(scope[0].tables.length > 0);
+  assert.equal(scope[0].estimatedSizeMb, null);
+  assert.deepEqual(scope[0].tables, []);
+});
+
+test('computeDatabaseScopeSummary handles unknown (null) database sizes without inventing bogus numbers', () => {
+  const dbs = [
+    {
+      id: 'db1',
+      name: 'Unprobed DB',
+      estimatedSizeMb: null,
+      enabled: true,
+      mode: DATABASE_COPY_MODES.STRUCTURE_AND_DATA,
+      tables: [],
+    },
+  ];
+  const summary = computeDatabaseScopeSummary(dbs);
+  assert.equal(summary.selectedCount, 1);
+  assert.equal(summary.estimatedCompressedMb, null);
+  assert.equal(summary.savedMb, 0);
+  assert.equal(summary.recommendedTier, 'cloud-7');
 });
 
 test('sealed vault payload integration: encrypts and decrypts databaseScope cleanly with WebCrypto', async () => {

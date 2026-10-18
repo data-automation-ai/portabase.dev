@@ -20,12 +20,7 @@ export const TABLE_COPY_MODES = Object.freeze({
   SKIP: 'skip',
 });
 
-export const DEFAULT_DATABASE_TABLES = Object.freeze([
-  { name: 'public.users', rowsEstimate: 1500, sizeMb: 15, mode: TABLE_COPY_MODES.STRUCTURE_AND_DATA },
-  { name: 'public.orders', rowsEstimate: 12000, sizeMb: 45, mode: TABLE_COPY_MODES.STRUCTURE_AND_DATA },
-  { name: 'public.audit_logs', rowsEstimate: 65000, sizeMb: 75, mode: TABLE_COPY_MODES.STRUCTURE_ONLY },
-  { name: 'public.webhook_events', rowsEstimate: 20000, sizeMb: 25, mode: TABLE_COPY_MODES.SKIP },
-]);
+export const DEFAULT_DATABASE_TABLES = Object.freeze([]);
 
 /**
  * Creates an initial default database scope configuration.
@@ -37,10 +32,10 @@ export function createDefaultDatabaseScope(projectRef = '', name = 'Primary Supa
       id: cleanRef ? `db_${cleanRef.slice(0, 8)}` : 'db_primary',
       projectRef: cleanRef,
       name: name.trim() || 'Primary Supabase App',
-      estimatedSizeMb: 160,
+      estimatedSizeMb: null,
       enabled: true,
       mode: DATABASE_COPY_MODES.STRUCTURE_AND_DATA,
-      tables: DEFAULT_DATABASE_TABLES.map(t => ({ ...t })),
+      tables: [],
     },
   ];
 }
@@ -69,21 +64,26 @@ export function computeDatabaseScopeSummary(databases = []) {
   let structureOnlyCount = 0;
   let totalNetMb = 0;
   let totalSavedMb = 0;
+  let hasUnknownSize = false;
 
   for (const db of databases) {
     if (!db || db.enabled === false) continue;
     selectedCount += 1;
 
-    const baseDbSize = typeof db.estimatedSizeMb === 'number' && db.estimatedSizeMb >= 0
-      ? db.estimatedSizeMb
-      : 100;
+    const isSizeKnown = typeof db.estimatedSizeMb === 'number' && db.estimatedSizeMb >= 0;
+    if (!isSizeKnown) {
+      hasUnknownSize = true;
+    }
+    const baseDbSize = isSizeKnown ? db.estimatedSizeMb : null;
 
     if (db.mode === DATABASE_COPY_MODES.STRUCTURE_ONLY) {
       structureOnlyCount += 1;
       // In structure-only mode, row data is skipped (0 rows). Schema DDL is ~1 MB.
-      const schemaOnlySizeMb = Math.min(baseDbSize, 1);
-      totalNetMb += schemaOnlySizeMb;
-      totalSavedMb += Math.max(0, baseDbSize - schemaOnlySizeMb);
+      if (baseDbSize !== null) {
+        const schemaOnlySizeMb = Math.min(baseDbSize, 1);
+        totalNetMb += schemaOnlySizeMb;
+        totalSavedMb += Math.max(0, baseDbSize - schemaOnlySizeMb);
+      }
     } else {
       structureAndDataCount += 1;
       // Structure and data: check individual table modes if present
@@ -93,28 +93,33 @@ export function computeDatabaseScopeSummary(databases = []) {
       for (const table of tables) {
         if (!table) continue;
         const tableSize = typeof table.sizeMb === 'number' && table.sizeMb >= 0 ? table.sizeMb : 0;
-        if (table.mode === TABLE_COPY_MODES.STRUCTURE_ONLY) {
-          // Exclude table row data, keep table schema
-          excludedTableMb += tableSize;
-        } else if (table.mode === TABLE_COPY_MODES.SKIP) {
-          // Completely omit table
+        if (table.mode === TABLE_COPY_MODES.STRUCTURE_ONLY || table.mode === TABLE_COPY_MODES.SKIP) {
           excludedTableMb += tableSize;
         }
       }
 
-      // Saved bytes cannot exceed database size
-      const effectiveSaved = Math.min(baseDbSize, excludedTableMb);
-      const netDbSize = Math.max(1, baseDbSize - effectiveSaved);
-      totalNetMb += netDbSize;
-      totalSavedMb += effectiveSaved;
+      if (baseDbSize !== null) {
+        // Saved bytes cannot exceed database size
+        const effectiveSaved = Math.min(baseDbSize, excludedTableMb);
+        const netDbSize = Math.max(1, baseDbSize - effectiveSaved);
+        totalNetMb += netDbSize;
+        totalSavedMb += effectiveSaved;
+      }
     }
   }
 
-  const estimatedCompressedMb = Math.round(totalNetMb);
+  // If there are selected databases but any has an unknown size, total size is null (unmeasured).
+  // Portabase never reports bogus or invented sizes.
+  const estimatedCompressedMb = (selectedCount === 0)
+    ? 0
+    : hasUnknownSize
+      ? null
+      : Math.round(totalNetMb);
+
   const savedMb = Math.round(totalSavedMb);
 
   // 'cloud-7' if <= 500 MB and at most 1 database; 'cloud-17' if multiple databases or > 500 MB
-  const recommendedTier = (selectedCount <= 1 && estimatedCompressedMb <= 500)
+  const recommendedTier = (selectedCount <= 1 && (estimatedCompressedMb === null || estimatedCompressedMb <= 500))
     ? 'cloud-7'
     : 'cloud-17';
 

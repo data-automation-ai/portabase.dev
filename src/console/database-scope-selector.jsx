@@ -98,14 +98,10 @@ export function DatabaseScopeSelector({
       id: `db_${cleanRef.slice(0, 8)}_${Date.now().toString(36)}`,
       projectRef: cleanRef,
       name: friendlyName,
-      estimatedSizeMb: 120,
+      estimatedSizeMb: null,
       enabled: true,
       mode: DATABASE_COPY_MODES.STRUCTURE_AND_DATA,
-      tables: [
-        { name: 'public.users', rowsEstimate: 1000, sizeMb: 12, mode: TABLE_COPY_MODES.STRUCTURE_AND_DATA },
-        { name: 'public.orders', rowsEstimate: 5000, sizeMb: 28, mode: TABLE_COPY_MODES.STRUCTURE_AND_DATA },
-        { name: 'public.audit_logs', rowsEstimate: 25000, sizeMb: 35, mode: TABLE_COPY_MODES.STRUCTURE_ONLY },
-      ],
+      tables: [],
     };
 
     updateDatabases([...dbs, newDb]);
@@ -132,8 +128,8 @@ export function DatabaseScopeSelector({
         if (existing) return db;
         const newTable = {
           name: formattedName,
-          rowsEstimate: 500,
-          sizeMb: 5,
+          rowsEstimate: null,
+          sizeMb: null,
           mode: TABLE_COPY_MODES.STRUCTURE_AND_DATA,
         };
         return { ...db, tables: [...(db.tables || []), newTable] };
@@ -334,7 +330,9 @@ export function DatabaseScopeSelector({
                         className="pb-badge pb-badge-ok"
                         style={{ fontSize: '11px' }}
                       >
-                        ~{db.estimatedSizeMb || 100} MB
+                        {typeof db.estimatedSizeMb === 'number' && db.estimatedSizeMb >= 0
+                          ? `~${db.estimatedSizeMb} MB`
+                          : '?? MB'}
                       </span>
                     </div>
                     <div style={{ fontSize: '11px', color: '#8b949e', marginTop: '2px' }}>
@@ -486,7 +484,9 @@ export function DatabaseScopeSelector({
                                 {table.name}
                               </span>
                               <span style={{ fontSize: '11px', color: '#8b949e', marginLeft: '8px' }}>
-                                ~{table.sizeMb || 0} MB ({table.rowsEstimate ? `${table.rowsEstimate} rows` : 'unknown'})
+                                {typeof table.sizeMb === 'number' && table.sizeMb >= 0
+                                  ? (table.sizeMb === 0 ? '0 MB' : table.sizeMb < 1 ? '< 1 MB' : `~${Math.round(table.sizeMb)} MB`)
+                                  : '?? MB'} ({typeof table.rowsEstimate === 'number' && table.rowsEstimate >= 0 ? `${table.rowsEstimate.toLocaleString()} rows` : '?? rows'})
                               </span>
                             </div>
 
@@ -607,7 +607,9 @@ export function DatabaseScopeSelector({
           <div style={{ borderLeft: '1px solid #30363d', paddingLeft: '16px' }}>
             <div style={{ fontSize: '11px', color: '#8b949e', textTransform: 'uppercase' }}>Estimated Capsule Size</div>
             <div style={{ fontSize: '15px', fontWeight: 700, color: '#3ecf8e' }}>
-              ~{summary.estimatedCompressedMb} MB
+              {typeof summary.estimatedCompressedMb === 'number' && summary.estimatedCompressedMb >= 0
+                ? `~${summary.estimatedCompressedMb} MB`
+                : '?? MB'}
               {summary.savedMb > 0 && (
                 <span style={{ fontSize: '12px', fontWeight: 500, color: '#7ee787', marginLeft: '6px' }}>
                   ({summary.savedMb} MB saved by Structure Only)
@@ -623,7 +625,9 @@ export function DatabaseScopeSelector({
               className="pb-badge pb-badge-ok"
               style={{ fontSize: '12px', padding: '4px 10px', textTransform: 'none' }}
             >
-              ✓ Fits $7/mo Starter (500 MB allowance)
+              {summary.estimatedCompressedMb === null
+                ? 'Unprobed size · $7/mo Starter (500 MB allowance)'
+                : '✓ Fits $7/mo Starter (500 MB allowance)'}
             </span>
           ) : (
             <span

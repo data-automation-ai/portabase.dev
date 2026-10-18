@@ -423,7 +423,11 @@ export function PrivateSealedVault({
 
             <div>
               <div style={{ color: '#9ca3af', fontSize: '11px', textTransform: 'uppercase', marginBottom: '2px' }}>Estimated Size</div>
-              <strong style={{ fontSize: '15px', color: '#3ecf8e' }}>~{summary.estimatedCompressedMb} MB</strong>
+              <strong style={{ fontSize: '15px', color: '#3ecf8e' }}>
+                {typeof summary.estimatedCompressedMb === 'number' && summary.estimatedCompressedMb >= 0
+                  ? `~${summary.estimatedCompressedMb} MB`
+                  : '?? MB'}
+              </strong>
               {summary.savedMb > 0 && <span style={{ fontSize: '11px', color: '#7ee787', marginLeft: '6px' }}>({summary.savedMb} MB saved)</span>}
             </div>
           </div>

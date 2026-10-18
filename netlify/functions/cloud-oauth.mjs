@@ -86,44 +86,82 @@ export async function handler(event) {
         }
 
         let tables = [];
+        let dbBytes = null;
         if (chosenRef) {
           try {
-            const qRes = await fetch(`https://api.supabase.com/v1/projects/${chosenRef}/database/query`, {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                query: `SELECT c.relname AS name, GREATEST(c.reltuples::bigint, 0) AS rows_estimate, pg_total_relation_size(c.oid) AS bytes FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' ORDER BY pg_total_relation_size(c.oid) DESC LIMIT 50;`,
+            const [sizeRes, qRes] = await Promise.all([
+              fetch(`https://api.supabase.com/v1/projects/${chosenRef}/database/query`, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  query: `SELECT pg_database_size(current_database())::bigint AS db_bytes;`,
+                }),
               }),
-            });
+              fetch(`https://api.supabase.com/v1/projects/${chosenRef}/database/query`, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  query: `SELECT c.relname AS name, GREATEST(c.reltuples::bigint, 0) AS rows_estimate, pg_total_relation_size(c.oid) AS bytes FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' ORDER BY pg_total_relation_size(c.oid) DESC LIMIT 50;`,
+                }),
+              }),
+            ]);
+
+            if (sizeRes.ok) {
+              const sizeRows = await sizeRes.json();
+              const rawBytes = sizeRows?.[0]?.db_bytes;
+              if (rawBytes != null && !Number.isNaN(Number(rawBytes))) {
+                dbBytes = Number(rawBytes);
+              }
+            }
+
             if (qRes.ok) {
               const rows = await qRes.json();
               if (Array.isArray(rows)) {
-                tables = rows.map(r => ({
-                  name: `public.${r.name}`,
-                  rowsEstimate: Number(r.rows_estimate) || 0,
-                  sizeMb: Math.max(1, Math.round((Number(r.bytes) || 0) / (1024 * 1024))),
-                  mode: 'structure_and_data',
-                }));
+                tables = rows.map(r => {
+                  const rawBytes = r.bytes != null ? Number(r.bytes) : null;
+                  const rawRows = r.rows_estimate != null ? Number(r.rows_estimate) : null;
+                  const sizeMb = (rawBytes != null && !Number.isNaN(rawBytes))
+                    ? Number((rawBytes / (1024 * 1024)).toFixed(2))
+                    : null;
+                  return {
+                    name: `public.${r.name}`,
+                    rowsEstimate: (rawRows != null && !Number.isNaN(rawRows)) ? rawRows : null,
+                    sizeBytes: rawBytes,
+                    sizeMb,
+                    mode: 'structure_and_data',
+                  };
+                });
               }
             }
           } catch {
-            // fallback tables
+            // discovery non-blocking
           }
         }
 
         const projectList = Array.isArray(allProjects) ? allProjects : [];
         const databases = projectList.map(p => {
           const isChosen = p.id === chosenRef;
+          let estimatedSizeMb = null;
+          if (isChosen) {
+            if (dbBytes !== null) {
+              estimatedSizeMb = Math.round(dbBytes / (1024 * 1024));
+            } else if (tables.length > 0 && tables.some(t => typeof t.sizeMb === 'number')) {
+              estimatedSizeMb = Math.round(tables.reduce((acc, t) => acc + (t.sizeMb || 0), 0));
+            }
+          }
           return {
             id: `db_${p.id.slice(0, 8)}`,
             projectRef: p.id,
             name: p.name || p.id,
             region: p.region || 'us-east-1',
             status: p.status || 'ready',
-            estimatedSizeMb: isChosen && tables.length > 0 ? tables.reduce((acc, t) => acc + t.sizeMb, 0) : 50,
+            estimatedSizeMb,
             enabled: isChosen,
             mode: 'structure_and_data',
             tables: isChosen ? tables : [],
