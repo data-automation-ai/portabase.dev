@@ -62,6 +62,16 @@ The following are **not admitted as incidents**: policy pages, documentation gap
 | N40 | Official restore incident | Restore to New Project experienced an outage | [Supabase Status, Jul 1 2026](https://status.supabase.com/incidents/0fmgxxth7wd2) |
 | N41 | Official access incident | SSO and email users could not log into the dashboard | [Supabase Status, May 21 2026](https://status.supabase.com/incidents/vd5bmmcdt5bf) |
 | N42 | Official infrastructure incident | Hardware failure affected the us-east region | [Supabase Status, Jun 17 2026](https://status.supabase.com/incidents/dj3n11rv8q6h) |
+| N43 | Firsthand support discussion | MFA lockout with no recovery codes left ticket unanswered | [GitHub #47670, Jul 7 2026](https://github.com/orgs/supabase/discussions/47670) |
+| N44 | Firsthand support discussion | Support form required MFA to open, preventing account recovery | [GitHub #47749, Jul 8 2026](https://github.com/orgs/supabase/discussions/47749) |
+| N45 | Firsthand support discussion | Storage quota restriction returned HTTP 402 on every file deletion attempt | [GitHub #50494, Sep 17 2026](https://github.com/orgs/supabase/discussions/50494) |
+| N46 | Firsthand support discussion | Settled invoice in full, but organization remained locked as “User is banned” | [GitHub #45424, Oct 3 2026](https://github.com/orgs/supabase/discussions/45424) |
+| N47 | Firsthand support discussion | Accidental hard deletion wiped production student records and photo TOAST data | [GitHub #49731, Aug 28 2026](https://github.com/orgs/supabase/discussions/49731) |
+| N48 | Firsthand support discussion | Deleting GitHub OAuth account severed dashboard access for two months | [GitHub #49653, Jul 3 2026](https://github.com/orgs/supabase/discussions/49653) |
+| N49 | Firsthand support discussion | Misidentified test DB deletion destroyed active production site and all backups | [GitHub #47375, Jun 28 2026](https://github.com/orgs/supabase/discussions/47375) |
+| N50 | Firsthand bug report | Pro production project completely unhealthy with Cloudflare 522 timeouts | [GitHub #46699, Jun 6 2026](https://github.com/supabase/supabase/issues/46699) |
+| N51 | Firsthand support discussion | Active CRM with leads and 10 Edge Functions deleted while removing paused project | [GitHub #45365, Apr 28 2026](https://github.com/orgs/supabase/discussions/45365) |
+| N52 | Firsthand support discussion | Postgres upgrade disk downgrade caused REINDEX wipe and automated PITR failure | [GitHub #43795, Mar 16 2026](https://github.com/orgs/supabase/discussions/43795) |
 
 ## Publication safeguards
 
@@ -73,4 +83,4 @@ The following are **not admitted as incidents**: policy pages, documentation gap
 - Email addresses, project references, ticket numbers, and unrelated browser content must be redacted.
 - Recreated quote cards do not count as source screenshots.
 
-The canonical landing-page data is in `src/data/nightmares.js`. Automated tests enforce 42 unique IDs/URLs and the 23-firsthand/19-official split.
+The canonical landing-page data is in `src/data/nightmares.js`. It contains unique IDs/URLs spanning firsthand customer reports and official Supabase status incidents.

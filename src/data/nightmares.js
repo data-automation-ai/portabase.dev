@@ -358,5 +358,61 @@ export const nightmares = [
     source: 'GitHub Discussions · Sep 17, 2026',
     href: 'https://github.com/orgs/supabase/discussions/50494',
     verified: 'Firsthand report · self-help workaround for access, storage block unresolved at close'
+  },
+  {
+    id: 'N46', kind: 'firsthand', tag: 'ACCOUNT BANNED',
+    title: 'An overdue invoice was settled in full, but the organization remained locked as “User is banned.”',
+    body: 'The agency reported paying overdue invoice MSEXWL-00002 ($229.52) in full via the automated link, but the account remained strictly flagged as banned. Multiple client production databases and Edge Functions stayed offline while a collaborator confirmed there was no escalation ability even by staff.',
+    source: 'GitHub Discussions · Oct 3, 2026',
+    href: 'https://github.com/orgs/supabase/discussions/45424',
+    verified: 'Firsthand support escalation · live client outages · no staff escalation path'
+  },
+  {
+    id: 'N47', kind: 'firsthand', tag: 'DATA LOSS',
+    title: 'An accidental deletion wiped production student records with days of ticket delay expected.',
+    body: 'The customer reported an accidental hard deletion affecting production student records and relational photo data in PostgreSQL TOAST storage. A critical ticket (SU-457506) was filed seeking retained WAL, but community moderation cautioned that free-tier recovery is unsupported and responses could take days.',
+    source: 'GitHub Discussions · Aug 28, 2026',
+    href: 'https://github.com/orgs/supabase/discussions/49731',
+    verified: 'Firsthand production data loss · ticket SU-457506 · physical backup requested'
+  },
+  {
+    id: 'N48', kind: 'firsthand', tag: 'IDENTITY LOCKOUT',
+    title: 'Deleting a GitHub OAuth account severed dashboard access for two months while the database stayed live.',
+    body: 'The organization relied exclusively on GitHub OAuth with no local fallback password. Deleting the GitHub identity closed the only administrative door; password reset flows reported the account belonged to GitHub. Ticket SU-411201 received no human reply for more than eight weeks.',
+    source: 'GitHub Discussions · Jul 3, 2026',
+    href: 'https://github.com/orgs/supabase/discussions/49653',
+    verified: 'Firsthand administrative lockout · ticket SU-411201 · community recovery workaround'
+  },
+  {
+    id: 'N49', kind: 'firsthand', tag: 'PROJECT DELETED',
+    title: 'A misidentified test database deletion destroyed an active production site and all its backups.',
+    body: 'While cleaning up test environments, the user accidentally deleted the project powering live site turizamsrbija.com (SU-406188). When asking to purchase a paid tier to retrieve database snapshots, moderation confirmed that project deletion immediately and irrevocably destroys all backups.',
+    source: 'GitHub Discussions · Jun 28, 2026',
+    href: 'https://github.com/orgs/supabase/discussions/47375',
+    verified: 'Firsthand production incident · ticket SU-406188 · confirmed backup destruction policy'
+  },
+  {
+    id: 'N50', kind: 'firsthand', tag: 'PRODUCTION DOWN',
+    title: 'A paid Pro production project went completely unhealthy with Cloudflare 522 timeouts on all auth endpoints.',
+    body: 'The customer reported that Database, PostgREST, Auth, Realtime, and Storage services showed Unhealthy simultaneously for several hours on a Pro plan (ref letnzgjctqfzmgqmgipn). Every signup and token refresh failed with HTTP 522 origin connection timeouts.',
+    source: 'GitHub Issues · Jun 6, 2026',
+    href: 'https://github.com/supabase/supabase/issues/46699',
+    verified: 'Firsthand Pro project bug report · multi-service failure with 522 origin errors'
+  },
+  {
+    id: 'N51', kind: 'firsthand', tag: 'PROJECT DELETED',
+    title: 'An active CRM with live leads and webhooks was deleted in seconds while attempting to remove a paused project.',
+    body: 'Intending to remove an unused paused project, the owner accidentally deleted their active CRM (CRN CENTRALYS), instantly destroying customer leads, invoices, and ten deployed Edge Functions wired to live marketing webhooks. Support ticket SU-366857 met confirmation that deletion is permanent.',
+    source: 'GitHub Discussions · Apr 28, 2026',
+    href: 'https://github.com/orgs/supabase/discussions/45365',
+    verified: 'Firsthand production incident · ticket SU-366857 · confirmed irrecoverable deletion'
+  },
+  {
+    id: 'N52', kind: 'firsthand', tag: 'DATA LOSS',
+    title: 'A Postgres upgrade shrunk disk capacity, and a routine REINDEX wiped the database when PITR failed.',
+    body: 'The customer reported an unexpected disk downgrade from 100GB following a Postgres update. Running REINDEX DATABASE postgres exhausted the remaining storage and wiped the active database. Automated Point-in-Time Recovery failed, prompting a public plea on Hacker News before support manually intervened.',
+    source: 'GitHub Discussions · Mar 16, 2026',
+    href: 'https://github.com/orgs/supabase/discussions/43795',
+    verified: 'Firsthand production outage · ticket SU-342355 · failed automated PITR'
   }
 ];
