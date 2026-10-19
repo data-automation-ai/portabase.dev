@@ -104,7 +104,7 @@ export async function handler(event) {
         };
         const jsonStr = JSON.stringify(payloadObj);
         const acceptEncoding = String(event.headers?.['accept-encoding'] || event.headers?.['Accept-Encoding'] || '');
-        if (jsonStr.length > 512 * 1024 && acceptEncoding.includes('gzip')) {
+        if (jsonStr.length > 5.5 * 1024 * 1024 && acceptEncoding.includes('gzip')) {
           const gz = zlib.gzipSync(Buffer.from(jsonStr, 'utf8'));
           return {
             statusCode: 200,
