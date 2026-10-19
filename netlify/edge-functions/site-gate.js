@@ -3,12 +3,20 @@
 // never in this repo. API routes pass through untouched (they carry JWTs).
 export default async function siteGate(request, context) {
   const url = new URL(request.url);
-  if (url.pathname === '/auth/callback' || url.pathname.startsWith('/oauth/') || url.pathname.startsWith('/api/') || url.pathname.startsWith('/.netlify/')) {
+  if (
+    url.pathname === '/auth/callback' ||
+    url.pathname.includes('/api/') ||
+    url.pathname.includes('/oauth/') ||
+    url.pathname.includes('/.netlify/') ||
+    url.pathname.startsWith('/api') ||
+    url.pathname.startsWith('/oauth')
+  ) {
     return context.next();
   }
   const code = Netlify.env.get('SITE_GATE_CODE');
   if (!code) {
-    return new Response('Site gate is not configured yet.', { status: 503 });
+    // If no gate code is set in Netlify, allow the site to operate without 503
+    return context.next();
   }
   const cookies = (request.headers.get('cookie') || '').split(';').map(c => c.trim());
   if (cookies.includes(`pb_gate=${code}`)) {

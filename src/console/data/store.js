@@ -463,8 +463,60 @@ export function loadLiveConsoleState(user) {
   return emptyWorkspace(user || {});
 }
 
+function pruneStateForStorage(state) {
+  if (!state) return state;
+  try {
+    const clone = { ...state };
+    if (Array.isArray(clone.databases)) {
+      clone.databases = clone.databases.map(db => ({
+        id: db.id,
+        name: db.name,
+        projectRef: db.projectRef,
+        projectName: db.projectName,
+        enabled: db.enabled,
+        mode: db.mode,
+        totalSourceMb: db.totalSourceMb,
+        includedMb: db.includedMb,
+        tables: (db.tables || []).slice(0, 300).map(t => ({
+          name: t.name,
+          mode: t.mode,
+          sizeMb: t.sizeMb,
+          objectType: t.objectType,
+        })),
+        binaries: (db.binaries || []).slice(0, 300).map(b => ({
+          name: b.name,
+          mode: b.mode,
+          sizeMb: b.sizeMb,
+          objectType: b.objectType,
+        })),
+      }));
+    }
+    return clone;
+  } catch {
+    return state;
+  }
+}
+
 export function saveLiveConsoleState(state) {
-  localStorage.setItem(LIVE_KEY, JSON.stringify({ ...state, demoMode: false }));
+  try {
+    const pruned = pruneStateForStorage(state);
+    localStorage.setItem(LIVE_KEY, JSON.stringify({ ...pruned, demoMode: false }));
+  } catch (err) {
+    console.warn('localStorage quota reached for portabase.console.live.v1; keeping state in memory:', err);
+    try {
+      // Clear older demo state to free up quota
+      localStorage.removeItem(KEY);
+      const minimal = {
+        workspace: state?.workspace,
+        profile: state?.profile,
+        billing: state?.billing,
+        demoMode: false,
+      };
+      localStorage.setItem(LIVE_KEY, JSON.stringify(minimal));
+    } catch {
+      /* in-memory only */
+    }
+  }
   window.dispatchEvent(new CustomEvent('portabase-console', { detail: state }));
 }
 
@@ -492,7 +544,12 @@ export function loadConsoleState(user) {
 }
 
 export function saveConsoleState(state) {
-  localStorage.setItem(KEY, JSON.stringify(state));
+  try {
+    const pruned = pruneStateForStorage(state);
+    localStorage.setItem(KEY, JSON.stringify(pruned));
+  } catch {
+    /* ignore quota limit */
+  }
   window.dispatchEvent(new CustomEvent('portabase-console', { detail: state }));
 }
 
