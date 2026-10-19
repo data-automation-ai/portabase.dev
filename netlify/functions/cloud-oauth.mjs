@@ -58,11 +58,28 @@ export async function handler(event) {
     try { body = JSON.parse(event.body); } catch { /* ignore */ }
   }
 
-  // 1. API: Discovery & Token Exchange via /api/cloud/oauth
-  if (pathname.startsWith('/api/cloud/oauth') || query.action === 'discover') {
+  // 1. API: Discovery, Disconnect & Token Exchange via /api/cloud/oauth
+  if (pathname.startsWith('/api/cloud/oauth') || query.action === 'discover' || query.action === 'disconnect') {
     const provider = query.provider || body.provider || 'supabase';
     const action = query.action || body.action || 'discover';
     const targetRef = (query.project || body.project || '').trim().toLowerCase();
+
+    if (provider === 'supabase' && action === 'disconnect') {
+      return jsonResponse(
+        200,
+        {
+          ok: true,
+          connected: false,
+          disconnected: true,
+          message: 'Disconnected from Supabase.',
+          databases: [],
+          projects: [],
+        },
+        {
+          'Set-Cookie': clearCookie('pb_oauth_sb_token'),
+        },
+      );
+    }
 
     if (provider === 'supabase' && action === 'discover') {
       const authHeader = ((event.headers?.authorization || event.headers?.Authorization) || '')

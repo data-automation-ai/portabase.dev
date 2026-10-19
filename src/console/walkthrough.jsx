@@ -53,7 +53,21 @@ export function GuidedWalkthrough({
   const [copiedBackup, setCopiedBackup] = useState(false);
 
   // Validation statuses
-  const [step1Valid, setStep1Valid] = useState(Boolean(currentProject?.ref && /^[a-z0-9]{20}$/i.test(currentProject.ref)));
+  const [isDisconnected, setIsDisconnected] = useState(() => {
+    try {
+      return typeof window !== 'undefined' && window.localStorage?.getItem('pb_supabase_disconnected') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [step1Valid, setStep1Valid] = useState(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage?.getItem('pb_supabase_disconnected') === '1') {
+        return false;
+      }
+    } catch { /* ignore */ }
+    return Boolean(currentProject?.ref && /^[a-z0-9]{20}$/i.test(currentProject.ref));
+  });
   const [step2Valid, setStep2Valid] = useState(true);
   const [step3Valid, setStep3Valid] = useState(Boolean(state?.onboarding?.completed));
   const [isDiscovering, setIsDiscovering] = useState(false);
@@ -62,8 +76,18 @@ export function GuidedWalkthrough({
 
   const scopeSummary = useMemo(() => computeDatabaseScopeSummary(databaseScope), [databaseScope]);
 
-  // Auto-discover live Supabase projects and tables on mount
+  // Auto-discover live Supabase projects and tables on mount (unless explicitly disconnected)
   useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage?.getItem('pb_supabase_disconnected') === '1') {
+        setDatabaseScope([]);
+        setStep1Valid(false);
+        setOauthFeedback('');
+        setStep(1);
+        return;
+      }
+    } catch { /* ignore */ }
+
     let cancelled = false;
     (async () => {
       try {
@@ -94,6 +118,12 @@ export function GuidedWalkthrough({
 
   const handleSupabaseOAuthConnect = async (e) => {
     e?.preventDefault();
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage?.removeItem('pb_supabase_disconnected');
+      }
+    } catch { /* ignore */ }
+    setIsDisconnected(false);
     setIsDiscovering(true);
     setOauthFeedback('');
     try {
@@ -127,11 +157,48 @@ export function GuidedWalkthrough({
     }
   };
 
+  const handleSupabaseDisconnect = async (e) => {
+    e?.preventDefault();
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage?.setItem('pb_supabase_disconnected', '1');
+      }
+    } catch { /* ignore */ }
+    setIsDisconnected(true);
+    setStep1Valid(false);
+    setOauthFeedback('');
+    setDatabaseScope([]);
+    setProjectInput('');
+    setProjectName('');
+    setManualDbPass('');
+    setManualApiKey('');
+    setManualRefreshToken('');
+    setState?.((s) => ({
+      ...s,
+      projects: [],
+      databaseScope: [],
+      databaseSummary: null,
+    }));
+    setStep(1);
+    try {
+      await fetch('/api/cloud/oauth?provider=supabase&action=disconnect', { method: 'POST' });
+    } catch {
+      // Ignore network errors on disconnect
+    }
+    toast?.('Disconnected from Supabase.', 'ok');
+  };
+
   const validateStep1 = () => {
     if (!cleanRef || !/^[a-z0-9]{20}$/i.test(cleanRef)) {
       toast?.('Please enter a valid 20-character Supabase project ref or URL.', 'danger');
       return;
     }
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage?.removeItem('pb_supabase_disconnected');
+      }
+    } catch { /* ignore */ }
+    setIsDisconnected(false);
     const name = projectName.trim() || 'My Supabase Project';
     setState?.((s) => {
       const projects = [...(s.projects || [])];
@@ -151,9 +218,9 @@ export function GuidedWalkthrough({
       return { ...s, projects };
     });
 
-    // Sync database scope if still default
+    // Sync database scope if still default or empty
     setDatabaseScope((prev) => {
-      if (prev.length === 1 && prev[0].id === 'db_primary') {
+      if (prev.length === 0 || (prev.length === 1 && prev[0].id === 'db_primary')) {
         return createDefaultDatabaseScope(cleanRef, name);
       }
       return prev;
@@ -300,6 +367,28 @@ export function GuidedWalkthrough({
               <span>{item.label}</span>
             </button>
           ))}
+          {step1Valid && (
+            <button
+              type="button"
+              onClick={handleSupabaseDisconnect}
+              title="Disconnect from Supabase and return to Step 1"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '7px 12px',
+                borderRadius: '999px',
+                border: '1px solid rgba(248,81,73,0.55)',
+                background: 'rgba(248,81,73,0.12)',
+                color: '#f85149',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              ✕ Disconnect Supabase
+            </button>
+          )}
         </div>
       </div>
 
@@ -323,7 +412,33 @@ export function GuidedWalkthrough({
                 }}>1</span>
                 Connect Your Supabase Account
               </h3>
-              {step1Valid && <span className="pb-badge pb-badge-ok">✓ Connected</span>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                {step1Valid ? (
+                  <>
+                    <span className="pb-badge pb-badge-ok">✓ Connected</span>
+                    <button
+                      type="button"
+                      onClick={handleSupabaseDisconnect}
+                      style={{
+                        background: 'rgba(248,81,73,0.12)',
+                        color: '#f85149',
+                        border: '1px solid rgba(248,81,73,0.55)',
+                        borderRadius: '6px',
+                        padding: '4px 10px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      ✕ Disconnect
+                    </button>
+                  </>
+                ) : isDisconnected ? (
+                  <span className="pb-badge" style={{ background: 'rgba(248,81,73,0.12)', color: '#f85149', border: '1px solid rgba(248,81,73,0.4)' }}>
+                    Disconnected
+                  </span>
+                ) : null}
+              </div>
             </div>
 
             <p style={{ margin: '0 0 18px 38px', fontSize: '13px', color: '#8b949e', lineHeight: 1.5 }}>
@@ -353,28 +468,69 @@ export function GuidedWalkthrough({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleSupabaseOAuthConnect}
-                  disabled={isDiscovering}
-                  className="pb-btn pb-btn-primary"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '14px', cursor: isDiscovering ? 'wait' : 'pointer' }}
-                >
-                  {isDiscovering ? '⏳ Connecting to Supabase...' : '🚀 Connect with Supabase (1-Click)'}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={handleSupabaseOAuthConnect}
+                    disabled={isDiscovering}
+                    className="pb-btn pb-btn-primary"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '14px', cursor: isDiscovering ? 'wait' : 'pointer' }}
+                  >
+                    {isDiscovering ? '⏳ Connecting to Supabase...' : '🚀 Connect with Supabase (1-Click)'}
+                  </button>
+                  {step1Valid && (
+                    <button
+                      type="button"
+                      onClick={handleSupabaseDisconnect}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '10px 14px',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        borderRadius: '6px',
+                        border: '1px solid rgba(248,81,73,0.55)',
+                        background: 'rgba(248,81,73,0.12)',
+                        color: '#f85149',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      ✕ Disconnect
+                    </button>
+                  )}
+                </div>
               </div>
 
               {oauthFeedback && (
                 <div style={{ background: '#07100b', border: '1px solid #238636', borderRadius: '6px', padding: '10px 14px', fontSize: '13px', color: '#3ecf8e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
                   <span>{oauthFeedback}</span>
-                  <button
-                    type="button"
-                    className="pb-btn pb-btn-sm pb-btn-primary"
-                    onClick={() => setStep(2)}
-                    style={{ fontSize: '12px', padding: '6px 14px' }}
-                  >
-                    Open Pick Databases Spreadsheet &rarr;
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="pb-btn pb-btn-sm pb-btn-primary"
+                      onClick={() => setStep(2)}
+                      style={{ fontSize: '12px', padding: '6px 14px' }}
+                    >
+                      Open Pick Databases Spreadsheet &rarr;
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSupabaseDisconnect}
+                      style={{
+                        background: 'rgba(248,81,73,0.12)',
+                        color: '#f85149',
+                        border: '1px solid rgba(248,81,73,0.55)',
+                        borderRadius: '6px',
+                        padding: '6px 12px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      ✕ Disconnect
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -493,7 +649,7 @@ export function GuidedWalkthrough({
                 </div>
               </details>
 
-              <div style={{ marginTop: '8px', display: 'flex', gap: '10px' }}>
+              <div style={{ marginTop: '8px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   className="pb-btn pb-btn-primary"
@@ -503,6 +659,24 @@ export function GuidedWalkthrough({
                 >
                   <Icon name="check" size={14} /> Continue to Step 2: Pick Databases &rarr;
                 </button>
+                {step1Valid && (
+                  <button
+                    type="button"
+                    onClick={handleSupabaseDisconnect}
+                    style={{
+                      background: 'rgba(248,81,73,0.12)',
+                      color: '#f85149',
+                      border: '1px solid rgba(248,81,73,0.55)',
+                      borderRadius: '6px',
+                      padding: '10px 16px',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    ✕ Disconnect Supabase
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -529,7 +703,25 @@ export function GuidedWalkthrough({
                 }}>2</span>
                 Choose Which Databases to Back Up
               </h3>
-              {step2Valid && <span className="pb-badge pb-badge-ok">✓ Scope Ready</span>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                {step2Valid && <span className="pb-badge pb-badge-ok">✓ Scope Ready</span>}
+                <button
+                  type="button"
+                  onClick={handleSupabaseDisconnect}
+                  style={{
+                    background: 'rgba(248,81,73,0.12)',
+                    color: '#f85149',
+                    border: '1px solid rgba(248,81,73,0.55)',
+                    borderRadius: '6px',
+                    padding: '4px 10px',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  ✕ Disconnect Supabase
+                </button>
+              </div>
             </div>
 
             <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#8b949e', lineHeight: 1.5 }}>
@@ -556,6 +748,22 @@ export function GuidedWalkthrough({
                 </button>
                 <button type="button" className="pb-btn" onClick={() => setStep(1)} style={{ background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d' }}>
                   &larr; Back to Step 1
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSupabaseDisconnect}
+                  style={{
+                    background: 'rgba(248,81,73,0.12)',
+                    color: '#f85149',
+                    border: '1px solid rgba(248,81,73,0.55)',
+                    borderRadius: '6px',
+                    padding: '8px 14px',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  ✕ Disconnect Supabase
                 </button>
               </div>
             </div>
