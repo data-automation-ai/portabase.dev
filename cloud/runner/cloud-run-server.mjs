@@ -454,7 +454,7 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
   <script>
     let stateDatabases = [];
     let expandedDbIds = {};
-    let expandedGroupsByDb = {};
+    let activeGroupByDb = {};
     let groupLimitsByDb = {};
     let sortConfigByDb = {};
     let tokenMasked = true;
@@ -554,23 +554,12 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
     }
 
     function toggleExpandGroup(dbId, groupKey) {
-      if (!expandedGroupsByDb[dbId]) expandedGroupsByDb[dbId] = {};
-      expandedGroupsByDb[dbId][groupKey] = !expandedGroupsByDb[dbId][groupKey];
+      activeGroupByDb[dbId] = activeGroupByDb[dbId] === groupKey ? null : groupKey;
       renderAll();
     }
 
-    function setAllGroupsExpanded(dbId, expand) {
-      if (!expand) {
-        expandedGroupsByDb[dbId] = {};
-      } else {
-        const db = stateDatabases.find(d => d.id === dbId);
-        if (db) {
-          const grps = buildGroupsForDb(db);
-          const m = {};
-          for (const g of grps) m[g.groupKey] = true;
-          expandedGroupsByDb[dbId] = m;
-        }
-      }
+    function closeActiveGroup(dbId) {
+      activeGroupByDb[dbId] = null;
       renderAll();
     }
 
@@ -929,8 +918,8 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
         const allRows = getUnifiedRows(db).filter(r => !r.isEmptyBucket && r.objectName !== '(empty bucket)');
         const sortCfg = sortConfigByDb[db.id] || { column: 'sizeMb', direction: 'desc' };
         const groups = sortRows(buildGroupsForDb(db), sortCfg, db.mode);
-        const expandedGrpMap = expandedGroupsByDb[db.id] || {};
-        const anyGrpExpanded = groups.some(g => Boolean(expandedGrpMap[g.groupKey]));
+        const activeGroupKey = activeGroupByDb[db.id] || null;
+        const activeGroup = activeGroupKey ? groups.find(g => g.groupKey === activeGroupKey) : null;
 
         const rawDbMb = typeof db.estimatedSizeMb === 'number'
           ? db.estimatedSizeMb
@@ -959,14 +948,14 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
         let runningStackedMb = 0;
         const rowsHtml = groups.map((grp, grpIdx) => {
           const isBucket = grp.isBinary;
-          const isGrpExpanded = Boolean(expandedGrpMap[grp.groupKey]);
+          const isGrpExpanded = activeGroupKey === grp.groupKey;
           const contribMb = db.enabled ? grp.includedMb : 0;
           runningStackedMb = Number((runningStackedMb + contribMb).toFixed(2));
           const stackedAfterGrp = runningStackedMb;
           const isExcluded = grp.mode === 'skip' || !db.enabled;
           const safeGrpName = String(grp.schemaOrBucket).replace(/'/g, "\\\\'");
           const safeGrpKey = String(grp.groupKey).replace(/'/g, "\\\\'");
-          const grpBg = isExcluded ? '#fef2f2' : (isGrpExpanded ? '#e2e8f0' : (grpIdx % 2 === 0 ? '#f8fafc' : '#f1f5f9'));
+          const grpBg = isExcluded ? '#fef2f2' : (isGrpExpanded ? '#dbeafe' : (grpIdx % 2 === 0 ? '#f8fafc' : '#f1f5f9'));
           const grpTxt = isExcluded ? '#94a3b8' : '#0f172a';
 
           const grpSwitchHtml = isBucket
@@ -980,10 +969,10 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
                 <button type="button" class="switch-btn \${grp.mode === 'structure_and_data' ? 'active-full' : ''}" onclick="setSchemaMode('\${db.id}', '\${safeGrpName}', 'structure_and_data')">Struct+Data\${grp.mode === 'mixed' ? '*' : ''}</button>
               </div>\`;
 
-          const grpRowHtml = \`<tr style="background:\${grpBg};height:22px;cursor:pointer;" onclick="toggleExpandGroup('\${db.id}', '\${safeGrpKey}')" title="Click to \${isGrpExpanded ? 'collapse' : 'expand'} \${grp.objectType} \${grp.schemaOrBucket}">
+          const grpRowHtml = \`<tr style="background:\${grpBg};height:22px;cursor:pointer;" onclick="toggleExpandGroup('\${db.id}', '\${safeGrpKey}')" title="Click to \${isGrpExpanded ? 'close' : 'explode'} \${grp.objectType} \${grp.schemaOrBucket}">
             <td style="width:\${colWidths.objectType}px;background:\${grpBg};color:\${isExcluded ? '#94a3b8' : (isBucket ? '#9a3412' : '#0f172a')};font-weight:700;">\${grp.objectType}</td>
             <td style="width:\${colWidths.schemaOrBucket}px;background:\${grpBg};color:\${isExcluded ? '#94a3b8' : (isBucket ? '#7c2d12' : '#1e3a8a')};font-weight:700;" title="\${grp.schemaOrBucket}">\${isGrpExpanded ? '▼ ' : '▶ '}\${grp.schemaOrBucket}</td>
-            <td style="width:\${colWidths.objectName}px;background:\${grpBg};color:\${grpTxt};font-weight:700;" title="\${grp.objectName}">\${grp.objectName}</td>
+            <td style="width:\${colWidths.objectName}px;background:\${grpBg};color:\${grpTxt};font-weight:700;" title="\${grp.objectName}">\${grp.objectName}\${isGrpExpanded ? ' <span style="color:#1d4ed8;margin-left:6px;">[▴ Done / Close]</span>' : ''}</td>
             <td style="width:\${colWidths.sizeMb}px;background:\${grpBg};color:\${grpTxt};text-align:right;font-weight:700;">\${Number(grp.sizeMb || 0).toFixed(2)} MB</td>
             <td style="width:\${colWidths.createdAt}px;background:\${grpBg};color:#475569;">\${(grp.createdAt || '—').slice(0, 16)}</td>
             <td style="width:\${colWidths.updatedAt}px;background:\${grpBg};color:#475569;">\${(grp.updatedAt || '—').slice(0, 16)}</td>
@@ -1046,7 +1035,13 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
               </tr>\`
             : '';
 
-          return grpRowHtml + childRowsHtml + loadMoreHtml;
+          const closeGroupFooterHtml = \`<tr style="background:#dbeafe;height:22px;cursor:pointer;" onclick="closeActiveGroup('\${db.id}')" title="Done picking records in \${grp.objectType} \${grp.schemaOrBucket} — click to close">
+            <td colspan="8" style="padding:2px 12px;color:#1e3a8a;font-weight:700;background:#dbeafe;">
+              ▴ Done picking records in \${grp.objectType} "\${grp.schemaOrBucket}" — Click to close
+            </td>
+          </tr>\`;
+
+          return grpRowHtml + childRowsHtml + loadMoreHtml + closeGroupFooterHtml;
         }).join('');
 
         const sortArrow = (col) => sortCfg.column === col ? (sortCfg.direction === 'asc' ? ' ▲' : ' ▼') : ' ↕';
@@ -1088,9 +1083,9 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
           \${isExpanded ? \`
             <div style="border-top:1px solid #30363d;background:#090d13;padding:10px 12px;">
               <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
-                <span style="font-size:11px;color:#8b949e;">Default view shows Schema &amp; Bucket level. Click any Schema or Bucket row to expand its individual objects · Drag header borders to resize.</span>
+                <span style="font-size:11px;color:#8b949e;">Default view shows Schema &amp; Bucket level. Click one Schema or Bucket row at a time to explode, pick its records, then close · Drag header borders to resize.</span>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                  <button type="button" class="btn btn-sm" onclick="setAllGroupsExpanded('\${db.id}', \${!anyGrpExpanded})">\${anyGrpExpanded ? '▴ Collapse to Schemas & Buckets' : '▾ Expand All Objects'}</button>
+                  \${activeGroup ? \`<button type="button" class="btn btn-sm btn-primary" onclick="closeActiveGroup('\${db.id}')">▴ Done Picking / Close "\${activeGroup.schemaOrBucket}"</button>\` : ''}
                   <button type="button" class="btn btn-sm" onclick="setDatabaseDefaultMode('\${db.id}', 'structure_and_data')">All Schemas: Struct+Data</button>
                   <button type="button" class="btn btn-sm" onclick="setDatabaseDefaultMode('\${db.id}', 'structure_only')">All Schemas: Struct Only</button>
                   <button type="button" class="btn btn-sm" onclick="setDatabaseBinariesMode('\${db.id}', 'include')">Include All Buckets</button>

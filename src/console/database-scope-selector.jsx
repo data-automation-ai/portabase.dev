@@ -66,8 +66,8 @@ export function DatabaseScopeSelector({
     const first = Array.isArray(databases) && databases[0]?.id;
     return first || null;
   });
-  // Default view shows Schema-level & Bucket-level rows ONLY (all groups collapsed initially)
-  const [expandedGroups, setExpandedGroups] = useState({});
+  // Default view shows Schema-level & Bucket-level rows ONLY; at most ONE schema/bucket per DB may be exploded at a time
+  const [activeGroupByDb, setActiveGroupByDb] = useState({});
   const [groupRowLimits, setGroupRowLimits] = useState({});
   const [newDbInput, setNewDbInput] = useState('');
   const [newDbName, setNewDbName] = useState('');
@@ -117,30 +117,19 @@ export function DatabaseScopeSelector({
     onChange?.(nextDbs);
   };
 
+  // Strictly ONE schema or bucket exploded at a time per database: opening one automatically closes any other
   const handleToggleGroupExpanded = (dbId, groupKey) => {
-    setExpandedGroups((prev) => {
-      const dbGroups = prev[dbId] || {};
-      return {
-        ...prev,
-        [dbId]: {
-          ...dbGroups,
-          [groupKey]: !dbGroups[groupKey],
-        },
-      };
-    });
+    setActiveGroupByDb((prev) => ({
+      ...prev,
+      [dbId]: prev[dbId] === groupKey ? null : groupKey,
+    }));
   };
 
-  const handleSetAllGroupsExpanded = (dbId, groups, expanded) => {
-    setExpandedGroups((prev) => {
-      if (!expanded) {
-        return { ...prev, [dbId]: {} };
-      }
-      const nextMap = {};
-      for (const g of groups) {
-        nextMap[g.groupKey] = true;
-      }
-      return { ...prev, [dbId]: nextMap };
-    });
+  const handleCloseActiveGroup = (dbId) => {
+    setActiveGroupByDb((prev) => ({
+      ...prev,
+      [dbId]: null,
+    }));
   };
 
   const handleSetSchemaMode = (dbId, schemaName, mode) => {
@@ -649,9 +638,8 @@ export function DatabaseScopeSelector({
           const isStructureOnly = db.mode === DATABASE_COPY_MODES.STRUCTURE_ONLY;
           const allObjects = getAllRowsForDb(db);
           const sortedGroups = getSortedGroupsForDb(db);
-          const dbExpandedMap = expandedGroups[db.id] || {};
-          const hasSearch = Boolean((searchQuery[db.id] || '').trim());
-          const anyGroupExpanded = sortedGroups.some((g) => Boolean(dbExpandedMap[g.groupKey]));
+          const activeGroupKey = activeGroupByDb[db.id] || null;
+          const activeGroup = activeGroupKey ? sortedGroups.find((g) => g.groupKey === activeGroupKey) : null;
           const dbMetrics = summary.perDatabase?.[db.id] || {};
           const skippedCount = allObjects.filter((t) => t.mode === TABLE_COPY_MODES.SKIP || t.mode === 'exclude').length;
           const structOnlyTableCount = allObjects.filter((t) => t.mode === TABLE_COPY_MODES.STRUCTURE_ONLY).length;
@@ -890,14 +878,20 @@ export function DatabaseScopeSelector({
                               Clear
                             </button>
                           )}
-                          <button
-                            type="button"
-                            className="pb-btn pb-btn-sm"
-                            onClick={() => handleSetAllGroupsExpanded(db.id, sortedGroups, !anyGroupExpanded)}
-                            style={{ fontSize: '11px', padding: '3px 8px', whiteSpace: 'nowrap' }}
-                          >
-                            {anyGroupExpanded ? '▴ Collapse to Schemas & Buckets' : '▾ Expand All Objects'}
-                          </button>
+                          {activeGroup ? (
+                            <button
+                              type="button"
+                              className="pb-btn pb-btn-sm pb-btn-primary"
+                              onClick={() => handleCloseActiveGroup(db.id)}
+                              style={{ fontSize: '11px', padding: '4px 10px', whiteSpace: 'nowrap' }}
+                            >
+                              ▴ Done Picking / Close &ldquo;{activeGroup.schemaOrBucket}&rdquo;
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: '11px', color: '#8b949e', whiteSpace: 'nowrap' }}>
+                              Click one Schema or Bucket row to explode, pick its records, then close
+                            </span>
+                          )}
                         </div>
 
                         {!readOnly && (
@@ -931,7 +925,7 @@ export function DatabaseScopeSelector({
                         )}
                       </div>
 
-                      {/* Dense 8.5pt Spreadsheet Grid (Default: Schema & Bucket rows only; click any Schema/Bucket to expand its objects) */}
+                      {/* Dense 8.5pt Spreadsheet Grid (Default: Schema & Bucket rows only; click ONE Schema/Bucket at a time to explode, pick records, and close) */}
                       <div
                         style={{
                           maxHeight: '460px',
@@ -985,7 +979,7 @@ export function DatabaseScopeSelector({
                               </tr>
                             ) : (
                               sortedGroups.map((grp, grpIdx) => {
-                                const isGroupExpanded = Boolean(dbExpandedMap[grp.groupKey] || hasSearch);
+                                const isGroupExpanded = activeGroupKey === grp.groupKey;
                                 const isBucket = grp.isBinary;
                                 const grpMode = grp.mode;
                                 const isGrpSkip = grpMode === TABLE_COPY_MODES.SKIP || grpMode === 'exclude';
@@ -1000,7 +994,7 @@ export function DatabaseScopeSelector({
                                 const grpBg = isGrpSkip
                                   ? '#fef2f2'
                                   : isGroupExpanded
-                                    ? '#e2e8f0'
+                                    ? '#dbeafe'
                                     : grpIdx % 2 === 0
                                       ? '#f8fafc'
                                       : '#f1f5f9';
@@ -1034,7 +1028,7 @@ export function DatabaseScopeSelector({
                                     <tr
                                       style={{ height: '22px', cursor: 'pointer' }}
                                       onClick={() => handleToggleGroupExpanded(db.id, grp.groupKey)}
-                                      title={`Click to ${isGroupExpanded ? 'collapse' : 'expand'} ${grp.objectType} "${grp.schemaOrBucket}" (${grp.objectCount} objects)`}
+                                      title={`Click to ${isGroupExpanded ? 'close' : 'explode'} ${grp.objectType} "${grp.schemaOrBucket}" (${grp.objectCount} objects)`}
                                     >
                                       <td
                                         style={{
@@ -1065,9 +1059,14 @@ export function DatabaseScopeSelector({
                                           fontWeight: 700,
                                           color: isGrpSkip ? '#94a3b8' : '#0f172a',
                                         }}
-                                        title={`${grp.objectName} — click to ${isGroupExpanded ? 'collapse' : 'expand'}`}
+                                        title={`${grp.objectName} — click to ${isGroupExpanded ? 'close' : 'explode'}`}
                                       >
                                         {grp.objectName}
+                                        {isGroupExpanded && (
+                                          <span style={{ marginLeft: '6px', color: '#1d4ed8', fontWeight: 700 }}>
+                                            [▴ Done / Close]
+                                          </span>
+                                        )}
                                       </td>
                                       <td
                                         style={{
@@ -1560,6 +1559,29 @@ export function DatabaseScopeSelector({
                                           >
                                             Show all {childItems.length} objects
                                           </button>
+                                        </td>
+                                      </tr>
+                                    )}
+
+                                    {/* Close Exploded Schema / Bucket Footer Row */}
+                                    {isGroupExpanded && (
+                                      <tr
+                                        style={{ height: '22px', background: '#dbeafe', cursor: 'pointer' }}
+                                        onClick={() => handleCloseActiveGroup(db.id)}
+                                        title={`Done picking records in ${grp.objectType} "${grp.schemaOrBucket}" — click to close`}
+                                      >
+                                        <td
+                                          colSpan={8}
+                                          style={{
+                                            fontSize: '8.5pt',
+                                            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                                            padding: '2px 12px',
+                                            borderBottom: '1px solid #94a3b8',
+                                            color: '#1e3a8a',
+                                            fontWeight: 700,
+                                          }}
+                                        >
+                                          ▴ Done picking records in {grp.objectType} &ldquo;{grp.schemaOrBucket}&rdquo; &mdash; Click to close
                                         </td>
                                       </tr>
                                     )}
