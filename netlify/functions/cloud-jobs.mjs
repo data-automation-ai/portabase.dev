@@ -1,9 +1,8 @@
-import { withBlobs } from '../shared/subscription-store.mjs';
+import { store as blobStore, withBlobs } from '../shared/subscription-store.mjs';
 /**
  * Account-scoped job intents. Admission and atomic queue writes enforce current
  * entitlements; this endpoint does not itself run backup or recovery processes.
  */
-import { getStore } from '@netlify/blobs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { getSubscriptionForUser } from '../shared/subscription-store.mjs';
 import { runnerAdmission } from '../shared/runner-admission.mjs';
@@ -15,7 +14,7 @@ import { normalizeJobQueue, storedJobQueue, publicClaimDecision } from '../share
 import { publicJobRecord as publicJob } from '../shared/public-records.mjs';
 import { enqueuePrivateJob, scheduledClaimAllowed } from '../shared/job-enqueue.mjs';
 
-function store() { return getStore({ name: 'portabase-cloud-jobs', consistency: 'strong' }); }
+function store() { return blobStore('portabase-cloud-jobs'); }
 
 export function createJobsHandler({ authenticate = verifyCloudUser, getSubscription,
   authenticateRunner = authenticateAgent, ownedRunners = listAgents, database = store, clock = Date.now,

@@ -1,11 +1,10 @@
-import { withBlobs } from '../shared/subscription-store.mjs';
+import { store, withBlobs } from '../shared/subscription-store.mjs';
 /**
  * GET /api/cloud/telemetry-events — live runner telemetry for the signed-in user.
  * Reads the telemetry blob store written by POST /api/cloud/telemetry, scoped
  * to an account namespace derived from the verified identity. Project references
  * supplied by customers never grant access to another account's reports.
  */
-import { getStore } from '@netlify/blobs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { ownerKey } from '../shared/agent-store.mjs';
 import { findForbiddenField } from '../../cloud/control-plane/forbidden.mjs';
@@ -20,7 +19,7 @@ const MAX_KEYS_PER_PREFIX = 200;
 const MAX_EVENTS = 500;
 
 export function telemetryStore() {
-  return getStore({ name: TELEMETRY_STORE_NAME, consistency: 'strong' });
+  return store(TELEMETRY_STORE_NAME);
 }
 
 /** YYYY-MM-DD day strings for the last `days` days, newest first. */

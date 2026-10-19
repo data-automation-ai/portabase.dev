@@ -51,7 +51,7 @@ Audience: teams who expect **Portabase to perform staging** and operate the cont
 
 **Launch platform: Supabase only** (see [LAUNCH-SCOPE.md](./LAUNCH-SCOPE.md)).
 
-Commercial defaults: **Cloud Free 100 MB (manual only)**, then Square **$7** (one database, ≤10 GB, 1 capsule / 24h) and **$17** (unlimited databases, ≤25 GB, 3 capsules / day). Hidden legacy `$37` is not offered on new checkouts. **7-day trial with card**, **up to 12 agents/runners**, **customer-provided capsule destination (BYO storage)**. Use the Cloud table/bucket sizer to include or exclude so the capsule fits.
+Commercial defaults: **Cloud Free 40 GB (manual only)**, then Square **$7** (one database, ≤10 GB, 1 capsule / 24h) and **$17** (unlimited databases, ≤25 GB, 3 capsules / day). Hidden legacy `$37` is not offered on new checkouts. **7-day trial with card**, **up to 12 agents/runners**, **customer-provided capsule destination (BYO storage)**. Use the Cloud table/bucket sizer to include or exclude so the capsule fits.
 
 Includes:
 

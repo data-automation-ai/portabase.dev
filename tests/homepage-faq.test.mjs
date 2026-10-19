@@ -43,7 +43,7 @@ test('FAQ answers stay honest: keys, free path, lamp, SMS, vault', () => {
 
   assert.match(byQ['Free CLI vs Cloud — what do I pay for?'], /\$7/);
   assert.match(byQ['Free CLI vs Cloud — what do I pay for?'], /\$17/);
-  assert.match(byQ['Free CLI vs Cloud — what do I pay for?'], /100 MB/);
+  assert.match(byQ['Free CLI vs Cloud — what do I pay for?'], /40 GB/);
   assert.doesNotMatch(byQ['Free CLI vs Cloud — what do I pay for?'], /\$37/);
   assert.match(byQ['Free CLI vs Cloud — what do I pay for?'], /open-source engine is unlimited and free/i);
   assert.match(byQ['Free CLI vs Cloud — what do I pay for?'], /The free plan has no scheduled service/);

@@ -77,20 +77,20 @@ test('quickstart commands match FREE-CLI.md / README, no invented flags', () => 
   assert.match(freeCli, /portabase restore/);
 });
 
-test('Cloud Free is 100 MB with no scheduled service', () => {
+test('Cloud Free is 40 GB with no scheduled service', () => {
   assert.equal(CLOUD_FREE.id, 'cloud-free');
   assert.equal(CLOUD_FREE.priceMonthlyUsd, 0);
   assert.equal(CLOUD_FREE.projects, 1);
-  assert.equal(CLOUD_FREE.storageCapMb, 100);
-  assert.equal(CLOUD_FREE.storageCapLabel, '100 MB');
+  assert.equal(CLOUD_FREE.storageCapMb, 40 * 1024);
+  assert.equal(CLOUD_FREE.storageCapLabel, '40 GB');
   assert.equal(CLOUD_FREE.scheduled, false);
   assert.equal(serverFree.scheduled, false);
-  assert.equal(serverFree.storageCapMb, 100);
+  assert.equal(serverFree.storageCapMb, 40 * 1024);
   const src = readFileSync(new URL('../src/main.jsx', import.meta.url), 'utf8');
   assert.match(src, /CLOUD_FREE/);
   assert.match(src, /No scheduled service/);
   assert.match(src, /The free plan has no scheduled service/);
-  assert.match(src, /100 MB/);
+  assert.match(src, /40 GB/);
   assert.match(src, /500 MB/);
   assert.match(src, /10 GB/);
   assert.doesNotMatch(src, /Cloud Free, then \$7, \$17, or \$37/);

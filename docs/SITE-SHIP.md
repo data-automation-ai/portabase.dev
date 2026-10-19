@@ -14,7 +14,7 @@ Use this when deploying the marketing + Cloud SPA to Netlify.
 8. **export-manifest / capsule-unload** — names only, no secrets.
 9. **`--report-drift`** — opt-in MD5 / row-count / RBAC.
 10. **Security refresh** — Cloud never stores capsules or passphrases; least-privilege if a job key is held briefly.
-11. **Pricing** — **Cloud Free 100 MB (manual)**. Square **$7** one DB ≤10 GB 1/24h · **$17** unlimited DBs ≤25 GB 3/day. Hidden legacy `$37`. Table/bucket sizer include/exclude.
+11. **Pricing** — **Cloud Free 40 GB (manual)**. Square **$7** one DB ≤10 GB 1/24h · **$17** unlimited DBs ≤25 GB 3/day. Hidden legacy `$37`. Table/bucket sizer include/exclude.
 12. **Download/run paths** — Local Starter vs S3/Dropbox/Drive/rclone; staging/disk warning.
 13. **Console IA** — capsule management (not content browser), key injection (customer-side), gauges, **Telemetry graphs**, **Open capsule** wizard, worker health.
 14. **Auth/trial funnel** — email + Google + magic link → trial → connect project → first capsule proof; no hosted-vault promise.

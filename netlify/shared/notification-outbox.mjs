@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { getStore } from '@netlify/blobs';
+import { store as blobStore } from './subscription-store.mjs';
 import { authenticateAgent, listAgents } from './agent-store.mjs';
 import { safeCloudEvent, CLOUD_EVENT_MAX_AGE_MS } from './safe-telemetry.mjs';
 import { notificationMessage } from './notification-message.mjs';
@@ -41,10 +41,10 @@ export function notificationEventId(agent, event) {
  * never blind retry or an exactly-once claim.
  */
 export function createNotificationOutbox({
-  store = () => getStore({ name: NOTIFICATION_OUTBOX_STORE, consistency: 'strong' }),
+  store = () => blobStore(NOTIFICATION_OUTBOX_STORE),
   authenticate = authenticateAgent,
   agentActive = async (owner, id) => (await listAgents(owner)).some(row => row.id === id && !row.revokedAt),
-  getPreferences = owner => getStore({ name: 'portabase-notification-preferences', consistency: 'strong' }).get(`owners/${owner}`, { type: 'json' }),
+  getPreferences = owner => blobStore('portabase-notification-preferences').get(`owners/${owner}`, { type: 'json' }),
   getDestination = resolveNotificationDestination,
   clock = Date.now, leaseMs = 60_000, maxAttempts = 5,
 } = {}) {

@@ -1,6 +1,6 @@
 # Square Checkout setup
 
-**Commercial product today:** Portabase Cloud — **Cloud Free 100 MB (manual)**, then Square **$7/mo** (one database · ≤10 GB · 1 capsule / 24h) or **$17/mo** (unlimited databases · ≤25 GB · 3 capsules / day) after a 7-day trial (`cloud-subscribe`). Hidden legacy `$37` is not offered on new checkouts. Card required. Customer provides capsule storage. Cloud has zero knowledge of encryption keys.
+**Commercial product today:** Portabase Cloud — **Cloud Free 40 GB (manual)**, then Square **$7/mo** (one database · ≤10 GB · 1 capsule / 24h) or **$17/mo** (unlimited databases · ≤25 GB · 3 capsules / day) after a 7-day trial (`cloud-subscribe`). Hidden legacy `$37` is not offered on new checkouts. Card required. Customer provides capsule storage. Cloud has zero knowledge of encryption keys.
 
 **Retired:** `$147` one-time “Essentials” software license.  
 `POST /api/square/checkout` now returns **HTTP 410** with pointers to open source + Cloud. Do not create payment links for that SKU.

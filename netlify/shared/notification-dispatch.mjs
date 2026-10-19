@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { getStore } from '@netlify/blobs';
+import { store as blobStore } from './subscription-store.mjs';
 import { createNotificationOutbox, NOTIFICATION_OUTBOX_STORE } from './notification-outbox.mjs';
 import { createNotificationBudget, validateNotificationLimits } from './notification-budget.mjs';
 import { resolveNotificationTransport } from './notification-config.mjs';
@@ -53,8 +53,8 @@ export function createNotificationDispatcher({
   env = process.env,
   outbox = createNotificationOutbox(),
   budget = createNotificationBudget(),
-  cursorStore = () => getStore({ name: DISPATCH_CURSOR_STORE, consistency: 'strong' }),
-  listingStore = () => getStore({ name: NOTIFICATION_OUTBOX_STORE, consistency: 'strong' }),
+  cursorStore = () => blobStore(DISPATCH_CURSOR_STORE),
+  listingStore = () => blobStore(NOTIFICATION_OUTBOX_STORE),
   resolveTransport = resolveNotificationTransport,
   clock = Date.now,
   maxPages = 16,

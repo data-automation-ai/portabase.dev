@@ -10,7 +10,7 @@
 | --- | --- |
 | **Platform** | **Supabase** projects (DB · Auth · Storage · Functions) |
 | **Gateway** | **Square** (Checkout + Subscriptions) |
-| **Cloud Free** | **$0** · **100 MB** · dashboard + manual runs · **The free plan has no scheduled service**. Not a Square catalog plan. |
+| **Cloud Free** | **$0** · **40 GB** · dashboard + manual runs · **The free plan has no scheduled service**. Not a Square catalog plan. |
 | **Starter Escape** | **$7.00 / month** · **one database** · **up to 10 GB** · **1 capsule / 24h** |
 | **Daily Escape** | **$17.00 / month** · **unlimited databases** · **up to 25 GB** · **3 capsules / day** |
 | **Scale Escape** | Hidden legacy **$37** · not offered on new checkouts |
@@ -31,7 +31,7 @@ with all price math server-authoritative per Square. Processor is Square, never 
 
 | Plan id | Monthly | Cap | Transfers / 24h |
 | --- | --- | --- | --- |
-| `cloud-free` | $0 | 100 MB | manual only |
+| `cloud-free` | $0 | 40 GB | manual only |
 | `cloud-7` | $7 | 10 GB | 1 |
 | `cloud-17` | $17 | 25 GB | 3 |
 | `cloud-37` | $37 (hidden) | 100 GB | 3 |

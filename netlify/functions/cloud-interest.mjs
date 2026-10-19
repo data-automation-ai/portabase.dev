@@ -1,4 +1,4 @@
-import { getStore } from '@netlify/blobs';
+import { store as blobStore } from '../shared/subscription-store.mjs';
 
 function json(status, body) {
   return new Response(JSON.stringify(body), {
@@ -44,7 +44,7 @@ export default async (request) => {
   };
 
   try {
-    const store = getStore({ name: 'portabase-cloud-interest', consistency: 'strong' });
+    const store = blobStore('portabase-cloud-interest');
     await store.setJSON(`${Date.now()}-${email}`, interest);
     return json(200, { ok: true });
   } catch (error) {

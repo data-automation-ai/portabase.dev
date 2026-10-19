@@ -1,5 +1,4 @@
-import { withBlobs } from '../shared/subscription-store.mjs';
-import { getStore } from '@netlify/blobs';
+import { store as blobStore, withBlobs } from '../shared/subscription-store.mjs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { ownerKey } from '../shared/agent-store.mjs';
 import { notificationMessage } from '../shared/notification-message.mjs';
@@ -8,7 +7,7 @@ const states = new Set(['pending', 'leased', 'sending', 'accepted', 'unknown', '
 const receipts = new Set(['accepted', 'sent', 'delivered', 'failed', 'conflicted']);
 const timestamp = value => typeof value === 'string' && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
 
-export function createNotificationHistoryHandler({ authenticate = verifyCloudUser, storeFactory = () => getStore({ name: 'portabase-notification-outbox', consistency: 'strong' }) } = {}) {
+export function createNotificationHistoryHandler({ authenticate = verifyCloudUser, storeFactory = () => blobStore('portabase-notification-outbox') } = {}) {
   return async event => {
     if (event.httpMethod !== 'GET') return jsonResponse(405, { error: 'method_not_allowed' });
     let owner;

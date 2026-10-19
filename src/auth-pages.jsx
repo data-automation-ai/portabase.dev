@@ -375,7 +375,7 @@ export function LoginPage() {
     <AuthShell
       version={version}
       title={mode === 'signup' ? 'Create your Cloud account' : mode === 'forgot' ? 'Reset password' : mode === 'update-password' ? 'Choose a new password' : 'Sign in to Cloud'}
-      lead="Email, magic link, or Google. Cloud Free 100 MB, or $7/mo via Square — upgrade cadence or capacity anytime in-app. You bring capsule storage. Keys are never posted to Portabase servers."
+      lead="Email, magic link, or Google. Cloud Free 40 GB, or $7/mo via Square — upgrade cadence or capacity anytime in-app. You bring capsule storage. Keys are never posted to Portabase servers."
       cardLabel={mode === 'signup' ? 'Create account' : mode === 'forgot' || mode === 'update-password' ? 'Reset password' : 'Sign in'}
     >
       <VersionPicker version={version} onChange={selectVersion} />

@@ -137,7 +137,7 @@ export function sampleSizeInventory() {
     buckets: [
       { id: 'avatars', objectCount: 184, totalBytes: 13_215_744 },
       { id: 'invoices', objectCount: 42, totalBytes: 29_491_200 },
-      { id: 'media', objectCount: 2204, totalBytes: 1_266_647_040 },
+      { id: 'media', objectCount: 2204, totalBytes: 45_000_000_000 },
     ],
   }, { source: SIZER_SOURCE.sample, mocked: true });
 }
@@ -343,7 +343,7 @@ export function meterPlanCards() {
 
 const PLAN_ORDER = ['cloud-free', 'cloud-7', 'cloud-17'];
 
-/** Smallest public cap that fits `bytes`. Over 10 GB returns cloud-17 still-over. */
+/** Smallest public cap that fits `bytes`. Over 40 GB returns cloud-free still-over. */
 export function recommendPlan(bytes) {
   const used = Math.max(0, Number(bytes) || 0);
   for (const id of PLAN_ORDER) {
@@ -352,7 +352,7 @@ export function recommendPlan(bytes) {
       return { ...fit, recommended: true, stillOver: false };
     }
   }
-  const last = planFit(used, 'cloud-17');
+  const last = planFit(used, 'cloud-free');
   return { ...last, recommended: true, stillOver: true };
 }
 

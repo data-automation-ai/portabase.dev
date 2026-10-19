@@ -89,6 +89,34 @@ export function createLocalFallbackStore(name = STORE) {
       persistLocalStoreToDisk();
       return true;
     },
+    list({ prefix = '', paginate = false } = {}) {
+      loadLocalStoreFromDisk();
+      const matching = [];
+      const seen = new Set();
+      for (const [k, v] of memoryStorage.entries()) {
+        let storeKey = null;
+        if (k.startsWith(`${name}:`)) {
+          storeKey = k.slice(name.length + 1);
+        } else if (name === STORE) {
+          storeKey = k;
+        }
+        if (storeKey !== null && storeKey.startsWith(prefix) && !seen.has(storeKey)) {
+          seen.add(storeKey);
+          matching.push({ key: storeKey, etag: v?.etag || '1' });
+        }
+      }
+      matching.sort((a, b) => a.key.localeCompare(b.key));
+      const result = { blobs: matching, directories: [] };
+      return {
+        ...result,
+        async *[Symbol.asyncIterator]() {
+          yield result;
+        },
+        then(resolve, reject) {
+          return Promise.resolve(result).then(resolve, reject);
+        },
+      };
+    },
   };
 }
 
@@ -97,9 +125,11 @@ export function withBlobs(handler) {
     if (event?.blobs) connectLambda(event);
     const siteID = process.env.NETLIFY_BLOBS_SITE_ID || process.env.SITE_ID || '794217cc-42ab-4a9f-81da-06a661403573';
     const token = process.env.NETLIFY_BLOBS_TOKEN;
-    if (!process.env.NETLIFY_BLOBS_CONTEXT && !globalThis.netlifyBlobsContext && siteID && token) {
+    if (!process.env.NETLIFY_BLOBS_CONTEXT && siteID && token) {
       try {
-        globalThis.netlifyBlobsContext = Buffer.from(JSON.stringify({ siteID, token })).toString('base64');
+        const b64 = Buffer.from(JSON.stringify({ siteID, token })).toString('base64');
+        if (!globalThis.netlifyBlobsContext) globalThis.netlifyBlobsContext = b64;
+        process.env.NETLIFY_BLOBS_CONTEXT = b64;
       } catch {
         // ignore
       }
@@ -111,19 +141,30 @@ export function withBlobs(handler) {
 export function store(name = STORE) {
   const siteID = process.env.NETLIFY_BLOBS_SITE_ID || process.env.SITE_ID || '794217cc-42ab-4a9f-81da-06a661403573';
   const token = process.env.NETLIFY_BLOBS_TOKEN;
-  const configured = process.env.NETLIFY_BLOBS_CONTEXT || globalThis.netlifyBlobsContext || (siteID && token);
+  const configured = Boolean(process.env.NETLIFY_BLOBS_CONTEXT || globalThis.netlifyBlobsContext || (siteID && token));
   if (!configured && !process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return createLocalFallbackStore(name);
+  }
+  if (!configured && name !== STORE) {
     return createLocalFallbackStore(name);
   }
   if (!process.env.NETLIFY_BLOBS_CONTEXT && !globalThis.netlifyBlobsContext && siteID && token) {
     try {
-      globalThis.netlifyBlobsContext = Buffer.from(JSON.stringify({ siteID, token })).toString('base64');
+      const b64 = Buffer.from(JSON.stringify({ siteID, token })).toString('base64');
+      globalThis.netlifyBlobsContext = b64;
+      process.env.NETLIFY_BLOBS_CONTEXT = b64;
     } catch {
       // ignore
     }
   }
-  // Never silently persist production billing on ephemeral Lambda disk.
-  return getStore({ name, consistency: 'strong', ...(siteID && token ? { siteID, token } : {}) });
+  try {
+    return getStore({ name, consistency: 'strong', ...(siteID && token ? { siteID, token } : {}) });
+  } catch (err) {
+    if (name !== STORE || (!process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME)) {
+      return createLocalFallbackStore(name);
+    }
+    throw err;
+  }
 }
 
 /** Primary key is Supabase auth user id (uuid). */

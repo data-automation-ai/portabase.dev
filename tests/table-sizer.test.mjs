@@ -59,12 +59,12 @@ test('selection omit is loud NOT COVERED and maps to existing --exclude-table-li
   assert.equal(included.buckets.filter((row) => row.included).map((row) => row.key).join(), 'avatars');
 });
 
-test('plan fit uses Free 100 MB / $7 500 MB / $17 10 GB', () => {
+test('plan fit uses Free 40 GB / $7 500 MB / $17 10 GB', () => {
   const mb = 1024 * 1024;
   const gb = 1024 * mb;
-  assert.equal(planFit(80 * mb, 'cloud-free').fits, true);
-  assert.equal(planFit(120 * mb, 'cloud-free').overCap, true);
-  assert.equal(planFit(120 * mb, 'cloud-free').capLabel, '100 MB');
+  assert.equal(planFit(30 * gb, 'cloud-free').fits, true);
+  assert.equal(planFit(45 * gb, 'cloud-free').overCap, true);
+  assert.equal(planFit(45 * gb, 'cloud-free').capLabel, '40 GB');
   assert.equal(planFit(400 * mb, 'cloud-7').fits, true);
   assert.equal(planFit(600 * mb, 'cloud-7').overCap, true);
   assert.equal(planFit(600 * mb, 'cloud-17').fits, true);
@@ -116,13 +116,13 @@ test('sizer UI stamps NOT COVERED on omitted rows and the loud banner', () => {
   assert.match(ui, /Fit this plan/);
 });
 
-test('recommendPlan picks Free 100 MB / $7 500 MB / $17 10 GB', () => {
+test('recommendPlan picks Free 40 GB or reports stillOver', () => {
   const mb = 1024 * 1024;
   const gb = 1024 * mb;
   assert.equal(recommendPlan(40 * mb).planId, 'cloud-free');
-  assert.equal(recommendPlan(300 * mb).planId, 'cloud-7');
-  assert.equal(recommendPlan(2 * gb).planId, 'cloud-17');
-  assert.equal(recommendPlan(12 * gb).stillOver, true);
+  assert.equal(recommendPlan(300 * mb).planId, 'cloud-free');
+  assert.equal(recommendPlan(2 * gb).planId, 'cloud-free');
+  assert.equal(recommendPlan(50 * gb).stillOver, true);
 });
 
 test('suggestExcludesToFit omits the largest bucket so Cloud Free fits', () => {
@@ -131,7 +131,7 @@ test('suggestExcludesToFit omits the largest bucket so Cloud Free fits', () => {
   assert.equal(suggestion.suggested, true);
   assert.ok(suggestion.selection.excludeBuckets.includes('media'));
   assert.equal(suggestion.fit.fits, true);
-  assert.match(suggestion.note, /100 MB/);
+  assert.match(suggestion.note, /40 GB/);
 });
 
 test('unmeasured items are loud and do not invent bytes', () => {

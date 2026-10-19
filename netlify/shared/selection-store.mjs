@@ -3,7 +3,7 @@
  * wants a capsule to cover) — pure validation plus thin Netlify Blobs helpers.
  * Store: 'portabase-cloud-selections', key `sel:v1:{uid}`.
  */
-import { getStore } from '@netlify/blobs';
+import { store as blobStore } from './subscription-store.mjs';
 import { findForbiddenField } from '../../cloud/control-plane/forbidden.mjs';
 import { CLOUD_FREE, CLOUD_PLANS, LEGACY_PLAN_ALIASES, getCloudPlan } from './product.mjs';
 
@@ -21,7 +21,7 @@ export function selectionKey(uid) {
 }
 
 export function selectionStore() {
-  return getStore({ name: SELECTION_STORE_NAME, consistency: 'strong' });
+  return blobStore(SELECTION_STORE_NAME);
 }
 
 /** Whether planId names a real plan (customer-facing or not, including legacy aliases and free). */

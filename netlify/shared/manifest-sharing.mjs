@@ -1,12 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { getStore } from '@netlify/blobs';
+import { store as blobStore } from './subscription-store.mjs';
 import { projectSharedManifest, sharedManifestBytes } from '../../utility/shared-manifest.mjs';
 
 export class ManifestSharingError extends Error {
   constructor(status, code) { super(code); this.status = status; }
 }
 const error = (status, code) => { throw new ManifestSharingError(status, code); };
-export const manifestSharingStore = () => getStore({ name: 'portabase-manifest-sharing', consistency: 'strong' });
+export const manifestSharingStore = () => blobStore('portabase-manifest-sharing');
 export function manifestSharingKey(owner, agentId) {
   if (typeof owner !== 'string' || !/^[a-f0-9]{64}$/.test(owner) || typeof agentId !== 'string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(agentId)) error(400, 'invalid_sharing_identity');
   return `owners/${owner}/agents/${agentId}`;

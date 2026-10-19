@@ -1,5 +1,5 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
-import { getStore } from '@netlify/blobs';
+import { store as blobStore } from './subscription-store.mjs';
 import { resolveServerSecret } from './secrets.mjs';
 import { applyDeliveryReceipt, canonicalProviderId, findReceiptTarget } from './notification-receipt-store.mjs';
 
@@ -11,7 +11,7 @@ const safeEqual = (a, b) => {
 };
 const header = (event, name) => Object.entries(event.headers || {}).find(([key]) => key.toLowerCase() === name)?.[1] || '';
 const json = (statusCode, body) => ({ statusCode, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, body: JSON.stringify(body) });
-const storeFactory = () => getStore({ name: 'portabase-notification-outbox', consistency: 'strong' });
+const storeFactory = () => blobStore('portabase-notification-outbox');
 function publicUrl(value) {
   if (typeof value !== 'string' || value !== value.trim()) return null;
   // Preserve the configured bytes (including explicit port/query order).

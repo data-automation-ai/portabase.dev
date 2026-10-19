@@ -24,7 +24,7 @@ If a dashboard is locked, a billing card fails, or a region goes down, official 
 | **Capture, encrypt, verify, restore, replay** | Full engine — no license gate | Same open-source engine |
 | **Where the job runs** | Your machine, VM, NAS, or CI | Local runner or managed Cloud runners |
 | **Where the capsule lives** | **Your** S3, Dropbox, Google Drive, or disk | **Your** S3, Dropbox, Google Drive, or Local Starter (Cloud never hosts capsule bytes) |
-| **Visual console, sizing planner, alerts** | Local read-only UI (`portabase ui`) | Hosted console, unattended restore, SMS alerts (**$0 Free Starter** ≤ 100 MB · **$7/mo Starter Escape** 1 DB ≤ 10 GB · **$17/mo Daily Escape** unlimited DBs ≤ 25 GB) |
+| **Visual console, sizing planner, alerts** | Local read-only UI (`portabase ui`) | Hosted console, unattended restore, SMS alerts (**$0 Cloud Free** ≤ 40 GB · **$7/mo Starter Escape** 1 DB ≤ 10 GB · **$17/mo Daily Escape** unlimited DBs ≤ 25 GB) |
 | **If `portabase.dev` disappears** | You keep the CLI and your encrypted capsules | Convenience is gone; your Escape is intact |
 
 > *Portabase is an independent open-source project and is not affiliated with Supabase, Inc. Separate Supabase Vector Buckets are outside Portabase's scope.*

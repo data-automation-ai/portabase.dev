@@ -79,7 +79,7 @@ Live: **https://portabase.dev**
 | Rule | Value |
 | --- | --- |
 | Payment | Square |
-| Cloud Free | **$0** · **100 MB** · manual only (no scheduled service) |
+| Cloud Free | **$0** · **40 GB** · manual only (no scheduled service) |
 | Starter Escape | **$7/mo** · **one database** · **≤10 GB** · **1 / 24h** |
 | Daily Escape | **$17/mo** · **unlimited databases** · **≤25 GB** · **3 / day** |
 | Scale Escape | Hidden legacy **$37** — not offered on new checkouts |
@@ -232,7 +232,7 @@ npm run portabase -- doctor
 | `docs/LAUNCH-SCOPE.md` | Supabase-only, Cloud vs standalone staging |
 | `docs/OPEN_CORE.md` | Open core vs paid |
 | `docs/SECURITY-TRUST.md` | Keys, KMS, Trail, CW, honesty |
-| `docs/BILLING.md` | Cloud Free 100 MB / $7 10 GB 1/24h / $17 25 GB 3/day |
+| `docs/BILLING.md` | Cloud Free 40 GB / $7 10 GB 1/24h / $17 25 GB 3/day |
 | `docs/AWS_CAPSULE.md` | AWS Capsule V2 (read-only; most-recent backups; runner-local AWS; `aws plan` dry-run; not proven) |
 | `docs/AWS_INVENTORY.md` | AWS resource classes + binary decision tree |
 | `docs/CLOUD.md` | How Cloud layers on the free CLI |

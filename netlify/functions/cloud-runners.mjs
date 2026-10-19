@@ -1,9 +1,8 @@
-import { withBlobs } from '../shared/subscription-store.mjs';
+import { store as blobStore, withBlobs } from '../shared/subscription-store.mjs';
 /**
  * Runner lifecycle intents. No compute provisioning happens in this endpoint.
  * Customer secrets are refused; records describe requested state only.
  */
-import { getStore } from '@netlify/blobs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { getSubscriptionForUser } from '../shared/subscription-store.mjs';
 import { runnerAdmission } from '../shared/runner-admission.mjs';
@@ -11,7 +10,7 @@ import { CLOUD_MAX_AGENTS } from '../shared/product.mjs';
 import { assertControlPlaneRunnerBody, provisionSleepingRunner } from '../shared/runner-plane.mjs';
 import { publicRunnerRecord } from '../shared/public-records.mjs';
 
-function store() { return getStore({ name: 'portabase-cloud-runners', consistency: 'strong' }); }
+function store() { return blobStore('portabase-cloud-runners'); }
 
 export function createRunnersHandler({ authenticate = verifyCloudUser, getSubscription,
   database = store, clock = Date.now, createRecord = provisionSleepingRunner } = {}) {

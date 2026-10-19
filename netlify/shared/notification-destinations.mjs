@@ -1,5 +1,5 @@
 import { randomBytes, randomInt, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
-import { getStore } from '@netlify/blobs';
+import { store as blobStore } from './subscription-store.mjs';
 import { ownerKey } from './agent-store.mjs';
 import { reserveVerificationReceiptIndex } from './notification-receipt-store.mjs';
 
@@ -10,7 +10,7 @@ const fail = (code, status = 400) => Object.assign(new Error(code), { code, stat
 const hashCode = (code, salt) => scryptSync(code, salt, 32).toString('hex');
 const challengeSalt = (row, challenge) => JSON.stringify([row.owner, row.channel, row.address,
   challenge.id, challenge.destinationRevision, challenge.salt]);
-const destinationStore = () => getStore({ name: NOTIFICATION_DESTINATION_STORE, consistency: 'strong' });
+const destinationStore = () => blobStore(NOTIFICATION_DESTINATION_STORE);
 const stamp = now => new Date(now).toISOString();
 
 export function notificationDestinationKey(owner, channel) {
@@ -40,7 +40,7 @@ function publicDestination(record) {
  * customer, bounded per authenticated account/channel before any provider call.
  */
 export function createNotificationDestinationService({ store = destinationStore, sendChallenge = null, clock = Date.now,
-  receiptStore = () => getStore({ name: 'portabase-notification-outbox', consistency: 'strong' }) } = {}) {
+  receiptStore = () => blobStore('portabase-notification-outbox') } = {}) {
   const db = () => typeof store === 'function' ? store() : store;
   async function read(owner, channel) {
     const snapshot = await db().getWithMetadata(notificationDestinationKey(owner, channel), { type: 'json' });

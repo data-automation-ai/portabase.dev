@@ -26,16 +26,16 @@ import {
   transferWindow as serverWindow,
 } from '../netlify/shared/product.mjs';
 
-test('Cloud Free is 100 MB, not a Square plan, and has no scheduled service', () => {
+test('Cloud Free is 40 GB, not a Square plan, and has no scheduled service', () => {
   assert.equal(CLOUD_FREE.priceMonthlyCents, 0);
   assert.equal(CLOUD_FREE.projects, 1);
-  assert.equal(CLOUD_FREE.storageCapMb, 100);
-  assert.equal(CLOUD_FREE.storageCapLabel, '100 MB');
-  assert.equal(CLOUD_FREE.storageCapBytes, 100 * 1024 * 1024);
+  assert.equal(CLOUD_FREE.storageCapMb, 40 * 1024);
+  assert.equal(CLOUD_FREE.storageCapLabel, '40 GB');
+  assert.equal(CLOUD_FREE.storageCapBytes, 40 * 1024 * 1024 * 1024);
   assert.equal(CLOUD_FREE.scheduled, false);
   assert.equal(Object.prototype.hasOwnProperty.call(CLOUD_PLANS, 'cloud-free'), false);
   assert.equal(getCloudPlan('cloud-free').id, 'cloud-free');
-  assert.equal(serverFree.storageCapMb, 100);
+  assert.equal(serverFree.storageCapMb, 40 * 1024);
   assert.equal(serverGet('cloud-free').scheduled, false);
 });
 
@@ -59,7 +59,7 @@ test('public Square plans are $7 / 500 MB / 1 per 24h and $17 / 10 GB / 3 per da
   assert.equal(CLOUD_PLANS['cloud-37'].customerFacing, false);
   assert.equal(getCloudPlan('cloud-27').id, 'cloud-17');
   assert.equal(resolvePlan({ extraCycles: 2 }).id, 'cloud-17');
-  assert.match(planAllowanceCopy('cloud-free'), /100 MB/);
+  assert.match(planAllowanceCopy('cloud-free'), /40 GB/);
   assert.match(planAllowanceCopy('cloud-7'), /500 MB/);
   assert.match(planAllowanceCopy('cloud-17'), /10 GB/);
 });
@@ -115,5 +115,5 @@ test('storageUsage meters against the plan cap', () => {
   assert.equal(usage.overCap, false);
   assert.equal(storageUsage(600 * 1024 * 1024, 'cloud-7').overCap, true);
   assert.equal(storageUsage(50 * 1024 * 1024, 'cloud-free').overCap, false);
-  assert.equal(storageUsage(120 * 1024 * 1024, 'cloud-free').overCap, true);
+  assert.equal(storageUsage(41 * oneGb, 'cloud-free').overCap, true);
 });

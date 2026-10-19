@@ -13,11 +13,11 @@ export const HOMEPAGE_FAQ = Object.freeze([
   }),
   Object.freeze({
     q: 'Can I run completely free?',
-    a: 'Yes, when the capsule fits a free destination — or when you use --exclude-binaries or leave out a huge unimportant table so the rest fits. Cloud Free is one project, 100 MB, manual only: the free plan has no scheduled service. The Cloud table sizer shows those sizes before a job. There is no fake percentage. Production-sized full capsules with all Storage bytes will not fit on a free destination.',
+    a: 'Yes, when the capsule fits a free destination — or when you use --exclude-binaries or leave out a huge unimportant table so the rest fits. Cloud Free is one project, 40 GB, manual only: the free plan has no scheduled service. The Cloud table sizer shows those sizes before a job. There is no fake percentage. Production-sized full capsules with all Storage bytes will not fit on a free destination.',
   }),
   Object.freeze({
     q: 'Free CLI vs Cloud — what do I pay for?',
-    a: 'The open-source engine is unlimited and free (you run it — friction: install, disk, cron). Cloud Free is 100 MB, one project, manual only. The free plan has no scheduled service. Paid Cloud starts at $7/mo (1 project, up to 500 MB, 1 capsule / 24h) with an in-app expansion at +$10/mo ($17/mo total for unlimited projects, incremental capsules up to 10 GB, 3 capsules / day) for GUI, guided configuration, telemetry, managed schedules, and optional SMS on $17. You still bring capsule storage.',
+    a: 'The open-source engine is unlimited and free (you run it — friction: install, disk, cron). Cloud Free is 40 GB, one project, manual only. The free plan has no scheduled service. Paid Cloud starts at $7/mo (1 project, up to 500 MB, 1 capsule / 24h) with an in-app expansion at +$10/mo ($17/mo total for unlimited projects, incremental capsules up to 10 GB, 3 capsules / day) for GUI, guided configuration, telemetry, managed schedules, and optional SMS on $17. You still bring capsule storage.',
   }),
   Object.freeze({
     q: 'Does Cloud Free include scheduled service?',
@@ -25,7 +25,7 @@ export const HOMEPAGE_FAQ = Object.freeze([
   }),
   Object.freeze({
     q: 'How do I keep a Cloud capsule under the plan cap?',
-    a: 'Use the dashboard table sizer. It shows per-table and per-bucket sizes from the free engine doctor / size inventory — no new CLI capture flags. Include or exclude tables and Storage buckets before a job so the capsule fits Cloud Free 100 MB, $7 500 MB, or $17 10 GB. Anything omitted is called out as NOT COVERED. The control plane gets the include list and size estimates only — never keys or row bodies.',
+    a: 'Use the dashboard table sizer. It shows per-table and per-bucket sizes from the free engine doctor / size inventory — no new CLI capture flags. Include or exclude tables and Storage buckets before a job so the capsule fits Cloud Free 40 GB, $7 500 MB, or $17 10 GB. Anything omitted is called out as NOT COVERED. The control plane gets the include list and size estimates only — never keys or row bodies.',
   }),
   Object.freeze({
     q: 'Does the proof lamp go green without a real MATCH?',

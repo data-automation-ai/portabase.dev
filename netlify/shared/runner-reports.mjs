@@ -1,4 +1,4 @@
-import { getStore } from '@netlify/blobs';
+import { store as blobStore } from './subscription-store.mjs';
 import { safeCloudEvent } from './safe-telemetry.mjs';
 
 export const REPORT_FRESHNESS_MS = 15 * 60_000;
@@ -59,7 +59,7 @@ export function runnerHealth(agent, record, now = Date.now()) {
 }
 
 /** Only caller-owned credentials decide which immutable report IDs can be read. */
-export async function agentsWithHealth(owner, agents, store = getStore({ name: 'portabase-cloud-telemetry', consistency: 'strong' }), now = Date.now()) {
+export async function agentsWithHealth(owner, agents, store = blobStore('portabase-cloud-telemetry'), now = Date.now()) {
   return Promise.all(agents.map(async agent => {
     const record = await store.get(latestReportKey(owner, agent.id), { type: 'json' });
     return { ...agent, health: runnerHealth(agent, record?.owner === owner ? record : null, now) };

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { getStore } from '@netlify/blobs';
+import { store as blobStore } from './subscription-store.mjs';
 import { safeCloudEvent, CLOUD_EVENT_MAX_AGE_MS } from './safe-telemetry.mjs';
 import { storeLatestReport } from './runner-reports.mjs';
 import { createNotificationOutbox } from './notification-outbox.mjs';
@@ -36,7 +36,7 @@ export function jobCompletionEvent(job, runner, now = Date.now()) {
 /** Deterministic writes let the job completion journal retry partial persistence.
  * This enqueues notifications only; no transport/provider send happens here. */
 export function createJobCompletionPublisher({
-  telemetryStore = () => getStore({ name: 'portabase-cloud-telemetry', consistency: 'strong' }),
+  telemetryStore = () => blobStore('portabase-cloud-telemetry'),
   enqueueNotifications = input => createNotificationOutbox().enqueue(input), clock = Date.now,
 } = {}) {
   return async ({ job, runner, authorization }) => {

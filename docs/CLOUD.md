@@ -23,20 +23,20 @@ Most Supabase users can stay on the free path. Cloud is convenience: GUI, schedu
 | --- | --- |
 | Price | $0 · no card |
 | Projects | **1** |
-| Metered capsule usage | **≤ 100 MB** |
+| Metered capsule usage | **≤ 40 GB** |
 | Dashboard + manual runs | Yes |
 | **Scheduled service** | **The free plan has no scheduled service** |
 | SMS | No |
 
-Paid Square plans ($7 / $17) add schedules and higher caps. **$7** is one database, up to 10 GB, 1 capsule / 24h. **$17** is unlimited databases, up to 25 GB, 3 capsules / day. Optional SMS on $17. Hidden legacy `cloud-37` is not offered on new checkouts. Live entitlement enforcement of the Cloud Free 100 MB cap is **not** a completed production proof.
+Paid Square plans ($7 / $17) add schedules and higher caps. **$7** is one database, up to 10 GB, 1 capsule / 24h. **$17** is unlimited databases, up to 25 GB, 3 capsules / day. Optional SMS on $17. Hidden legacy `cloud-37` is not offered on new checkouts. Live entitlement enforcement of the Cloud Free 40 GB cap is **not** a completed production proof.
 
 ## Table + bucket sizer
 
-The Cloud dashboard / job setup wizard shows per-table sizes and per-bucket sizes / object counts from the free engine **doctor / size inventory** (already produced by `portabase doctor` and capture). You selectively **include or exclude** tables and Storage buckets so the capsule fits Cloud Free 100 MB / $7 10 GB / $17 25 GB.
+The Cloud dashboard / job setup wizard shows per-table sizes and per-bucket sizes / object counts from the free engine **doctor / size inventory** (already produced by `portabase doctor` and capture). You selectively **include or exclude** tables and Storage buckets so the capsule fits Cloud Free 40 GB / $7 10 GB / $17 25 GB.
 
 - Table and bucket omit maps to new engine flags: `--exclude-table-data schema.table,...` (keeps table structure, skips rows) and `--exclude-buckets id,...`. Selection exports as an exact command/config.
 - Omitted tables and buckets are called out as **NOT COVERED**.
-- The sizer recommends the smallest public cap that fits (Cloud Free 100 MB / $7 10 GB / $17 25 GB) and can omit largest items to fit the selected plan. Unmeasured sizes stay loud — Cloud does not invent bytes.
+- The sizer recommends the smallest public cap that fits (Cloud Free 40 GB / $7 10 GB / $17 25 GB) and can omit largest items to fit the selected plan. Unmeasured sizes stay loud — Cloud does not invent bytes.
 - Control plane may store the include list, size estimates, and job metadata / hashes. Keys stay sealed to the runner. Never row bodies.
 
 ## Never-hold-keys threat model
@@ -70,8 +70,8 @@ Honest limit: Cloud isolation is **designed**, not claimed proven-green. Checks 
 
 | Proven in repo (unit / wiring) | Not proven |
 | --- | --- |
-| Product constants Cloud Free 100 MB · $7 / 10 GB · $17 / 25 GB | Live Square catalog IDs until Louis pins them |
-| Cloud Free designed as 100 MB, no scheduled service | Live entitlement enforcement of Cloud Free caps |
+| Product constants Cloud Free 40 GB · $7 / 10 GB · $17 / 25 GB | Live Square catalog IDs until Louis pins them |
+| Cloud Free designed as 40 GB, no scheduled service | Live entitlement enforcement of Cloud Free caps |
 | Table + bucket sizer include list (unit) | Live runner inventory ingest on portabase.dev |
 | Checkout fails closed with **exact env var names** when Square is missing | Live charge in production |
 | Webhook / confirm-checkout activate a paid plan on `/api/cloud/me` | End-to-end paid subscriber on portabase.dev |
@@ -121,7 +121,7 @@ View-model: `src/lib/dashboard-view.js`. API: `GET /api/cloud/dashboard` (Bearer
 
 **Proof lamp:** stays **RED** until a real dry-run/compare from the CLI or Cloud Runner is MATCH. Demo / empty / mocked reports cannot turn it green.
 
-Account strip: Cloud Free 100 MB / $7 10 GB / $17 25 GB. Customer portal URL is **not** wired until Louis pins it.
+Account strip: Cloud Free 40 GB / $7 10 GB / $17 25 GB. Customer portal URL is **not** wired until Louis pins it.
 
 ## Control-plane store
 

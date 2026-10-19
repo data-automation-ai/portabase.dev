@@ -144,7 +144,7 @@ export function TableSizer({
           <p>
             Selected estimate {formatHumanSize(fit.usedBytes)} of {fit.capLabel}
             {fit.overCap ? ` · over by ${formatHumanSize(fit.overByBytes)}` : ` · ${formatHumanSize(fit.remainingBytes)} remaining`}.
-            Exclude tables or buckets so the capsule fits Cloud Free 100 MB, $7 10 GB, or $17 25 GB.
+            Exclude tables or buckets so the capsule fits Cloud Free 40 GB, $7 10 GB, or $17 25 GB.
             Smallest public cap that fits this selection: <strong>{recommended.shortLabel}</strong>
             {recommended.stillOver ? ' (still over $17 25 GB)' : ''}.
           </p>
@@ -308,7 +308,7 @@ export function JobSetupWizard({
           </ol>
           {step === 0 && (
             <>
-              <p className="pb-muted">Pick the cap this capsule must fit. Cloud Free is 100 MB, manual only. $7 is one database up to 10 GB, 1 capsule / 24h. $17 is unlimited databases up to 25 GB, 3 capsules / day.</p>
+              <p className="pb-muted">Pick the cap this capsule must fit. Cloud Free is 40 GB, manual only. $7 is one database up to 10 GB, 1 capsule / 24h. $17 is unlimited databases up to 25 GB, 3 capsules / day.</p>
               <TableSizer
                 inventory={inv}
                 planId={planId}

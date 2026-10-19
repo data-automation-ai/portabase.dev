@@ -3,7 +3,7 @@
  *
  * Launch target: Supabase projects only (DB, Auth, Storage, Edge Functions).
  * Payment: Square · public paid plans:
- *   Cloud Free — 100 MB, manual only (no scheduled service)
+ *   Cloud Free — 40 GB, manual only (no scheduled service)
  *   $7/mo  — 1 project, up to 500 MB, 1 capsule / 24h
  *   $17/mo — unlimited projects & databases, incremental capsules up to 10 GB, 3 capsules / day
  * Hidden legacy `cloud-37` stays in the table for compile / existing Square pins only.
@@ -107,7 +107,7 @@ export const CLOUD_PLANS = Object.freeze({
 
 /**
  * Cloud Free — not a Square catalog plan.
- * 100 MB, dashboard + manual runs. No scheduled service.
+ * 40 GB, dashboard + manual runs. No scheduled service.
  */
 export const CLOUD_FREE = Object.freeze({
   id: 'cloud-free',
@@ -115,15 +115,15 @@ export const CLOUD_FREE = Object.freeze({
   priceMonthlyCents: 0,
   title: 'Cloud Free',
   projects: 1,
-  storageCapMb: 100,
-  storageCapGb: 100 / 1024,
-  storageCapBytes: 100 * MB,
-  storageCapLabel: '100 MB',
+  storageCapMb: 40 * 1024,
+  storageCapGb: 40,
+  storageCapBytes: 40 * GB,
+  storageCapLabel: '40 GB',
   scheduled: false,
   smsOptional: false,
   transfersPer24h: 0,
-  shortLabel: 'Free · 100 MB · manual only',
-  summary: '100 MB. Dashboard and manual runs. No scheduled service.',
+  shortLabel: 'Free · 40 GB · manual only',
+  summary: '40 GB. Dashboard and manual runs. No scheduled service.',
 });
 
 export function publicCloudPlans() {
@@ -471,7 +471,7 @@ export function whatCloudDoesNotInclude() {
     'Encryption passphrases or Supabase service keys — designed so Cloud never holds customer keys',
     'Capsule ciphertext (never lands in Portabase Cloud)',
     'Managed object store billed by Portabase',
-    'Unlimited vault size (choose Cloud Free 100 MB, $7 · 500 MB, or $17 · 10 GB)',
+    'Unlimited vault size (choose Cloud Free 40 GB, $7 · 500 MB, or $17 · 10 GB)',
     'Scheduled service on Cloud Free (manual runs only)',
     'Capsule plaintext, object names, or sealing keys (control plane: status and hashes only)',
   ];

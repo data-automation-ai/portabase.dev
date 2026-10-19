@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { getStore } from '@netlify/blobs';
+import { store as blobStore } from './subscription-store.mjs';
 import { createManagedSchedules, scheduleIndexIdentity, SCHEDULE_INDEX_STORE } from './managed-schedules.mjs';
 import { uuid } from './schedule-contract.mjs';
 
@@ -24,8 +24,8 @@ async function expand(prefix, db) {
 /** Bounded, persisted traversal; a large account prefix cannot starve later
  * owners forever. Queue CAS, not this traversal lease, guarantees uniqueness. */
 export function createManagedScheduleDispatcher({ env = process.env, service = createManagedSchedules({ env }),
-  indexDatabase = () => getStore({ name: SCHEDULE_INDEX_STORE, consistency: 'strong' }),
-  cursorDatabase = () => getStore({ name: 'portabase-schedule-dispatch', consistency: 'strong' }),
+  indexDatabase = () => blobStore(SCHEDULE_INDEX_STORE),
+  cursorDatabase = () => blobStore('portabase-schedule-dispatch'),
   clock = Date.now, maxPages = 16, maxAccounts = 25, maxDurationMs = 20000 } = {}) {
   if (!Number.isSafeInteger(maxPages) || maxPages < 2 || maxPages > 64 || !Number.isSafeInteger(maxAccounts) || maxAccounts < 1 || maxAccounts > 100
     || !Number.isSafeInteger(maxDurationMs) || maxDurationMs < 1000 || maxDurationMs > 25000) throw new Error('invalid_schedule_dispatch_options');

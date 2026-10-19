@@ -1,4 +1,4 @@
-import { getStore } from '@netlify/blobs';
+import { store as blobStore } from '../shared/subscription-store.mjs';
 import { randomUUID } from 'node:crypto';
 import { authenticateAgent } from '../shared/agent-store.mjs';
 import { safeCloudEvent } from '../shared/safe-telemetry.mjs';
@@ -12,7 +12,7 @@ function json(status, body) {
   });
 }
 
-export function createTelemetryHandler({ authenticate = authenticateAgent, storeFactory = () => getStore({ name: 'portabase-cloud-telemetry', consistency: 'strong' }), now = () => Date.now(), enqueueNotifications = input => createNotificationOutbox().enqueue(input) } = {}) {
+export function createTelemetryHandler({ authenticate = authenticateAgent, storeFactory = () => blobStore('portabase-cloud-telemetry'), now = () => Date.now(), enqueueNotifications = input => createNotificationOutbox().enqueue(input) } = {}) {
   return async request => {
     if (request.method !== 'POST') return json(405, { error: 'method_not_allowed' });
     let agent;

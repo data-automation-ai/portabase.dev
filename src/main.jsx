@@ -376,7 +376,7 @@ function CliVsCloud() {
     ['Targeted restores', 'You run restore / replay.', 'Yes. Console-guided.'],
     ['Telemetry reports', 'Local status only.', 'Yes. Status and hashes.'],
     ['SMS status alerts', 'No.', 'Optional on $17. Status only. No keys.'],
-    ['Price', 'Free', 'Cloud Free 100 MB · $7 / $17'],
+    ['Price', 'Free', 'Cloud Free 40 GB · $7 / $17'],
   ];
   return <section className="section cli-vs-cloud" id="cli-vs-cloud">
     <div className="shell">
@@ -1269,7 +1269,7 @@ function CloudTeaser() {
       <div>
         <div className="section-kicker green">ESCAPE OPS</div>
         <h2>Open source is the Escape.<br />Cloud keeps the Escape running.</h2>
-        <p><strong>Supabase only.</strong> GitHub = free Escape engine. <strong>This site</strong> = hosted <strong>GUI</strong>, guided configuration, <strong>telemetry</strong>, and optional SMS on $17 — so the Escape is not a forgotten cron job. <strong>Cloud Free</strong> is 100 MB, manual only. Paid: <strong>$7/mo</strong> (1 project, up to 500 MB, 1 capsule / 24h) or <strong>$17/mo</strong> (unlimited projects, incremental capsules up to 10 GB, 3 capsules / day). You provide capsule storage. Zero knowledge of your encryption keys. Restore into your <strong>contingency account</strong> — a free second Supabase account that the incident cannot touch. Refunds are self-serve: full within 8 days, prorated after, one button, no email required.</p>
+        <p><strong>Supabase only.</strong> GitHub = free Escape engine. <strong>This site</strong> = hosted <strong>GUI</strong>, guided configuration, <strong>telemetry</strong>, and optional SMS on $17 — so the Escape is not a forgotten cron job. <strong>Cloud Free</strong> is 40 GB, manual only. Paid: <strong>$7/mo</strong> (1 project, up to 500 MB, 1 capsule / 24h) or <strong>$17/mo</strong> (unlimited projects, incremental capsules up to 10 GB, 3 capsules / day). You provide capsule storage. Zero knowledge of your encryption keys. Restore into your <strong>contingency account</strong> — a free second Supabase account that the incident cannot touch. Refunds are self-serve: full within 8 days, prorated after, one button, no email required.</p>
         <p className="cloud-insurance"><strong>Both versions are fire insurance — and insurance only works before the fire.</strong> The free CLI is the policy you write yourself: one snapshot, taken before any lockout, that the incident cannot reach. Cloud is the premium: a few dollars a month to keep that policy current, tested, and watched. A proven restore is the payout — your business rebuilt in a new account while the old one is still locked. Nobody is glad they paid the premium. Everyone is glad they had the policy.</p>
         <div className="cloud-teaser-actions">
           <a className="button button-primary" href="/login?mode=signup&next=/app">Start free trial <Arrow /></a>
@@ -1387,11 +1387,11 @@ function CloudPage() {
         <div className="shell">
           <div className="price-copy" style={{ maxWidth: 820, marginBottom: 28 }}>
             <div className="section-kicker green">PLANS &amp; PRICING · BYO VAULT · ZERO-KNOWLEDGE KEYS</div>
-            <h2>Cloud Free 100 MB, then $7/mo — upgrade anytime in-app.</h2>
+            <h2>Cloud Free 40 GB, then $7/mo — upgrade anytime in-app.</h2>
             <p>
               The open-source CLI engine (<code>npx portabase</code>) is free forever on your own machine.
               <strong> Portabase Cloud</strong> adds the web dashboard, table &amp; bucket sizer, automated schedules, cross-account restore orchestration, and SMS alerts.
-              <strong> Cloud Free</strong> includes up to 100 MB for manual runs (The free plan has no scheduled service).
+              <strong> Cloud Free</strong> includes up to 40 GB for manual runs (The free plan has no scheduled service).
               Paid plans start with a <strong>7-day free trial</strong> at <strong>$7/mo</strong> via Square, with an anytime <strong>+$10/mo in-app expansion</strong> ($17/mo total) for unlimited projects, incremental capsules up to 10 GB, and 3 capsules / day.
             </p>
           </div>
@@ -1404,14 +1404,14 @@ function CloudPage() {
                   <b>$0<span className="per">/mo</span></b>
                   <small className="list-price">1 project · up to {CLOUD_FREE.storageCapLabel}</small>
                 </div>
-                <p>Manual backups and cross-account restore checks for projects up to 100 MB. Capsules land in <strong>your</strong> storage.</p>
+                <p>Manual backups and cross-account restore checks for projects up to 40 GB. Capsules land in <strong>your</strong> storage.</p>
               </div>
               <ul>
                 <li><span>✓</span> 1 Supabase project (up to {CLOUD_FREE.storageCapLabel})</li>
                 <li><span>✓</span> Restore into any separate Supabase account</li>
                 <li><span>✓</span> Dashboard · manual runs</li>
                 <li><span>✓</span> <strong>No scheduled service</strong></li>
-                <li><span>✓</span> Table + bucket sizer to fit 100 MB</li>
+                <li><span>✓</span> Table + bucket sizer to fit 40 GB</li>
                 <li><span>✓</span> Your Google Drive, Dropbox, S3, or disk</li>
               </ul>
               <a className="button button-ghost purchase" href={signedIn ? '/dashboard' : '/login?mode=signup&next=/dashboard'}>
@@ -1515,7 +1515,7 @@ function CloudPage() {
                 <tr>
                   <th>Capability</th>
                   <th>Free CLI (<code>npx portabase</code>)<br /><span>Apache-2.0 · Run on your machine</span></th>
-                  <th>Portabase Cloud<br /><span>Free 100 MB · $7 (500 MB) · $17 (10 GB)</span></th>
+                  <th>Portabase Cloud<br /><span>Free 40 GB · $7 (500 MB) · $17 (10 GB)</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -1565,11 +1565,11 @@ function CloudPage() {
 }
 
 function LegacyPurchaseNotice() {
-  return <div className="thanks"><div className="thanks-card"><Logo href="/" /><div className="section-kicker green">MODEL UPDATE</div><h1>Portabase is open core + Cloud subscription.</h1><p>There is no $147 software unlock. The recovery engine is free on GitHub. Portabase Cloud is Cloud Free 100 MB, then $7/mo (500 MB) or $17/mo (10 GB) — console, table sizer, telemetry, and alert chains. We do not host your capsules or learn your keys.</p><a className="button button-primary" href="/cloud">Open source vs Cloud <Arrow /></a><a className="button button-ghost" href="mailto:escape@portabase.dev?subject=Legacy Portabase purchase">Legacy purchase help <Arrow /></a></div></div>;
+  return <div className="thanks"><div className="thanks-card"><Logo href="/" /><div className="section-kicker green">MODEL UPDATE</div><h1>Portabase is open core + Cloud subscription.</h1><p>There is no $147 software unlock. The recovery engine is free on GitHub. Portabase Cloud is Cloud Free 40 GB, then $7/mo (500 MB) or $17/mo (10 GB) — console, table sizer, telemetry, and alert chains. We do not host your capsules or learn your keys.</p><a className="button button-primary" href="/cloud">Open source vs Cloud <Arrow /></a><a className="button button-ghost" href="mailto:escape@portabase.dev?subject=Legacy Portabase purchase">Legacy purchase help <Arrow /></a></div></div>;
 }
 
 function Footer() {
-  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#never-hold-keys">Keys</a><a href="/#faq">FAQ</a><a href="/#reality">The reality</a><a href="/#stories">Real incidents</a><a href="/#escape">Escape plan</a><a href="/#audit">Risk check</a><a href="/docs">Docs</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · {planPriceRangeLabel()}</a><a href="/legal">Legal</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/DataAutomation-ai/portabase-CLI" target="_blank" rel="noreferrer">GitHub · portabase-CLI</a><span>Independent product.<br />Not affiliated with Supabase, Inc.</span><span>Apache-2.0 open core. Cloud is ops subscription — designed so we never hold keys, never custody of capsule contents. Cloud Free 100 MB · $7 (500 MB) · $17 (10 GB).</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your vault. Your way out.</span></div></footer>;
+  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#never-hold-keys">Keys</a><a href="/#faq">FAQ</a><a href="/#reality">The reality</a><a href="/#stories">Real incidents</a><a href="/#escape">Escape plan</a><a href="/#audit">Risk check</a><a href="/docs">Docs</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · {planPriceRangeLabel()}</a><a href="/legal">Legal</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/DataAutomation-ai/portabase-CLI" target="_blank" rel="noreferrer">GitHub · portabase-CLI</a><span>Independent product.<br />Not affiliated with Supabase, Inc.</span><span>Apache-2.0 open core. Cloud is ops subscription — designed so we never hold keys, never custody of capsule contents. Cloud Free 40 GB · $7 (500 MB) · $17 (10 GB).</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your vault. Your way out.</span></div></footer>;
 }
 
 /**

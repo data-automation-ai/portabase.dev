@@ -1,5 +1,4 @@
-import { withBlobs } from '../shared/subscription-store.mjs';
-import { getStore } from '@netlify/blobs';
+import { store as blobStore, withBlobs } from '../shared/subscription-store.mjs';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import { ownerKey } from '../shared/agent-store.mjs';
 
@@ -15,7 +14,7 @@ function valid(input) {
     });
 }
 
-export function createNotificationPreferencesHandler({ authenticate = verifyCloudUser, storeFactory = () => getStore({ name: 'portabase-notification-preferences', consistency: 'strong' }) } = {}) {
+export function createNotificationPreferencesHandler({ authenticate = verifyCloudUser, storeFactory = () => blobStore('portabase-notification-preferences') } = {}) {
   return async event => {
     if (!['GET', 'PUT'].includes(event.httpMethod)) return jsonResponse(405, { error: 'method_not_allowed' });
     let owner;

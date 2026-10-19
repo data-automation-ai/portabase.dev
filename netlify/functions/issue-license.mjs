@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { getStore } from '@netlify/blobs';
+import { store as blobStore } from '../shared/subscription-store.mjs';
 import { signLicense } from '../../utility/license-format.mjs';
 import { resolveServerSecret } from '../shared/secrets.mjs';
 import { isPaidEssentialsOrder } from './square-order.mjs';
@@ -30,7 +30,7 @@ async function paidOrder(orderId) {
 }
 
 async function claimPlatform(orderId, platform) {
-  const store = getStore('portabase-license-claims');
+  const store = blobStore('portabase-license-claims');
   let claim = await store.get(orderId, { type: 'json', consistency: 'strong' });
   if (!claim) {
     const candidate = buildLicensePayload({ orderId, platform });

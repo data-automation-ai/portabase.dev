@@ -1,11 +1,11 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { getStore } from '@netlify/blobs';
+import { store } from './subscription-store.mjs';
 import { CLOUD_MAX_AGENTS } from './product.mjs';
 import { RUNNER_ID_RE } from '../../cloud/runner/config-reference.mjs';
 import { publicAgentRecord } from './public-records.mjs';
 
 export const AGENT_STORE = 'portabase-cloud-agent-credentials';
-export const agentStore = () => getStore({ name: AGENT_STORE, consistency: 'strong' });
+export const agentStore = () => store(AGENT_STORE);
 const digest = value => createHash('sha256').update(value).digest('hex');
 const REF = /^[a-z0-9]{20}$/;
 export function ownerKey(user) {

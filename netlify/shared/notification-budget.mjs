@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { getStore } from '@netlify/blobs';
+import { store as blobStore } from './subscription-store.mjs';
 
 export const NOTIFICATION_BUDGET_STORE = 'portabase-notification-budgets';
 export function validateNotificationLimits(limits) {
@@ -17,7 +17,7 @@ function validate(row, owner, channel, day) {
 }
 
 /** Reserve before dispatch. Crashes and ambiguous outcomes keep send capacity consumed. */
-export function createNotificationBudget({ store = () => getStore({ name: NOTIFICATION_BUDGET_STORE, consistency: 'strong' }), clock = Date.now } = {}) {
+export function createNotificationBudget({ store = () => blobStore(NOTIFICATION_BUDGET_STORE), clock = Date.now } = {}) {
   const db = () => typeof store === 'function' ? store() : store;
   return {
     async reserve(owner, channel, limits) {

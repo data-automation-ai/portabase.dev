@@ -87,15 +87,15 @@ export const CLOUD_FREE = Object.freeze({
   priceMonthlyCents: 0,
   title: 'Cloud Free',
   projects: 1,
-  storageCapMb: 100,
-  storageCapGb: 100 / 1024,
-  storageCapBytes: 100 * MB,
-  storageCapLabel: '100 MB',
+  storageCapMb: 40 * 1024,
+  storageCapGb: 40,
+  storageCapBytes: 40 * GB,
+  storageCapLabel: '40 GB',
   scheduled: false,
   smsOptional: false,
   transfersPer24h: 0,
-  shortLabel: 'Free · 100 MB · manual only',
-  summary: '100 MB. Dashboard and manual runs. No scheduled service.',
+  shortLabel: 'Free · 40 GB · manual only',
+  summary: '40 GB. Dashboard and manual runs. No scheduled service.',
 });
 
 export function publicCloudPlans() {

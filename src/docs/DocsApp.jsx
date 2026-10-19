@@ -226,7 +226,7 @@ function CloudDocs() {
       <p>
         Before a Cloud job, the dashboard sizer shows per-table sizes and per-bucket sizes / object counts from the free engine
         doctor / size inventory. You selectively <strong>include or exclude</strong> tables and Storage buckets so the capsule fits
-        Cloud Free 100 MB, $7 500 MB, or $17 10 GB. Anything omitted is called out as <strong>NOT COVERED</strong>.
+        Cloud Free 40 GB, $7 500 MB, or $17 10 GB. Anything omitted is called out as <strong>NOT COVERED</strong>.
         Table omit uses existing <code>--exclude-table-list</code>. No new CLI capture flags.
         The control plane stores the include list, size estimates, and job metadata / hashes — never keys or row bodies.
       </p>
@@ -244,13 +244,13 @@ function CloudDocs() {
             <tr><td>Capsules</td><td>Manual only</td><td>$7 · 1 / 24h · $17 · 3 / day</td></tr>
             <tr><td>Scheduled service</td><td><strong>The free plan has no scheduled service</strong></td><td>Yes · managed schedules</td></tr>
             <tr><td>SMS status</td><td>No</td><td>Optional on $17 — status only</td></tr>
-            <tr><td>Table + bucket sizer</td><td>Yes · fit 100 MB</td><td>Yes · include/exclude before a job</td></tr>
+            <tr><td>Table + bucket sizer</td><td>Yes · fit 40 GB</td><td>Yes · include/exclude before a job</td></tr>
             <tr><td>Vault</td><td>Customer-owned</td><td>Customer-owned</td></tr>
           </tbody>
         </table>
       </div>
       <div className="docs-callout honest">
-        <strong>Designed offer.</strong> Cloud Free is 100 MB, dashboard and manual runs — <strong>no scheduled service</strong>.
+        <strong>Designed offer.</strong> Cloud Free is 40 GB, dashboard and manual runs — <strong>no scheduled service</strong>.
         Live entitlement enforcement of that cap is not a completed production proof. Paid schedules are the {planPriceRangeLabel()} Square plans.
       </div>
     </>

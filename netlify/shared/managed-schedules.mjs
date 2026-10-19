@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
-import { getStore } from '@netlify/blobs';
 import { agentStore, agentKey, ownerKey, runnerJobIdentity } from './agent-store.mjs';
-import { getSubscriptionForUser } from './subscription-store.mjs';
+import { store as blobStore, getSubscriptionForUser } from './subscription-store.mjs';
 import { runnerAdmission } from './runner-admission.mjs';
 import { minScheduleHours } from './product.mjs';
 import { normalizeJobQueue, storedJobQueue } from './job-queue-envelope.mjs';
@@ -24,8 +23,8 @@ const mutationIdentity = body => body && uuid(body.id) && Number.isSafeInteger(b
 const cancelQueued = (jobs, id, now) => jobs.map(job => job.status === 'queued' && job.schedule?.id === id
   ? { ...job, status: 'cancelled', finishedAt: new Date(now).toISOString(), safeError: null } : job);
 
-export function createManagedSchedules({ database = () => getStore({ name: 'portabase-cloud-jobs', consistency: 'strong' }),
-  indexDatabase = () => getStore({ name: SCHEDULE_INDEX_STORE, consistency: 'strong' }), agentDatabase = agentStore,
+export function createManagedSchedules({ database = () => blobStore('portabase-cloud-jobs'),
+  indexDatabase = () => blobStore(SCHEDULE_INDEX_STORE), agentDatabase = agentStore,
   subscription = getSubscriptionForUser, clock = Date.now, env = process.env } = {}) {
   const enabled = () => env.PORTABASE_SCHEDULE_DISPATCH_ENABLED === 'true';
   async function authority(user, now) {
