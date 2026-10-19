@@ -75,6 +75,7 @@ export function DatabaseScopeSelector({
   const [newTableInputs, setNewTableInputs] = useState({});
   const [sortConfig, setSortConfig] = useState({});
   const [searchQuery, setSearchQuery] = useState({});
+  const [targetCapMb, setTargetCapMb] = useState(1000);
   const [colWidths, setColWidths] = useState({
     type: 78,
     schema: 124,
@@ -221,6 +222,33 @@ export function DatabaseScopeSelector({
         ...db,
         tables: (db.tables || []).map(mapItem),
         binaries: Array.isArray(db.binaries) ? db.binaries.map(mapItem) : undefined,
+      };
+    });
+    updateDatabases(next);
+  };
+
+  const handleSetFilteredMode = (dbId, mode, matchingItems = []) => {
+    if (readOnly || !Array.isArray(matchingItems) || matchingItems.length === 0) return;
+    const matchKeys = new Set(matchingItems.map((item) => parseObjectRow(item).key));
+    const next = dbs.map((db) => {
+      if (db.id !== dbId) return db;
+      const updateItem = (item) => {
+        const parsed = parseObjectRow(item);
+        if (matchKeys.has(parsed.key) || matchKeys.has(item.name)) {
+          if (parsed.isBinary) {
+            return {
+              ...item,
+              mode: mode === TABLE_COPY_MODES.SKIP ? BINARY_COPY_MODES.EXCLUDE : BINARY_COPY_MODES.INCLUDE,
+            };
+          }
+          return { ...item, mode };
+        }
+        return item;
+      };
+      return {
+        ...db,
+        tables: (db.tables || []).map(updateItem),
+        binaries: Array.isArray(db.binaries) ? db.binaries.map(updateItem) : undefined,
       };
     });
     updateDatabases(next);
@@ -1589,6 +1617,31 @@ export function DatabaseScopeSelector({
                                 );
                               })
                             )}
+                            {/* Pinned Subtotal Row for this Database */}
+                            {sortedGroups.length > 0 && (
+                              <tr style={{ background: '#f8fafc', borderTop: '2px solid #64748b', height: '26px' }}>
+                                <td style={{ ...baseCellStyle, fontWeight: 700, color: '#0f172a', background: '#f1f5f9' }}>
+                                  SUBTOTAL
+                                </td>
+                                <td style={{ ...baseCellStyle, fontWeight: 700, color: '#0f172a', background: '#f1f5f9' }}>
+                                  {db.projectName || db.name}
+                                </td>
+                                <td style={{ ...baseCellStyle, fontWeight: 600, color: '#475569', background: '#f1f5f9' }}>
+                                  {allObjects.length} objects ({tables.length} tables, {binaries.length} binaries)
+                                </td>
+                                <td style={{ ...baseCellStyle, textAlign: 'right', fontWeight: 700, color: '#0f172a', background: '#f1f5f9' }}>
+                                  {formatMb(dbSummary.totalSourceMb)}
+                                </td>
+                                <td style={{ ...baseCellStyle, color: '#94a3b8', background: '#f1f5f9' }}>—</td>
+                                <td style={{ ...baseCellStyle, color: '#94a3b8', background: '#f1f5f9' }}>—</td>
+                                <td style={{ ...baseCellStyle, textAlign: 'center', fontWeight: 700, color: '#1e3a8a', background: '#e0f2fe' }}>
+                                  Database Subtotal Included:
+                                </td>
+                                <td style={{ ...baseCellStyle, textAlign: 'right', fontWeight: 700, color: '#0f766e', fontSize: '9pt', background: '#e0f2fe' }}>
+                                  {formatMb(dbSummary.includedMb)}
+                                </td>
+                              </tr>
+                            )}
                           </tbody>
                         </table>
                       </div>
@@ -1682,30 +1735,54 @@ export function DatabaseScopeSelector({
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {summary.recommendedTier === 'cloud-7' ? (
-            <span
-              className="pb-badge pb-badge-ok"
-              style={{ fontSize: '12px', padding: '4px 10px', textTransform: 'none' }}
-            >
-              {summary.estimatedCompressedMb === null
-                ? 'Unprobed size · $7/mo Starter (500 MB allowance)'
-                : '✓ Fits $7/mo Starter (500 MB allowance)'}
-            </span>
-          ) : (
-            <span
-              className="pb-badge"
-              style={{
-                fontSize: '12px',
-                padding: '4px 10px',
-                background: '#1c2536',
-                color: '#93c5fd',
-                textTransform: 'none',
-              }}
-            >
-              Multi-Database / 10 GB Expansion ($17/mo total)
-            </span>
-          )}
+        {/* Dynamic Target Budget Cap & Safety Gauge */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '260px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+            <span style={{ fontSize: '11px', color: '#8b949e', textTransform: 'uppercase' }}>Target Budget Cap:</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <input
+                type="number"
+                value={targetCapMb}
+                onChange={(e) => setTargetCapMb(Math.max(1, Number(e.target.value) || 1))}
+                style={{
+                  width: '72px',
+                  background: '#0d1117',
+                  border: '1px solid #30363d',
+                  borderRadius: '4px',
+                  padding: '2px 6px',
+                  color: '#f0f6fc',
+                  fontSize: '11px',
+                  fontFamily: 'monospace',
+                  textAlign: 'right',
+                }}
+              />
+              <span style={{ fontSize: '11px', color: '#8b949e' }}>MB</span>
+            </div>
+          </div>
+          {/* Visual Progress Bar */}
+          <div style={{
+            width: '100%',
+            height: '8px',
+            background: '#21262d',
+            borderRadius: '4px',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              width: `${Math.min(100, ((summary.grandTotalMb || 0) / targetCapMb) * 100)}%`,
+              height: '100%',
+              background: (summary.grandTotalMb || 0) > targetCapMb
+                ? '#f85149'
+                : (summary.grandTotalMb || 0) > targetCapMb * 0.85
+                  ? '#d29922'
+                  : '#3ecf8e',
+              transition: 'width 0.2s ease',
+            }} />
+          </div>
+          <div style={{ fontSize: '10.5px', color: (summary.grandTotalMb || 0) > targetCapMb ? '#f85149' : '#8b949e', textAlign: 'right' }}>
+            {(summary.grandTotalMb || 0) <= targetCapMb
+              ? `${(targetCapMb - (summary.grandTotalMb || 0)).toFixed(2)} MB remaining under cap`
+              : `⚠️ Exceeds cap by ${((summary.grandTotalMb || 0) - targetCapMb).toFixed(2)} MB`}
+          </div>
         </div>
       </div>
     </div>

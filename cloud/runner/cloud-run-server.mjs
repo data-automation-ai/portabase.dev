@@ -112,6 +112,45 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
       background: var(--bg);
       color: var(--text);
       line-height: 1.45;
+      border: 16px solid transparent;
+      border-image: repeating-linear-gradient(
+        -45deg,
+        #facc15,
+        #facc15 18px,
+        #000000 18px,
+        #000000 36px
+      ) 16;
+      min-height: 100vh;
+    }
+    .hazard-tape-header {
+      background: repeating-linear-gradient(
+        -45deg,
+        #facc15,
+        #facc15 16px,
+        #000000 16px,
+        #000000 32px
+      );
+      padding: 6px 16px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.8);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .hazard-tape-text {
+      background: #000;
+      color: #facc15;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      padding: 4px 14px;
+      border-radius: 4px;
+      border: 1px solid #facc15;
+      text-transform: uppercase;
+      box-shadow: 0 0 12px rgba(250, 204, 21, 0.4);
     }
     .container {
       max-width: 1440px;
@@ -334,6 +373,9 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
   </style>
 </head>
 <body>
+  <div class="hazard-tape-header">
+    <span class="hazard-tape-text">⚠️ RESTRICTED AIR-GAPPED PERIMETER · ZERO-KNOWLEDGE GOOGLE CLOUD RUNNER · OPERATOR ACCESS FORBIDDEN ⚠️</span>
+  </div>
   <div class="container">
     <div class="runner-header">
       <div style="display:flex;align-items:center;gap:12px;">

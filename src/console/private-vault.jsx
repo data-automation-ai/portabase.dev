@@ -784,67 +784,99 @@ export function PrivateSealedVault({
               </button>
             </div>
 
-            {/* 1-Click OAuth Inside Google Cloud Runner */}
+            {/* 1-Click OAuth Inside Google Cloud Runner with Hazard Perimeter */}
             {authMethod === 'oauth' && (
-              <div style={{ background: '#0d1117', padding: '14px', borderRadius: '8px', border: '1px solid #30363d', display: 'grid', gap: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                  <div>
-                    <strong style={{ fontSize: '13px', color: '#3ecf8e' }}>Supabase OAuth Connection Inside Google Cloud Runner</strong>
-                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#8b949e' }}>
-                      Connect directly inside your provisioned Google Cloud Runner (<code>portabase-runner</code>) to discover all projects, databases, and binary storage buckets.
-                    </p>
+              <div style={{
+                border: '10px solid transparent',
+                borderImage: 'repeating-linear-gradient(-45deg, #facc15, #facc15 14px, #000000 14px, #000000 28px) 10',
+                borderRadius: '8px',
+                overflow: 'hidden',
+                boxShadow: '0 0 20px rgba(250, 204, 21, 0.25)',
+                background: '#070b10',
+                marginBottom: '14px',
+              }}>
+                <div style={{
+                  background: 'repeating-linear-gradient(-45deg, #facc15, #facc15 12px, #000000 12px, #000000 24px)',
+                  padding: '5px 12px',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}>
+                  <span style={{
+                    background: '#000',
+                    color: '#facc15',
+                    fontFamily: 'monospace',
+                    fontSize: '10.5px',
+                    fontWeight: 800,
+                    letterSpacing: '0.12em',
+                    padding: '2px 10px',
+                    borderRadius: '3px',
+                    border: '1px solid #facc15',
+                    textTransform: 'uppercase',
+                  }}>
+                    ⚠️ AIR-GAPPED PERIMETER · ZERO-KNOWLEDGE GOOGLE CLOUD RUNNER · OPERATOR ACCESS FORBIDDEN ⚠️
+                  </span>
+                </div>
+                <div style={{ padding: '16px', display: 'grid', gap: '12px', background: '#0a0e14' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                    <div>
+                      <strong style={{ fontSize: '13.5px', color: '#3ecf8e' }}>Supabase Connection Inside Isolated Google Cloud Runner</strong>
+                      <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#8b949e' }}>
+                        Walled-off execution zone inside your provisioned Google Cloud Runner (<code>portabase-runner</code>). 0 secret bytes reach Portabase web hosts.
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <a
+                        href={CLOUD_RUNNER_SERVICE_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="pb-btn pb-btn-sm"
+                        style={{ fontSize: '11px', textDecoration: 'none', background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d' }}
+                      >
+                        ↗ Open Inside Cloud Runner
+                      </a>
+                      <button
+                        type="button"
+                        onClick={handleSupabaseOAuthConnect}
+                        disabled={isDiscovering}
+                        className="pb-btn pb-btn-sm pb-btn-primary"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: isDiscovering ? 'wait' : 'pointer' }}
+                      >
+                        {isDiscovering ? '⏳ Discovering Projects...' : '🚀 Sign in with Supabase'}
+                      </button>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                    <a
-                      href={CLOUD_RUNNER_SERVICE_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="pb-btn pb-btn-sm"
-                      style={{ fontSize: '11px', textDecoration: 'none' }}
-                    >
-                      ↗ Open Inside Cloud Runner
-                    </a>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                      type="text"
+                      className="pb-input"
+                      placeholder="Optional: Paste customer Supabase OAuth / Access Token (sbp_...) inside runner"
+                      value={runnerSupabaseToken}
+                      onChange={(e) => setRunnerSupabaseToken(e.target.value)}
+                      style={{
+                        flex: 1,
+                        minWidth: '240px',
+                        fontFamily: 'monospace',
+                        fontSize: '12px',
+                        WebkitTextSecurity: showRunnerSupabaseToken ? 'none' : 'disc',
+                      }}
+                      autoComplete="off"
+                    />
                     <button
                       type="button"
-                      onClick={handleSupabaseOAuthConnect}
-                      disabled={isDiscovering}
-                      className="pb-btn pb-btn-sm pb-btn-primary"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: isDiscovering ? 'wait' : 'pointer' }}
+                      className="pb-btn pb-btn-sm"
+                      onClick={() => setShowRunnerSupabaseToken((v) => !v)}
+                      style={{ fontSize: '11px', padding: '4px 8px' }}
                     >
-                      {isDiscovering ? '⏳ Discovering Projects...' : '🚀 Sign in with Supabase'}
+                      {showRunnerSupabaseToken ? 'Hide' : 'Show'}
                     </button>
                   </div>
+                  {oauthConnectedFeedback && (
+                    <div style={{ marginTop: '4px', fontSize: '12px', color: '#3ecf8e', fontWeight: 600 }}>
+                      {oauthConnectedFeedback}
+                    </div>
+                  )}
                 </div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <input
-                    type="text"
-                    className="pb-input"
-                    placeholder="Optional: Paste customer Supabase OAuth / Access Token (sbp_...) inside runner"
-                    value={runnerSupabaseToken}
-                    onChange={(e) => setRunnerSupabaseToken(e.target.value)}
-                    style={{
-                      flex: 1,
-                      minWidth: '240px',
-                      fontFamily: 'monospace',
-                      fontSize: '12px',
-                      WebkitTextSecurity: showRunnerSupabaseToken ? 'none' : 'disc',
-                    }}
-                    autoComplete="off"
-                  />
-                  <button
-                    type="button"
-                    className="pb-btn pb-btn-sm"
-                    onClick={() => setShowRunnerSupabaseToken((v) => !v)}
-                    style={{ fontSize: '11px', padding: '4px 8px' }}
-                  >
-                    {showRunnerSupabaseToken ? 'Hide' : 'Show'}
-                  </button>
-                </div>
-                {oauthConnectedFeedback && (
-                  <div style={{ marginTop: '4px', fontSize: '12px', color: '#3ecf8e' }}>
-                    {oauthConnectedFeedback}
-                  </div>
-                )}
               </div>
             )}
 
