@@ -1,0 +1,17 @@
+node_modules/
+dist/
+release/
+.git/
+.netlify/
+.worktrees/
+portabase-capsules/
+portabase-status/
+desktop/
+public/
+src/
+tests/
+docs/
+scripts/
+*.log
+*.tgz
+*.zip

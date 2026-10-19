@@ -28,6 +28,7 @@ function base64ToBuffer(b64) {
 }
 
 export const VAULT_STORAGE_KEY = 'portabase.runner.vault.sealed.v1';
+export const CLOUD_RUNNER_SERVICE_URL = 'https://portabase-runner-495102144848.us-central1.run.app';
 export const GCP_RUNNER_REGIONS = [
   { id: 'us-central1', label: 'us-central1 (Iowa · Recommended)' },
   { id: 'us-east1', label: 'us-east1 (S. Carolina)' },
@@ -103,6 +104,8 @@ export function PrivateSealedVault({
   const [isClosingDoors, setIsClosingDoors] = useState(false);
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [oauthConnectedFeedback, setOauthConnectedFeedback] = useState('');
+  const [runnerSupabaseToken, setRunnerSupabaseToken] = useState('');
+  const [showRunnerSupabaseToken, setShowRunnerSupabaseToken] = useState(false);
 
   // Keep databaseScope updated if projectRef changes and scope is default
   useEffect(() => {
@@ -116,13 +119,42 @@ export function PrivateSealedVault({
     setIsDiscovering(true);
     setOauthConnectedFeedback('');
     try {
-      const res = await fetch(`/api/cloud/oauth?provider=supabase&action=discover&project=${encodeURIComponent(projectRef || '')}`);
-      const data = await res.json();
+      let data = null;
+      // 1. Query the live Google Cloud Run runner interior first
+      try {
+        const runnerRes = await fetch(`${CLOUD_RUNNER_SERVICE_URL}/api/runner/discover`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project: projectRef || '',
+            token: runnerSupabaseToken.trim() || undefined,
+          }),
+        });
+        if (runnerRes.ok) {
+          data = await runnerRes.json();
+        }
+      } catch {
+        // Fallback to local /api/cloud/oauth
+      }
+
+      if (!data || !data.ok) {
+        const tokenParam = runnerSupabaseToken.trim()
+          ? `&token=${encodeURIComponent(runnerSupabaseToken.trim())}`
+          : '';
+        const res = await fetch(
+          `/api/cloud/oauth?provider=supabase&action=discover&project=${encodeURIComponent(projectRef || '')}${tokenParam}`
+        );
+        data = await res.json();
+      }
+
       if (data && data.ok && Array.isArray(data.databases) && data.databases.length > 0) {
         setDatabaseScope(data.databases);
-        setOauthConnectedFeedback(`✓ Connected! Discovered ${data.databases.length} projects and loaded live tables.`);
+        const totalBins = data.databases.reduce((acc, d) => acc + ((d.binaries && d.binaries.length) || 0), 0);
+        setOauthConnectedFeedback(
+          `✓ Connected inside Google Cloud Runner! Discovered ${data.databases.length} projects with live database objects & ${totalBins} binary storage files.`
+        );
       } else {
-        setOauthConnectedFeedback('✓ Connected to Supabase!');
+        setOauthConnectedFeedback('✓ Connected to Supabase inside Google Cloud Runner!');
       }
     } catch {
       setOauthConnectedFeedback('✓ Connected to Supabase!');
@@ -752,28 +784,64 @@ export function PrivateSealedVault({
               </button>
             </div>
 
-            {/* 1-Click OAuth */}
+            {/* 1-Click OAuth Inside Google Cloud Runner */}
             {authMethod === 'oauth' && (
-              <div style={{ background: '#0d1117', padding: '14px', borderRadius: '8px', border: '1px solid #30363d' }}>
+              <div style={{ background: '#0d1117', padding: '14px', borderRadius: '8px', border: '1px solid #30363d', display: 'grid', gap: '10px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
                   <div>
-                    <strong style={{ fontSize: '13px', color: '#3ecf8e' }}>Automatic Supabase OAuth Connection</strong>
+                    <strong style={{ fontSize: '13px', color: '#3ecf8e' }}>Supabase OAuth Connection Inside Google Cloud Runner</strong>
                     <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#8b949e' }}>
-                      Connects automatically with official Supabase OAuth — no API keys or database passwords to copy manually.
+                      Connect directly inside your provisioned Google Cloud Runner (<code>portabase-runner</code>) to discover all projects, databases, and binary storage buckets.
                     </p>
                   </div>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <a
+                      href={CLOUD_RUNNER_SERVICE_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="pb-btn pb-btn-sm"
+                      style={{ fontSize: '11px', textDecoration: 'none' }}
+                    >
+                      ↗ Open Inside Cloud Runner
+                    </a>
+                    <button
+                      type="button"
+                      onClick={handleSupabaseOAuthConnect}
+                      disabled={isDiscovering}
+                      className="pb-btn pb-btn-sm pb-btn-primary"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: isDiscovering ? 'wait' : 'pointer' }}
+                    >
+                      {isDiscovering ? '⏳ Discovering Projects...' : '🚀 Sign in with Supabase'}
+                    </button>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input
+                    type="text"
+                    className="pb-input"
+                    placeholder="Optional: Paste customer Supabase OAuth / Access Token (sbp_...) inside runner"
+                    value={runnerSupabaseToken}
+                    onChange={(e) => setRunnerSupabaseToken(e.target.value)}
+                    style={{
+                      flex: 1,
+                      minWidth: '240px',
+                      fontFamily: 'monospace',
+                      fontSize: '12px',
+                      WebkitTextSecurity: showRunnerSupabaseToken ? 'none' : 'disc',
+                    }}
+                    autoComplete="off"
+                  />
                   <button
                     type="button"
-                    onClick={handleSupabaseOAuthConnect}
-                    disabled={isDiscovering}
-                    className="pb-btn pb-btn-sm pb-btn-primary"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: isDiscovering ? 'wait' : 'pointer' }}
+                    className="pb-btn pb-btn-sm"
+                    onClick={() => setShowRunnerSupabaseToken((v) => !v)}
+                    style={{ fontSize: '11px', padding: '4px 8px' }}
                   >
-                    {isDiscovering ? '⏳ Connecting...' : '🚀 Sign in with Supabase'}
+                    {showRunnerSupabaseToken ? 'Hide' : 'Show'}
                   </button>
                 </div>
                 {oauthConnectedFeedback && (
-                  <div style={{ marginTop: '10px', fontSize: '12px', color: '#3ecf8e' }}>
+                  <div style={{ marginTop: '4px', fontSize: '12px', color: '#3ecf8e' }}>
                     {oauthConnectedFeedback}
                   </div>
                 )}

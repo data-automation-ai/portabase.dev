@@ -26,4 +26,4 @@ ENV PORTABASE_GCP_REGION=us-central1
 # Runtime credentials are supplied inside the private runner boundary.
 # This image does not implement key sealing, attestation or subscription provisioning.
 USER node
-CMD ["node", "cloud/runner/supervisor.mjs"]
+CMD ["node", "cloud/runner/cloud-run-server.mjs"]

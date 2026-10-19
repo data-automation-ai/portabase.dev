@@ -3,43 +3,66 @@ import { Icon } from './icons.jsx';
 import {
   DATABASE_COPY_MODES,
   TABLE_COPY_MODES,
+  BINARY_COPY_MODES,
+  OBJECT_TYPES,
+  computeObjectIncludedMb,
   computeDatabaseScopeSummary,
   createDefaultDatabaseScope,
 } from '../../cloud/runner/database-scope.mjs';
 
-function parseObjectName(name) {
-  if (typeof name !== 'string') return { schema: 'public', name: '' };
-  const parts = name.split('.');
-  if (parts.length > 1) {
-    return { schema: parts[0], name: parts.slice(1).join('.') };
+function parseObjectRow(row) {
+  const objectType = String(row?.objectType || OBJECT_TYPES.TABLE).toUpperCase();
+  const isBinary = objectType === OBJECT_TYPES.BINARY;
+  if (isBinary) {
+    const bucket = row?.bucket || row?.schema || (typeof row?.name === 'string' && row.name.includes('/') ? row.name.split('/')[0] : 'default');
+    const objectName = row?.objectName || (typeof row?.name === 'string' && row.name.startsWith(`${bucket}/`) ? row.name.slice(bucket.length + 1) : row?.name || '');
+    return {
+      objectType,
+      isBinary: true,
+      schemaOrBucket: bucket,
+      objectName,
+      key: row?.name || `${bucket}/${objectName}`,
+    };
   }
-  return { schema: 'public', name };
+  const rawName = String(row?.name || '');
+  const parts = rawName.split('.');
+  const schema = row?.schema || (parts.length > 1 ? parts[0] : 'public');
+  const objectName = row?.objectName || (parts.length > 1 ? parts.slice(1).join('.') : rawName);
+  return {
+    objectType,
+    isBinary: false,
+    schemaOrBucket: schema,
+    objectName,
+    key: rawName || `${schema}.${objectName}`,
+  };
 }
 
-function formatTableSize(sizeMb) {
-  if (typeof sizeMb !== 'number' || sizeMb < 0) return '?? MB';
-  if (sizeMb === 0) return '0 MB';
-  if (sizeMb < 1) return '< 1 MB';
-  return `~${Math.round(sizeMb)} MB`;
+function formatMb(sizeMb) {
+  if (typeof sizeMb !== 'number' || Number.isNaN(sizeMb) || sizeMb < 0) return '?? MB';
+  if (sizeMb === 0) return '0.00 MB';
+  if (sizeMb < 0.01) return '< 0.01 MB';
+  return `${sizeMb.toFixed(2)} MB`;
 }
 
-function formatRows(rows) {
-  if (typeof rows !== 'number' || rows < 0) return '?? rows';
-  return `${rows.toLocaleString()} rows`;
+function formatDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  return d.toISOString().replace('T', ' ').slice(0, 16);
 }
 
 /**
- * Visual Multi-Database & Table Scope Selector
- * 
- * Allows users to choose which databases and tables to back up with intuitive
- * "Structure + Data" vs. "Structure Only" toggles.
+ * Project -> Database -> Spreadsheet Object & Binary Scope Selector
  */
 export function DatabaseScopeSelector({
   databases = [],
   onChange = null,
   readOnly = false,
 }) {
-  const [expandedDbId, setExpandedDbId] = useState(null);
+  const [expandedDbId, setExpandedDbId] = useState(() => {
+    const first = Array.isArray(databases) && databases[0]?.id;
+    return first || null;
+  });
   const [newDbInput, setNewDbInput] = useState('');
   const [newDbName, setNewDbName] = useState('');
   const [showAddDb, setShowAddDb] = useState(false);
@@ -59,23 +82,13 @@ export function DatabaseScopeSelector({
 
   const handleToggleDbEnabled = (id) => {
     if (readOnly) return;
-    const next = dbs.map((db) => {
-      if (db.id === id) {
-        return { ...db, enabled: !db.enabled };
-      }
-      return db;
-    });
+    const next = dbs.map((db) => (db.id === id ? { ...db, enabled: !db.enabled } : db));
     updateDatabases(next);
   };
 
   const handleSetDbMode = (id, mode) => {
     if (readOnly) return;
-    const next = dbs.map((db) => {
-      if (db.id === id) {
-        return { ...db, mode };
-      }
-      return db;
-    });
+    const next = dbs.map((db) => (db.id === id ? { ...db, mode } : db));
     updateDatabases(next);
   };
 
@@ -89,53 +102,62 @@ export function DatabaseScopeSelector({
     updateDatabases(next);
   };
 
-  const handleSetTableMode = (dbId, tableName, mode) => {
+  const handleSetObjectMode = (dbId, itemKey, isBinary, mode) => {
     if (readOnly) return;
     const next = dbs.map((db) => {
-      if (db.id === dbId) {
-        const tables = (db.tables || []).map((t) => {
-          if (t.name === tableName) {
-            return { ...t, mode };
+      if (db.id !== dbId) return db;
+      const updateList = (list = []) =>
+        list.map((item) => {
+          const parsed = parseObjectRow(item);
+          if (parsed.key === itemKey || item.name === itemKey) {
+            return { ...item, mode };
           }
-          return t;
+          return item;
         });
-        return { ...db, tables };
-      }
-      return db;
+      return {
+        ...db,
+        tables: updateList(db.tables || []),
+        binaries: Array.isArray(db.binaries) ? updateList(db.binaries) : undefined,
+      };
     });
     updateDatabases(next);
   };
 
-  const handleToggleTableStructure = (dbId, tableName) => {
+  const handleToggleTableStructure = (dbId, itemKey, currentMode) => {
     if (readOnly) return;
-    const targetDb = dbs.find(d => d.id === dbId);
-    const currentTable = targetDb?.tables?.find(t => t.name === tableName);
-    const currentMode = currentTable?.mode || TABLE_COPY_MODES.STRUCTURE_AND_DATA;
     const nextMode = currentMode === TABLE_COPY_MODES.SKIP
       ? TABLE_COPY_MODES.STRUCTURE_ONLY
       : TABLE_COPY_MODES.SKIP;
-    handleSetTableMode(dbId, tableName, nextMode);
+    handleSetObjectMode(dbId, itemKey, false, nextMode);
   };
 
-  const handleToggleTableData = (dbId, tableName) => {
+  const handleToggleTableData = (dbId, itemKey, currentMode) => {
     if (readOnly) return;
-    const targetDb = dbs.find(d => d.id === dbId);
-    const currentTable = targetDb?.tables?.find(t => t.name === tableName);
-    const currentMode = currentTable?.mode || TABLE_COPY_MODES.STRUCTURE_AND_DATA;
     const nextMode = currentMode === TABLE_COPY_MODES.STRUCTURE_AND_DATA
       ? TABLE_COPY_MODES.STRUCTURE_ONLY
       : TABLE_COPY_MODES.STRUCTURE_AND_DATA;
-    handleSetTableMode(dbId, tableName, nextMode);
+    handleSetObjectMode(dbId, itemKey, false, nextMode);
   };
 
-  const handleSetAllTablesMode = (dbId, mode) => {
+  const handleSetAllObjectsMode = (dbId, mode) => {
     if (readOnly) return;
     const next = dbs.map((db) => {
-      if (db.id === dbId) {
-        const tables = (db.tables || []).map((t) => ({ ...t, mode }));
-        return { ...db, tables };
-      }
-      return db;
+      if (db.id !== dbId) return db;
+      const mapItem = (item) => {
+        const parsed = parseObjectRow(item);
+        if (parsed.isBinary) {
+          return {
+            ...item,
+            mode: mode === TABLE_COPY_MODES.SKIP ? BINARY_COPY_MODES.EXCLUDE : BINARY_COPY_MODES.INCLUDE,
+          };
+        }
+        return { ...item, mode };
+      };
+      return {
+        ...db,
+        tables: (db.tables || []).map(mapItem),
+        binaries: Array.isArray(db.binaries) ? db.binaries.map(mapItem) : undefined,
+      };
     });
     updateDatabases(next);
   };
@@ -156,7 +178,7 @@ export function DatabaseScopeSelector({
         ...prev,
         [dbId]: {
           column,
-          direction: column === 'size' || column === 'rows' ? 'desc' : 'asc',
+          direction: ['size', 'includedMb', 'createdAt', 'updatedAt'].includes(column) ? 'desc' : 'asc',
         },
       };
     });
@@ -172,15 +194,17 @@ export function DatabaseScopeSelector({
 
     if (!cleanRef) return;
 
-    const friendlyName = newDbName.trim() || `Supabase App (${cleanRef.slice(0, 6)})`;
+    const friendlyName = newDbName.trim() || `Supabase Project (${cleanRef.slice(0, 6)})`;
     const newDb = {
       id: `db_${cleanRef.slice(0, 8)}_${Date.now().toString(36)}`,
       projectRef: cleanRef,
-      name: friendlyName,
+      projectName: friendlyName,
+      name: `${friendlyName} — postgres`,
       estimatedSizeMb: null,
       enabled: true,
       mode: DATABASE_COPY_MODES.STRUCTURE_AND_DATA,
       tables: [],
+      binaries: [],
     };
 
     updateDatabases([...dbs, newDb]);
@@ -191,8 +215,7 @@ export function DatabaseScopeSelector({
 
   const handleRemoveDatabase = (id) => {
     if (readOnly || dbs.length <= 1) return;
-    const next = dbs.filter((db) => db.id !== id);
-    updateDatabases(next);
+    updateDatabases(dbs.filter((db) => db.id !== id));
   };
 
   const handleAddTable = (dbId) => {
@@ -206,9 +229,12 @@ export function DatabaseScopeSelector({
         const existing = (db.tables || []).find((t) => t.name === formattedName);
         if (existing) return db;
         const newTable = {
+          objectType: OBJECT_TYPES.TABLE,
           name: formattedName,
           rowsEstimate: null,
           sizeMb: null,
+          createdAt: null,
+          updatedAt: null,
           mode: TABLE_COPY_MODES.STRUCTURE_AND_DATA,
         };
         return { ...db, tables: [...(db.tables || []), newTable] };
@@ -220,61 +246,74 @@ export function DatabaseScopeSelector({
     setNewTableInputs({ ...newTableInputs, [dbId]: '' });
   };
 
-  const getSortedTables = (tables, dbId) => {
-    let filtered = tables;
-    const query = (searchQuery[dbId] || '').trim().toLowerCase();
+  const getAllRowsForDb = (db) => {
+    const tables = Array.isArray(db.tables) ? db.tables : [];
+    const binaries = Array.isArray(db.binaries) ? db.binaries : [];
+    return [...tables, ...binaries];
+  };
+
+  const getSortedObjects = (db) => {
+    const allRows = getAllRowsForDb(db);
+    let filtered = allRows;
+    const query = (searchQuery[db.id] || '').trim().toLowerCase();
     if (query) {
-      filtered = tables.filter((t) => {
-        const { schema, name } = parseObjectName(t.name);
+      filtered = allRows.filter((row) => {
+        const parsed = parseObjectRow(row);
         return (
-          schema.toLowerCase().includes(query) ||
-          name.toLowerCase().includes(query) ||
-          t.name.toLowerCase().includes(query)
+          parsed.objectType.toLowerCase().includes(query) ||
+          parsed.schemaOrBucket.toLowerCase().includes(query) ||
+          parsed.objectName.toLowerCase().includes(query) ||
+          parsed.key.toLowerCase().includes(query)
         );
       });
     }
 
-    const { column = 'size', direction = 'desc' } = sortConfig[dbId] || { column: 'size', direction: 'desc' };
+    const { column = 'size', direction = 'desc' } = sortConfig[db.id] || { column: 'size', direction: 'desc' };
     const multiplier = direction === 'asc' ? 1 : -1;
 
     return [...filtered].sort((a, b) => {
-      const aObj = parseObjectName(a.name);
-      const bObj = parseObjectName(b.name);
+      const aObj = parseObjectRow(a);
+      const bObj = parseObjectRow(b);
 
+      if (column === 'type') {
+        const cmp = aObj.objectType.localeCompare(bObj.objectType);
+        return cmp !== 0 ? cmp * multiplier : aObj.objectName.localeCompare(bObj.objectName) * multiplier;
+      }
       if (column === 'schema') {
-        const cmp = aObj.schema.localeCompare(bObj.schema);
-        return cmp !== 0 ? cmp * multiplier : aObj.name.localeCompare(bObj.name) * multiplier;
+        const cmp = aObj.schemaOrBucket.localeCompare(bObj.schemaOrBucket);
+        return cmp !== 0 ? cmp * multiplier : aObj.objectName.localeCompare(bObj.objectName) * multiplier;
       }
       if (column === 'name') {
-        return aObj.name.localeCompare(bObj.name) * multiplier;
+        return aObj.objectName.localeCompare(bObj.objectName) * multiplier;
       }
       if (column === 'size') {
         const aSize = typeof a.sizeMb === 'number' ? a.sizeMb : -1;
         const bSize = typeof b.sizeMb === 'number' ? b.sizeMb : -1;
         return (aSize - bSize) * multiplier;
       }
-      if (column === 'rows') {
-        const aRows = typeof a.rowsEstimate === 'number' ? a.rowsEstimate : -1;
-        const bRows = typeof b.rowsEstimate === 'number' ? b.rowsEstimate : -1;
-        return (aRows - bRows) * multiplier;
+      if (column === 'createdAt') {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() || 0 : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() || 0 : 0;
+        return (aTime - bTime) * multiplier;
       }
-      if (column === 'structure') {
-        const aStruct = a.mode !== TABLE_COPY_MODES.SKIP ? 1 : 0;
-        const bStruct = b.mode !== TABLE_COPY_MODES.SKIP ? 1 : 0;
-        return (aStruct - bStruct) * multiplier;
-      }
-      if (column === 'data') {
-        const aData = a.mode === TABLE_COPY_MODES.STRUCTURE_AND_DATA ? 1 : 0;
-        const bData = b.mode === TABLE_COPY_MODES.STRUCTURE_AND_DATA ? 1 : 0;
-        return (aData - bData) * multiplier;
+      if (column === 'updatedAt') {
+        const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() || 0 : 0;
+        const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() || 0 : 0;
+        return (aTime - bTime) * multiplier;
       }
       if (column === 'mode') {
         const rank = {
           [TABLE_COPY_MODES.STRUCTURE_AND_DATA]: 3,
+          [BINARY_COPY_MODES.INCLUDE]: 3,
           [TABLE_COPY_MODES.STRUCTURE_ONLY]: 2,
           [TABLE_COPY_MODES.SKIP]: 1,
         };
         return ((rank[a.mode] || 0) - (rank[b.mode] || 0)) * multiplier;
+      }
+      if (column === 'includedMb') {
+        const aInc = computeObjectIncludedMb(a, db.mode);
+        const bInc = computeObjectIncludedMb(b, db.mode);
+        return (aInc - bInc) * multiplier;
       }
       return 0;
     });
@@ -294,7 +333,8 @@ export function DatabaseScopeSelector({
           userSelect: 'none',
           color: isActive ? '#f0f6fc' : undefined,
           background: isActive ? '#1c2128' : undefined,
-          padding: '10px 12px',
+          padding: '10px 10px',
+          whiteSpace: 'nowrap',
         }}
         title={`Click to sort by ${label}`}
       >
@@ -331,10 +371,10 @@ export function DatabaseScopeSelector({
       >
         <div>
           <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#f0f6fc' }}>
-            Databases &amp; Copy Modes
+            Accessible Supabase Projects &amp; Databases
           </h4>
           <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#8b949e' }}>
-            Choose full data backup or lightning-fast structure-only blueprints.
+            Click any database to open the sortable object &amp; binary storage spreadsheet.
           </p>
         </div>
 
@@ -362,7 +402,7 @@ export function DatabaseScopeSelector({
               onClick={() => setShowAddDb((v) => !v)}
               style={{ fontSize: '12px', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
             >
-              <Icon name="plus" size={12} /> Add Database
+              <Icon name="plus" size={12} /> Add Project / Database
             </button>
           </div>
         )}
@@ -384,7 +424,7 @@ export function DatabaseScopeSelector({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '13px', fontWeight: 600, color: '#3ecf8e' }}>
-              Add Additional Supabase Database / Project
+              Add Additional Supabase Project / Database
             </span>
             <button
               type="button"
@@ -411,12 +451,12 @@ export function DatabaseScopeSelector({
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
-                Friendly Name (Optional)
+                Project / Database Name (Optional)
               </label>
               <input
                 type="text"
                 className="pb-input"
-                placeholder="e.g. Staging App or Analytics DB"
+                placeholder="e.g. Production App"
                 value={newDbName}
                 onChange={(e) => setNewDbName(e.target.value)}
                 style={{ width: '100%', fontSize: '12px' }}
@@ -430,22 +470,26 @@ export function DatabaseScopeSelector({
               disabled={!newDbInput.trim()}
               style={{ padding: '6px 14px' }}
             >
-              Add to Backup Scope
+              Add to Export Scope
             </button>
           </div>
         </form>
       )}
 
-      {/* Database Cards List */}
+      {/* Project -> Database Cards List */}
       <div style={{ display: 'grid', gap: '12px', marginBottom: '16px' }}>
         {dbs.map((db) => {
           const isExpanded = expandedDbId === db.id;
           const isStructureOnly = db.mode === DATABASE_COPY_MODES.STRUCTURE_ONLY;
-          const tables = Array.isArray(db.tables) ? db.tables : [];
-          const sortedTables = getSortedTables(tables, db.id);
-          const skippedCount = tables.filter((t) => t.mode === TABLE_COPY_MODES.SKIP).length;
-          const structOnlyTableCount = tables.filter((t) => t.mode === TABLE_COPY_MODES.STRUCTURE_ONLY).length;
-          const fullCount = tables.length - structOnlyTableCount - skippedCount;
+          const allObjects = getAllRowsForDb(db);
+          const sortedObjects = getSortedObjects(db);
+          const dbMetrics = summary.perDatabase?.[db.id] || {};
+          const skippedCount = allObjects.filter((t) => t.mode === TABLE_COPY_MODES.SKIP || t.mode === 'exclude').length;
+          const structOnlyTableCount = allObjects.filter((t) => t.mode === TABLE_COPY_MODES.STRUCTURE_ONLY).length;
+          const fullCount = allObjects.length - structOnlyTableCount - skippedCount;
+
+          // Running stacked MB accumulator across visible rows
+          let runningStackedMb = 0;
 
           return (
             <div
@@ -459,7 +503,46 @@ export function DatabaseScopeSelector({
                 transition: 'all 0.15s ease',
               }}
             >
-              {/* Header row: Checkbox, Name, Ref, Size & Pill toggle */}
+              {/* Project Banner Header */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                fontSize: '11px',
+                color: '#8b949e',
+                marginBottom: '6px',
+                paddingBottom: '6px',
+                borderBottom: '1px dashed #21262d',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ textTransform: 'uppercase', letterSpacing: '0.06em', color: '#58a6ff', fontWeight: 700 }}>
+                    PROJECT: {db.projectName || db.name || 'Supabase Project'}
+                  </span>
+                  {db.projectRef && (
+                    <span className="pb-badge" style={{ fontFamily: 'monospace', fontSize: '11px', background: '#21262d' }}>
+                      {db.projectRef}
+                    </span>
+                  )}
+                  {db.region && (
+                    <span style={{ color: '#8b949e' }}>({db.region})</span>
+                  )}
+                </div>
+                <div style={{ fontFamily: 'monospace', fontWeight: 600, color: '#c9d1d9' }}>
+                  Project DB + Storage Total:{' '}
+                  <span style={{ color: '#3ecf8e' }}>
+                    {typeof dbMetrics.totalSourceMb === 'number'
+                      ? `${dbMetrics.totalSourceMb.toFixed(2)} MB`
+                      : (typeof db.estimatedSizeMb === 'number' && db.estimatedSizeMb >= 0 ? `~${db.estimatedSizeMb} MB` : '?? MB')}
+                  </span>
+                  {typeof dbMetrics.includedMb === 'number' && (
+                    <span style={{ marginLeft: '10px', color: '#7ee787' }}>
+                      (Selected: {dbMetrics.includedMb.toFixed(2)} MB)
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Database Row underneath Project */}
               <div
                 style={{
                   display: 'flex',
@@ -478,23 +561,15 @@ export function DatabaseScopeSelector({
                     style={{ cursor: readOnly ? 'default' : 'pointer', width: '16px', height: '16px' }}
                     aria-label={`Include database ${db.name || db.projectRef} in target`}
                   />
-                  <div>
+                  <div
+                    onClick={() => setExpandedDbId(isExpanded ? null : db.id)}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <strong style={{ fontSize: '14px', color: '#f0f6fc' }}>
-                        {db.name || 'Supabase Database'}
+                      <strong style={{ fontSize: '14px', color: '#f0f6fc', textDecoration: 'underline', textDecorationColor: '#30363d' }}>
+                        🗄️ {db.databaseName || db.name || 'postgres'}
                       </strong>
-                      {db.projectRef && (
-                        <span
-                          className="pb-badge"
-                          style={{ fontFamily: 'monospace', fontSize: '11px', background: '#21262d' }}
-                        >
-                          {db.projectRef}
-                        </span>
-                      )}
-                      <span
-                        className="pb-badge pb-badge-ok"
-                        style={{ fontSize: '11px' }}
-                      >
+                      <span className="pb-badge pb-badge-ok" style={{ fontSize: '11px', fontFamily: 'monospace' }}>
                         {typeof db.estimatedSizeMb === 'number' && db.estimatedSizeMb >= 0
                           ? `~${db.estimatedSizeMb} MB`
                           : '?? MB'}
@@ -505,7 +580,7 @@ export function DatabaseScopeSelector({
                         ? 'Database deselected from backup and restore target'
                         : isStructureOnly
                           ? '⚡ Structure Only: Schemas, tables, DDL & RLS (0 table rows saved)'
-                          : `Structure + Data + Objects · ${tables.length} objects (${fullCount} full, ${structOnlyTableCount} blueprint, ${skippedCount} skipped)`}
+                          : `Structure + Data + Binaries · ${allObjects.length} objects (${fullCount} included, ${structOnlyTableCount} structure-only, ${skippedCount} excluded)`}
                     </div>
                   </div>
                 </div>
@@ -536,9 +611,7 @@ export function DatabaseScopeSelector({
                         cursor: db.enabled && !readOnly ? 'pointer' : 'default',
                         background: !isStructureOnly ? '#1f6feb' : 'transparent',
                         color: !isStructureOnly ? '#ffffff' : '#8b949e',
-                        transition: 'all 0.15s ease',
                       }}
-                      title="Include entire database structure plus table data rows and storage objects"
                     >
                       Structure + Data + Objects
                     </button>
@@ -555,9 +628,7 @@ export function DatabaseScopeSelector({
                         cursor: db.enabled && !readOnly ? 'pointer' : 'default',
                         background: isStructureOnly ? '#238636' : 'transparent',
                         color: isStructureOnly ? '#ffffff' : '#8b949e',
-                        transition: 'all 0.15s ease',
                       }}
-                      title="Include entire database structure only (schema DDL, tables, views, RLS; skip row payloads)"
                     >
                       Structure Only ⚡
                     </button>
@@ -597,16 +668,16 @@ export function DatabaseScopeSelector({
                         fontWeight: 600,
                       }}
                     >
-                      <span>{isExpanded ? '▴ Hide spreadsheet of database objects' : '▾ Click into database objects (Spreadsheet View)'}</span>
+                      <span>{isExpanded ? '▴ Hide spreadsheet of database & binary objects' : '▾ Click into database objects (Spreadsheet View)'}</span>
                       <span className="pb-badge" style={{ fontSize: '11px', background: '#21262d', color: '#c9d1d9' }}>
-                        {tables.length} objects
+                        {allObjects.length} objects
                       </span>
                     </button>
 
                     <div style={{ fontSize: '11px', color: '#8b949e' }}>
                       {structOnlyTableCount > 0 && <span style={{ color: '#7ee787', marginRight: '8px' }}>⚡ {structOnlyTableCount} Structure Only</span>}
-                      {skippedCount > 0 && <span style={{ color: '#f85149', marginRight: '8px' }}>✕ {skippedCount} Skipped</span>}
-                      <span>✓ {fullCount} Full</span>
+                      {skippedCount > 0 && <span style={{ color: '#f85149', marginRight: '8px' }}>✕ {skippedCount} Excluded</span>}
+                      <span>✓ {fullCount} Included</span>
                     </div>
                   </div>
 
@@ -626,12 +697,12 @@ export function DatabaseScopeSelector({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '220px' }}>
                           <input
                             type="text"
-                            placeholder="Filter by schema or table name..."
+                            placeholder="Filter by object type, schema, bucket, or name..."
                             value={searchQuery[db.id] || ''}
                             onChange={(e) => setSearchQuery({ ...searchQuery, [db.id]: e.target.value })}
                             style={{
                               width: '100%',
-                              maxWidth: '320px',
+                              maxWidth: '340px',
                               background: '#161b22',
                               border: '1px solid #30363d',
                               borderRadius: '6px',
@@ -658,174 +729,253 @@ export function DatabaseScopeSelector({
                             <button
                               type="button"
                               className="pb-btn pb-btn-sm"
-                              onClick={() => handleSetAllTablesMode(db.id, TABLE_COPY_MODES.STRUCTURE_AND_DATA)}
+                              onClick={() => handleSetAllObjectsMode(db.id, TABLE_COPY_MODES.STRUCTURE_AND_DATA)}
                               style={{ fontSize: '11px', padding: '3px 8px', background: '#1f6feb', color: '#fff' }}
-                              title="Include structure and data for all tables"
                             >
-                              All Full
+                              All Full / Include
                             </button>
                             <button
                               type="button"
                               className="pb-btn pb-btn-sm"
-                              onClick={() => handleSetAllTablesMode(db.id, TABLE_COPY_MODES.STRUCTURE_ONLY)}
+                              onClick={() => handleSetAllObjectsMode(db.id, TABLE_COPY_MODES.STRUCTURE_ONLY)}
                               style={{ fontSize: '11px', padding: '3px 8px', background: '#238636', color: '#fff' }}
-                              title="Include structure only for all tables (save data size)"
                             >
                               All Structure Only ⚡
                             </button>
                             <button
                               type="button"
                               className="pb-btn pb-btn-sm pb-btn-ghost"
-                              onClick={() => handleSetAllTablesMode(db.id, TABLE_COPY_MODES.SKIP)}
+                              onClick={() => handleSetAllObjectsMode(db.id, TABLE_COPY_MODES.SKIP)}
                               style={{ fontSize: '11px', padding: '3px 8px', color: '#f85149' }}
-                              title="Skip all tables"
                             >
-                              Skip All
+                              Exclude All
                             </button>
                           </div>
                         )}
                       </div>
 
                       {/* Spreadsheet Table Grid */}
-                      <div className="pb-table-wrap" style={{ maxHeight: '420px', overflowY: 'auto' }}>
-                        <table className="pb-table" style={{ fontSize: '12px', minWidth: '600px' }}>
+                      <div className="pb-table-wrap" style={{ maxHeight: '460px', overflowY: 'auto' }}>
+                        <table className="pb-table" style={{ fontSize: '12px', minWidth: '860px', width: '100%' }}>
                           <thead>
                             <tr>
-                              {renderSortHeader(db.id, 'schema', 'Schema', 'left')}
-                              {renderSortHeader(db.id, 'name', 'Table Name', 'left')}
-                              {renderSortHeader(db.id, 'size', 'Size', 'right')}
-                              {renderSortHeader(db.id, 'rows', 'Rows', 'right')}
-                              {renderSortHeader(db.id, 'structure', 'Structure', 'center')}
-                              {renderSortHeader(db.id, 'data', 'Data', 'center')}
-                              {renderSortHeader(db.id, 'mode', 'Copy Mode (Trinary)', 'center')}
+                              {renderSortHeader(db.id, 'type', 'Object Type', 'left')}
+                              {renderSortHeader(db.id, 'schema', 'Schema / Bucket', 'left')}
+                              {renderSortHeader(db.id, 'name', 'Object Name', 'left')}
+                              {renderSortHeader(db.id, 'size', 'Size (MB)', 'right')}
+                              {renderSortHeader(db.id, 'createdAt', 'Date Created', 'left')}
+                              {renderSortHeader(db.id, 'updatedAt', 'Last Updated', 'left')}
+                              {renderSortHeader(db.id, 'mode', 'Operation Switch', 'center')}
+                              {renderSortHeader(db.id, 'includedMb', 'Stacked MB', 'right')}
                             </tr>
                           </thead>
                           <tbody>
-                            {sortedTables.length === 0 ? (
+                            {sortedObjects.length === 0 ? (
                               <tr>
-                                <td colSpan={7} style={{ textAlign: 'center', padding: '24px', color: '#8b949e', fontSize: '12px' }}>
-                                  {tables.length === 0
-                                    ? 'No tables discovered yet for this database. Use the input below to add tables or keep Structure + Data for all.'
-                                    : 'No tables match the search filter.'}
+                                <td colSpan={8} style={{ textAlign: 'center', padding: '24px', color: '#8b949e', fontSize: '12px' }}>
+                                  {allObjects.length === 0
+                                    ? 'No objects discovered yet for this database. Connect via OAuth inside the runner or add custom objects below.'
+                                    : 'No objects match the search filter.'}
                                 </td>
                               </tr>
                             ) : (
-                              sortedTables.map((table) => {
-                                const { schema, name } = parseObjectName(table.name);
-                                const isFull = table.mode === TABLE_COPY_MODES.STRUCTURE_AND_DATA;
-                                const isStructureOnlyTable = table.mode === TABLE_COPY_MODES.STRUCTURE_ONLY;
-                                const isSkip = table.mode === TABLE_COPY_MODES.SKIP;
+                              sortedObjects.map((item) => {
+                                const parsed = parseObjectRow(item);
+                                const isBinary = parsed.isBinary;
+                                const mode = item.mode || (isBinary ? BINARY_COPY_MODES.INCLUDE : TABLE_COPY_MODES.STRUCTURE_AND_DATA);
+                                const isSkip = mode === TABLE_COPY_MODES.SKIP || mode === 'exclude';
+                                const isStructureOnlyRow = !isBinary && mode === TABLE_COPY_MODES.STRUCTURE_ONLY;
+                                const isFull = !isSkip && !isStructureOnlyRow;
+
+                                const rowIncludedMb = computeObjectIncludedMb(item, db.mode);
+                                runningStackedMb += rowIncludedMb;
 
                                 return (
-                                  <tr key={table.name} style={{ background: isSkip ? 'rgba(248, 81, 73, 0.04)' : undefined }}>
+                                  <tr key={parsed.key} style={{ background: isSkip ? 'rgba(248, 81, 73, 0.04)' : undefined }}>
                                     <td>
-                                      <span className="pb-badge" style={{ fontFamily: 'monospace', fontSize: '11px', background: '#21262d', color: '#8b949e' }}>
-                                        {schema}
+                                      <span
+                                        className="pb-badge"
+                                        style={{
+                                          fontFamily: 'monospace',
+                                          fontSize: '10px',
+                                          background: isBinary ? '#1f2d3d' : '#21262d',
+                                          color: isBinary ? '#79c0ff' : '#3ecf8e',
+                                        }}
+                                      >
+                                        {parsed.objectType}
+                                      </span>
+                                    </td>
+                                    <td>
+                                      <span
+                                        className="pb-badge"
+                                        style={{
+                                          fontFamily: 'monospace',
+                                          fontSize: '11px',
+                                          background: '#21262d',
+                                          color: isBinary ? '#d2a8ff' : '#8b949e',
+                                        }}
+                                        title={isBinary ? 'Storage Bucket' : 'Database Schema'}
+                                      >
+                                        {isBinary ? `🪣 ${parsed.schemaOrBucket}` : parsed.schemaOrBucket}
                                       </span>
                                     </td>
                                     <td>
                                       <strong style={{ fontFamily: 'monospace', fontSize: '12px', color: isSkip ? '#8b949e' : '#f0f6fc' }}>
-                                        {name}
+                                        {parsed.objectName}
                                       </strong>
                                     </td>
-                                    <td style={{ textAlign: 'right', fontFamily: 'monospace', color: '#8b949e' }}>
-                                      {formatTableSize(table.sizeMb)}
+                                    <td style={{ textAlign: 'right', fontFamily: 'monospace', color: '#c9d1d9' }}>
+                                      {formatMb(item.sizeMb)}
                                     </td>
-                                    <td style={{ textAlign: 'right', fontFamily: 'monospace', color: '#8b949e' }}>
-                                      {formatRows(table.rowsEstimate)}
+                                    <td style={{ fontFamily: 'monospace', fontSize: '11px', color: '#8b949e' }}>
+                                      {formatDate(item.createdAt)}
                                     </td>
-                                    <td style={{ textAlign: 'center' }}>
-                                      <input
-                                        type="checkbox"
-                                        checked={!isSkip}
-                                        onChange={() => handleToggleTableStructure(db.id, table.name)}
-                                        disabled={readOnly}
-                                        style={{ cursor: readOnly ? 'default' : 'pointer', width: '15px', height: '15px' }}
-                                        title="Include Structure: DDL, schema, indexes, and RLS policies"
-                                        aria-label={`Include structure for ${table.name}`}
-                                      />
+                                    <td style={{ fontFamily: 'monospace', fontSize: '11px', color: '#8b949e' }}>
+                                      {formatDate(item.updatedAt)}
                                     </td>
                                     <td style={{ textAlign: 'center' }}>
-                                      <input
-                                        type="checkbox"
-                                        checked={isFull}
-                                        disabled={isSkip || readOnly}
-                                        onChange={() => handleToggleTableData(db.id, table.name)}
-                                        style={{ cursor: isSkip || readOnly ? 'default' : 'pointer', width: '15px', height: '15px' }}
-                                        title={isSkip ? 'Structure must be checked to include data' : 'Include Data: copy row payloads'}
-                                        aria-label={`Include data for ${table.name}`}
-                                      />
+                                      {isBinary ? (
+                                        /* Binary Object 2-Way Switch: Exclude vs Include in Manifest */
+                                        <div
+                                          style={{
+                                            display: 'inline-flex',
+                                            background: '#0d1117',
+                                            borderRadius: '4px',
+                                            border: '1px solid #30363d',
+                                            padding: '2px',
+                                          }}
+                                          role="group"
+                                          aria-label={`Binary export mode for ${parsed.key}`}
+                                        >
+                                          <button
+                                            type="button"
+                                            onClick={() => handleSetObjectMode(db.id, parsed.key, true, BINARY_COPY_MODES.EXCLUDE)}
+                                            disabled={readOnly}
+                                            style={{
+                                              padding: '2px 8px',
+                                              fontSize: '11px',
+                                              fontWeight: 600,
+                                              borderRadius: '3px',
+                                              border: 'none',
+                                              cursor: readOnly ? 'default' : 'pointer',
+                                              background: isSkip ? '#b91c1c' : 'transparent',
+                                              color: isSkip ? '#fff' : '#8b949e',
+                                            }}
+                                          >
+                                            Exclude
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleSetObjectMode(db.id, parsed.key, true, BINARY_COPY_MODES.INCLUDE)}
+                                            disabled={readOnly}
+                                            style={{
+                                              padding: '2px 8px',
+                                              fontSize: '11px',
+                                              fontWeight: 600,
+                                              borderRadius: '3px',
+                                              border: 'none',
+                                              cursor: readOnly ? 'default' : 'pointer',
+                                              background: !isSkip ? '#1f6feb' : 'transparent',
+                                              color: !isSkip ? '#fff' : '#8b949e',
+                                            }}
+                                          >
+                                            Include in Manifest
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        /* Database Object 3-Way Switch: Exclude | Include structure only | Include structure and data */
+                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                          <input
+                                            type="checkbox"
+                                            checked={!isSkip}
+                                            onChange={() => handleToggleTableStructure(db.id, parsed.key, mode)}
+                                            disabled={readOnly}
+                                            style={{ display: 'none' }}
+                                            aria-label={`Include structure for ${parsed.key}`}
+                                          />
+                                          <input
+                                            type="checkbox"
+                                            checked={isFull}
+                                            disabled={isSkip || readOnly}
+                                            onChange={() => handleToggleTableData(db.id, parsed.key, mode)}
+                                            style={{ display: 'none' }}
+                                            aria-label={`Include data for ${parsed.key}`}
+                                          />
+                                          <div
+                                            style={{
+                                              display: 'inline-flex',
+                                              background: '#0d1117',
+                                              borderRadius: '4px',
+                                              border: '1px solid #30363d',
+                                              padding: '2px',
+                                            }}
+                                            role="group"
+                                            aria-label={`Inclusion mode for ${parsed.key}`}
+                                          >
+                                            <button
+                                              type="button"
+                                              onClick={() => handleSetObjectMode(db.id, parsed.key, false, TABLE_COPY_MODES.SKIP)}
+                                              disabled={readOnly}
+                                              style={{
+                                                padding: '2px 7px',
+                                                fontSize: '11px',
+                                                fontWeight: 600,
+                                                borderRadius: '3px',
+                                                border: 'none',
+                                                cursor: readOnly ? 'default' : 'pointer',
+                                                background: isSkip ? '#b91c1c' : 'transparent',
+                                                color: isSkip ? '#fff' : '#8b949e',
+                                              }}
+                                              title="Exclude object completely"
+                                            >
+                                              Exclude
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleSetObjectMode(db.id, parsed.key, false, TABLE_COPY_MODES.STRUCTURE_ONLY)}
+                                              disabled={readOnly}
+                                              style={{
+                                                padding: '2px 7px',
+                                                fontSize: '11px',
+                                                fontWeight: 600,
+                                                borderRadius: '3px',
+                                                border: 'none',
+                                                cursor: readOnly ? 'default' : 'pointer',
+                                                background: isStructureOnlyRow ? '#238636' : 'transparent',
+                                                color: isStructureOnlyRow ? '#fff' : '#8b949e',
+                                              }}
+                                              title="Include structure only (DDL schema, 0 row data)"
+                                            >
+                                              Structure Only ⚡
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleSetObjectMode(db.id, parsed.key, false, TABLE_COPY_MODES.STRUCTURE_AND_DATA)}
+                                              disabled={readOnly}
+                                              style={{
+                                                padding: '2px 7px',
+                                                fontSize: '11px',
+                                                fontWeight: 600,
+                                                borderRadius: '3px',
+                                                border: 'none',
+                                                cursor: readOnly ? 'default' : 'pointer',
+                                                background: isFull ? '#1f6feb' : 'transparent',
+                                                color: isFull ? '#fff' : '#8b949e',
+                                              }}
+                                              title="Include structure and data"
+                                            >
+                                              Structure + Data
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
                                     </td>
-                                    <td style={{ textAlign: 'center' }}>
-                                      {/* Trinary Control Pill */}
-                                      <div
-                                        style={{
-                                          display: 'inline-flex',
-                                          background: '#0d1117',
-                                          borderRadius: '4px',
-                                          border: '1px solid #30363d',
-                                          padding: '2px',
-                                        }}
-                                        role="group"
-                                        aria-label={`Inclusion mode for ${table.name}`}
-                                      >
-                                        <button
-                                          type="button"
-                                          onClick={() => handleSetTableMode(db.id, table.name, TABLE_COPY_MODES.STRUCTURE_AND_DATA)}
-                                          disabled={readOnly}
-                                          style={{
-                                            padding: '2px 7px',
-                                            fontSize: '11px',
-                                            fontWeight: 600,
-                                            borderRadius: '3px',
-                                            border: 'none',
-                                            cursor: readOnly ? 'default' : 'pointer',
-                                            background: isFull ? '#1f6feb' : 'transparent',
-                                            color: isFull ? '#fff' : '#8b949e',
-                                            transition: 'all 0.15s ease',
-                                          }}
-                                          title="Fully include: structure + data"
-                                        >
-                                          Full
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleSetTableMode(db.id, table.name, TABLE_COPY_MODES.STRUCTURE_ONLY)}
-                                          disabled={readOnly}
-                                          style={{
-                                            padding: '2px 7px',
-                                            fontSize: '11px',
-                                            fontWeight: 600,
-                                            borderRadius: '3px',
-                                            border: 'none',
-                                            cursor: readOnly ? 'default' : 'pointer',
-                                            background: isStructureOnlyTable ? '#238636' : 'transparent',
-                                            color: isStructureOnlyTable ? '#fff' : '#8b949e',
-                                            transition: 'all 0.15s ease',
-                                          }}
-                                          title="Include with data structure only (0 row payloads)"
-                                        >
-                                          Structure Only ⚡
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleSetTableMode(db.id, table.name, TABLE_COPY_MODES.SKIP)}
-                                          disabled={readOnly}
-                                          style={{
-                                            padding: '2px 7px',
-                                            fontSize: '11px',
-                                            fontWeight: 600,
-                                            borderRadius: '3px',
-                                            border: 'none',
-                                            cursor: readOnly ? 'default' : 'pointer',
-                                            background: isSkip ? '#b91c1c' : 'transparent',
-                                            color: isSkip ? '#fff' : '#8b949e',
-                                            transition: 'all 0.15s ease',
-                                          }}
-                                          title="Do not include (skip table)"
-                                        >
-                                          Skip
-                                        </button>
+                                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>
+                                      <div style={{ fontWeight: 700, color: isSkip ? '#6e7681' : '#3ecf8e' }}>
+                                        +{rowIncludedMb.toFixed(2)} MB
+                                      </div>
+                                      <div style={{ fontSize: '10px', color: '#8b949e' }}>
+                                        Σ {runningStackedMb.toFixed(2)} MB
                                       </div>
                                     </td>
                                   </tr>
@@ -874,21 +1024,21 @@ export function DatabaseScopeSelector({
         })}
       </div>
 
-      {/* Bottom Live Estimate Bar */}
+      {/* Bottom Grand Sum Total Bar across all Projects & Databases */}
       <div
         style={{
           background: '#161b22',
           border: '1px solid #30363d',
           borderRadius: '8px',
-          padding: '12px 16px',
+          padding: '14px 16px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: '12px',
+          gap: '14px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' }}>
           <div>
             <div style={{ fontSize: '11px', color: '#8b949e', textTransform: 'uppercase' }}>Selected Databases</div>
             <div style={{ fontSize: '15px', fontWeight: 700, color: '#f0f6fc' }}>
@@ -897,14 +1047,28 @@ export function DatabaseScopeSelector({
           </div>
 
           <div style={{ borderLeft: '1px solid #30363d', paddingLeft: '16px' }}>
-            <div style={{ fontSize: '11px', color: '#8b949e', textTransform: 'uppercase' }}>Estimated Capsule Size</div>
-            <div style={{ fontSize: '15px', fontWeight: 700, color: '#3ecf8e' }}>
-              {typeof summary.estimatedCompressedMb === 'number' && summary.estimatedCompressedMb >= 0
-                ? `~${summary.estimatedCompressedMb} MB`
+            <div style={{ fontSize: '11px', color: '#8b949e', textTransform: 'uppercase' }}>Tables (DDL + Data)</div>
+            <div style={{ fontSize: '14px', fontWeight: 600, fontFamily: 'monospace', color: '#c9d1d9' }}>
+              {(summary.includedDatabaseMb ?? 0).toFixed(2)} MB
+            </div>
+          </div>
+
+          <div style={{ borderLeft: '1px solid #30363d', paddingLeft: '16px' }}>
+            <div style={{ fontSize: '11px', color: '#8b949e', textTransform: 'uppercase' }}>Included Binary Storage</div>
+            <div style={{ fontSize: '14px', fontWeight: 600, fontFamily: 'monospace', color: '#d2a8ff' }}>
+              {(summary.includedBinaryMb ?? 0).toFixed(2)} MB
+            </div>
+          </div>
+
+          <div style={{ borderLeft: '1px solid #30363d', paddingLeft: '16px' }}>
+            <div style={{ fontSize: '11px', color: '#8b949e', textTransform: 'uppercase' }}>Grand Sum Total (All Databases + Binaries)</div>
+            <div style={{ fontSize: '16px', fontWeight: 700, fontFamily: 'monospace', color: '#3ecf8e' }}>
+              {typeof summary.grandTotalMb === 'number' && summary.grandTotalMb >= 0
+                ? `${summary.grandTotalMb.toFixed(2)} MB`
                 : '?? MB'}
               {summary.savedMb > 0 && (
-                <span style={{ fontSize: '12px', fontWeight: 500, color: '#7ee787', marginLeft: '6px' }}>
-                  ({summary.savedMb} MB saved by Structure Only)
+                <span style={{ fontSize: '12px', fontWeight: 500, color: '#7ee787', marginLeft: '8px' }}>
+                  ({summary.savedMb} MB excluded/saved)
                 </span>
               )}
             </div>

@@ -12,6 +12,8 @@ import {
   buildDropboxAuthorizeUrl,
   exchangeDropboxOAuthCode,
 } from '../../cloud/runner/storage-oauth.mjs';
+import { discoverSupabaseProjectsAndDatabases } from '../../cloud/runner/supabase-discovery.mjs';
+import { computeDatabaseScopeSummary, buildExportManifest } from '../../cloud/runner/database-scope.mjs';
 
 function parseCookie(header, name) {
   if (!header) return null;
@@ -62,7 +64,20 @@ export async function handler(event) {
     const targetRef = (query.project || body.project || '').trim().toLowerCase();
 
     if (provider === 'supabase' && action === 'discover') {
-      const token = process.env.SUPABASE_MANAGEMENT_TOKEN || process.env.SUPABASE_ACCESS_TOKEN;
+      const authHeader = ((event.headers?.authorization || event.headers?.Authorization) || '')
+        .replace(/^Bearer\s+/i, '')
+        .trim();
+      const cookieHeader = event.headers?.cookie || event.headers?.Cookie;
+      const cookieSession = parseCookie(cookieHeader, 'pb_oauth_sb_token');
+      const token =
+        (body.token || '').trim() ||
+        (query.token || '').trim() ||
+        authHeader ||
+        (cookieSession?.accessToken || '') ||
+        process.env.SUPABASE_MANAGEMENT_TOKEN ||
+        process.env.SUPABASE_ACCESS_TOKEN ||
+        '';
+
       if (!token) {
         return jsonResponse(200, {
           ok: true,
@@ -74,106 +89,17 @@ export async function handler(event) {
       }
 
       try {
-        const pRes = await fetch('https://api.supabase.com/v1/projects', {
-          headers: { Authorization: `Bearer ${token}` },
+        const result = await discoverSupabaseProjectsAndDatabases({
+          token,
+          targetRef,
+          inspectAllActive: true,
         });
-        const allProjects = pRes.ok ? await pRes.json() : [];
-
-        let chosenRef = targetRef;
-        if (!chosenRef && Array.isArray(allProjects) && allProjects.length > 0) {
-          const active = allProjects.find(p => p.status === 'ACTIVE_HEALTHY') || allProjects[0];
-          chosenRef = active.id;
-        }
-
-        let tables = [];
-        let dbBytes = null;
-        if (chosenRef) {
-          try {
-            const [sizeRes, qRes] = await Promise.all([
-              fetch(`https://api.supabase.com/v1/projects/${chosenRef}/database/query`, {
-                method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  query: `SELECT pg_database_size(current_database())::bigint AS db_bytes;`,
-                }),
-              }),
-              fetch(`https://api.supabase.com/v1/projects/${chosenRef}/database/query`, {
-                method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  query: `SELECT c.relname AS name, GREATEST(c.reltuples::bigint, 0) AS rows_estimate, pg_total_relation_size(c.oid) AS bytes FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' ORDER BY pg_total_relation_size(c.oid) DESC LIMIT 50;`,
-                }),
-              }),
-            ]);
-
-            if (sizeRes.ok) {
-              const sizeRows = await sizeRes.json();
-              const rawBytes = sizeRows?.[0]?.db_bytes;
-              if (rawBytes != null && !Number.isNaN(Number(rawBytes))) {
-                dbBytes = Number(rawBytes);
-              }
-            }
-
-            if (qRes.ok) {
-              const rows = await qRes.json();
-              if (Array.isArray(rows)) {
-                tables = rows.map(r => {
-                  const rawBytes = r.bytes != null ? Number(r.bytes) : null;
-                  const rawRows = r.rows_estimate != null ? Number(r.rows_estimate) : null;
-                  const sizeMb = (rawBytes != null && !Number.isNaN(rawBytes))
-                    ? Number((rawBytes / (1024 * 1024)).toFixed(2))
-                    : null;
-                  return {
-                    name: `public.${r.name}`,
-                    rowsEstimate: (rawRows != null && !Number.isNaN(rawRows)) ? rawRows : null,
-                    sizeBytes: rawBytes,
-                    sizeMb,
-                    mode: 'structure_and_data',
-                  };
-                });
-              }
-            }
-          } catch {
-            // discovery non-blocking
-          }
-        }
-
-        const projectList = Array.isArray(allProjects) ? allProjects : [];
-        const databases = projectList.map(p => {
-          const isChosen = p.id === chosenRef;
-          let estimatedSizeMb = null;
-          if (isChosen) {
-            if (dbBytes !== null) {
-              estimatedSizeMb = Math.round(dbBytes / (1024 * 1024));
-            } else if (tables.length > 0 && tables.some(t => typeof t.sizeMb === 'number')) {
-              estimatedSizeMb = Math.round(tables.reduce((acc, t) => acc + (t.sizeMb || 0), 0));
-            }
-          }
-          return {
-            id: `db_${p.id.slice(0, 8)}`,
-            projectRef: p.id,
-            name: p.name || p.id,
-            region: p.region || 'us-east-1',
-            status: p.status || 'ready',
-            estimatedSizeMb,
-            enabled: isChosen,
-            mode: 'structure_and_data',
-            tables: isChosen ? tables : [],
-          };
-        });
-
+        const scopeSummary = computeDatabaseScopeSummary(result.databases || []);
+        const exportManifest = buildExportManifest(result.databases || []);
         return jsonResponse(200, {
-          ok: true,
-          connected: true,
-          targetProjectRef: chosenRef,
-          projects: projectList.map(p => ({ id: p.id, name: p.name, region: p.region, status: p.status })),
-          databases,
+          ...result,
+          scopeSummary,
+          exportManifest,
         });
       } catch (err) {
         return jsonResponse(500, { ok: false, error: err.message });
@@ -237,7 +163,7 @@ export async function handler(event) {
       const clientId = process.env.SUPABASE_OAUTH_CLIENT_ID;
       const clientSecret = process.env.SUPABASE_OAUTH_CLIENT_SECRET;
       const redirectUri = `${origin}/oauth/supabase/callback`;
-      await exchangeSupabaseOAuthCode({
+      const tokenResp = await exchangeSupabaseOAuthCode({
         code,
         codeVerifier: pkce.codeVerifier,
         redirectUri,
@@ -245,11 +171,15 @@ export async function handler(event) {
         clientSecret,
       });
 
+      const sessionCookie = tokenResp?.access_token
+        ? serializeCookie('pb_oauth_sb_token', { accessToken: tokenResp.access_token }, 3600)
+        : clearCookie('pb_oauth_supabase');
+
       return {
         statusCode: 302,
         headers: {
           Location: `/dashboard?oauth=supabase_connected&project=${encodeURIComponent(pkce.project || '')}`,
-          'Set-Cookie': clearCookie('pb_oauth_supabase'),
+          'Set-Cookie': sessionCookie,
           'Cache-Control': 'no-store',
         },
       };
