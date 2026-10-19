@@ -94,8 +94,8 @@ function formatIsoDate(val) {
   if (!val) return null;
   const str = String(val);
   const d = new Date(str);
-  if (Number.isNaN(d.getTime())) return str.slice(0, 19);
-  return d.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+  if (Number.isNaN(d.getTime())) return str.slice(0, 16);
+  return d.toISOString().replace('T', ' ').slice(0, 16);
 }
 
 /**
@@ -131,7 +131,6 @@ export async function inspectSupabaseProjectDatabase(projectRef, token, fetchImp
 
   const tables = rawDbObjects.map((r) => {
     const rawBytes = r.size_bytes != null ? Number(r.size_bytes) : 0;
-    const rawRows = r.rows_estimate != null ? Number(r.rows_estimate) : 0;
     const sizeMb = !Number.isNaN(rawBytes) && rawBytes > 0
       ? Number((rawBytes / (1024 * 1024)).toFixed(4))
       : 0;
@@ -139,16 +138,12 @@ export async function inspectSupabaseProjectDatabase(projectRef, token, fetchImp
     const objectName = r.object_name || 'unknown';
     const objectType = r.object_type || 'TABLE';
     return {
-      name: `${schema}.${objectName}`,
       schema,
       objectName,
       objectType,
-      rowsEstimate: !Number.isNaN(rawRows) ? rawRows : 0,
-      sizeBytes: !Number.isNaN(rawBytes) ? rawBytes : 0,
       sizeMb,
       createdAt: formatIsoDate(r.created_at) || dbCreatedAt,
       updatedAt: formatIsoDate(r.updated_at) || dbCreatedAt,
-      mode: 'structure_and_data',
     };
   });
 
@@ -162,18 +157,13 @@ export async function inspectSupabaseProjectDatabase(projectRef, token, fetchImp
     const objectName = b.object_name || 'unknown';
     const isEmptyBucket = objectName === '(empty bucket)' && rawRows === 0;
     return {
-      name: `${bucket}/${objectName}`,
-      bucket,
       schema: bucket,
       objectName,
       objectType: 'BINARY',
-      isEmptyBucket,
-      rowsEstimate: isEmptyBucket ? 0 : 1,
-      sizeBytes: !Number.isNaN(rawBytes) ? rawBytes : 0,
+      ...(isEmptyBucket ? { isEmptyBucket: true } : {}),
       sizeMb,
       createdAt: formatIsoDate(b.created_at) || dbCreatedAt,
       updatedAt: formatIsoDate(b.updated_at) || dbCreatedAt,
-      mode: 'include',
     };
   });
 

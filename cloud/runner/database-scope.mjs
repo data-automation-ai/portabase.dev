@@ -459,10 +459,10 @@ export function buildPgDumpArgsForDatabase(dbConfig) {
   const tables = Array.isArray(dbConfig.tables) ? dbConfig.tables : [];
 
   for (const table of tables) {
-    if (!table || !table.name) continue;
+    if (!table || (!table.name && !table.objectName)) continue;
     const objType = String(table.objectType || OBJECT_TYPES.TABLE).toUpperCase();
     if (objType === OBJECT_TYPES.BINARY) continue;
-    const tableName = String(table.name).trim();
+    const tableName = String(table.name || `${table.schema || 'public'}.${table.objectName}`).trim();
     if (!tableName) continue;
 
     if (table.mode === TABLE_COPY_MODES.STRUCTURE_ONLY) {

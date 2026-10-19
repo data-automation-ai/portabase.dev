@@ -657,10 +657,16 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
       stateDatabases = stateDatabases.map(db => {
         if (db.id !== dbId) return db;
         if (objectType === 'BINARY') {
-          const binaries = (db.binaries || []).map(b => b.name === rowName ? { ...b, mode: newMode } : b);
+          const binaries = (db.binaries || []).map(b => {
+            const k = b.name || ((b.bucket || b.schema || 'default') + '/' + (b.objectName || ''));
+            return k === rowName ? { ...b, mode: newMode } : b;
+          });
           return { ...db, binaries };
         } else {
-          const tables = (db.tables || []).map(t => t.name === rowName ? { ...t, mode: newMode } : t);
+          const tables = (db.tables || []).map(t => {
+            const k = t.name || ((t.schema || 'public') + '.' + (t.objectName || ''));
+            return k === rowName ? { ...t, mode: newMode } : t;
+          });
           return { ...db, tables };
         }
       });
@@ -677,6 +683,7 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
     function getUnifiedRows(db) {
       const tables = (db.tables || []).map(t => ({
         ...t,
+        name: t.name || ((t.schema || 'public') + '.' + (t.objectName || '')),
         objectType: t.objectType || 'TABLE',
         schemaOrBucket: t.schema || 'public',
         objectName: t.objectName || t.name,
@@ -684,6 +691,7 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
       }));
       const binaries = (db.binaries || []).map(b => ({
         ...b,
+        name: b.name || ((b.bucket || b.schema || 'default') + '/' + (b.objectName || '')),
         objectType: 'BINARY',
         schemaOrBucket: b.bucket || b.schema || 'default',
         objectName: b.objectName || b.name,
