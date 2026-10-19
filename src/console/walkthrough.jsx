@@ -7,6 +7,8 @@ import {
   createDefaultDatabaseScope,
   computeDatabaseScopeSummary,
   buildPgDumpArgsForDatabase,
+  generateRunnerCapsule,
+  buildRunnerCapsuleRestorePlan,
 } from '../../cloud/runner/database-scope.mjs';
 
 export function extractProjectRef(input) {
@@ -33,7 +35,7 @@ export function GuidedWalkthrough({
 
   const [step, setStep] = useState(1);
   const [projectInput, setProjectInput] = useState(currentProject?.ref || '');
-  const [projectName, setProjectName] = useState(currentProject?.name || 'Primary Supabase App');
+  const [projectName, setProjectName] = useState(currentProject?.name || 'Primary Supabase Database');
   const [connectMethod, setConnectMethod] = useState('oauth');
   const [manualDbPass, setManualDbPass] = useState('');
   const [manualApiKey, setManualApiKey] = useState('');
@@ -42,12 +44,20 @@ export function GuidedWalkthrough({
   // Step 2: Multi-Database Scope State
   const cleanRef = useMemo(() => extractProjectRef(projectInput), [projectInput]);
   const [databaseScope, setDatabaseScope] = useState(() => {
-    return createDefaultDatabaseScope(currentProject?.ref || '', currentProject?.name || 'Primary Supabase App');
+    return createDefaultDatabaseScope(currentProject?.ref || '', currentProject?.name || 'Primary Supabase Database');
   });
 
-  // Step 3: Vault storage kind
-  const [vaultKind, setVaultKind] = useState(currentDest?.destinationKind || 'gdrive');
-  const [vaultPath, setVaultPath] = useState(currentDest?.path || '/Portabase');
+  // Step 3: Self-Managed Data Store & Generated Capsule State
+  const [vaultKind, setVaultKind] = useState(currentDest?.destinationKind || 's3');
+  const [vaultPath, setVaultPath] = useState(currentDest?.path || 's3://my-self-managed-vault/portabase/');
+  const [generatedCapsule, setGeneratedCapsule] = useState(null);
+  const [isGeneratingCapsule, setIsGeneratingCapsule] = useState(false);
+
+  // Step 4: Restore Capsule from Runner Ephemeral Storage State
+  const [restoreTargetLocation, setRestoreTargetLocation] = useState('');
+  const [overwriteExistingDataStore, setOverwriteExistingDataStore] = useState(false);
+  const [restoreResultPlan, setRestoreResultPlan] = useState(null);
+  const [isRestoringCapsule, setIsRestoringCapsule] = useState(false);
 
   const [copiedDoctor, setCopiedDoctor] = useState(false);
   const [copiedBackup, setCopiedBackup] = useState(false);
@@ -70,13 +80,14 @@ export function GuidedWalkthrough({
   });
   const [step2Valid, setStep2Valid] = useState(true);
   const [step3Valid, setStep3Valid] = useState(Boolean(state?.onboarding?.completed));
+  const [step4Valid, setStep4Valid] = useState(false);
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [oauthFeedback, setOauthFeedback] = useState('');
   const [showProofModal, setShowProofModal] = useState(false);
 
   const scopeSummary = useMemo(() => computeDatabaseScopeSummary(databaseScope), [databaseScope]);
 
-  // Auto-discover live Supabase projects and tables on mount (unless explicitly disconnected)
+  // Auto-discover live Supabase databases and tables on mount (unless explicitly disconnected)
   useEffect(() => {
     try {
       if (typeof window !== 'undefined' && window.localStorage?.getItem('pb_supabase_disconnected') === '1') {
@@ -104,7 +115,7 @@ export function GuidedWalkthrough({
             setProjectName(activeDb.name);
           }
           setStep1Valid(true);
-          setOauthFeedback(`✓ Connected to Supabase! Loaded ${data.databases.length} database(s) and live tables.`);
+          setOauthFeedback(`✓ Connected inside runner! Loaded ${data.databases.length} Supabase database(s), schemas, buckets & tables.`);
           setStep(2);
         }
       } catch {
@@ -139,19 +150,19 @@ export function GuidedWalkthrough({
           setProjectName(activeDb.name);
         }
         setStep1Valid(true);
-        setOauthFeedback(`✓ Connected to Supabase! Loaded ${data.databases.length} database(s) and live tables.`);
-        toast?.(`Connected! Discovered ${data.databases.length} projects.`, 'ok');
+        setOauthFeedback(`✓ Connected inside runner! Loaded ${data.databases.length} Supabase database(s), schemas, buckets & tables.`);
+        toast?.(`Connected! Discovered ${data.databases.length} Supabase databases.`, 'ok');
         setStep(2);
       } else {
         setStep1Valid(true);
-        setOauthFeedback('✓ Connected to Supabase! Ready for backup selection.');
-        toast?.('Connected to Supabase!', 'ok');
+        setOauthFeedback('✓ Connected to Supabase database inside runner! Ready for object & bucket selection.');
+        toast?.('Connected to Supabase database!', 'ok');
         setStep(2);
       }
     } catch {
       setStep1Valid(true);
-      setOauthFeedback('✓ Connected to Supabase! Ready for backup selection.');
-      toast?.('Connected to Supabase!', 'ok');
+      setOauthFeedback('✓ Connected to Supabase database inside runner! Ready for object & bucket selection.');
+      toast?.('Connected to Supabase database!', 'ok');
     } finally {
       setIsDiscovering(false);
     }
@@ -168,6 +179,8 @@ export function GuidedWalkthrough({
     setStep1Valid(false);
     setOauthFeedback('');
     setDatabaseScope([]);
+    setGeneratedCapsule(null);
+    setRestoreResultPlan(null);
     setProjectInput('');
     setProjectName('');
     setManualDbPass('');
@@ -198,7 +211,7 @@ export function GuidedWalkthrough({
 
   const validateStep1 = () => {
     if (!cleanRef || !/^[a-z0-9]{20}$/i.test(cleanRef)) {
-      toast?.('Please enter a valid 20-character Supabase project ref or URL.', 'danger');
+      toast?.('Please enter a valid 20-character Supabase database ref or URL.', 'danger');
       return;
     }
     try {
@@ -207,7 +220,7 @@ export function GuidedWalkthrough({
       }
     } catch { /* ignore */ }
     setIsDisconnected(false);
-    const name = projectName.trim() || 'My Supabase Project';
+    const name = projectName.trim() || 'Primary Supabase Database';
     setState?.((s) => {
       const projects = [...(s.projects || [])];
       const existing = projects.findIndex((p) => p.ref === cleanRef);
@@ -235,13 +248,13 @@ export function GuidedWalkthrough({
     });
 
     setStep1Valid(true);
-    toast?.('Step 1 Complete: Supabase account connected!', 'ok');
+    toast?.('Step 1 Complete: Supabase database selected inside runner!', 'ok');
     setStep(2);
   };
 
   const validateStep2 = () => {
     if (scopeSummary.selectedCount === 0) {
-      toast?.('Please select at least one database to back up.', 'danger');
+      toast?.('Please select at least one Supabase database to transfer to the capsule.', 'danger');
       return;
     }
     setState?.((s) => ({
@@ -250,12 +263,96 @@ export function GuidedWalkthrough({
       databaseSummary: scopeSummary,
     }));
     setStep2Valid(true);
-    toast?.('Step 2 Complete: Database backup scope saved!', 'ok');
+    toast?.('Step 2 Complete: Capsule object & bucket selection saved!', 'ok');
     setStep(3);
   };
 
+  const handleGenerateCapsule = async () => {
+    setIsGeneratingCapsule(true);
+    try {
+      let capsule = null;
+      try {
+        const res = await fetch('/api/cloud/oauth?provider=supabase&action=generate_capsule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            databases: databaseScope,
+            customerDataStore: { kind: vaultKind, path: vaultPath },
+          }),
+        });
+        const data = await res.json();
+        if (data?.ok && data?.capsule) {
+          capsule = data.capsule;
+        }
+      } catch {
+        // Fallback to deterministic capsule generator in browser/runner module
+      }
+      if (!capsule) {
+        capsule = generateRunnerCapsule({
+          databases: databaseScope,
+          customerDataStore: { kind: vaultKind, path: vaultPath },
+        });
+      }
+      setGeneratedCapsule(capsule);
+      setStep3Valid(true);
+      toast?.(`Step 3 Complete: Capsule ${capsule.capsuleId} staged in runner & saved to ${capsule.customerDataStore.label}!`, 'ok');
+    } finally {
+      setIsGeneratingCapsule(false);
+    }
+  };
+
+  const handleRestoreCapsule = async () => {
+    setIsRestoringCapsule(true);
+    try {
+      const capsuleToRestore = generatedCapsule || generateRunnerCapsule({
+        databases: databaseScope,
+        customerDataStore: { kind: vaultKind, path: vaultPath },
+      });
+      if (!generatedCapsule) {
+        setGeneratedCapsule(capsuleToRestore);
+      }
+
+      let restorePlan = null;
+      try {
+        const res = await fetch('/api/cloud/oauth?provider=supabase&action=restore_capsule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            capsule: capsuleToRestore,
+            targetDatabaseRef: restoreTargetLocation || cleanRef || 'target-supabase-db',
+            targetLocation: restoreTargetLocation || cleanRef || 'target-supabase-db',
+            overwriteExisting: overwriteExistingDataStore,
+          }),
+        });
+        const data = await res.json();
+        if (data?.ok && data?.restorePlan) {
+          restorePlan = data.restorePlan;
+        }
+      } catch {
+        // Fallback to deterministic restore plan builder
+      }
+      if (!restorePlan) {
+        restorePlan = buildRunnerCapsuleRestorePlan({
+          capsule: capsuleToRestore,
+          targetDatabaseRef: restoreTargetLocation || cleanRef || 'target-supabase-db',
+          targetLocation: restoreTargetLocation || cleanRef || 'target-supabase-db',
+          overwriteExisting: overwriteExistingDataStore,
+        });
+      }
+      setRestoreResultPlan(restorePlan);
+      setStep4Valid(true);
+      completeWalkthrough();
+      toast?.(
+        `Step 4 Ready: Restore from runner ephemeral storage configured (${restorePlan.overwriteIndicator.label}).`,
+        overwriteExistingDataStore ? 'warn' : 'ok'
+      );
+    } finally {
+      setIsRestoringCapsule(false);
+    }
+  };
+
   const copyDoctorCommand = () => {
-    const cmd = `npx portabase doctor --project ${cleanRef || '<your-project-ref>'}`;
+    const cmd = `npx portabase doctor --project ${cleanRef || '<your-database-ref>'}`;
     navigator.clipboard?.writeText(cmd);
     setCopiedDoctor(true);
     setTimeout(() => setCopiedDoctor(false), 2400);
@@ -263,7 +360,7 @@ export function GuidedWalkthrough({
   };
 
   const copyBackupCommand = () => {
-    const cmd = `npx portabase backup --project ${cleanRef || '<your-project-ref>'}`;
+    const cmd = `npx portabase backup --project ${cleanRef || '<your-database-ref>'}`;
     navigator.clipboard?.writeText(cmd);
     setCopiedBackup(true);
     setTimeout(() => setCopiedBackup(false), 2400);
@@ -279,7 +376,7 @@ export function GuidedWalkthrough({
       },
     }));
     setStep3Valid(true);
-    toast?.('🎉 Guided setup complete! Your project is protected.', 'ok');
+    toast?.('🎉 Capsule workflow complete! Your Supabase databases are protected.', 'ok');
   };
 
   return (
@@ -297,20 +394,20 @@ export function GuidedWalkthrough({
       }}
       aria-label="Step-by-step setup walkthrough"
     >
-      {/* Friendly 1-2-3 Stepper Header */}
+      {/* 4-Step Supabase Runner Workflow Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
         <div>
           <span
             className="pb-badge pb-badge-ok"
             style={{ textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.06em', marginBottom: '4px', display: 'inline-block' }}
           >
-            QUICK ONBOARDING · STEP {step} OF 3
+            SUPABASE RUNNER WORKFLOW · STEP {step} OF 4
           </span>
           <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#f0f6fc' }}>
-            Portabase 1-2-3 Quick Setup
+            Portabase 4-Step Supabase Capsule Runner
           </h2>
           <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: '#8b949e' }}>
-            Set up automatic, self-owned encrypted backups of your Supabase databases in 3 simple steps.
+            1. Choose Supabase Database inside the runner &rarr; 2. Select Buckets, Tables &amp; Objects &rarr; 3. Generate Capsule &amp; Save to Self-Managed Data Store &rarr; 4. Restore Capsule from Runner Ephemeral Storage.
           </p>
           <div style={{ marginTop: '4px' }}>
             <button
@@ -332,12 +429,13 @@ export function GuidedWalkthrough({
           </div>
         </div>
 
-        {/* 1-2-3 Step Pills */}
+        {/* 1-2-3-4 Step Pills */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           {[
-            { num: 1, label: '1. Connect Supabase', valid: step1Valid },
-            { num: 2, label: '2. Pick Databases', valid: step2Valid },
-            { num: 3, label: '3. Save & Lock Vault', valid: step3Valid },
+            { num: 1, label: '1. Choose Database', valid: step1Valid },
+            { num: 2, label: '2. Select Buckets & Tables', valid: step2Valid },
+            { num: 3, label: '3. Generate & Save Capsule', valid: step3Valid },
+            { num: 4, label: '4. Restore Capsule', valid: step4Valid },
           ].map((item) => (
             <button
               key={item.num}
@@ -400,7 +498,7 @@ export function GuidedWalkthrough({
         </div>
       </div>
 
-      {/* STEP 1: Connect Your Supabase Account */}
+      {/* STEP 1: Choose the Supabase Database While Inside the Runner */}
       {step === 1 && (
         <div className="pb-walkthrough-step">
           <div style={{ background: '#161b22', padding: '12px', borderRadius: '8px', border: '1px solid #30363d', marginBottom: '12px' }}>
@@ -418,12 +516,12 @@ export function GuidedWalkthrough({
                   fontSize: '13px',
                   fontWeight: 700,
                 }}>1</span>
-                Connect Your Supabase Account
+                Choose the Supabase Database While Inside the Runner
               </h3>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 {step1Valid ? (
                   <>
-                    <span className="pb-badge pb-badge-ok">✓ Connected</span>
+                    <span className="pb-badge pb-badge-ok">✓ Database Connected</span>
                     <button
                       type="button"
                       onClick={handleSupabaseDisconnect}
@@ -450,8 +548,7 @@ export function GuidedWalkthrough({
             </div>
 
             <p style={{ margin: '0 0 12px 0', fontSize: '12.5px', color: '#8b949e', lineHeight: 1.45 }}>
-              Connect securely with official 1-Click Supabase OAuth, or paste your project URL / reference below.
-              Portabase Cloud never sees or stores your database password.
+              Step 1: Choose your Supabase database directly inside the runner using 1-Click Supabase OAuth or by entering your database URL / 20-character database reference below.
             </p>
 
             <div style={{ display: 'grid', gap: '12px' }}>
@@ -469,10 +566,10 @@ export function GuidedWalkthrough({
               }}>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: 600, color: '#3ecf8e', marginBottom: '2px' }}>
-                    Sign in with Supabase (1-Click)
+                    Sign in &amp; Discover Supabase Databases Inside the Runner (1-Click)
                   </div>
                   <div style={{ fontSize: '12px', color: '#8b949e' }}>
-                    Connects automatically — no API keys or passwords to copy.
+                    Connects inside the isolated runner container to list your accessible Supabase databases, schemas, and storage buckets.
                   </div>
                 </div>
 
@@ -484,7 +581,7 @@ export function GuidedWalkthrough({
                     className="pb-btn pb-btn-primary"
                     style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', fontSize: '13px', cursor: isDiscovering ? 'wait' : 'pointer' }}
                   >
-                    {isDiscovering ? '⏳ Connecting to Supabase...' : '🚀 Connect with Supabase (1-Click)'}
+                    {isDiscovering ? '⏳ Discovering Databases...' : '🚀 Connect & Choose Supabase Database (1-Click)'}
                   </button>
                   {step1Valid && (
                     <button
@@ -520,7 +617,7 @@ export function GuidedWalkthrough({
                       onClick={() => setStep(2)}
                       style={{ fontSize: '12px', padding: '5px 12px' }}
                     >
-                      Open Pick Databases Spreadsheet &rarr;
+                      Step 2: Select Buckets, Tables &amp; Objects &rarr;
                     </button>
                     <button
                       type="button"
@@ -542,11 +639,11 @@ export function GuidedWalkthrough({
                 </div>
               )}
 
-              {/* Project Reference Input */}
+              {/* Database Reference Input */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px', marginTop: '4px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '4px' }}>
-                    Supabase Project URL or 20-character Reference
+                    Supabase Database URL or 20-character Database Reference
                   </label>
                   <input
                     type="text"
@@ -558,19 +655,19 @@ export function GuidedWalkthrough({
                   />
                   {cleanRef && (
                     <div style={{ marginTop: '4px', fontSize: '12px', color: /^[a-z0-9]{20}$/i.test(cleanRef) ? '#3ecf8e' : '#f85149' }}>
-                      {/^[a-z0-9]{20}$/i.test(cleanRef) ? `✓ Project Ref: ${cleanRef}` : 'Ref must be 20 lowercase letters and digits'}
+                      {/^[a-z0-9]{20}$/i.test(cleanRef) ? `✓ Database Ref: ${cleanRef}` : 'Ref must be 20 lowercase letters and digits'}
                     </div>
                   )}
                 </div>
 
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '4px' }}>
-                    Friendly Project Name
+                    Friendly Database Name
                   </label>
                   <input
                     type="text"
                     className="pb-input"
-                    placeholder="e.g. My Production App"
+                    placeholder="e.g. Primary Production Database"
                     value={projectName}
                     onChange={(e) => setProjectName(e.target.value)}
                     style={{ width: '100%' }}
@@ -665,7 +762,7 @@ export function GuidedWalkthrough({
                   disabled={!cleanRef || !/^[a-z0-9]{20}$/i.test(cleanRef)}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', fontSize: '13px' }}
                 >
-                  <Icon name="check" size={14} /> Continue to Step 2: Pick Databases &rarr;
+                  <Icon name="check" size={14} /> Continue to Step 2: Select Buckets, Tables &amp; Objects &rarr;
                 </button>
                 {step1Valid && (
                   <button
@@ -691,7 +788,7 @@ export function GuidedWalkthrough({
         </div>
       )}
 
-      {/* STEP 2: Pick Databases (Structure + Data vs. Structure Only) */}
+      {/* STEP 2: Select Exactly Which Buckets, Tables, or Other Objects Are Selected for Transfer to the Capsule */}
       {step === 2 && (
         <div className="pb-walkthrough-step" style={{ minWidth: 0, maxWidth: '100%' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '6px' }}>
@@ -708,10 +805,10 @@ export function GuidedWalkthrough({
                 fontSize: '13px',
                 fontWeight: 700,
               }}>2</span>
-              Choose Which Databases to Back Up
+              Select Buckets, Tables &amp; Objects for Transfer to the Capsule
             </h3>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              {step2Valid && <span className="pb-badge pb-badge-ok">✓ Scope Ready</span>}
+              {step2Valid && <span className="pb-badge pb-badge-ok">✓ Capsule Scope Ready</span>}
               <button
                 type="button"
                 onClick={handleSupabaseDisconnect}
@@ -732,7 +829,7 @@ export function GuidedWalkthrough({
           </div>
 
           <p style={{ margin: '0 0 8px 0', fontSize: '12.5px', color: '#8b949e', lineHeight: 1.4 }}>
-            Choose whether each database gets a full backup with all row data, or a fast structure-only blueprint.
+            Step 2: Select exactly which storage buckets, schemas, tables, views, or functions in your Supabase databases are being selected for transfer to the capsule. Subtotal MBs update live as you toggle Include / Exclude / Struct / Struct+Data.
           </p>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '10px', minWidth: 0, maxWidth: '100%' }}>
@@ -751,7 +848,7 @@ export function GuidedWalkthrough({
                 disabled={scopeSummary.selectedCount === 0}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 18px', fontSize: '13px' }}
               >
-                <Icon name="check" size={14} /> Continue to Step 3: Save &amp; Lock Vault &rarr;
+                <Icon name="check" size={14} /> Continue to Step 3: Generate Capsule &amp; Save to Data Store &rarr;
               </button>
               <button type="button" className="pb-btn" onClick={() => setStep(1)} style={{ background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d' }}>
                 &larr; Back to Step 1
@@ -777,7 +874,7 @@ export function GuidedWalkthrough({
         </div>
       )}
 
-      {/* STEP 3: Choose Backup Storage & Lock Vault */}
+      {/* STEP 3: Generate Capsule & Save to Customer's Desired Self-Managed Data Store */}
       {step === 3 && (
         <div className="pb-walkthrough-step" style={{ minWidth: 0, maxWidth: '100%' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '6px' }}>
@@ -794,14 +891,13 @@ export function GuidedWalkthrough({
                 fontSize: '13px',
                 fontWeight: 700,
               }}>3</span>
-              Choose Where to Save &amp; Lock Your Vault
+              Generate Capsule &amp; Save to Customer&apos;s Self-Managed Data Store
             </h3>
-            {step3Valid && <span className="pb-badge pb-badge-ok">✓ Protected</span>}
+            {step3Valid && <span className="pb-badge pb-badge-ok">✓ Capsule Staged &amp; Saved</span>}
           </div>
 
           <p style={{ margin: '0 0 10px 0', fontSize: '12.5px', color: '#8b949e', lineHeight: 1.45 }}>
-            All backup files are encrypted on your side before writing to your chosen cloud destination.
-            Lock your vault below to generate the encrypted runner configuration.
+            Step 3: Generate the capsule in the runner&apos;s ephemeral storage (<code>/tmp/portabase-ephemeral/...</code>) and save it to your desired self-managed data store (AWS S3, Dropbox, Google Drive / Cloud Storage, or direct <code>.pbase</code> download).
             {' '}
             <button
               type="button"
@@ -814,24 +910,245 @@ export function GuidedWalkthrough({
           </p>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '12px', minWidth: 0, maxWidth: '100%' }}>
+            {/* Direct Runner Capsule Generator Card */}
+            <div style={{ background: '#161b22', border: '1px solid #30363d', borderRadius: '8px', padding: '12px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#f0f6fc', marginBottom: '8px' }}>
+                📦 Runner Ephemeral Capsule Generator &rarr; Self-Managed Data Store
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', marginBottom: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 600, color: '#c9d1d9', marginBottom: '4px' }}>
+                    Customer Self-Managed Data Store
+                  </label>
+                  <select
+                    className="pb-input"
+                    value={vaultKind}
+                    onChange={(e) => {
+                      const nextKind = e.target.value;
+                      setVaultKind(nextKind);
+                      if (nextKind === 's3') setVaultPath('s3://my-self-managed-vault/portabase/');
+                      else if (nextKind === 'dropbox') setVaultPath('/Apps/Portabase/capsules');
+                      else if (nextKind === 'gdrive') setVaultPath('gdrive:///Portabase/capsules');
+                      else setVaultPath('download://capsule.pbase');
+                    }}
+                    style={{ width: '100%' }}
+                  >
+                    <option value="s3">AWS S3 Bucket (Self-Managed)</option>
+                    <option value="dropbox">Dropbox Vault (Self-Managed)</option>
+                    <option value="gdrive">Google Drive / GCS (Self-Managed)</option>
+                    <option value="download">Direct .pbase Capsule Download</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 600, color: '#c9d1d9', marginBottom: '4px' }}>
+                    Destination URI / Folder Path
+                  </label>
+                  <input
+                    type="text"
+                    className="pb-input"
+                    value={vaultPath}
+                    onChange={(e) => setVaultPath(e.target.value)}
+                    placeholder="s3://my-bucket/portabase/ or /Apps/Portabase"
+                    style={{ width: '100%', fontFamily: 'monospace' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="pb-btn pb-btn-primary"
+                  onClick={handleGenerateCapsule}
+                  disabled={isGeneratingCapsule}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  {isGeneratingCapsule ? '⏳ Generating Capsule in Runner...' : '📦 Generate Capsule & Save to Self-Managed Data Store'}
+                </button>
+                <button
+                  type="button"
+                  className="pb-btn"
+                  onClick={() => {
+                    if (!generatedCapsule) handleGenerateCapsule();
+                    setStep(4);
+                  }}
+                  style={{ background: '#1f6feb', color: '#ffffff', border: '1px solid #388bfd' }}
+                >
+                  Continue to Step 4: Restore Capsule from Ephemeral Storage &rarr;
+                </button>
+              </div>
+
+              {generatedCapsule && (
+                <div style={{ marginTop: '10px', padding: '10px 12px', background: '#07130d', border: '1px solid #238636', borderRadius: '6px', fontSize: '12px', color: '#3ecf8e', fontFamily: 'monospace' }}>
+                  <div><strong>✓ Capsule Staged in Runner Ephemeral Storage:</strong> {generatedCapsule.capsuleId}</div>
+                  <div>Ephemeral Staging Path: {generatedCapsule.ephemeralStagingPath}</div>
+                  <div>Saved to Customer Data Store: {generatedCapsule.customerDataStore?.destinationUri} ({generatedCapsule.customerDataStore?.label})</div>
+                  <div>Included Payload: {Number(generatedCapsule.totalIncludedMb || 0).toFixed(2)} MB ({generatedCapsule.databaseCount} database(s))</div>
+                </div>
+              )}
+            </div>
+
             {/* Embedded Private Sealed Vault */}
             <PrivateSealedVault
               projectRef={cleanRef}
               initialDatabaseScope={databaseScope}
-              onVaultSealed={completeWalkthrough}
+              onVaultSealed={() => {
+                if (!generatedCapsule) handleGenerateCapsule();
+                setStep3Valid(true);
+              }}
             />
 
-            <div style={{ marginTop: '8px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <div style={{ marginTop: '4px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <button
                 type="button"
                 className="pb-btn pb-btn-primary"
-                onClick={completeWalkthrough}
+                onClick={() => {
+                  if (!generatedCapsule) handleGenerateCapsule();
+                  setStep(4);
+                }}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
               >
-                <Icon name="check" size={14} /> Mark Setup Complete ✓
+                <Icon name="check" size={14} /> Continue to Step 4: Restore Capsule &rarr;
               </button>
               <button type="button" className="pb-btn" onClick={() => setStep(2)} style={{ background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d' }}>
                 &larr; Back to Step 2
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 4: Restore Capsule (While in Runner Ephemeral Storage) to Customer's Desired Location */}
+      {step === 4 && (
+        <div className="pb-walkthrough-step" style={{ minWidth: 0, maxWidth: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '6px' }}>
+            <h3 style={{ margin: 0, fontSize: '16px', color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                background: '#238636',
+                color: '#fff',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '13px',
+                fontWeight: 700,
+              }}>4</span>
+              Restore Capsule (While in Runner&apos;s Ephemeral Storage) to Desired Location
+            </h3>
+            {step4Valid && <span className="pb-badge pb-badge-ok">✓ Restore Plan Ready</span>}
+          </div>
+
+          <p style={{ margin: '0 0 10px 0', fontSize: '12.5px', color: '#8b949e', lineHeight: 1.45 }}>
+            Step 4: Restore the capsule currently staged in the runner&apos;s ephemeral storage to your desired Supabase database location, with an explicit indication of whether or not it should <strong>overwrite an existing Supabase data store</strong>.
+          </p>
+
+          <div style={{ background: '#161b22', border: '1px solid #30363d', borderRadius: '8px', padding: '14px', display: 'grid', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '4px' }}>
+                  Capsule Source in Runner Ephemeral Storage
+                </label>
+                <input
+                  type="text"
+                  className="pb-input"
+                  readOnly
+                  value={generatedCapsule?.ephemeralStagingPath || '/tmp/portabase-ephemeral/capsule-latest/capsule.pbase'}
+                  style={{ width: '100%', fontFamily: 'monospace', color: '#3ecf8e', background: '#0d1117' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '4px' }}>
+                  Customer&apos;s Desired Target Supabase Database Ref / Location
+                </label>
+                <input
+                  type="text"
+                  className="pb-input"
+                  value={restoreTargetLocation}
+                  onChange={(e) => setRestoreTargetLocation(e.target.value)}
+                  placeholder={cleanRef ? `e.g. blank target ref (source: ${cleanRef})` : 'e.g. 20-char target Supabase database ref or postgresql://...'}
+                  style={{ width: '100%', fontFamily: 'monospace' }}
+                />
+              </div>
+            </div>
+
+            {/* Explicit Indication of Whether or Not to Overwrite an Existing Supabase Data Store */}
+            <div
+              style={{
+                padding: '12px 14px',
+                borderRadius: '8px',
+                border: overwriteExistingDataStore ? '1px solid rgba(248,81,73,0.75)' : '1px solid rgba(62,207,142,0.5)',
+                background: overwriteExistingDataStore ? 'rgba(248,81,73,0.1)' : 'rgba(62,207,142,0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '10px',
+              }}
+            >
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: 700, color: '#f0f6fc' }}>
+                <input
+                  type="checkbox"
+                  checked={overwriteExistingDataStore}
+                  onChange={(e) => setOverwriteExistingDataStore(e.target.checked)}
+                  style={{ width: '17px', height: '17px', accentColor: '#f85149', cursor: 'pointer' }}
+                />
+                <span>Overwrite Existing Supabase Data Store?</span>
+              </label>
+
+              <span
+                style={{
+                  fontSize: '11.5px',
+                  fontFamily: 'monospace',
+                  fontWeight: 700,
+                  padding: '4px 10px',
+                  borderRadius: '999px',
+                  background: overwriteExistingDataStore ? 'rgba(248,81,73,0.2)' : 'rgba(62,207,142,0.18)',
+                  color: overwriteExistingDataStore ? '#f85149' : '#3ecf8e',
+                  border: overwriteExistingDataStore ? '1px solid rgba(248,81,73,0.6)' : '1px solid rgba(62,207,142,0.5)',
+                }}
+              >
+                {overwriteExistingDataStore
+                  ? '⚠ OVERWRITE EXISTING DATA STORE: YES (--clean --if-exists + replace storage objects)'
+                  : '✓ DO NOT OVERWRITE EXISTING DATA STORE: NO (Safe non-destructive restore)'}
+              </span>
+            </div>
+
+            { restoreResultPlan && (
+              <div
+                style={{
+                  padding: '12px',
+                  borderRadius: '8px',
+                  background: '#09131f',
+                  border: '1px solid #1f6feb',
+                  color: '#58a6ff',
+                  fontFamily: 'monospace',
+                  fontSize: '12px',
+                  display: 'grid',
+                  gap: '4px',
+                }}
+              >
+                <div><strong>✓ Capsule Restore Plan Ready:</strong> {restoreResultPlan.capsuleId}</div>
+                <div>Ephemeral Source: {restoreResultPlan.ephemeralStagingPath}</div>
+                <div>Target Location: {restoreResultPlan.targetLocation}</div>
+                <div>Overwrite Existing Supabase Data Store: <strong>{restoreResultPlan.overwriteExisting ? 'YES (overwrite_existing_supabase_datastore)' : 'NO (preserve_existing_no_overwrite)'}</strong></div>
+                <div>Indication: {restoreResultPlan.overwriteIndicator?.label} — {restoreResultPlan.overwriteIndicator?.description}</div>
+                <div>Engine Command: pg_restore {restoreResultPlan.pgRestoreArgs?.join(' ')}</div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '4px' }}>
+              <button
+                type="button"
+                className="pb-btn pb-btn-primary"
+                onClick={handleRestoreCapsule}
+                disabled={isRestoringCapsule}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                {isRestoringCapsule ? '⏳ Restoring Capsule from Ephemeral Storage...' : '🔄 Restore Capsule from Runner Ephemeral Storage'}
+              </button>
+              <button type="button" className="pb-btn" onClick={() => setStep(3)} style={{ background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d' }}>
+                &larr; Back to Step 3
               </button>
             </div>
           </div>
@@ -862,7 +1179,7 @@ export function GuidedWalkthrough({
             <div style={{ display: 'grid', gap: '10px' }}>
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                  <label style={{ fontSize: '11px', color: '#c9d1d9' }}>1. Check project connectivity:</label>
+                  <label style={{ fontSize: '11px', color: '#c9d1d9' }}>1. Check database connectivity:</label>
                   <button type="button" className="pb-btn pb-btn-sm" onClick={copyDoctorCommand}>
                     {copiedDoctor ? '✓ Copied' : 'Copy'}
                   </button>

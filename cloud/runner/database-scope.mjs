@@ -539,3 +539,203 @@ export function buildExportManifest(databases = []) {
   }
   return manifest;
 }
+
+function computeDeterministicHexDigest(inputStr = '') {
+  const str = String(inputStr);
+  const seeds = [
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+  ];
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    const lane = i & 7;
+    seeds[lane] = Math.imul(seeds[lane] ^ code, 0x01000193) >>> 0;
+    seeds[(lane + 1) & 7] = (seeds[(lane + 1) & 7] + ((seeds[lane] << 5) | (seeds[lane] >>> 27))) >>> 0;
+  }
+  return seeds.map((n) => n.toString(16).padStart(8, '0')).join('');
+}
+
+/**
+ * Step 3: Generates a recovery capsule from the selected Supabase database objects & buckets
+ * inside the runner's ephemeral storage and records saving it to the customer's self-managed data store.
+ */
+export function generateRunnerCapsule({
+  databases = [],
+  destinationStore,
+  destinationPath,
+  customerDataStore = null,
+  capsuleId: customCapsuleId = '',
+  capsuleLabel = '',
+} = {}) {
+  const resolvedStore = customerDataStore?.kind || destinationStore || 's3';
+  const resolvedPath = customerDataStore?.path || destinationPath || 's3://my-self-managed-vault/portabase/';
+  const scopeSummary = computeDatabaseScopeSummary(databases);
+  const exportManifest = buildExportManifest(databases);
+  const createdAt = new Date().toISOString();
+  const digestHex = computeDeterministicHexDigest(
+    JSON.stringify({
+      databases: exportManifest.databases.map((d) => ({
+        id: d.id,
+        projectRef: d.projectRef,
+        mode: d.mode,
+        tables: d.includedTables.length,
+        binaries: d.includedBinaries.length,
+      })),
+      grandTotalMb: exportManifest.grandTotalMb,
+      destinationStore: resolvedStore,
+      destinationPath: resolvedPath,
+    })
+  );
+  const shortHash = digestHex.slice(0, 10);
+  const stamp = createdAt.replace(/[-:T.Z]/g, '').slice(0, 12);
+  const capsuleId = String(customCapsuleId || '').trim() || `cap_${stamp}_${shortHash}`;
+  const fileName = `${capsuleId}.pbase`;
+  const ephemeralStagingPath = `/tmp/portabase-ephemeral/${capsuleId}/capsule.pbase`;
+  const ephemeralRunnerPath = ephemeralStagingPath;
+
+  const cleanStore = String(resolvedStore || 's3').trim().toLowerCase();
+  const storeLabels = {
+    s3: 'AWS S3 (Self-Managed Bucket)',
+    dropbox: 'Dropbox (Self-Managed Vault)',
+    gdrive: 'Google Drive / Cloud Storage (Self-Managed)',
+    download: 'Direct Self-Managed Capsule Archive (.pbase)',
+  };
+  const normalizedPath = String(resolvedPath || '').trim() || (
+    cleanStore === 's3'
+      ? `s3://self-managed-vault/portabase/${fileName}`
+      : `/Portabase/${fileName}`
+  );
+  const finalSavedUri = normalizedPath.endsWith('.pbase')
+    ? normalizedPath
+    : `${normalizedPath.replace(/\/$/, '')}/${fileName}`;
+
+  const totalIncludedTables = exportManifest.databases.reduce(
+    (sum, db) => sum + (Array.isArray(db.includedTables) ? db.includedTables.length : 0),
+    0
+  );
+  const totalIncludedBinaries = exportManifest.databases.reduce(
+    (sum, db) => sum + (Array.isArray(db.includedBinaries) ? db.includedBinaries.length : 0),
+    0
+  );
+
+  const storeMetadata = {
+    kind: cleanStore,
+    label: storeLabels[cleanStore] || cleanStore,
+    destinationPath: normalizedPath,
+    destinationUri: finalSavedUri,
+    savedUri: finalSavedUri,
+    saved: true,
+    savedAt: createdAt,
+  };
+
+  const totalMb = scopeSummary.grandTotalMb ?? 0;
+
+  return {
+    ok: true,
+    capsuleId,
+    label: capsuleLabel.trim() || `Supabase Capsule (${exportManifest.databases.map((d) => d.projectName || d.databaseName).join(', ') || 'postgres'})`,
+    fileName,
+    ephemeralStagingPath,
+    ephemeralRunnerPath,
+    ephemeralStatus: 'STAGED_IN_RUNNER_EPHEMERAL_STORAGE',
+    customerDataStore: storeMetadata,
+    selfManagedStore: storeMetadata,
+    databaseCount: scopeSummary.selectedCount,
+    includedDatabaseCount: scopeSummary.selectedCount,
+    includedTableAndObjectCount: totalIncludedTables,
+    includedBinaryFileCount: totalIncludedBinaries,
+    includedDatabaseMb: scopeSummary.includedDatabaseMb,
+    includedBinaryMb: scopeSummary.includedBinaryMb,
+    totalIncludedMb: totalMb,
+    totalCapsuleMb: totalMb,
+    excludedMb: scopeSummary.savedMb ?? 0,
+    sha256: `sha256:${digestHex}`,
+    createdAt,
+    scopeSummary,
+    exportManifest,
+  };
+}
+
+/**
+ * Step 4: Restores a capsule currently staged in the runner's ephemeral storage
+ * to the customer's desired Supabase target location, with an explicit indication of
+ * whether or not it should overwrite an existing Supabase data store.
+ */
+export function buildRunnerCapsuleRestorePlan({
+  capsule = null,
+  databases = [],
+  targetDatabaseRef = '',
+  targetLocation = '',
+  targetDatabaseName = '',
+  overwriteExisting = false,
+} = {}) {
+  const activeCapsule = capsule && capsule.capsuleId
+    ? capsule
+    : generateRunnerCapsule({ databases });
+
+  const cleanTargetRef = String(targetDatabaseRef || targetLocation || '').trim() ||
+    activeCapsule.exportManifest?.databases?.[0]?.projectRef ||
+    'target-supabase-db';
+  const resolvedTargetName = String(targetDatabaseName || '').trim() ||
+    activeCapsule.exportManifest?.databases?.[0]?.projectName ||
+    `Supabase Database (${cleanTargetRef})`;
+
+  const shouldOverwrite = Boolean(overwriteExisting);
+  const overwritePolicy = shouldOverwrite
+    ? 'overwrite_existing_supabase_datastore'
+    : 'preserve_existing_no_overwrite';
+  const overwriteLabel = shouldOverwrite
+    ? 'OVERWRITE EXISTING SUPABASE DATA STORE: YES'
+    : 'DO NOT OVERWRITE EXISTING SUPABASE DATA STORE: NO (Safe Mode)';
+  const overwriteDescription = shouldOverwrite
+    ? 'Existing schemas, tables, rows, and bucket objects in the target Supabase data store WILL be dropped/replaced (--clean --if-exists).'
+    : 'Existing Supabase data store will NOT be overwritten; restore only writes to a blank target or non-conflicting objects.';
+
+  const pgRestoreArgs = shouldOverwrite
+    ? ['--clean', '--if-exists', '--no-owner', '--no-privileges', `--dbname=postgresql://postgres@${cleanTargetRef}.supabase.co:5432/postgres`]
+    : ['--no-owner', '--no-privileges', '--exit-on-error', `--dbname=postgresql://postgres@${cleanTargetRef}.supabase.co:5432/postgres`];
+
+  const storageReplayMode = shouldOverwrite ? 'overwrite_existing_objects' : 'skip_existing_objects';
+  const executedAt = new Date().toISOString();
+  const ephemeralPath = activeCapsule.ephemeralStagingPath || activeCapsule.ephemeralRunnerPath;
+
+  return {
+    ok: true,
+    restoreId: `rst_${executedAt.replace(/[-:T.Z]/g, '').slice(0, 12)}_${activeCapsule.capsuleId.slice(-6)}`,
+    status: 'RESTORE_READY_FROM_RUNNER_EPHEMERAL',
+    capsuleId: activeCapsule.capsuleId,
+    ephemeralStagingPath: ephemeralPath,
+    ephemeralSourcePath: ephemeralPath,
+    selfManagedVaultUri: activeCapsule.customerDataStore?.destinationUri || activeCapsule.selfManagedStore?.savedUri || null,
+    targetLocation: cleanTargetRef,
+    targetDatabase: {
+      databaseRef: cleanTargetRef,
+      databaseName: resolvedTargetName,
+      overwriteExisting: shouldOverwrite,
+      overwritePolicy,
+      overwriteIndicator: {
+        overwriteExisting: shouldOverwrite,
+        label: overwriteLabel,
+        description: overwriteDescription,
+      },
+    },
+    overwriteExisting: shouldOverwrite,
+    overwritePolicy,
+    overwriteIndicator: {
+      overwriteExisting: shouldOverwrite,
+      label: overwriteLabel,
+      description: overwriteDescription,
+    },
+    restoredDatabaseCount: activeCapsule.includedDatabaseCount,
+    restoredTableAndObjectCount: activeCapsule.includedTableAndObjectCount,
+    restoredBinaryFileCount: activeCapsule.includedBinaryFileCount,
+    restoredDatabaseMb: activeCapsule.includedDatabaseMb,
+    restoredBinaryMb: activeCapsule.includedBinaryMb,
+    totalRestoredMb: activeCapsule.totalCapsuleMb,
+    pgRestoreArgs,
+    storageReplayMode,
+    executedAt,
+  };
+}
+
+

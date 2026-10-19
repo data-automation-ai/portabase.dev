@@ -14,7 +14,12 @@ import {
   exchangeDropboxOAuthCode,
 } from '../../cloud/runner/storage-oauth.mjs';
 import { discoverSupabaseProjectsAndDatabases } from '../../cloud/runner/supabase-discovery.mjs';
-import { computeDatabaseScopeSummary, buildExportManifest } from '../../cloud/runner/database-scope.mjs';
+import {
+  computeDatabaseScopeSummary,
+  buildExportManifest,
+  generateRunnerCapsule,
+  buildRunnerCapsuleRestorePlan,
+} from '../../cloud/runner/database-scope.mjs';
 
 function parseCookie(header, name) {
   if (!header) return null;
@@ -58,11 +63,38 @@ export async function handler(event) {
     try { body = JSON.parse(event.body); } catch { /* ignore */ }
   }
 
-  // 1. API: Discovery, Disconnect & Token Exchange via /api/cloud/oauth
-  if (pathname.startsWith('/api/cloud/oauth') || query.action === 'discover' || query.action === 'disconnect') {
+  // 1. API: Discovery, Disconnect, Capsule Generate & Capsule Restore via /api/cloud/oauth
+  if (
+    pathname.startsWith('/api/cloud/oauth') ||
+    query.action === 'discover' ||
+    query.action === 'disconnect' ||
+    query.action === 'generate_capsule' ||
+    query.action === 'restore_capsule'
+  ) {
     const provider = query.provider || body.provider || 'supabase';
     const action = query.action || body.action || 'discover';
     const targetRef = (query.project || body.project || '').trim().toLowerCase();
+
+    if (action === 'generate_capsule') {
+      const capsule = generateRunnerCapsule({
+        databases: Array.isArray(body.databases) ? body.databases : [],
+        destinationStore: body.destinationStore || 's3',
+        destinationPath: body.destinationPath || '',
+        capsuleLabel: body.capsuleLabel || '',
+      });
+      return jsonResponse(200, capsule);
+    }
+
+    if (action === 'restore_capsule') {
+      const restorePlan = buildRunnerCapsuleRestorePlan({
+        capsule: body.capsule || null,
+        databases: Array.isArray(body.databases) ? body.databases : [],
+        targetDatabaseRef: body.targetDatabaseRef || targetRef,
+        targetDatabaseName: body.targetDatabaseName || '',
+        overwriteExisting: Boolean(body.overwriteExisting),
+      });
+      return jsonResponse(200, restorePlan);
+    }
 
     if (provider === 'supabase' && action === 'disconnect') {
       return jsonResponse(

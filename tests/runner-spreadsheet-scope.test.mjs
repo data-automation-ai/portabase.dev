@@ -7,6 +7,8 @@ import {
   groupDatabaseObjectsBySchemaAndBucket,
   setSchemaModeInDatabase,
   setBucketModeInDatabase,
+  generateRunnerCapsule,
+  buildRunnerCapsuleRestorePlan,
 } from '../cloud/runner/database-scope.mjs';
 import { DISCOVERY_SQL } from '../cloud/runner/supabase-discovery.mjs';
 import { createCloudRunServer } from '../cloud/runner/cloud-run-server.mjs';
@@ -289,4 +291,91 @@ test('subtotal MBs update accurately when schemas and buckets are toggled betwee
   const afterStructMetrics = afterStructSummary.perDatabase[db.id];
   assert.equal(afterStructMetrics.includedMb, 483.92);
 });
+
+test('Step 3 & Step 4: generateRunnerCapsule and buildRunnerCapsuleRestorePlan handle ephemeral storage, customer self-managed data store, and overwriteExisting flag', async () => {
+  const capsule = generateRunnerCapsule({
+    databases: SAMPLE_MULTI_PROJECT_SCOPE,
+    customerDataStore: { kind: 's3', path: 's3://customer-self-managed-bucket/portabase/' },
+    capsuleId: 'capsule-test-4step',
+  });
+
+  assert.equal(capsule.capsuleId, 'capsule-test-4step');
+  assert.match(capsule.ephemeralStagingPath, /^\/tmp\/portabase-ephemeral\/capsule-test-4step\/capsule\.pbase$/);
+  assert.doesNotMatch(capsule.ephemeralStagingPath, /^F:/i);
+  assert.equal(capsule.customerDataStore.kind, 's3');
+  assert.equal(capsule.customerDataStore.destinationUri, 's3://customer-self-managed-bucket/portabase/capsule-test-4step.pbase');
+  assert.equal(capsule.totalIncludedMb, 194.92);
+
+  // Step 4a: Restore WITHOUT overwriting existing Supabase data store (safe default)
+  const safePlan = buildRunnerCapsuleRestorePlan({
+    capsule,
+    targetDatabaseRef: 'blanktargetref123456',
+    overwriteExisting: false,
+  });
+  assert.equal(safePlan.overwriteExisting, false);
+  assert.equal(safePlan.overwritePolicy, 'preserve_existing_no_overwrite');
+  assert.equal(safePlan.storageReplayMode, 'skip_existing_objects');
+  assert.ok(!safePlan.pgRestoreArgs.includes('--clean'));
+
+  // Step 4b: Restore WITH overwriting existing Supabase data store
+  const overwritePlan = buildRunnerCapsuleRestorePlan({
+    capsule,
+    targetDatabaseRef: 'existingtarget123456',
+    overwriteExisting: true,
+  });
+  assert.equal(overwritePlan.overwriteExisting, true);
+  assert.equal(overwritePlan.overwritePolicy, 'overwrite_existing_supabase_datastore');
+  assert.equal(overwritePlan.storageReplayMode, 'overwrite_existing_objects');
+  assert.ok(overwritePlan.pgRestoreArgs.includes('--clean'));
+  assert.ok(overwritePlan.pgRestoreArgs.includes('--if-exists'));
+
+  // Verify HTTP routes on createCloudRunServer()
+  const server = createCloudRunServer();
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const addr = server.address();
+  const baseUrl = `http://127.0.0.1:${addr.port}`;
+
+  try {
+    const htmlRes = await fetch(`${baseUrl}/`);
+    const html = await htmlRes.text();
+    assert.match(html, /1\. Choose Supabase Database Inside the Runner/);
+    assert.match(html, /2\. Select Buckets, Tables &amp; Objects for Transfer to the Capsule/);
+    assert.match(html, /3\. Generate Capsule &amp; Save to Customer's Self-Managed Data Store/);
+    assert.match(html, /4\. Restore Capsule \(from Runner Ephemeral Storage\) to Desired Location/);
+    assert.match(html, /DATABASE:/);
+    assert.doesNotMatch(html, /PROJECT:\s*\$\{db\.projectName/);
+
+    const genRes = await fetch(`${baseUrl}/api/runner/capsule/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        databases: SAMPLE_MULTI_PROJECT_SCOPE,
+        customerDataStore: { kind: 'dropbox', path: '/Apps/Portabase' },
+        capsuleId: 'capsule-http-test',
+      }),
+    });
+    assert.equal(genRes.status, 200);
+    const genData = await genRes.json();
+    assert.equal(genData.ok, true);
+    assert.equal(genData.capsule.capsuleId, 'capsule-http-test');
+
+    const restRes = await fetch(`${baseUrl}/api/runner/capsule/restore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        capsule: genData.capsule,
+        targetDatabaseRef: 'destdbref01234567890',
+        overwriteExisting: true,
+      }),
+    });
+    assert.equal(restRes.status, 200);
+    const restData = await restRes.json();
+    assert.equal(restData.ok, true);
+    assert.equal(restData.restorePlan.overwriteExisting, true);
+    assert.equal(restData.restorePlan.overwritePolicy, 'overwrite_existing_supabase_datastore');
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 

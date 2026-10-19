@@ -11,6 +11,8 @@ import { discoverSupabaseProjectsAndDatabases } from './supabase-discovery.mjs';
 import {
   computeDatabaseScopeSummary,
   buildExportManifest,
+  generateRunnerCapsule,
+  buildRunnerCapsuleRestorePlan,
 } from './database-scope.mjs';
 
 const PORT = Number(process.env.PORT || 8080);
@@ -396,18 +398,18 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
       </div>
     </div>
 
-    <!-- Step 1: Customer Supabase OAuth / Token Connection INSIDE the Runner -->
+    <!-- Step 1: Choose Supabase Database Inside the Runner -->
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
         <div>
-          <strong style="font-size:15px;color:#f0f6fc;">1. Connect Supabase Inside the Runner</strong>
+          <strong style="font-size:15px;color:#f0f6fc;">1. Choose Supabase Database Inside the Runner</strong>
           <div style="font-size:12px;color:var(--muted);margin-top:2px;">
-            Authenticate via official Supabase OAuth 2.0 PKCE or enter a Supabase Access Token (<code>sbp_...</code>) directly inside this runner container.
+            Authenticate via official Supabase OAuth 2.0 PKCE or enter a Supabase Access Token (<code>sbp_...</code>) directly inside this runner container to choose your Supabase database.
           </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <a href="/oauth/supabase/start" class="btn btn-primary" onclick="localStorage.removeItem('pb_supabase_disconnected')">🚀 1-Click Supabase OAuth Sign-In</a>
-          ${hasServerDefaultToken ? `<button type="button" class="btn" onclick="localStorage.removeItem('pb_supabase_disconnected');discoverProjects('')">⚡ Load Connected Org Workspace</button>` : ''}
+          ${hasServerDefaultToken ? `<button type="button" class="btn" onclick="localStorage.removeItem('pb_supabase_disconnected');discoverProjects('')">⚡ Load Connected Databases</button>` : ''}
           <button type="button" class="btn" style="background:rgba(248,81,73,0.14);color:#f85149;border-color:rgba(248,81,73,0.6);" onclick="disconnectSupabase()">✕ Logout / Disconnect Supabase</button>
         </div>
       </div>
@@ -426,7 +428,7 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
         />
         <button type="button" class="btn btn-sm" onclick="toggleTokenMask()">Show/Hide</button>
         <button type="button" class="btn btn-primary" id="connectBtn" onclick="localStorage.removeItem('pb_supabase_disconnected');discoverProjects()">
-          🔍 Connect &amp; Discover Projects
+          🔍 Connect &amp; Discover Databases
         </button>
         <button type="button" class="btn btn-sm" style="background:rgba(248,81,73,0.14);color:#f85149;border-color:rgba(248,81,73,0.6);" onclick="disconnectSupabase()">
           ✕ Logout / Disconnect
@@ -437,17 +439,17 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
       ${oauthError ? `<div style="margin-top:10px;font-size:12px;color:#f85149;">⚠ OAuth notice: ${oauthError}</div>` : ''}
     </div>
 
-    <!-- Step 2: Projects -> Databases -> Expandable Sortable Spreadsheet -->
+    <!-- Step 2: Select Buckets, Tables & Objects for Transfer to the Capsule -->
     <div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
         <div>
-          <strong style="font-size:15px;color:#f0f6fc;">2. Accessible Projects, Databases &amp; Sortable Object/Binary Spreadsheet</strong>
+          <strong style="font-size:15px;color:#f0f6fc;">2. Select Buckets, Tables &amp; Objects for Transfer to the Capsule</strong>
           <div style="font-size:12px;color:var(--muted);margin-top:2px;">
-            Underneath each project is its database with total MB summation. Click any database row to expand the sortable spreadsheet with 3-way DB switches, 2-way Binary Storage switches, and Stacked MB on the far right.
+            Default view shows Schema &amp; Bucket level. Click any database row to expand the sortable spreadsheet with 3-way DB switches, 2-way Binary Storage switches, and live Subtotal MBs.
           </div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button type="button" class="btn btn-sm" onclick="setAllDatabases(true, 'structure_and_data')">Include All Projects (Full)</button>
+          <button type="button" class="btn btn-sm" onclick="setAllDatabases(true, 'structure_and_data')">Include All Databases (Full)</button>
           <button type="button" class="btn btn-sm" onclick="setAllDatabases(true, 'structure_only')">All Structure Only</button>
           <button type="button" class="btn btn-sm" onclick="setAllBinaries('include')">Include All Binaries</button>
           <button type="button" class="btn btn-sm" onclick="setAllBinaries('skip')">Exclude All Binaries</button>
@@ -460,6 +462,65 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
           Connecting to runner discovery engine...
         </div>
       </div>
+    </div>
+
+    <!-- Step 3: Generate Capsule & Save to Customer's Self-Managed Data Store -->
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:10px;">
+        <div>
+          <strong style="font-size:15px;color:#f0f6fc;">3. Generate Capsule &amp; Save to Customer's Self-Managed Data Store</strong>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;">
+            Stages the selected database schemas, tables, and storage buckets into a capsule inside the runner's ephemeral storage and saves it to your self-managed data store.
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:#080b10;padding:12px;border-radius:8px;border:1px solid #21262d;">
+        <label style="font-size:12px;font-weight:600;color:#c9d1d9;">Self-Managed Data Store:</label>
+        <select id="capsuleStoreSelect" class="input" style="min-width:210px;">
+          <option value="s3">AWS S3 Bucket (Self-Managed)</option>
+          <option value="dropbox">Dropbox Vault (Self-Managed)</option>
+          <option value="gdrive">Google Drive / GCS (Self-Managed)</option>
+          <option value="download">Direct .pbase Capsule Download</option>
+        </select>
+        <input id="capsulePathInput" type="text" class="input" value="s3://my-self-managed-vault/portabase/" placeholder="s3://bucket/path or /Portabase" style="flex:1;min-width:240px;" />
+        <button type="button" class="btn btn-primary" onclick="generateCapsuleInRunner()">
+          📦 Generate Capsule &amp; Save to Data Store
+        </button>
+      </div>
+      <div id="capsuleStatusBox" style="display:none;margin-top:10px;padding:10px 12px;border-radius:8px;background:#07130d;border:1px solid #238636;font-size:12px;color:#3ecf8e;font-family:monospace;"></div>
+    </div>
+
+    <!-- Step 4: Restore Capsule (While in Runner Ephemeral Storage) to Desired Location -->
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:10px;">
+        <div>
+          <strong style="font-size:15px;color:#f0f6fc;">4. Restore Capsule (from Runner Ephemeral Storage) to Desired Location</strong>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;">
+            Restore the capsule currently staged in the runner's ephemeral storage to your desired Supabase location, with an explicit indication of whether or not it should overwrite an existing Supabase data store.
+          </div>
+        </div>
+      </div>
+      <div style="display:grid;gap:10px;background:#080b10;padding:12px;border-radius:8px;border:1px solid #21262d;">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <label style="font-size:12px;font-weight:600;color:#c9d1d9;">Target Supabase Database Ref / Location:</label>
+          <input id="restoreTargetInput" type="text" class="input" placeholder="e.g. target 20-char database ref or postgresql://..." style="flex:1;min-width:260px;" />
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:8px 10px;border-radius:6px;background:#111722;border:1px solid #30363d;">
+          <label style="display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:#f0f6fc;cursor:pointer;">
+            <input id="overwriteExistingCheckbox" type="checkbox" style="width:16px;height:16px;accent-color:#f85149;cursor:pointer;" onchange="updateOverwriteBanner()" />
+            Overwrite Existing Supabase Data Store (DROP / Replace existing schemas, tables &amp; bucket objects)
+          </label>
+          <span id="overwriteModeBadge" style="font-size:11px;font-family:monospace;padding:2px 8px;border-radius:999px;background:rgba(62,207,142,0.15);color:#3ecf8e;border:1px solid rgba(62,207,142,0.4);">
+            SAFE DEFAULT: Do NOT Overwrite Existing Data Store
+          </span>
+        </div>
+        <div>
+          <button type="button" class="btn btn-primary" onclick="restoreCapsuleInRunner()">
+            🔄 Restore Capsule from Runner Ephemeral Storage
+          </button>
+        </div>
+      </div>
+      <div id="restoreStatusBox" style="display:none;margin-top:10px;padding:10px 12px;border-radius:8px;background:#09131f;border:1px solid #1f6feb;font-size:12px;color:#58a6ff;font-family:monospace;"></div>
     </div>
 
     <!-- Export Manifest Drawer -->
@@ -475,7 +536,7 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
     <div class="grand-bar">
       <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:center;">
         <div class="metric-box">
-          <span class="metric-label">Accessible Projects</span>
+          <span class="metric-label">Accessible Databases</span>
           <span class="metric-val" id="grandProjectsCount">0</span>
         </div>
         <div class="metric-box">
@@ -501,6 +562,7 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
   <script>
     let stateDatabases = [];
     let expandedDbIds = {};
+    let activeCapsule = null;
     let activeGroupByDb = {};
     let groupLimitsByDb = {};
     let sortConfigByDb = {};
@@ -562,7 +624,7 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
       const banner = document.getElementById('statusBanner');
       const rawToken = overrideToken !== undefined ? overrideToken : document.getElementById('sbTokenInput').value.trim();
       btn.disabled = true;
-      btn.textContent = '⏳ Discovering Projects, Schemas, Buckets & Objects...';
+      btn.textContent = '⏳ Discovering Databases, Schemas, Buckets & Objects...';
       banner.style.display = 'block';
       banner.style.color = '#58a6ff';
       banner.textContent = 'Querying Supabase Management API & PostgreSQL catalogs inside Google Cloud Run...';
@@ -584,14 +646,14 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
           expandedDbIds[firstWithObjects.id] = true;
         }
         banner.style.color = '#3ecf8e';
-        banner.textContent = '✓ Connected inside Google Cloud Runner! Discovered ' + stateDatabases.length + ' projects with live PostgreSQL schemas, buckets & objects.';
+        banner.textContent = '✓ Connected inside Google Cloud Runner! Discovered ' + stateDatabases.length + ' databases with live PostgreSQL schemas, buckets & objects.';
         renderAll();
       } catch (err) {
         banner.style.color = '#f85149';
         banner.textContent = '⚠ ' + err.message;
       } finally {
         btn.disabled = false;
-        btn.textContent = '🔍 Connect & Discover Projects';
+        btn.textContent = '🔍 Connect & Discover Databases';
       }
     }
 
@@ -949,10 +1011,95 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
       URL.revokeObjectURL(url);
     }
 
+    function updateOverwriteBanner() {
+      const cb = document.getElementById('overwriteExistingCheckbox');
+      const badge = document.getElementById('overwriteModeBadge');
+      if (!cb || !badge) return;
+      if (cb.checked) {
+        badge.style.background = 'rgba(248,81,73,0.18)';
+        badge.style.color = '#f85149';
+        badge.style.borderColor = 'rgba(248,81,73,0.6)';
+        badge.textContent = '⚠ OVERWRITE EXISTING DATA STORE ENABLED (--clean --if-exists + replace bucket files)';
+      } else {
+        badge.style.background = 'rgba(62,207,142,0.15)';
+        badge.style.color = '#3ecf8e';
+        badge.style.borderColor = 'rgba(62,207,142,0.4)';
+        badge.textContent = 'SAFE DEFAULT: Do NOT Overwrite Existing Data Store';
+      }
+    }
+
+    async function generateCapsuleInRunner() {
+      const storeKind = (document.getElementById('capsuleStoreSelect')?.value || 's3').trim();
+      const storePath = (document.getElementById('capsulePathInput')?.value || '').trim();
+      const box = document.getElementById('capsuleStatusBox');
+      if (box) {
+        box.style.display = 'block';
+        box.style.color = '#58a6ff';
+        box.textContent = '⏳ Staging capsule in runner ephemeral storage and saving to customer self-managed data store...';
+      }
+      try {
+        const res = await fetch('/api/runner/capsule/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            databases: stateDatabases,
+            customerDataStore: { kind: storeKind, path: storePath },
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || 'Capsule generation failed');
+        activeCapsule = data.capsule;
+        if (box) {
+          box.style.color = '#3ecf8e';
+          box.textContent = '✓ Capsule Ready: ' + data.capsule.capsuleId + ' · Ephemeral: ' + data.capsule.ephemeralStagingPath + ' · Saved to: ' + data.capsule.customerDataStore.destinationUri + ' (' + data.capsule.totalIncludedMb.toFixed(2) + ' MB)';
+        }
+      } catch (err) {
+        if (box) {
+          box.style.color = '#f85149';
+          box.textContent = '⚠ ' + err.message;
+        }
+      }
+    }
+
+    async function restoreCapsuleInRunner() {
+      const targetDatabaseRef = (document.getElementById('restoreTargetInput')?.value || '').trim();
+      const overwriteExisting = Boolean(document.getElementById('overwriteExistingCheckbox')?.checked);
+      const box = document.getElementById('restoreStatusBox');
+      if (box) {
+        box.style.display = 'block';
+        box.style.color = '#58a6ff';
+        box.textContent = '⏳ Preparing capsule restore from runner ephemeral storage...';
+      }
+      try {
+        const res = await fetch('/api/runner/capsule/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            capsule: activeCapsule,
+            databases: stateDatabases,
+            targetDatabaseRef,
+            overwriteExisting,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || 'Capsule restore failed');
+        const plan = data.restorePlan;
+        if (box) {
+          box.style.color = overwriteExisting ? '#f85149' : '#3ecf8e';
+          box.textContent = '✓ Restore Plan Ready (' + plan.capsuleId + ') → Target: ' + plan.targetLocation + ' · ' + plan.overwriteIndicator.label + ' · pg_restore ' + plan.pgRestoreArgs.join(' ');
+        }
+      } catch (err) {
+        if (box) {
+          box.style.color = '#f85149';
+          box.textContent = '⚠ ' + err.message;
+        }
+      }
+    }
+
     function renderAll() {
       const container = document.getElementById('projectsContainer');
       if (!stateDatabases || stateDatabases.length === 0) {
-        container.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);">No projects loaded yet. Enter a Supabase token above or click 1-Click Supabase OAuth Sign-In.</div>';
+        container.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);">No databases loaded yet. Enter a Supabase token above or click 1-Click Supabase OAuth Sign-In.</div>';
         return;
       }
 
@@ -1120,12 +1267,12 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
         return \`<div class="project-card \${db.enabled ? 'active' : ''}">
           <div class="project-banner">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-              <span style="font-size:11px;font-weight:700;color:#58a6ff;text-transform:uppercase;">PROJECT: \${db.projectName || db.name}</span>
+              <span style="font-size:11px;font-weight:700;color:#58a6ff;text-transform:uppercase;">DATABASE: \${db.projectName || db.name}</span>
               <span style="font-size:11px;font-family:monospace;color:#8b949e;background:#161b22;padding:1px 6px;border-radius:4px;">ref: \${db.projectRef}</span>
               <span style="font-size:11px;color:#8b949e;">region: \${db.region} · status: \${db.status}</span>
             </div>
             <div style="font-size:12px;font-family:monospace;color:#c9d1d9;">
-              Project Total Summation: <strong style="color:#f0f6fc;">\${rawTotalProjectMb.toFixed(2)} MB</strong>
+              Database Total Summation: <strong style="color:#f0f6fc;">\${rawTotalProjectMb.toFixed(2)} MB</strong>
               <span style="color:#3ecf8e;margin-left:8px;">(Included: \${selectedTotalMb.toFixed(2)} MB)</span>
             </div>
           </div>
@@ -1160,7 +1307,7 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
               </div>
               \${groups.length === 0 ? \`
                 <div style="padding:14px;text-align:center;color:#475569;background:#ffffff;border:1px solid #94a3b8;font-size:8.5pt;">
-                  No schemas, buckets, or objects returned for this project (status: \${db.status}). Database-level summation is \${rawTotalProjectMb.toFixed(2)} MB.
+                  No schemas, buckets, or objects returned for this database (status: \${db.status}). Database-level summation is \${rawTotalProjectMb.toFixed(2)} MB.
                 </div>
               \` : \`
                 <div style="overflow-x:auto;border:1px solid #94a3b8;background:#ffffff;max-height:460px;overflow-y:auto;">
@@ -1224,7 +1371,7 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
         if (localStorage.getItem('pb_supabase_disconnected') === '1') {
           const container = document.getElementById('projectsContainer');
           if (container) {
-            container.innerHTML = '<div style="padding:28px;text-align:center;color:var(--muted);font-size:13px;">Disconnected from Supabase. Click <strong>1-Click Supabase OAuth Sign-In</strong> or <strong>Connect &amp; Discover Projects</strong> above to connect.</div>';
+            container.innerHTML = '<div style="padding:28px;text-align:center;color:var(--muted);font-size:13px;">Disconnected from Supabase. Click <strong>1-Click Supabase OAuth Sign-In</strong> or <strong>Connect &amp; Discover Databases</strong> above to connect.</div>';
           }
           return;
         }
@@ -1416,6 +1563,44 @@ export function createCloudRunServer() {
         ok: true,
         scopeSummary,
         exportManifest,
+      }, req);
+      return;
+    }
+
+    // 5b. Step 3: Generate Capsule in runner ephemeral storage & save to customer self-managed data store
+    if (pathname === '/api/runner/capsule/generate' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const databases = Array.isArray(body.databases) ? body.databases : [];
+      const customerDataStore = body.customerDataStore || {};
+      const capsule = generateRunnerCapsule({
+        databases,
+        customerDataStore,
+        capsuleId: body.capsuleId,
+      });
+      sendJson(res, 200, {
+        ok: true,
+        capsule,
+      }, req);
+      return;
+    }
+
+    // 5c. Step 4: Restore Capsule from runner ephemeral storage to desired location (with explicit overwriteExisting indicator)
+    if (pathname === '/api/runner/capsule/restore' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const capsule = body.capsule || generateRunnerCapsule({
+        databases: Array.isArray(body.databases) ? body.databases : [],
+        customerDataStore: body.customerDataStore || {},
+        capsuleId: body.capsuleId,
+      });
+      const restorePlan = buildRunnerCapsuleRestorePlan({
+        capsule,
+        targetDatabaseRef: body.targetDatabaseRef || '',
+        targetLocation: body.targetLocation || '',
+        overwriteExisting: Boolean(body.overwriteExisting),
+      });
+      sendJson(res, 200, {
+        ok: true,
+        restorePlan,
       }, req);
       return;
     }

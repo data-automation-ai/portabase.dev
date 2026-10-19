@@ -333,7 +333,7 @@ export function DatabaseScopeSelector({
 
     if (!cleanRef) return;
 
-    const friendlyName = newDbName.trim() || `Supabase Project (${cleanRef.slice(0, 6)})`;
+    const friendlyName = newDbName.trim() || `Supabase Database (${cleanRef.slice(0, 6)})`;
     const newDb = {
       id: `db_${cleanRef.slice(0, 8)}_${Date.now().toString(36)}`,
       projectRef: cleanRef,
@@ -602,10 +602,10 @@ export function DatabaseScopeSelector({
       >
         <div>
           <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#f0f6fc' }}>
-            Accessible Supabase Projects &amp; Databases
+            Accessible Supabase Databases
           </h4>
           <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#8b949e' }}>
-            Click any database to open the sortable object &amp; binary storage spreadsheet.
+            Click any database to open the sortable buckets, tables &amp; objects spreadsheet for capsule transfer.
           </p>
         </div>
 
@@ -633,7 +633,7 @@ export function DatabaseScopeSelector({
               onClick={() => setShowAddDb((v) => !v)}
               style={{ fontSize: '12px', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
             >
-              <Icon name="plus" size={12} /> Add Project / Database
+              <Icon name="plus" size={12} /> Add Supabase Database
             </button>
             {onDisconnect && (
               <button
@@ -676,7 +676,7 @@ export function DatabaseScopeSelector({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '13px', fontWeight: 600, color: '#3ecf8e' }}>
-              Add Additional Supabase Project / Database
+              Add Additional Supabase Database
             </span>
             <button
               type="button"
@@ -690,7 +690,7 @@ export function DatabaseScopeSelector({
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
-                Supabase Project Ref or URL (20 chars)
+                Supabase Database Ref or URL (20 chars)
               </label>
               <input
                 type="text"
@@ -703,12 +703,12 @@ export function DatabaseScopeSelector({
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
-                Project / Database Name (Optional)
+                Database Name (Optional)
               </label>
               <input
                 type="text"
                 className="pb-input"
-                placeholder="e.g. Production App"
+                placeholder="e.g. Production Database"
                 value={newDbName}
                 onChange={(e) => setNewDbName(e.target.value)}
                 style={{ width: '100%', fontSize: '12px' }}
@@ -722,13 +722,13 @@ export function DatabaseScopeSelector({
               disabled={!newDbInput.trim()}
               style={{ padding: '6px 14px' }}
             >
-              Add to Export Scope
+              Add to Capsule Scope
             </button>
           </div>
         </form>
       )}
 
-      {/* Project -> Database Cards List */}
+      {/* Database Cards List */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '12px', marginBottom: '16px', minWidth: 0, maxWidth: '100%' }}>
         {dbs.map((db) => {
           const isExpanded = expandedDbId === db.id;
@@ -760,7 +760,7 @@ export function DatabaseScopeSelector({
                 boxSizing: 'border-box',
               }}
             >
-              {/* Project Banner Header */}
+              {/* Database Banner Header */}
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -775,7 +775,7 @@ export function DatabaseScopeSelector({
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <span style={{ textTransform: 'uppercase', letterSpacing: '0.06em', color: '#58a6ff', fontWeight: 700 }}>
-                    PROJECT: {db.projectName || db.name || 'Supabase Project'}
+                    DATABASE: {db.projectName || db.name || 'Supabase Database'}
                   </span>
                   {db.projectRef && (
                     <span className="pb-badge" style={{ fontFamily: 'monospace', fontSize: '11px', background: '#21262d' }}>
@@ -787,7 +787,7 @@ export function DatabaseScopeSelector({
                   )}
                 </div>
                 <div style={{ fontFamily: 'monospace', fontWeight: 600, color: '#c9d1d9' }}>
-                  Project DB + Storage Total:{' '}
+                  Database + Storage Total:{' '}
                   <span style={{ color: '#3ecf8e' }}>
                     {typeof dbMetrics.totalSourceMb === 'number'
                       ? `${dbMetrics.totalSourceMb.toFixed(2)} MB`
@@ -801,7 +801,7 @@ export function DatabaseScopeSelector({
                 </div>
               </div>
 
-              {/* Database Row underneath Project */}
+              {/* Database Row */}
               <div
                 style={{
                   display: 'flex',
