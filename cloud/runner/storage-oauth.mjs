@@ -297,9 +297,6 @@ export async function exchangeDropboxOAuthCode({
     'Content-Type': 'application/x-www-form-urlencoded',
     Accept: 'application/json',
   };
-  if (clientId && clientSecret) {
-    headers.Authorization = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
-  }
 
   let response;
   try {
@@ -377,9 +374,6 @@ export async function refreshDropboxOAuthToken({
     'Content-Type': 'application/x-www-form-urlencoded',
     Accept: 'application/json',
   };
-  if (clientId && clientSecret) {
-    headers.Authorization = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
-  }
 
   let response;
   try {

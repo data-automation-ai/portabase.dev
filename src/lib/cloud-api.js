@@ -108,6 +108,10 @@ export function uploadCapsuleToConnector(version, payload = {}) {
   return api('/api/cloud/storage-connectors', { method: 'POST', body: { action: 'upload-capsule', ...payload }, version });
 }
 
+export function disconnectStorageConnector(version, provider) {
+  return api('/api/cloud/storage-connectors', { method: 'POST', body: { action: 'disconnect', provider }, version });
+}
+
 export function fetchRunners(version) {
   return api('/api/cloud/runners', { version });
 }

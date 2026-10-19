@@ -69,9 +69,62 @@ export function PrivateSealedVault({
   const [gdriveFolderPath, setGdriveFolderPath] = useState('/Portabase');
   const [dropboxRefreshToken, setDropboxRefreshToken] = useState('');
   const [dropboxFolderPath, setDropboxFolderPath] = useState('/Portabase');
+  const [dropboxAppKey, setDropboxAppKey] = useState('');
+  const [storageOauthBanner, setStorageOauthBanner] = useState(null);
   const [gcsBucketUri, setGcsBucketUri] = useState('');
   const [awsS3RoleArn, setAwsS3RoleArn] = useState('');
   const [awsS3Bucket, setAwsS3Bucket] = useState('');
+
+  // Handle OAuth query params on redirect from storage providers
+  useEffect(() => {
+    try {
+      const search = window.location.search;
+      if (!search) return;
+      const params = new URLSearchParams(search);
+      const storageOauth = params.get('storage_oauth');
+      const storageOauthErr = params.get('storage_oauth_error');
+
+      if (storageOauth === 'dropbox-connected') {
+        setStorageDestination('dropbox');
+        setStorageOauthBanner({
+          tone: 'ok',
+          message: '✓ Dropbox 1-Click OAuth connected successfully! Token cookie saved.',
+        });
+      } else if (storageOauth === 'google-drive-connected') {
+        setStorageDestination('gdrive');
+        setStorageOauthBanner({
+          tone: 'ok',
+          message: '✓ Google Drive OAuth connected successfully! Token cookie saved.',
+        });
+      } else if (storageOauth === 'dropbox_missing_app_key') {
+        setStorageDestination('dropbox');
+        setStorageOauthBanner({
+          tone: 'warn',
+          message: 'Dropbox App Key is not configured on the server. Enter your Dropbox App Key or Access Token below.',
+        });
+      } else if (storageOauth === 'gdrive_missing_client_id') {
+        setStorageDestination('gdrive');
+        setStorageOauthBanner({
+          tone: 'warn',
+          message: 'Google Drive Client ID is not configured on the server. Enter your Google Client ID or Access Token.',
+        });
+      } else if (storageOauthErr) {
+        setStorageOauthBanner({
+          tone: 'danger',
+          message: `Storage OAuth error: ${decodeURIComponent(storageOauthErr)}`,
+        });
+      }
+
+      if (storageOauth || storageOauthErr) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('storage_oauth');
+        url.searchParams.delete('storage_oauth_error');
+        window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+      }
+    } catch {
+      // safe fallback
+    }
+  }, []);
 
   // Mask toggles using text-security to avoid password input violation (0 input[type=password])
   const [showDbPassword, setShowDbPassword] = useState(false);
@@ -1096,12 +1149,15 @@ export function PrivateSealedVault({
             {/* Destination Detail Inputs */}
             {storageDestination === 'gdrive' && (
               <div style={{ background: '#0d1117', padding: '12px', borderRadius: '6px', border: '1px solid #30363d' }}>
+                {storageOauthBanner && (
+                  <div className={`pb-callout ${storageOauthBanner.tone}`} style={{ marginBottom: '8px' }}>
+                    <div>{storageOauthBanner.message}</div>
+                  </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
                   <span style={{ fontSize: '12px', fontWeight: 600, color: '#f0f6fc' }}>Google Drive Destination</span>
                   <a
                     href="/oauth/google-drive/start"
-                    target="_blank"
-                    rel="noreferrer noopener"
                     className="pb-btn pb-btn-sm"
                     style={{ textDecoration: 'none' }}
                   >
@@ -1121,17 +1177,33 @@ export function PrivateSealedVault({
 
             {storageDestination === 'dropbox' && (
               <div style={{ background: '#0d1117', padding: '12px', borderRadius: '6px', border: '1px solid #30363d' }}>
+                {storageOauthBanner && (
+                  <div className={`pb-callout ${storageOauthBanner.tone}`} style={{ marginBottom: '8px' }}>
+                    <div>{storageOauthBanner.message}</div>
+                  </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
                   <span style={{ fontSize: '12px', fontWeight: 600, color: '#f0f6fc' }}>Dropbox Destination</span>
                   <a
-                    href="/oauth/dropbox/start"
-                    target="_blank"
-                    rel="noreferrer noopener"
+                    href={`/oauth/dropbox/start${dropboxAppKey.trim() ? `?appKey=${encodeURIComponent(dropboxAppKey.trim())}` : ''}`}
                     className="pb-btn pb-btn-sm"
                     style={{ textDecoration: 'none' }}
                   >
                     1-Click Dropbox Sign-In
                   </a>
+                </div>
+                <div style={{ marginBottom: '8px' }}>
+                  <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>
+                    Dropbox App Key (Optional if configured on server)
+                  </label>
+                  <input
+                    type="text"
+                    className="pb-input"
+                    placeholder="Leave blank to use server environment key"
+                    value={dropboxAppKey}
+                    onChange={(e) => setDropboxAppKey(e.target.value)}
+                    style={{ width: '100%', fontFamily: 'monospace', fontSize: '12px' }}
+                  />
                 </div>
                 <label style={{ display: 'block', fontSize: '11px', color: '#c9d1d9', marginBottom: '4px' }}>Folder Path</label>
                 <input

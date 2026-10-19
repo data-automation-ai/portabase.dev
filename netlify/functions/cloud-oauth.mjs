@@ -113,6 +113,38 @@ export async function handler(event) {
       );
     }
 
+    if (provider === 'dropbox' && action === 'disconnect') {
+      return jsonResponse(
+        200,
+        {
+          ok: true,
+          connected: false,
+          disconnected: true,
+          provider: 'dropbox',
+          message: 'Disconnected from Dropbox.',
+        },
+        {
+          'Set-Cookie': clearCookie('pb_oauth_dropbox_token'),
+        },
+      );
+    }
+
+    if ((provider === 'google-drive' || provider === 'gdrive') && action === 'disconnect') {
+      return jsonResponse(
+        200,
+        {
+          ok: true,
+          connected: false,
+          disconnected: true,
+          provider: 'google-drive',
+          message: 'Disconnected from Google Drive.',
+        },
+        {
+          'Set-Cookie': clearCookie('pb_oauth_gdrive_token'),
+        },
+      );
+    }
+
     if (provider === 'supabase' && action === 'discover') {
       const authHeader = ((event.headers?.authorization || event.headers?.Authorization) || '')
         .replace(/^Bearer\s+/i, '')
@@ -264,7 +296,7 @@ export async function handler(event) {
 
   // 4. /oauth/google-drive/start
   if (pathname.includes('/oauth/google-drive/start')) {
-    const clientId = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
+    const clientId = (query.clientId || query.appKey || process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_DRIVE_CLIENT_ID || process.env.VITE_GOOGLE_OAUTH_CLIENT_ID || '').trim();
     if (!clientId) {
       return {
         statusCode: 302,
@@ -275,29 +307,87 @@ export async function handler(event) {
     const { codeVerifier, codeChallenge } = generatePkcePair();
     const state = generateOAuthState();
     const redirectUri = `${origin}/oauth/google-drive/callback`;
-    const cookie = serializeCookie('pb_oauth_gdrive', { codeVerifier, state });
+    const cookie = serializeCookie('pb_oauth_gdrive', { codeVerifier, state, clientId });
     const authUrl = buildGoogleDriveAuthorizeUrl({ clientId, redirectUri, codeChallenge, state });
     return {
       statusCode: 302,
       headers: { Location: authUrl, 'Set-Cookie': cookie, 'Cache-Control': 'no-store' },
+      multiValueHeaders: { 'Set-Cookie': [cookie] },
     };
   }
 
   // 5. /oauth/google-drive/callback
   if (pathname.includes('/oauth/google-drive/callback')) {
-    return {
-      statusCode: 302,
-      headers: {
-        Location: '/dashboard?storage_oauth=google-drive-connected',
-        'Set-Cookie': clearCookie('pb_oauth_gdrive'),
-        'Cache-Control': 'no-store',
-      },
-    };
+    const code = query.code;
+    const state = query.state;
+    const oauthErr = query.error;
+    const cookieHeader = event.headers.cookie || event.headers.Cookie;
+    const pkce = parseCookie(cookieHeader, 'pb_oauth_gdrive');
+
+    if (oauthErr || !code || !state || !pkce || pkce.state !== state) {
+      const errReason = query.error_description || oauthErr || 'invalid_state';
+      const cleared = clearCookie('pb_oauth_gdrive');
+      return {
+        statusCode: 302,
+        headers: {
+          Location: `/dashboard?storage_oauth_error=${encodeURIComponent(errReason)}`,
+          'Set-Cookie': cleared,
+          'Cache-Control': 'no-store',
+        },
+        multiValueHeaders: { 'Set-Cookie': [cleared] },
+      };
+    }
+
+    try {
+      const clientId = pkce.clientId || process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_DRIVE_CLIENT_ID;
+      const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+      const redirectUri = `${origin}/oauth/google-drive/callback`;
+      const tokenResp = await exchangeGoogleDriveOAuthCode({
+        code,
+        codeVerifier: pkce.codeVerifier,
+        redirectUri,
+        clientId,
+        clientSecret,
+      });
+
+      const tokenPayload = {
+        accessToken: tokenResp.accessToken || tokenResp.access_token,
+        refreshToken: tokenResp.refreshToken || tokenResp.refresh_token || null,
+        scope: tokenResp.scope || null,
+        clientId,
+      };
+
+      const tokenCookie = serializeCookie('pb_oauth_gdrive_token', tokenPayload, 86400);
+      const clearedCookie = clearCookie('pb_oauth_gdrive');
+
+      return {
+        statusCode: 302,
+        headers: {
+          Location: '/dashboard?storage_oauth=google-drive-connected',
+          'Set-Cookie': tokenCookie,
+          'Cache-Control': 'no-store',
+        },
+        multiValueHeaders: {
+          'Set-Cookie': [tokenCookie, clearedCookie],
+        },
+      };
+    } catch (err) {
+      const cleared = clearCookie('pb_oauth_gdrive');
+      return {
+        statusCode: 302,
+        headers: {
+          Location: `/dashboard?storage_oauth_error=${encodeURIComponent(err.message)}`,
+          'Set-Cookie': cleared,
+          'Cache-Control': 'no-store',
+        },
+        multiValueHeaders: { 'Set-Cookie': [cleared] },
+      };
+    }
   }
 
   // 6. /oauth/dropbox/start
   if (pathname.includes('/oauth/dropbox/start')) {
-    const clientId = process.env.DROPBOX_APP_KEY || process.env.DROPBOX_CLIENT_ID;
+    const clientId = (query.clientId || query.appKey || process.env.DROPBOX_APP_KEY || process.env.DROPBOX_CLIENT_ID || '').trim();
     if (!clientId) {
       return {
         statusCode: 302,
@@ -308,24 +398,83 @@ export async function handler(event) {
     const { codeVerifier, codeChallenge } = generatePkcePair();
     const state = generateOAuthState();
     const redirectUri = `${origin}/oauth/dropbox/callback`;
-    const cookie = serializeCookie('pb_oauth_dropbox', { codeVerifier, state });
+    const cookie = serializeCookie('pb_oauth_dropbox', { codeVerifier, state, clientId });
     const authUrl = buildDropboxAuthorizeUrl({ clientId, redirectUri, codeChallenge, state });
     return {
       statusCode: 302,
       headers: { Location: authUrl, 'Set-Cookie': cookie, 'Cache-Control': 'no-store' },
+      multiValueHeaders: { 'Set-Cookie': [cookie] },
     };
   }
 
   // 7. /oauth/dropbox/callback
   if (pathname.includes('/oauth/dropbox/callback')) {
-    return {
-      statusCode: 302,
-      headers: {
-        Location: '/dashboard?storage_oauth=dropbox-connected',
-        'Set-Cookie': clearCookie('pb_oauth_dropbox'),
-        'Cache-Control': 'no-store',
-      },
-    };
+    const code = query.code;
+    const state = query.state;
+    const oauthErr = query.error;
+    const cookieHeader = event.headers.cookie || event.headers.Cookie;
+    const pkce = parseCookie(cookieHeader, 'pb_oauth_dropbox');
+
+    if (oauthErr || !code || !state || !pkce || pkce.state !== state) {
+      const errReason = query.error_description || oauthErr || 'invalid_state';
+      const cleared = clearCookie('pb_oauth_dropbox');
+      return {
+        statusCode: 302,
+        headers: {
+          Location: `/dashboard?storage_oauth_error=${encodeURIComponent(errReason)}`,
+          'Set-Cookie': cleared,
+          'Cache-Control': 'no-store',
+        },
+        multiValueHeaders: { 'Set-Cookie': [cleared] },
+      };
+    }
+
+    try {
+      const clientId = pkce.clientId || process.env.DROPBOX_APP_KEY || process.env.DROPBOX_CLIENT_ID;
+      const clientSecret = process.env.DROPBOX_APP_SECRET || process.env.DROPBOX_CLIENT_SECRET;
+      const redirectUri = `${origin}/oauth/dropbox/callback`;
+      const tokenResp = await exchangeDropboxOAuthCode({
+        code,
+        codeVerifier: pkce.codeVerifier,
+        redirectUri,
+        clientId,
+        clientSecret,
+      });
+
+      const tokenPayload = {
+        accessToken: tokenResp.accessToken || tokenResp.access_token,
+        refreshToken: tokenResp.refreshToken || tokenResp.refresh_token || null,
+        accountId: tokenResp.accountId || tokenResp.account_id || null,
+        uid: tokenResp.uid || null,
+        clientId,
+      };
+
+      const tokenCookie = serializeCookie('pb_oauth_dropbox_token', tokenPayload, 86400);
+      const clearedCookie = clearCookie('pb_oauth_dropbox');
+
+      return {
+        statusCode: 302,
+        headers: {
+          Location: '/dashboard?storage_oauth=dropbox-connected',
+          'Set-Cookie': tokenCookie,
+          'Cache-Control': 'no-store',
+        },
+        multiValueHeaders: {
+          'Set-Cookie': [tokenCookie, clearedCookie],
+        },
+      };
+    } catch (err) {
+      const cleared = clearCookie('pb_oauth_dropbox');
+      return {
+        statusCode: 302,
+        headers: {
+          Location: `/dashboard?storage_oauth_error=${encodeURIComponent(err.message)}`,
+          'Set-Cookie': cleared,
+          'Cache-Control': 'no-store',
+        },
+        multiValueHeaders: { 'Set-Cookie': [cleared] },
+      };
+    }
   }
 
   return jsonResponse(404, { error: 'not_found' });

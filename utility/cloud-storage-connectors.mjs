@@ -81,9 +81,6 @@ export async function resolveDropboxAccessToken(opts = {}) {
     if (appSecret) bodyParams.set('client_secret', appSecret);
 
     const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
-    if (appKey && appSecret) {
-      headers.Authorization = `Basic ${Buffer.from(`${appKey}:${appSecret}`).toString('base64')}`;
-    }
 
     const res = await fetchImpl('https://api.dropboxapi.com/oauth2/token', {
       method: 'POST',

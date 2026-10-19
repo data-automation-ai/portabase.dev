@@ -30,7 +30,7 @@ import { AgentCredentials } from './agent-credentials.jsx';
 import { NotificationPreferences } from './notification-preferences.jsx';
 import { ManagedBackupSchedules } from './managed-backup-schedules.jsx';
 import { checkoutPlanFromSearch } from '../lib/auth-return.js';
-import { fetchPromoCodes, createPromoCode, redeemPromoCode, runUnattendedRestore, fetchMe, fetchStorageConnectors, testStorageConnector, uploadCapsuleToConnector } from '../lib/cloud-api.js';
+import { fetchPromoCodes, createPromoCode, redeemPromoCode, runUnattendedRestore, fetchMe, fetchStorageConnectors, testStorageConnector, uploadCapsuleToConnector, disconnectStorageConnector } from '../lib/cloud-api.js';
 
 const billingDate = value => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(value));
 
@@ -852,15 +852,87 @@ function StorageConnectorsCard({ state, setState, toast }) {
   const [provider, setProvider] = useState('dropbox');
   const [folderPath, setFolderPath] = useState('/Portabase');
   const [tokenInput, setTokenInput] = useState('');
+  const [appKeyInput, setAppKeyInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const [oauthConnectors, setOauthConnectors] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const data = await fetchStorageConnectors(state?.version || 'supabase');
+        if (mounted && data?.connectors) {
+          setOauthConnectors(data.connectors);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+
+    try {
+      const search = window.location.search;
+      if (!search) return;
+      const params = new URLSearchParams(search);
+      const storageOauth = params.get('storage_oauth');
+      const storageOauthErr = params.get('storage_oauth_error');
+
+      if (storageOauth === 'dropbox-connected') {
+        setProvider('dropbox');
+        toast?.('Connected to Dropbox via 1-Click OAuth!', 'ok');
+        testStorageConnector(state?.version || 'supabase', { provider: 'dropbox', folderPath: '/Portabase' })
+          .then(res => { if (mounted) setResult(res); })
+          .catch(() => {});
+      } else if (storageOauth === 'google-drive-connected') {
+        setProvider('google-drive');
+        toast?.('Connected to Google Drive via OAuth!', 'ok');
+        testStorageConnector(state?.version || 'supabase', { provider: 'google-drive', folderPath: 'Portabase' })
+          .then(res => { if (mounted) setResult(res); })
+          .catch(() => {});
+      } else if (storageOauth === 'dropbox_missing_app_key') {
+        setProvider('dropbox');
+        setError('Dropbox App Key is not configured on the server. Enter your Dropbox App Key or Access Token below.');
+      } else if (storageOauth === 'gdrive_missing_client_id') {
+        setProvider('google-drive');
+        setError('Google Drive Client ID is not configured on the server. Enter your Google Client ID or Access Token.');
+      } else if (storageOauthErr) {
+        setError(`Storage OAuth error: ${decodeURIComponent(storageOauthErr)}`);
+      }
+
+      if (storageOauth || storageOauthErr) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('storage_oauth');
+        url.searchParams.delete('storage_oauth_error');
+        window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+      }
+    } catch {
+      // ignore
+    }
+    return () => { mounted = false; };
+  }, [state?.version, toast]);
 
   const onProviderChange = (p) => {
     setProvider(p);
     setFolderPath(p === 'dropbox' ? '/Portabase' : 'Portabase');
     setResult(null);
     setError('');
+  };
+
+  const handleDisconnect = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await disconnectStorageConnector(state?.version || 'supabase', provider);
+      toast?.(`Disconnected ${provider === 'dropbox' ? 'Dropbox' : 'Google Drive'} OAuth session`, 'ok');
+      const data = await fetchStorageConnectors(state?.version || 'supabase');
+      setOauthConnectors(data?.connectors || null);
+      setResult(null);
+    } catch (err) {
+      setError(err.message || 'Disconnect failed');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleTest = async () => {
@@ -872,7 +944,8 @@ function StorageConnectorsCard({ state, setState, toast }) {
         provider,
         folderPath: folderPath.trim(),
         accessToken: tokenInput.trim() || undefined,
-        simulate: !tokenInput.trim(),
+        appKey: appKeyInput.trim() || undefined,
+        simulate: !tokenInput.trim() && !oauthConnectors?.[provider]?.oauthConnected,
       };
       const res = await testStorageConnector(state?.version || 'supabase', payload);
       setResult(res);
@@ -949,10 +1022,15 @@ function StorageConnectorsCard({ state, setState, toast }) {
     }
   };
 
+  const currentOauth = oauthConnectors?.[provider]?.oauthConnected;
+
   return (
     <div className="pb-card" data-testid="storage-connectors-card" style={{ marginTop: 14 }}>
       <div className="pb-card-head">
-        <h3>Dropbox &amp; Google Drive Direct Connectors</h3>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h3>Dropbox &amp; Google Drive Direct Connectors</h3>
+          {currentOauth && <Badge tone="ok">OAuth Connected</Badge>}
+        </div>
         <Badge tone="acid">Native API + rclone</Badge>
       </div>
       <p className="pb-muted" style={{ fontSize: 13, margin: '6px 0 14px' }}>
@@ -989,14 +1067,27 @@ function StorageConnectorsCard({ state, setState, toast }) {
             type="password"
             value={tokenInput}
             onChange={e => setTokenInput(e.target.value)}
-            placeholder="Leave empty for env/simulated token"
+            placeholder={currentOauth ? 'Using OAuth Cookie' : 'Leave empty for env/simulated token'}
             data-testid="storage-connector-token-input"
             style={{ width: '100%', padding: '6px 8px', fontSize: 13 }}
           />
         </div>
+        {provider === 'dropbox' && (
+          <div className="pb-field">
+            <label style={{ fontSize: 11, fontWeight: 600 }}>App Key (Optional)</label>
+            <input
+              type="text"
+              value={appKeyInput}
+              onChange={e => setAppKeyInput(e.target.value)}
+              placeholder="Leave blank for server key"
+              data-testid="storage-connector-appkey-input"
+              style={{ width: '100%', padding: '6px 8px', fontSize: 13 }}
+            />
+          </div>
+        )}
       </div>
 
-      <div className="pb-inline" style={{ gap: 10, marginBottom: 12 }}>
+      <div className="pb-inline" style={{ gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
         <button
           type="button"
           className="pb-btn"
@@ -1015,6 +1106,37 @@ function StorageConnectorsCard({ state, setState, toast }) {
         >
           {busy ? 'Syncing…' : 'Verify & Sync Capsule'}
         </button>
+        {provider === 'dropbox' && (
+          <a
+            href={`/oauth/dropbox/start${appKeyInput.trim() ? `?appKey=${encodeURIComponent(appKeyInput.trim())}` : ''}`}
+            className="pb-btn"
+            data-testid="dropbox-oauth-btn"
+            style={{ textDecoration: 'none' }}
+          >
+            1-Click Dropbox OAuth
+          </a>
+        )}
+        {provider === 'google-drive' && (
+          <a
+            href="/oauth/google-drive/start"
+            className="pb-btn"
+            data-testid="gdrive-oauth-btn"
+            style={{ textDecoration: 'none' }}
+          >
+            1-Click Google Drive OAuth
+          </a>
+        )}
+        {currentOauth && (
+          <button
+            type="button"
+            className="pb-btn pb-btn-ghost"
+            disabled={busy}
+            onClick={handleDisconnect}
+            data-testid="disconnect-storage-connector-btn"
+          >
+            Disconnect OAuth
+          </button>
+        )}
       </div>
 
       {error && (
