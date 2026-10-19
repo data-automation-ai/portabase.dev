@@ -36,10 +36,11 @@ rel_objects AS (
   FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace
   LEFT JOIN pg_stat_user_tables s ON s.relid = c.oid
-  WHERE n.nspname IN ('public', 'auth', 'storage')
+  WHERE n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+    AND n.nspname NOT LIKE 'pg_temp_%'
+    AND n.nspname NOT LIKE 'pg_toast_temp_%'
     AND c.relkind IN ('r', 'p', 'v', 'm')
   ORDER BY pg_total_relation_size(c.oid) DESC
-  LIMIT 120
 ),
 fn_objects AS (
   SELECT
@@ -52,9 +53,8 @@ fn_objects AS (
     NULL::timestamptz AS updated_at
   FROM pg_proc p
   JOIN pg_namespace n ON n.oid = p.pronamespace
-  WHERE n.nspname = 'public'
+  WHERE n.nspname IN ('public', 'auth', 'storage')
   ORDER BY p.proname ASC
-  LIMIT 30
 ),
 bin_objects AS (
   SELECT
@@ -70,8 +70,17 @@ bin_objects AS (
     COALESCE(o.updated_at, o.created_at) AS updated_at
   FROM storage.objects o
   WHERE o.name IS NOT NULL
-  ORDER BY o.created_at DESC NULLS LAST
-  LIMIT 150
+  UNION ALL
+  SELECT
+    'BINARY' AS object_type,
+    b.id AS schema_name,
+    '(empty bucket)' AS object_name,
+    0::bigint AS rows_estimate,
+    0::bigint AS size_bytes,
+    b.created_at AS created_at,
+    COALESCE(b.updated_at, b.created_at) AS updated_at
+  FROM storage.buckets b
+  WHERE NOT EXISTS (SELECT 1 FROM storage.objects o WHERE o.bucket_id = b.id)
 )
 SELECT json_build_object(
   'db_bytes', (SELECT db_bytes FROM db_meta),
@@ -124,7 +133,7 @@ export async function inspectSupabaseProjectDatabase(projectRef, token, fetchImp
     const rawBytes = r.size_bytes != null ? Number(r.size_bytes) : 0;
     const rawRows = r.rows_estimate != null ? Number(r.rows_estimate) : 0;
     const sizeMb = !Number.isNaN(rawBytes) && rawBytes > 0
-      ? Math.max(0.01, Number((rawBytes / (1024 * 1024)).toFixed(2)))
+      ? Number((rawBytes / (1024 * 1024)).toFixed(4))
       : 0;
     const schema = r.schema_name || 'public';
     const objectName = r.object_name || 'unknown';
@@ -145,18 +154,21 @@ export async function inspectSupabaseProjectDatabase(projectRef, token, fetchImp
 
   const binaries = rawBinObjects.map((b) => {
     const rawBytes = b.size_bytes != null ? Number(b.size_bytes) : 0;
+    const rawRows = b.rows_estimate != null ? Number(b.rows_estimate) : 1;
     const sizeMb = !Number.isNaN(rawBytes) && rawBytes > 0
-      ? Math.max(0.01, Number((rawBytes / (1024 * 1024)).toFixed(2)))
+      ? Number((rawBytes / (1024 * 1024)).toFixed(4))
       : 0;
     const bucket = b.schema_name || 'default';
     const objectName = b.object_name || 'unknown';
+    const isEmptyBucket = objectName === '(empty bucket)' && rawRows === 0;
     return {
       name: `${bucket}/${objectName}`,
       bucket,
       schema: bucket,
       objectName,
       objectType: 'BINARY',
-      rowsEstimate: 1,
+      isEmptyBucket,
+      rowsEstimate: isEmptyBucket ? 0 : 1,
       sizeBytes: !Number.isNaN(rawBytes) ? rawBytes : 0,
       sizeMb,
       createdAt: formatIsoDate(b.created_at) || dbCreatedAt,

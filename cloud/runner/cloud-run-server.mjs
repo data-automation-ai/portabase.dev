@@ -1,4 +1,5 @@
 import http from 'node:http';
+import zlib from 'node:zlib';
 import { URL } from 'node:url';
 import {
   generatePkcePair,
@@ -37,15 +38,26 @@ function clearCookie(name) {
   return `${name}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 }
 
-function sendJson(res, status, data) {
+function sendJson(res, status, data, req = null) {
   const body = JSON.stringify(data);
-  res.writeHead(status, {
+  const acceptEncoding = String(req?.headers?.['accept-encoding'] || '');
+  const baseHeaders = {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Supabase-Token',
-  });
+  };
+  if (body.length > 100 * 1024 && acceptEncoding.includes('gzip')) {
+    const gz = zlib.gzipSync(Buffer.from(body, 'utf8'));
+    res.writeHead(status, {
+      ...baseHeaders,
+      'Content-Encoding': 'gzip',
+    });
+    res.end(gz);
+    return;
+  }
+  res.writeHead(status, baseHeaders);
   res.end(body);
 }
 
@@ -442,17 +454,19 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
   <script>
     let stateDatabases = [];
     let expandedDbIds = {};
+    let expandedGroupsByDb = {};
+    let groupLimitsByDb = {};
     let sortConfigByDb = {};
     let tokenMasked = true;
     let colWidths = {
-      objectType: 76,
-      schemaOrBucket: 104,
-      objectName: 210,
-      sizeMb: 86,
+      objectType: 78,
+      schemaOrBucket: 124,
+      objectName: 230,
+      sizeMb: 88,
       createdAt: 118,
       updatedAt: 118,
       mode: 196,
-      stackedMb: 132,
+      stackedMb: 136,
     };
 
     function startColResize(ev, colKey) {
@@ -483,14 +497,17 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
       const fullMb = typeof item.sizeMb === 'number' && !Number.isNaN(item.sizeMb) ? item.sizeMb : 0;
       if (item.objectType === 'BINARY') {
         const mode = item.mode || 'include';
-        return mode === 'skip' ? 0 : Number(fullMb.toFixed(2));
+        return mode === 'skip' ? 0 : Number(fullMb.toFixed(3));
       }
       const effectiveMode = item.mode || (dbMode === 'structure_only' ? 'structure_only' : 'structure_and_data');
       if (effectiveMode === 'skip') return 0;
       if (effectiveMode === 'structure_only') {
-        return Number(Math.max(0.01, Math.min(fullMb * 0.02, 0.25)).toFixed(2));
+        const ddlMb = item.objectType === 'VIEW' || item.objectType === 'FUNCTION'
+          ? fullMb
+          : Math.min(fullMb || 0.01, 0.02);
+        return Number(ddlMb.toFixed(3));
       }
-      return Number(fullMb.toFixed(2));
+      return Number(fullMb.toFixed(3));
     }
 
     async function discoverProjects(overrideToken) {
@@ -498,7 +515,7 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
       const banner = document.getElementById('statusBanner');
       const rawToken = overrideToken !== undefined ? overrideToken : document.getElementById('sbTokenInput').value.trim();
       btn.disabled = true;
-      btn.textContent = '⏳ Discovering Projects, Objects & Storage...';
+      btn.textContent = '⏳ Discovering Projects, Schemas, Buckets & Objects...';
       banner.style.display = 'block';
       banner.style.color = '#58a6ff';
       banner.textContent = 'Querying Supabase Management API & PostgreSQL catalogs inside Google Cloud Run...';
@@ -520,7 +537,7 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
           expandedDbIds[firstWithObjects.id] = true;
         }
         banner.style.color = '#3ecf8e';
-        banner.textContent = '✓ Connected inside Google Cloud Runner! Discovered ' + stateDatabases.length + ' projects with live PostgreSQL objects & binary storage.';
+        banner.textContent = '✓ Connected inside Google Cloud Runner! Discovered ' + stateDatabases.length + ' projects with live PostgreSQL schemas, buckets & objects.';
         renderAll();
       } catch (err) {
         banner.style.color = '#f85149';
@@ -533,6 +550,33 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
 
     function toggleExpandDb(dbId) {
       expandedDbIds[dbId] = !expandedDbIds[dbId];
+      renderAll();
+    }
+
+    function toggleExpandGroup(dbId, groupKey) {
+      if (!expandedGroupsByDb[dbId]) expandedGroupsByDb[dbId] = {};
+      expandedGroupsByDb[dbId][groupKey] = !expandedGroupsByDb[dbId][groupKey];
+      renderAll();
+    }
+
+    function setAllGroupsExpanded(dbId, expand) {
+      if (!expand) {
+        expandedGroupsByDb[dbId] = {};
+      } else {
+        const db = stateDatabases.find(d => d.id === dbId);
+        if (db) {
+          const grps = buildGroupsForDb(db);
+          const m = {};
+          for (const g of grps) m[g.groupKey] = true;
+          expandedGroupsByDb[dbId] = m;
+        }
+      }
+      renderAll();
+    }
+
+    function showMoreGroupRows(dbId, groupKey, nextLimit) {
+      const k = dbId + ':' + groupKey;
+      groupLimitsByDb[k] = nextLimit;
       renderAll();
     }
 
@@ -562,6 +606,30 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
       stateDatabases = stateDatabases.map(db => {
         if (db.id !== dbId) return db;
         const binaries = (db.binaries || []).map(b => ({ ...b, mode: binMode }));
+        return { ...db, binaries };
+      });
+      renderAll();
+    }
+
+    function setSchemaMode(dbId, schemaName, newMode) {
+      stateDatabases = stateDatabases.map(db => {
+        if (db.id !== dbId) return db;
+        const tables = (db.tables || []).map(t => {
+          const s = t.schema || (t.name && t.name.includes('.') ? t.name.split('.')[0] : 'public');
+          return s === schemaName ? { ...t, mode: newMode } : t;
+        });
+        return { ...db, tables };
+      });
+      renderAll();
+    }
+
+    function setBucketMode(dbId, bucketName, newMode) {
+      stateDatabases = stateDatabases.map(db => {
+        if (db.id !== dbId) return db;
+        const binaries = (db.binaries || []).map(b => {
+          const bkt = b.bucket || b.schema || 'default';
+          return bkt === bucketName ? { ...b, mode: newMode } : b;
+        });
         return { ...db, binaries };
       });
       renderAll();
@@ -637,8 +705,8 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
         else if (col === 'updatedAt') { va = a.updatedAt || ''; vb = b.updatedAt || ''; }
         else if (col === 'mode') { va = a.mode || ''; vb = b.mode || ''; }
         else if (col === 'stackedMb') {
-          va = computeRowIncludedMb(a, dbMode);
-          vb = computeRowIncludedMb(b, dbMode);
+          va = typeof a.includedMb === 'number' ? a.includedMb : computeRowIncludedMb(a, dbMode);
+          vb = typeof b.includedMb === 'number' ? b.includedMb : computeRowIncludedMb(b, dbMode);
         } else {
           va = Number(a.sizeMb || 0); vb = Number(b.sizeMb || 0);
         }
@@ -647,13 +715,129 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
       });
     }
 
+    function buildGroupsForDb(db) {
+      const allRows = getUnifiedRows(db);
+      const schemaMap = new Map();
+      const bucketMap = new Map();
+
+      for (const item of allRows) {
+        const isBin = item.objectType === 'BINARY';
+        if (isBin) {
+          const bkt = item.schemaOrBucket || 'default';
+          if (!bucketMap.has(bkt)) {
+            bucketMap.set(bkt, {
+              groupKey: 'bucket:' + bkt,
+              objectType: 'BUCKET',
+              isBinary: true,
+              schemaOrBucket: bkt,
+              items: [],
+              rawCount: 0,
+              sizeMb: 0,
+              includedMb: 0,
+              createdAt: '',
+              updatedAt: '',
+              includeCount: 0,
+              skipCount: 0,
+            });
+          }
+          const g = bucketMap.get(bkt);
+          g.rawCount++;
+          const isEmptyPlaceholder = Boolean(item.isEmptyBucket || (item.objectName === '(empty bucket)' && !item.sizeMb));
+          if (!isEmptyPlaceholder) g.items.push(item);
+          const sz = Number(item.sizeMb || 0);
+          const inc = db.enabled ? computeRowIncludedMb(item, db.mode) : 0;
+          g.sizeMb += sz;
+          g.includedMb += inc;
+          if (item.createdAt && (!g.createdAt || item.createdAt < g.createdAt)) g.createdAt = item.createdAt;
+          if (item.updatedAt && (!g.updatedAt || item.updatedAt > g.updatedAt)) g.updatedAt = item.updatedAt;
+          if (item.mode === 'skip') g.skipCount++; else g.includeCount++;
+        } else {
+          const sch = item.schemaOrBucket || 'public';
+          if (!schemaMap.has(sch)) {
+            schemaMap.set(sch, {
+              groupKey: 'schema:' + sch,
+              objectType: 'SCHEMA',
+              isBinary: false,
+              schemaOrBucket: sch,
+              items: [],
+              tableCount: 0,
+              viewCount: 0,
+              fnCount: 0,
+              sizeMb: 0,
+              includedMb: 0,
+              createdAt: '',
+              updatedAt: '',
+              fullCount: 0,
+              structCount: 0,
+              skipCount: 0,
+            });
+          }
+          const g = schemaMap.get(sch);
+          g.items.push(item);
+          if (item.objectType === 'VIEW') g.viewCount++;
+          else if (item.objectType === 'FUNCTION') g.fnCount++;
+          else g.tableCount++;
+          const sz = Number(item.sizeMb || 0);
+          const inc = db.enabled ? computeRowIncludedMb(item, db.mode) : 0;
+          g.sizeMb += sz;
+          g.includedMb += inc;
+          if (item.createdAt && (!g.createdAt || item.createdAt < g.createdAt)) g.createdAt = item.createdAt;
+          if (item.updatedAt && (!g.updatedAt || item.updatedAt > g.updatedAt)) g.updatedAt = item.updatedAt;
+          if (item.mode === 'skip') g.skipCount++;
+          else if (item.mode === 'structure_only') g.structCount++;
+          else g.fullCount++;
+        }
+      }
+
+      const groups = [];
+      for (const g of schemaMap.values()) {
+        const total = g.items.length;
+        let mode = 'structure_and_data';
+        if (g.skipCount === total) mode = 'skip';
+        else if (g.structCount === total) mode = 'structure_only';
+        else if (g.fullCount === total) mode = 'structure_and_data';
+        else mode = 'mixed';
+
+        const parts = [];
+        if (g.tableCount > 0) parts.push(g.tableCount + ' tables');
+        if (g.viewCount > 0) parts.push(g.viewCount + ' views');
+        if (g.fnCount > 0) parts.push(g.fnCount + ' functions');
+
+        groups.push({
+          ...g,
+          sizeMb: Number(g.sizeMb.toFixed(2)),
+          includedMb: Number(g.includedMb.toFixed(2)),
+          objectName: total + ' objects' + (parts.length ? ' (' + parts.join(', ') + ')' : ''),
+          mode,
+        });
+      }
+
+      for (const g of bucketMap.values()) {
+        const fileTotal = g.items.length;
+        let mode = 'include';
+        if (g.skipCount === g.rawCount) mode = 'skip';
+        else if (g.includeCount === g.rawCount) mode = 'include';
+        else mode = 'mixed';
+
+        groups.push({
+          ...g,
+          sizeMb: Number(g.sizeMb.toFixed(2)),
+          includedMb: Number(g.includedMb.toFixed(2)),
+          objectName: fileTotal === 0 ? '0 files (empty bucket)' : (fileTotal + ' binary files'),
+          mode,
+        });
+      }
+
+      return groups;
+    }
+
     function buildManifest() {
       const enabledDbs = stateDatabases.filter(d => d.enabled);
       let grandDbMb = 0;
       let grandBinMb = 0;
 
       const projectManifests = enabledDbs.map(db => {
-        const rows = getUnifiedRows(db);
+        const rows = getUnifiedRows(db).filter(r => !r.isEmptyBucket && r.objectName !== '(empty bucket)');
         const dbItems = rows.filter(r => r.objectType !== 'BINARY' && r.mode !== 'skip');
         const binItems = rows.filter(r => r.objectType === 'BINARY' && r.mode === 'include');
 
@@ -734,9 +918,11 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
 
       const htmlParts = stateDatabases.map(db => {
         const isExpanded = Boolean(expandedDbIds[db.id]);
-        const allRows = getUnifiedRows(db);
+        const allRows = getUnifiedRows(db).filter(r => !r.isEmptyBucket && r.objectName !== '(empty bucket)');
         const sortCfg = sortConfigByDb[db.id] || { column: 'sizeMb', direction: 'desc' };
-        const sortedRows = sortRows(allRows, sortCfg, db.mode);
+        const groups = sortRows(buildGroupsForDb(db), sortCfg, db.mode);
+        const expandedGrpMap = expandedGroupsByDb[db.id] || {};
+        const anyGrpExpanded = groups.some(g => Boolean(expandedGrpMap[g.groupKey]));
 
         const rawDbMb = typeof db.estimatedSizeMb === 'number'
           ? db.estimatedSizeMb
@@ -763,38 +949,96 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
         const selectedTotalMb = Number((selectedDbMb + selectedBinMb).toFixed(2));
 
         let runningStackedMb = 0;
-        const rowsHtml = sortedRows.map((item, rowIdx) => {
-          const isBin = item.objectType === 'BINARY';
-          const contribMb = db.enabled ? computeRowIncludedMb(item, db.mode) : 0;
+        const rowsHtml = groups.map((grp, grpIdx) => {
+          const isBucket = grp.isBinary;
+          const isGrpExpanded = Boolean(expandedGrpMap[grp.groupKey]);
+          const contribMb = db.enabled ? grp.includedMb : 0;
           runningStackedMb = Number((runningStackedMb + contribMb).toFixed(2));
-          const isExcluded = item.mode === 'skip' || !db.enabled;
-          const safeName = String(item.name).replace(/'/g, "\\\\'");
-          const rowBg = isExcluded ? '#fef2f2' : (rowIdx % 2 === 0 ? '#ffffff' : '#f8fafc');
-          const txtColor = isExcluded ? '#94a3b8' : '#0f172a';
+          const stackedAfterGrp = runningStackedMb;
+          const isExcluded = grp.mode === 'skip' || !db.enabled;
+          const safeGrpName = String(grp.schemaOrBucket).replace(/'/g, "\\\\'");
+          const safeGrpKey = String(grp.groupKey).replace(/'/g, "\\\\'");
+          const grpBg = isExcluded ? '#fef2f2' : (isGrpExpanded ? '#e2e8f0' : (grpIdx % 2 === 0 ? '#f8fafc' : '#f1f5f9'));
+          const grpTxt = isExcluded ? '#94a3b8' : '#0f172a';
 
-          const switchHtml = isBin
-            ? \`<div class="switch-group">
-                <button type="button" class="switch-btn \${item.mode === 'skip' ? 'active-skip' : ''}" onclick="setRowMode('\${db.id}', 'BINARY', '\${safeName}', 'skip')">Exclude</button>
-                <button type="button" class="switch-btn \${item.mode !== 'skip' ? 'active-bin' : ''}" onclick="setRowMode('\${db.id}', 'BINARY', '\${safeName}', 'include')">Include</button>
+          const grpSwitchHtml = isBucket
+            ? \`<div class="switch-group" onclick="event.stopPropagation()">
+                <button type="button" class="switch-btn \${grp.mode === 'skip' ? 'active-skip' : ''}" onclick="setBucketMode('\${db.id}', '\${safeGrpName}', 'skip')">Exclude</button>
+                <button type="button" class="switch-btn \${grp.mode === 'include' ? 'active-bin' : ''}" onclick="setBucketMode('\${db.id}', '\${safeGrpName}', 'include')">Include\${grp.mode === 'mixed' ? '*' : ''}</button>
               </div>\`
-            : \`<div class="switch-group">
-                <button type="button" class="switch-btn \${item.mode === 'skip' ? 'active-skip' : ''}" onclick="setRowMode('\${db.id}', '\${item.objectType}', '\${safeName}', 'skip')">Exclude</button>
-                <button type="button" class="switch-btn \${item.mode === 'structure_only' ? 'active-struct' : ''}" onclick="setRowMode('\${db.id}', '\${item.objectType}', '\${safeName}', 'structure_only')">Struct</button>
-                <button type="button" class="switch-btn \${item.mode === 'structure_and_data' ? 'active-full' : ''}" onclick="setRowMode('\${db.id}', '\${item.objectType}', '\${safeName}', 'structure_and_data')">Struct+Data</button>
+            : \`<div class="switch-group" onclick="event.stopPropagation()">
+                <button type="button" class="switch-btn \${grp.mode === 'skip' ? 'active-skip' : ''}" onclick="setSchemaMode('\${db.id}', '\${safeGrpName}', 'skip')">Exclude</button>
+                <button type="button" class="switch-btn \${grp.mode === 'structure_only' ? 'active-struct' : ''}" onclick="setSchemaMode('\${db.id}', '\${safeGrpName}', 'structure_only')">Struct</button>
+                <button type="button" class="switch-btn \${grp.mode === 'structure_and_data' ? 'active-full' : ''}" onclick="setSchemaMode('\${db.id}', '\${safeGrpName}', 'structure_and_data')">Struct+Data\${grp.mode === 'mixed' ? '*' : ''}</button>
               </div>\`;
 
-          return \`<tr style="background:\${rowBg};height:21px;">
-            <td style="width:\${colWidths.objectType}px;background:\${rowBg};color:\${txtColor};font-weight:600;" title="\${item.objectType}">\${item.objectType}</td>
-            <td style="width:\${colWidths.schemaOrBucket}px;background:\${rowBg};color:\${txtColor};" title="\${item.schemaOrBucket}">\${item.schemaOrBucket}</td>
-            <td style="width:\${colWidths.objectName}px;background:\${rowBg};color:\${txtColor};font-weight:600;" title="\${item.objectName}">\${item.objectName}</td>
-            <td style="width:\${colWidths.sizeMb}px;background:\${rowBg};color:\${txtColor};text-align:right;">\${Number(item.sizeMb || 0).toFixed(2)} MB</td>
-            <td style="width:\${colWidths.createdAt}px;background:\${rowBg};color:#475569;">\${(item.createdAt || '—').slice(0, 16)}</td>
-            <td style="width:\${colWidths.updatedAt}px;background:\${rowBg};color:#475569;">\${(item.updatedAt || '—').slice(0, 16)}</td>
-            <td style="width:\${colWidths.mode}px;background:\${rowBg};text-align:center;">\${switchHtml}</td>
-            <td style="width:\${colWidths.stackedMb}px;background:\${rowBg};text-align:right;font-weight:600;color:\${contribMb > 0 ? '#0f766e' : '#94a3b8'};">
-              +\${contribMb.toFixed(2)} (Σ \${runningStackedMb.toFixed(2)})
+          const grpRowHtml = \`<tr style="background:\${grpBg};height:22px;cursor:pointer;" onclick="toggleExpandGroup('\${db.id}', '\${safeGrpKey}')" title="Click to \${isGrpExpanded ? 'collapse' : 'expand'} \${grp.objectType} \${grp.schemaOrBucket}">
+            <td style="width:\${colWidths.objectType}px;background:\${grpBg};color:\${isExcluded ? '#94a3b8' : (isBucket ? '#9a3412' : '#0f172a')};font-weight:700;">\${grp.objectType}</td>
+            <td style="width:\${colWidths.schemaOrBucket}px;background:\${grpBg};color:\${isExcluded ? '#94a3b8' : (isBucket ? '#7c2d12' : '#1e3a8a')};font-weight:700;" title="\${grp.schemaOrBucket}">\${isGrpExpanded ? '▼ ' : '▶ '}\${grp.schemaOrBucket}</td>
+            <td style="width:\${colWidths.objectName}px;background:\${grpBg};color:\${grpTxt};font-weight:700;" title="\${grp.objectName}">\${grp.objectName}</td>
+            <td style="width:\${colWidths.sizeMb}px;background:\${grpBg};color:\${grpTxt};text-align:right;font-weight:700;">\${Number(grp.sizeMb || 0).toFixed(2)} MB</td>
+            <td style="width:\${colWidths.createdAt}px;background:\${grpBg};color:#475569;">\${(grp.createdAt || '—').slice(0, 16)}</td>
+            <td style="width:\${colWidths.updatedAt}px;background:\${grpBg};color:#475569;">\${(grp.updatedAt || '—').slice(0, 16)}</td>
+            <td style="width:\${colWidths.mode}px;background:\${grpBg};text-align:center;">\${grpSwitchHtml}</td>
+            <td style="width:\${colWidths.stackedMb}px;background:\${grpBg};text-align:right;font-weight:700;color:\${contribMb > 0 ? '#0f766e' : '#94a3b8'};">
+              +\${contribMb.toFixed(2)} (Σ \${stackedAfterGrp.toFixed(2)})
             </td>
           </tr>\`;
+
+          if (!isGrpExpanded) return grpRowHtml;
+
+          const sortedChildren = sortRows(grp.items || [], sortCfg, db.mode);
+          const limitKey = db.id + ':' + grp.groupKey;
+          const limit = groupLimitsByDb[limitKey] || 500;
+          const visibleChildren = sortedChildren.slice(0, limit);
+          const remaining = sortedChildren.length - visibleChildren.length;
+          let childStacked = 0;
+
+          const childRowsHtml = visibleChildren.map((item, rowIdx) => {
+            const isBin = item.objectType === 'BINARY';
+            const itemContrib = db.enabled ? computeRowIncludedMb(item, db.mode) : 0;
+            childStacked = Number((childStacked + itemContrib).toFixed(2));
+            const itemExcl = item.mode === 'skip' || !db.enabled;
+            const safeName = String(item.name).replace(/'/g, "\\\\'");
+            const rowBg = itemExcl ? '#fef2f2' : (rowIdx % 2 === 0 ? '#ffffff' : '#f8fafc');
+            const txtColor = itemExcl ? '#94a3b8' : '#0f172a';
+
+            const switchHtml = isBin
+              ? \`<div class="switch-group">
+                  <button type="button" class="switch-btn \${item.mode === 'skip' ? 'active-skip' : ''}" onclick="setRowMode('\${db.id}', 'BINARY', '\${safeName}', 'skip')">Exclude</button>
+                  <button type="button" class="switch-btn \${item.mode !== 'skip' ? 'active-bin' : ''}" onclick="setRowMode('\${db.id}', 'BINARY', '\${safeName}', 'include')">Include</button>
+                </div>\`
+              : \`<div class="switch-group">
+                  <button type="button" class="switch-btn \${item.mode === 'skip' ? 'active-skip' : ''}" onclick="setRowMode('\${db.id}', '\${item.objectType}', '\${safeName}', 'skip')">Exclude</button>
+                  <button type="button" class="switch-btn \${item.mode === 'structure_only' ? 'active-struct' : ''}" onclick="setRowMode('\${db.id}', '\${item.objectType}', '\${safeName}', 'structure_only')">Struct</button>
+                  <button type="button" class="switch-btn \${item.mode === 'structure_and_data' ? 'active-full' : ''}" onclick="setRowMode('\${db.id}', '\${item.objectType}', '\${safeName}', 'structure_and_data')">Struct+Data</button>
+                </div>\`;
+
+            return \`<tr style="background:\${rowBg};height:21px;">
+              <td style="width:\${colWidths.objectType}px;padding-left:14px;background:\${rowBg};color:\${txtColor};font-weight:600;" title="\${item.objectType}">\${item.objectType}</td>
+              <td style="width:\${colWidths.schemaOrBucket}px;padding-left:14px;background:\${rowBg};color:#64748b;" title="\${item.schemaOrBucket}">└ \${item.schemaOrBucket}</td>
+              <td style="width:\${colWidths.objectName}px;background:\${rowBg};color:\${txtColor};font-weight:600;" title="\${item.objectName}">\${item.objectName}</td>
+              <td style="width:\${colWidths.sizeMb}px;background:\${rowBg};color:\${txtColor};text-align:right;">\${Number(item.sizeMb || 0).toFixed(2)} MB</td>
+              <td style="width:\${colWidths.createdAt}px;background:\${rowBg};color:#475569;">\${(item.createdAt || '—').slice(0, 16)}</td>
+              <td style="width:\${colWidths.updatedAt}px;background:\${rowBg};color:#475569;">\${(item.updatedAt || '—').slice(0, 16)}</td>
+              <td style="width:\${colWidths.mode}px;background:\${rowBg};text-align:center;">\${switchHtml}</td>
+              <td style="width:\${colWidths.stackedMb}px;background:\${rowBg};text-align:right;font-weight:600;color:\${itemContrib > 0 ? '#0f766e' : '#94a3b8'};">
+                +\${itemContrib.toFixed(2)} (Σ \${childStacked.toFixed(2)})
+              </td>
+            </tr>\`;
+          }).join('');
+
+          const loadMoreHtml = remaining > 0
+            ? \`<tr style="background:#f1f5f9;height:22px;">
+                <td colspan="8" style="padding:2px 12px;color:#1e293b;">
+                  Showing \${visibleChildren.length} of \${sortedChildren.length} objects in \${grp.objectType.toLowerCase()} "\${grp.schemaOrBucket}" —
+                  <button type="button" class="switch-btn active-bin" style="margin-left:6px;" onclick="showMoreGroupRows('\${db.id}', '\${safeGrpKey}', \${limit + 1000})">Show +1,000 more</button>
+                  <button type="button" class="switch-btn" style="margin-left:6px;border:1px solid #94a3b8;background:#fff;" onclick="showMoreGroupRows('\${db.id}', '\${safeGrpKey}', \${sortedChildren.length})">Show all \${sortedChildren.length} objects</button>
+                </td>
+              </tr>\`
+            : '';
+
+          return grpRowHtml + childRowsHtml + loadMoreHtml;
         }).join('');
 
         const sortArrow = (col) => sortCfg.column === col ? (sortCfg.direction === 'asc' ? ' ▲' : ' ▼') : ' ↕';
@@ -824,11 +1068,11 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
               <span style="font-size:11px;padding:2px 8px;border-radius:10px;background:#21262d;color:#58a6ff;font-family:monospace;">
                 DB: \${rawDbMb.toFixed(2)} MB · Storage: \${rawBinMb.toFixed(2)} MB · Total: \${rawTotalProjectMb.toFixed(2)} MB
               </span>
-              <span style="font-size:11px;color:#8b949e;">(\${(db.tables || []).length} DB objects · \${(db.binaries || []).length} binary files)</span>
+              <span style="font-size:11px;color:#8b949e;">(\${groups.filter(g => !g.isBinary).length} schemas · \${groups.filter(g => g.isBinary).length} buckets · \${allRows.length} total objects)</span>
             </div>
             <div style="display:flex;align-items:center;gap:8px;">
               <button type="button" class="btn btn-sm" onclick="event.stopPropagation(); toggleExpandDb('\${db.id}')">
-                \${isExpanded ? '▼ Collapse Spreadsheet' : '▶ Expand Object & Binary Spreadsheet (' + allRows.length + ' rows)'}
+                \${isExpanded ? '▼ Collapse Spreadsheet' : '▶ Expand Schema & Bucket Spreadsheet (' + groups.length + ' schemas/buckets · ' + allRows.length + ' objects)'}
               </button>
             </div>
           </div>
@@ -836,20 +1080,21 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
           \${isExpanded ? \`
             <div style="border-top:1px solid #30363d;background:#090d13;padding:10px 12px;">
               <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
-                <span style="font-size:11px;color:#8b949e;">Click any column header to sort · Drag any column header border to resize.</span>
+                <span style="font-size:11px;color:#8b949e;">Default view shows Schema &amp; Bucket level. Click any Schema or Bucket row to expand its individual objects · Drag header borders to resize.</span>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                  <button type="button" class="btn btn-sm" onclick="setDatabaseDefaultMode('\${db.id}', 'structure_and_data')">All DB Objects: Struct+Data</button>
-                  <button type="button" class="btn btn-sm" onclick="setDatabaseDefaultMode('\${db.id}', 'structure_only')">All DB Objects: Struct Only</button>
-                  <button type="button" class="btn btn-sm" onclick="setDatabaseBinariesMode('\${db.id}', 'include')">Include All Binaries</button>
-                  <button type="button" class="btn btn-sm" onclick="setDatabaseBinariesMode('\${db.id}', 'skip')">Exclude All Binaries</button>
+                  <button type="button" class="btn btn-sm" onclick="setAllGroupsExpanded('\${db.id}', \${!anyGrpExpanded})">\${anyGrpExpanded ? '▴ Collapse to Schemas & Buckets' : '▾ Expand All Objects'}</button>
+                  <button type="button" class="btn btn-sm" onclick="setDatabaseDefaultMode('\${db.id}', 'structure_and_data')">All Schemas: Struct+Data</button>
+                  <button type="button" class="btn btn-sm" onclick="setDatabaseDefaultMode('\${db.id}', 'structure_only')">All Schemas: Struct Only</button>
+                  <button type="button" class="btn btn-sm" onclick="setDatabaseBinariesMode('\${db.id}', 'include')">Include All Buckets</button>
+                  <button type="button" class="btn btn-sm" onclick="setDatabaseBinariesMode('\${db.id}', 'skip')">Exclude All Buckets</button>
                 </div>
               </div>
-              \${sortedRows.length === 0 ? \`
+              \${groups.length === 0 ? \`
                 <div style="padding:14px;text-align:center;color:#475569;background:#ffffff;border:1px solid #94a3b8;font-size:8.5pt;">
-                  No individual objects returned for this project (status: \${db.status}). Database-level summation is \${rawTotalProjectMb.toFixed(2)} MB.
+                  No schemas, buckets, or objects returned for this project (status: \${db.status}). Database-level summation is \${rawTotalProjectMb.toFixed(2)} MB.
                 </div>
               \` : \`
-                <div style="overflow-x:auto;border:1px solid #94a3b8;background:#ffffff;max-height:420px;overflow-y:auto;">
+                <div style="overflow-x:auto;border:1px solid #94a3b8;background:#ffffff;max-height:460px;overflow-y:auto;">
                   <table class="spreadsheet" style="width:\${Object.values(colWidths).reduce((a,b)=>a+b,0)}px;">
                     <thead>
                       <tr>
@@ -924,7 +1169,7 @@ export function createCloudRunServer() {
         region: GCP_REGION,
         hasDefaultToken: Boolean(process.env.SUPABASE_MANAGEMENT_TOKEN || process.env.SUPABASE_ACCESS_TOKEN),
         timestamp: new Date().toISOString(),
-      });
+      }, req);
       return;
     }
 
@@ -1024,6 +1269,7 @@ export function createCloudRunServer() {
         '';
 
       const targetRef = (body.project || url.searchParams.get('project') || '').trim();
+      const includeManifest = Boolean(body.includeManifest || url.searchParams.get('includeManifest'));
 
       try {
         const result = await discoverSupabaseProjectsAndDatabases({
@@ -1032,7 +1278,6 @@ export function createCloudRunServer() {
           inspectAllActive: true,
         });
         const scopeSummary = computeDatabaseScopeSummary(result.databases || []);
-        const exportManifest = buildExportManifest(result.databases || []);
         sendJson(res, 200, {
           ...result,
           runner: {
@@ -1042,14 +1287,14 @@ export function createCloudRunServer() {
             region: GCP_REGION,
           },
           scopeSummary,
-          exportManifest,
-        });
+          ...(includeManifest ? { exportManifest: buildExportManifest(result.databases || []) } : {}),
+        }, req);
       } catch (err) {
         sendJson(res, 400, {
           ok: false,
           connected: false,
           error: err.message,
-        });
+        }, req);
       }
       return;
     }
@@ -1064,7 +1309,7 @@ export function createCloudRunServer() {
         ok: true,
         scopeSummary,
         exportManifest,
-      });
+      }, req);
       return;
     }
 
@@ -1084,7 +1329,7 @@ export function createCloudRunServer() {
       return;
     }
 
-    sendJson(res, 404, { ok: false, error: 'not_found', path: pathname });
+    sendJson(res, 404, { ok: false, error: 'not_found', path: pathname }, req);
   });
 }
 

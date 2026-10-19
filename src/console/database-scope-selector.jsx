@@ -8,6 +8,9 @@ import {
   computeObjectIncludedMb,
   computeDatabaseScopeSummary,
   createDefaultDatabaseScope,
+  groupDatabaseObjectsBySchemaAndBucket,
+  setSchemaModeInDatabase,
+  setBucketModeInDatabase,
 } from '../../cloud/runner/database-scope.mjs';
 
 function parseObjectRow(row) {
@@ -63,6 +66,9 @@ export function DatabaseScopeSelector({
     const first = Array.isArray(databases) && databases[0]?.id;
     return first || null;
   });
+  // Default view shows Schema-level & Bucket-level rows ONLY (all groups collapsed initially)
+  const [expandedGroups, setExpandedGroups] = useState({});
+  const [groupRowLimits, setGroupRowLimits] = useState({});
   const [newDbInput, setNewDbInput] = useState('');
   const [newDbName, setNewDbName] = useState('');
   const [showAddDb, setShowAddDb] = useState(false);
@@ -70,14 +76,14 @@ export function DatabaseScopeSelector({
   const [sortConfig, setSortConfig] = useState({});
   const [searchQuery, setSearchQuery] = useState({});
   const [colWidths, setColWidths] = useState({
-    type: 76,
-    schema: 104,
-    name: 210,
-    size: 86,
+    type: 78,
+    schema: 124,
+    name: 230,
+    size: 88,
     createdAt: 116,
     updatedAt: 116,
     mode: 196,
-    includedMb: 132,
+    includedMb: 136,
   });
 
   const handleStartResize = (e, colKey) => {
@@ -109,6 +115,44 @@ export function DatabaseScopeSelector({
 
   const updateDatabases = (nextDbs) => {
     onChange?.(nextDbs);
+  };
+
+  const handleToggleGroupExpanded = (dbId, groupKey) => {
+    setExpandedGroups((prev) => {
+      const dbGroups = prev[dbId] || {};
+      return {
+        ...prev,
+        [dbId]: {
+          ...dbGroups,
+          [groupKey]: !dbGroups[groupKey],
+        },
+      };
+    });
+  };
+
+  const handleSetAllGroupsExpanded = (dbId, groups, expanded) => {
+    setExpandedGroups((prev) => {
+      if (!expanded) {
+        return { ...prev, [dbId]: {} };
+      }
+      const nextMap = {};
+      for (const g of groups) {
+        nextMap[g.groupKey] = true;
+      }
+      return { ...prev, [dbId]: nextMap };
+    });
+  };
+
+  const handleSetSchemaMode = (dbId, schemaName, mode) => {
+    if (readOnly) return;
+    const next = dbs.map((db) => (db.id === dbId ? setSchemaModeInDatabase(db, schemaName, mode) : db));
+    updateDatabases(next);
+  };
+
+  const handleSetBucketMode = (dbId, bucketName, mode) => {
+    if (readOnly) return;
+    const next = dbs.map((db) => (db.id === dbId ? setBucketModeInDatabase(db, bucketName, mode) : db));
+    updateDatabases(next);
   };
 
   const handleToggleDbEnabled = (id) => {
@@ -280,29 +324,14 @@ export function DatabaseScopeSelector({
   const getAllRowsForDb = (db) => {
     const tables = Array.isArray(db.tables) ? db.tables : [];
     const binaries = Array.isArray(db.binaries) ? db.binaries : [];
-    return [...tables, ...binaries];
+    return [...tables, ...binaries].filter((r) => !r?.isEmptyBucket && r?.objectName !== '(empty bucket)');
   };
 
-  const getSortedObjects = (db) => {
-    const allRows = getAllRowsForDb(db);
-    let filtered = allRows;
-    const query = (searchQuery[db.id] || '').trim().toLowerCase();
-    if (query) {
-      filtered = allRows.filter((row) => {
-        const parsed = parseObjectRow(row);
-        return (
-          parsed.objectType.toLowerCase().includes(query) ||
-          parsed.schemaOrBucket.toLowerCase().includes(query) ||
-          parsed.objectName.toLowerCase().includes(query) ||
-          parsed.key.toLowerCase().includes(query)
-        );
-      });
-    }
-
+  const sortChildItems = (items, db) => {
     const { column = 'size', direction = 'desc' } = sortConfig[db.id] || { column: 'size', direction: 'desc' };
     const multiplier = direction === 'asc' ? 1 : -1;
 
-    return [...filtered].sort((a, b) => {
+    return [...items].sort((a, b) => {
       const aObj = parseObjectRow(a);
       const bObj = parseObjectRow(b);
 
@@ -345,6 +374,82 @@ export function DatabaseScopeSelector({
         const aInc = computeObjectIncludedMb(a, db.mode);
         const bInc = computeObjectIncludedMb(b, db.mode);
         return (aInc - bInc) * multiplier;
+      }
+      return 0;
+    });
+  };
+
+  const getSortedGroupsForDb = (db) => {
+    const rawGroups = groupDatabaseObjectsBySchemaAndBucket(db);
+    const query = (searchQuery[db.id] || '').trim().toLowerCase();
+
+    const filteredGroups = rawGroups
+      .map((grp) => {
+        if (!query) {
+          return { ...grp, matchingItems: sortChildItems(grp.items, db) };
+        }
+        const groupMatches =
+          grp.objectType.toLowerCase().includes(query) ||
+          grp.schemaOrBucket.toLowerCase().includes(query) ||
+          grp.objectName.toLowerCase().includes(query);
+
+        const matchingItems = grp.items.filter((row) => {
+          const parsed = parseObjectRow(row);
+          return (
+            parsed.objectType.toLowerCase().includes(query) ||
+            parsed.schemaOrBucket.toLowerCase().includes(query) ||
+            parsed.objectName.toLowerCase().includes(query) ||
+            parsed.key.toLowerCase().includes(query)
+          );
+        });
+
+        if (!groupMatches && matchingItems.length === 0) return null;
+        return {
+          ...grp,
+          matchingItems: sortChildItems(matchingItems.length > 0 ? matchingItems : grp.items, db),
+        };
+      })
+      .filter(Boolean);
+
+    const { column = 'size', direction = 'desc' } = sortConfig[db.id] || { column: 'size', direction: 'desc' };
+    const multiplier = direction === 'asc' ? 1 : -1;
+
+    return [...filteredGroups].sort((a, b) => {
+      if (column === 'type') {
+        const cmp = a.objectType.localeCompare(b.objectType);
+        return cmp !== 0 ? cmp * multiplier : a.schemaOrBucket.localeCompare(b.schemaOrBucket) * multiplier;
+      }
+      if (column === 'schema') {
+        return a.schemaOrBucket.localeCompare(b.schemaOrBucket) * multiplier;
+      }
+      if (column === 'name') {
+        return (a.objectCount - b.objectCount) * multiplier;
+      }
+      if (column === 'size') {
+        return ((a.sizeMb || 0) - (b.sizeMb || 0)) * multiplier;
+      }
+      if (column === 'createdAt') {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() || 0 : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() || 0 : 0;
+        return (aTime - bTime) * multiplier;
+      }
+      if (column === 'updatedAt') {
+        const aTime = a.updatedAt ? new Date(a.updatedAt).getTime() || 0 : 0;
+        const bTime = b.updatedAt ? new Date(b.updatedAt).getTime() || 0 : 0;
+        return (aTime - bTime) * multiplier;
+      }
+      if (column === 'mode') {
+        const rank = {
+          [TABLE_COPY_MODES.STRUCTURE_AND_DATA]: 3,
+          [BINARY_COPY_MODES.INCLUDE]: 3,
+          mixed: 2.5,
+          [TABLE_COPY_MODES.STRUCTURE_ONLY]: 2,
+          [TABLE_COPY_MODES.SKIP]: 1,
+        };
+        return ((rank[a.mode] || 0) - (rank[b.mode] || 0)) * multiplier;
+      }
+      if (column === 'includedMb') {
+        return ((a.includedMb || 0) - (b.includedMb || 0)) * multiplier;
       }
       return 0;
     });
@@ -543,13 +648,16 @@ export function DatabaseScopeSelector({
           const isExpanded = expandedDbId === db.id;
           const isStructureOnly = db.mode === DATABASE_COPY_MODES.STRUCTURE_ONLY;
           const allObjects = getAllRowsForDb(db);
-          const sortedObjects = getSortedObjects(db);
+          const sortedGroups = getSortedGroupsForDb(db);
+          const dbExpandedMap = expandedGroups[db.id] || {};
+          const hasSearch = Boolean((searchQuery[db.id] || '').trim());
+          const anyGroupExpanded = sortedGroups.some((g) => Boolean(dbExpandedMap[g.groupKey]));
           const dbMetrics = summary.perDatabase?.[db.id] || {};
           const skippedCount = allObjects.filter((t) => t.mode === TABLE_COPY_MODES.SKIP || t.mode === 'exclude').length;
           const structOnlyTableCount = allObjects.filter((t) => t.mode === TABLE_COPY_MODES.STRUCTURE_ONLY).length;
           const fullCount = allObjects.length - structOnlyTableCount - skippedCount;
 
-          // Running stacked MB accumulator across visible rows
+          // Running stacked MB accumulator across Schema & Bucket groups
           let runningStackedMb = 0;
 
           return (
@@ -641,7 +749,7 @@ export function DatabaseScopeSelector({
                         ? 'Database deselected from backup and restore target'
                         : isStructureOnly
                           ? '⚡ Structure Only: Schemas, tables, DDL & RLS (0 table rows saved)'
-                          : `Structure + Data + Binaries · ${allObjects.length} objects (${fullCount} included, ${structOnlyTableCount} structure-only, ${skippedCount} excluded)`}
+                          : `${sortedGroups.filter((g) => !g.isBinary).length} schemas · ${sortedGroups.filter((g) => g.isBinary).length} buckets · ${allObjects.length} total objects (${fullCount} included, ${structOnlyTableCount} structure-only, ${skippedCount} excluded)`}
                     </div>
                   </div>
                 </div>
@@ -729,9 +837,9 @@ export function DatabaseScopeSelector({
                         fontWeight: 600,
                       }}
                     >
-                      <span>{isExpanded ? '▴ Hide spreadsheet of database & binary objects' : '▾ Click into database objects (Spreadsheet View)'}</span>
+                      <span>{isExpanded ? '▴ Hide spreadsheet of schemas, buckets & objects' : '▾ Click into database schemas & buckets (Spreadsheet View)'}</span>
                       <span className="pb-badge" style={{ fontSize: '11px', background: '#21262d', color: '#c9d1d9' }}>
-                        {allObjects.length} objects
+                        {sortedGroups.length} schemas/buckets · {allObjects.length} objects
                       </span>
                     </button>
 
@@ -753,12 +861,12 @@ export function DatabaseScopeSelector({
                         padding: '12px',
                       }}
                     >
-                      {/* Spreadsheet Header Toolbar: Search & Bulk Action Controls */}
+                      {/* Spreadsheet Header Toolbar: Search, Expand/Collapse Schemas & Buckets, and Bulk Action Controls */}
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '220px' }}>
                           <input
                             type="text"
-                            placeholder="Filter by object type, schema, bucket, or name..."
+                            placeholder="Filter schemas, buckets, or individual object names..."
                             value={searchQuery[db.id] || ''}
                             onChange={(e) => setSearchQuery({ ...searchQuery, [db.id]: e.target.value })}
                             style={{
@@ -782,6 +890,14 @@ export function DatabaseScopeSelector({
                               Clear
                             </button>
                           )}
+                          <button
+                            type="button"
+                            className="pb-btn pb-btn-sm"
+                            onClick={() => handleSetAllGroupsExpanded(db.id, sortedGroups, !anyGroupExpanded)}
+                            style={{ fontSize: '11px', padding: '3px 8px', whiteSpace: 'nowrap' }}
+                          >
+                            {anyGroupExpanded ? '▴ Collapse to Schemas & Buckets' : '▾ Expand All Objects'}
+                          </button>
                         </div>
 
                         {!readOnly && (
@@ -815,10 +931,10 @@ export function DatabaseScopeSelector({
                         )}
                       </div>
 
-                      {/* Dense 8.5pt Spreadsheet Grid (No pills, resizable & sortable columns) */}
+                      {/* Dense 8.5pt Spreadsheet Grid (Default: Schema & Bucket rows only; click any Schema/Bucket to expand its objects) */}
                       <div
                         style={{
-                          maxHeight: '420px',
+                          maxHeight: '460px',
                           overflowY: 'auto',
                           overflowX: 'auto',
                           border: '1px solid #94a3b8',
@@ -850,7 +966,7 @@ export function DatabaseScopeSelector({
                             </tr>
                           </thead>
                           <tbody>
-                            {sortedObjects.length === 0 ? (
+                            {sortedGroups.length === 0 ? (
                               <tr>
                                 <td
                                   colSpan={8}
@@ -863,271 +979,591 @@ export function DatabaseScopeSelector({
                                   }}
                                 >
                                   {allObjects.length === 0
-                                    ? 'No objects discovered yet for this database. Connect via OAuth inside the runner or add custom objects below.'
-                                    : 'No objects match the search filter.'}
+                                    ? 'No schemas, buckets, or objects discovered yet for this database. Connect via OAuth inside the runner or add custom objects below.'
+                                    : 'No schemas, buckets, or objects match the search filter.'}
                                 </td>
                               </tr>
                             ) : (
-                              sortedObjects.map((item, rowIdx) => {
-                                const parsed = parseObjectRow(item);
-                                const isBinary = parsed.isBinary;
-                                const mode = item.mode || (isBinary ? BINARY_COPY_MODES.INCLUDE : TABLE_COPY_MODES.STRUCTURE_AND_DATA);
-                                const isSkip = mode === TABLE_COPY_MODES.SKIP || mode === 'exclude';
-                                const isStructureOnlyRow = !isBinary && mode === TABLE_COPY_MODES.STRUCTURE_ONLY;
-                                const isFull = !isSkip && !isStructureOnlyRow;
+                              sortedGroups.map((grp, grpIdx) => {
+                                const isGroupExpanded = Boolean(dbExpandedMap[grp.groupKey] || hasSearch);
+                                const isBucket = grp.isBinary;
+                                const grpMode = grp.mode;
+                                const isGrpSkip = grpMode === TABLE_COPY_MODES.SKIP || grpMode === 'exclude';
+                                const isGrpStruct = !isBucket && grpMode === TABLE_COPY_MODES.STRUCTURE_ONLY;
+                                const isGrpFull = !isBucket && grpMode === TABLE_COPY_MODES.STRUCTURE_AND_DATA;
+                                const isGrpInclude = isBucket && grpMode === BINARY_COPY_MODES.INCLUDE;
 
-                                const rowIncludedMb = computeObjectIncludedMb(item, db.mode);
-                                runningStackedMb += rowIncludedMb;
+                                const grpIncludedMb = grp.includedMb || 0;
+                                runningStackedMb = Number((runningStackedMb + grpIncludedMb).toFixed(2));
+                                const stackedAfterGroup = runningStackedMb;
 
-                                const rowBg = isSkip
+                                const grpBg = isGrpSkip
                                   ? '#fef2f2'
-                                  : rowIdx % 2 === 0
-                                    ? '#ffffff'
-                                    : '#f8fafc';
+                                  : isGroupExpanded
+                                    ? '#e2e8f0'
+                                    : grpIdx % 2 === 0
+                                      ? '#f8fafc'
+                                      : '#f1f5f9';
 
-                                const baseCellStyle = {
+                                const grpCellStyle = {
                                   fontSize: '8.5pt',
                                   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
                                   padding: '1px 6px',
-                                  height: '21px',
+                                  height: '22px',
                                   lineHeight: '1.15',
                                   whiteSpace: 'nowrap',
                                   overflow: 'hidden',
                                   textOverflow: 'ellipsis',
-                                  borderBottom: '1px solid #cbd5e1',
+                                  borderBottom: '1px solid #94a3b8',
                                   borderRight: '1px solid #cbd5e1',
-                                  background: rowBg,
-                                  color: isSkip ? '#94a3b8' : '#0f172a',
+                                  background: grpBg,
+                                  color: isGrpSkip ? '#94a3b8' : '#0f172a',
                                   verticalAlign: 'middle',
                                 };
 
+                                const childItems = grp.matchingItems || [];
+                                const limitKey = `${db.id}:${grp.groupKey}`;
+                                const rowLimit = groupRowLimits[limitKey] || 500;
+                                const visibleChildren = isGroupExpanded ? childItems.slice(0, rowLimit) : [];
+                                const remainingChildren = childItems.length - visibleChildren.length;
+                                let childRunningMb = 0;
+
                                 return (
-                                  <tr key={parsed.key} style={{ height: '21px' }}>
-                                    <td
-                                      style={{
-                                        ...baseCellStyle,
-                                        width: `${colWidths.type}px`,
-                                        fontWeight: 600,
-                                        color: isSkip ? '#94a3b8' : isBinary ? '#9a3412' : '#1e293b',
-                                      }}
-                                      title={parsed.objectType}
+                                  <React.Fragment key={grp.groupKey}>
+                                    {/* Schema-Level or Bucket-Level Summary Row (Default View) */}
+                                    <tr
+                                      style={{ height: '22px', cursor: 'pointer' }}
+                                      onClick={() => handleToggleGroupExpanded(db.id, grp.groupKey)}
+                                      title={`Click to ${isGroupExpanded ? 'collapse' : 'expand'} ${grp.objectType} "${grp.schemaOrBucket}" (${grp.objectCount} objects)`}
                                     >
-                                      {parsed.objectType}
-                                    </td>
-                                    <td
-                                      style={{
-                                        ...baseCellStyle,
-                                        width: `${colWidths.schema}px`,
-                                        color: isSkip ? '#94a3b8' : isBinary ? '#7c2d12' : '#334155',
-                                      }}
-                                      title={parsed.schemaOrBucket}
-                                    >
-                                      {parsed.schemaOrBucket}
-                                    </td>
-                                    <td
-                                      style={{
-                                        ...baseCellStyle,
-                                        width: `${colWidths.name}px`,
-                                        fontWeight: 600,
-                                        color: isSkip ? '#94a3b8' : '#0f172a',
-                                      }}
-                                      title={parsed.objectName}
-                                    >
-                                      {parsed.objectName}
-                                    </td>
-                                    <td
-                                      style={{
-                                        ...baseCellStyle,
-                                        width: `${colWidths.size}px`,
-                                        textAlign: 'right',
-                                      }}
-                                    >
-                                      {formatMb(item.sizeMb)}
-                                    </td>
-                                    <td
-                                      style={{
-                                        ...baseCellStyle,
-                                        width: `${colWidths.createdAt}px`,
-                                        color: '#475569',
-                                      }}
-                                      title={formatDate(item.createdAt)}
-                                    >
-                                      {formatDate(item.createdAt)}
-                                    </td>
-                                    <td
-                                      style={{
-                                        ...baseCellStyle,
-                                        width: `${colWidths.updatedAt}px`,
-                                        color: '#475569',
-                                      }}
-                                      title={formatDate(item.updatedAt)}
-                                    >
-                                      {formatDate(item.updatedAt)}
-                                    </td>
-                                    <td
-                                      style={{
-                                        ...baseCellStyle,
-                                        width: `${colWidths.mode}px`,
-                                        textAlign: 'center',
-                                        padding: '1px 3px',
-                                      }}
-                                    >
-                                      {isBinary ? (
-                                        <div
-                                          style={{
-                                            display: 'inline-flex',
-                                            border: '1px solid #94a3b8',
-                                            background: '#f1f5f9',
-                                          }}
-                                          role="group"
-                                          aria-label={`Binary export mode for ${parsed.key}`}
-                                        >
-                                          <button
-                                            type="button"
-                                            onClick={() => handleSetObjectMode(db.id, parsed.key, true, BINARY_COPY_MODES.EXCLUDE)}
-                                            disabled={readOnly}
-                                            style={{
-                                              padding: '0 6px',
-                                              height: '16px',
-                                              fontSize: '8pt',
-                                              fontFamily: 'inherit',
-                                              fontWeight: isSkip ? 700 : 400,
-                                              border: 'none',
-                                              borderRight: '1px solid #cbd5e1',
-                                              cursor: readOnly ? 'default' : 'pointer',
-                                              background: isSkip ? '#dc2626' : 'transparent',
-                                              color: isSkip ? '#ffffff' : '#334155',
-                                              whiteSpace: 'nowrap',
-                                            }}
-                                          >
-                                            Exclude
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleSetObjectMode(db.id, parsed.key, true, BINARY_COPY_MODES.INCLUDE)}
-                                            disabled={readOnly}
-                                            style={{
-                                              padding: '0 6px',
-                                              height: '16px',
-                                              fontSize: '8pt',
-                                              fontFamily: 'inherit',
-                                              fontWeight: !isSkip ? 700 : 400,
-                                              border: 'none',
-                                              cursor: readOnly ? 'default' : 'pointer',
-                                              background: !isSkip ? '#1d4ed8' : 'transparent',
-                                              color: !isSkip ? '#ffffff' : '#334155',
-                                              whiteSpace: 'nowrap',
-                                            }}
-                                          >
-                                            Include
-                                          </button>
-                                        </div>
-                                      ) : (
-                                        <div style={{ display: 'inline-flex', alignItems: 'center' }}>
-                                          <input
-                                            type="checkbox"
-                                            checked={!isSkip}
-                                            onChange={() => handleToggleTableStructure(db.id, parsed.key, mode)}
-                                            disabled={readOnly}
-                                            style={{ display: 'none' }}
-                                            aria-label={`Include structure for ${parsed.key}`}
-                                          />
-                                          <input
-                                            type="checkbox"
-                                            checked={isFull}
-                                            disabled={isSkip || readOnly}
-                                            onChange={() => handleToggleTableData(db.id, parsed.key, mode)}
-                                            style={{ display: 'none' }}
-                                            aria-label={`Include data for ${parsed.key}`}
-                                          />
+                                      <td
+                                        style={{
+                                          ...grpCellStyle,
+                                          width: `${colWidths.type}px`,
+                                          fontWeight: 700,
+                                          color: isGrpSkip ? '#94a3b8' : isBucket ? '#9a3412' : '#0f172a',
+                                        }}
+                                      >
+                                        {grp.objectType}
+                                      </td>
+                                      <td
+                                        style={{
+                                          ...grpCellStyle,
+                                          width: `${colWidths.schema}px`,
+                                          fontWeight: 700,
+                                          color: isGrpSkip ? '#94a3b8' : isBucket ? '#7c2d12' : '#1e3a8a',
+                                        }}
+                                        title={grp.schemaOrBucket}
+                                      >
+                                        {isGroupExpanded ? '▼ ' : '▶ '}
+                                        {grp.schemaOrBucket}
+                                      </td>
+                                      <td
+                                        style={{
+                                          ...grpCellStyle,
+                                          width: `${colWidths.name}px`,
+                                          fontWeight: 700,
+                                          color: isGrpSkip ? '#94a3b8' : '#0f172a',
+                                        }}
+                                        title={`${grp.objectName} — click to ${isGroupExpanded ? 'collapse' : 'expand'}`}
+                                      >
+                                        {grp.objectName}
+                                      </td>
+                                      <td
+                                        style={{
+                                          ...grpCellStyle,
+                                          width: `${colWidths.size}px`,
+                                          textAlign: 'right',
+                                          fontWeight: 700,
+                                        }}
+                                      >
+                                        {formatMb(grp.sizeMb)}
+                                      </td>
+                                      <td
+                                        style={{
+                                          ...grpCellStyle,
+                                          width: `${colWidths.createdAt}px`,
+                                          color: '#475569',
+                                        }}
+                                      >
+                                        {formatDate(grp.createdAt)}
+                                      </td>
+                                      <td
+                                        style={{
+                                          ...grpCellStyle,
+                                          width: `${colWidths.updatedAt}px`,
+                                          color: '#475569',
+                                        }}
+                                      >
+                                        {formatDate(grp.updatedAt)}
+                                      </td>
+                                      <td
+                                        style={{
+                                          ...grpCellStyle,
+                                          width: `${colWidths.mode}px`,
+                                          textAlign: 'center',
+                                          padding: '1px 3px',
+                                        }}
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        {isBucket ? (
                                           <div
                                             style={{
                                               display: 'inline-flex',
                                               border: '1px solid #94a3b8',
-                                              background: '#f1f5f9',
+                                              background: '#ffffff',
                                             }}
                                             role="group"
-                                            aria-label={`Inclusion mode for ${parsed.key}`}
+                                            aria-label={`Bucket export mode for ${grp.schemaOrBucket}`}
                                           >
                                             <button
                                               type="button"
-                                              onClick={() => handleSetObjectMode(db.id, parsed.key, false, TABLE_COPY_MODES.SKIP)}
+                                              onClick={() => handleSetBucketMode(db.id, grp.schemaOrBucket, BINARY_COPY_MODES.EXCLUDE)}
                                               disabled={readOnly}
                                               style={{
-                                                padding: '0 5px',
+                                                padding: '0 6px',
                                                 height: '16px',
                                                 fontSize: '8pt',
                                                 fontFamily: 'inherit',
-                                                fontWeight: isSkip ? 700 : 400,
+                                                fontWeight: isGrpSkip ? 700 : 400,
                                                 border: 'none',
                                                 borderRight: '1px solid #cbd5e1',
                                                 cursor: readOnly ? 'default' : 'pointer',
-                                                background: isSkip ? '#dc2626' : 'transparent',
-                                                color: isSkip ? '#ffffff' : '#334155',
+                                                background: isGrpSkip ? '#dc2626' : 'transparent',
+                                                color: isGrpSkip ? '#ffffff' : '#334155',
                                                 whiteSpace: 'nowrap',
                                               }}
-                                              title="Exclude object completely"
+                                              title={`Exclude entire bucket "${grp.schemaOrBucket}"`}
                                             >
                                               Exclude
                                             </button>
                                             <button
                                               type="button"
-                                              onClick={() => handleSetObjectMode(db.id, parsed.key, false, TABLE_COPY_MODES.STRUCTURE_ONLY)}
+                                              onClick={() => handleSetBucketMode(db.id, grp.schemaOrBucket, BINARY_COPY_MODES.INCLUDE)}
+                                              disabled={readOnly}
+                                              style={{
+                                                padding: '0 6px',
+                                                height: '16px',
+                                                fontSize: '8pt',
+                                                fontFamily: 'inherit',
+                                                fontWeight: isGrpInclude ? 700 : 400,
+                                                border: 'none',
+                                                cursor: readOnly ? 'default' : 'pointer',
+                                                background: isGrpInclude ? '#1d4ed8' : 'transparent',
+                                                color: isGrpInclude ? '#ffffff' : '#334155',
+                                                whiteSpace: 'nowrap',
+                                              }}
+                                              title={`Include entire bucket "${grp.schemaOrBucket}"`}
+                                            >
+                                              Include{grpMode === 'mixed' ? '*' : ''}
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <div
+                                            style={{
+                                              display: 'inline-flex',
+                                              border: '1px solid #94a3b8',
+                                              background: '#ffffff',
+                                            }}
+                                            role="group"
+                                            aria-label={`Schema export mode for ${grp.schemaOrBucket}`}
+                                          >
+                                            <button
+                                              type="button"
+                                              onClick={() => handleSetSchemaMode(db.id, grp.schemaOrBucket, TABLE_COPY_MODES.SKIP)}
                                               disabled={readOnly}
                                               style={{
                                                 padding: '0 5px',
                                                 height: '16px',
                                                 fontSize: '8pt',
                                                 fontFamily: 'inherit',
-                                                fontWeight: isStructureOnlyRow ? 700 : 400,
+                                                fontWeight: isGrpSkip ? 700 : 400,
                                                 border: 'none',
                                                 borderRight: '1px solid #cbd5e1',
                                                 cursor: readOnly ? 'default' : 'pointer',
-                                                background: isStructureOnlyRow ? '#15803d' : 'transparent',
-                                                color: isStructureOnlyRow ? '#ffffff' : '#334155',
+                                                background: isGrpSkip ? '#dc2626' : 'transparent',
+                                                color: isGrpSkip ? '#ffffff' : '#334155',
                                                 whiteSpace: 'nowrap',
                                               }}
-                                              title="Include structure only (DDL schema, 0 row data)"
+                                              title={`Exclude entire schema "${grp.schemaOrBucket}"`}
+                                            >
+                                              Exclude
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleSetSchemaMode(db.id, grp.schemaOrBucket, TABLE_COPY_MODES.STRUCTURE_ONLY)}
+                                              disabled={readOnly}
+                                              style={{
+                                                padding: '0 5px',
+                                                height: '16px',
+                                                fontSize: '8pt',
+                                                fontFamily: 'inherit',
+                                                fontWeight: isGrpStruct ? 700 : 400,
+                                                border: 'none',
+                                                borderRight: '1px solid #cbd5e1',
+                                                cursor: readOnly ? 'default' : 'pointer',
+                                                background: isGrpStruct ? '#15803d' : 'transparent',
+                                                color: isGrpStruct ? '#ffffff' : '#334155',
+                                                whiteSpace: 'nowrap',
+                                              }}
+                                              title={`Include structure only for entire schema "${grp.schemaOrBucket}"`}
                                             >
                                               Struct
                                             </button>
                                             <button
                                               type="button"
-                                              onClick={() => handleSetObjectMode(db.id, parsed.key, false, TABLE_COPY_MODES.STRUCTURE_AND_DATA)}
+                                              onClick={() => handleSetSchemaMode(db.id, grp.schemaOrBucket, TABLE_COPY_MODES.STRUCTURE_AND_DATA)}
                                               disabled={readOnly}
                                               style={{
                                                 padding: '0 5px',
                                                 height: '16px',
                                                 fontSize: '8pt',
                                                 fontFamily: 'inherit',
-                                                fontWeight: isFull ? 700 : 400,
+                                                fontWeight: isGrpFull ? 700 : 400,
                                                 border: 'none',
                                                 cursor: readOnly ? 'default' : 'pointer',
-                                                background: isFull ? '#1d4ed8' : 'transparent',
-                                                color: isFull ? '#ffffff' : '#334155',
+                                                background: isGrpFull ? '#1d4ed8' : 'transparent',
+                                                color: isGrpFull ? '#ffffff' : '#334155',
                                                 whiteSpace: 'nowrap',
                                               }}
-                                              title="Include structure and data"
+                                              title={`Include structure + data for entire schema "${grp.schemaOrBucket}"`}
                                             >
-                                              Struct+Data
+                                              Struct+Data{grpMode === 'mixed' ? '*' : ''}
                                             </button>
                                           </div>
-                                        </div>
-                                      )}
-                                    </td>
-                                    <td
-                                      style={{
-                                        ...baseCellStyle,
-                                        width: `${colWidths.includedMb}px`,
-                                        textAlign: 'right',
-                                        fontWeight: 600,
-                                        color: isSkip ? '#94a3b8' : '#0f766e',
-                                      }}
-                                      title={`Row: +${rowIncludedMb.toFixed(2)} MB | Running Stacked Sum: ${runningStackedMb.toFixed(2)} MB`}
-                                    >
-                                      +{rowIncludedMb.toFixed(2)} (Σ {runningStackedMb.toFixed(2)})
-                                    </td>
-                                  </tr>
+                                        )}
+                                      </td>
+                                      <td
+                                        style={{
+                                          ...grpCellStyle,
+                                          width: `${colWidths.includedMb}px`,
+                                          textAlign: 'right',
+                                          fontWeight: 700,
+                                          color: isGrpSkip ? '#94a3b8' : '#0f766e',
+                                        }}
+                                        title={`Group: +${grpIncludedMb.toFixed(2)} MB | Running Stacked Sum: ${stackedAfterGroup.toFixed(2)} MB`}
+                                      >
+                                        +{grpIncludedMb.toFixed(2)} (Σ {stackedAfterGroup.toFixed(2)})
+                                      </td>
+                                    </tr>
+
+                                    {/* Expanded Child Objects inside this Schema or Bucket */}
+                                    {visibleChildren.map((item, rowIdx) => {
+                                      const parsed = parseObjectRow(item);
+                                      const isBinary = parsed.isBinary;
+                                      const mode = item.mode || (isBinary ? BINARY_COPY_MODES.INCLUDE : TABLE_COPY_MODES.STRUCTURE_AND_DATA);
+                                      const isSkip = mode === TABLE_COPY_MODES.SKIP || mode === 'exclude';
+                                      const isStructureOnlyRow = !isBinary && mode === TABLE_COPY_MODES.STRUCTURE_ONLY;
+                                      const isFull = !isSkip && !isStructureOnlyRow;
+
+                                      const rowIncludedMb = computeObjectIncludedMb(item, db.mode);
+                                      childRunningMb = Number((childRunningMb + rowIncludedMb).toFixed(2));
+
+                                      const rowBg = isSkip
+                                        ? '#fef2f2'
+                                        : rowIdx % 2 === 0
+                                          ? '#ffffff'
+                                          : '#f8fafc';
+
+                                      const baseCellStyle = {
+                                        fontSize: '8.5pt',
+                                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                                        padding: '1px 6px',
+                                        height: '21px',
+                                        lineHeight: '1.15',
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        borderBottom: '1px solid #cbd5e1',
+                                        borderRight: '1px solid #cbd5e1',
+                                        background: rowBg,
+                                        color: isSkip ? '#94a3b8' : '#0f172a',
+                                        verticalAlign: 'middle',
+                                      };
+
+                                      return (
+                                        <tr key={parsed.key} style={{ height: '21px' }}>
+                                          <td
+                                            style={{
+                                              ...baseCellStyle,
+                                              width: `${colWidths.type}px`,
+                                              paddingLeft: '14px',
+                                              fontWeight: 600,
+                                              color: isSkip ? '#94a3b8' : isBinary ? '#9a3412' : '#334155',
+                                            }}
+                                            title={parsed.objectType}
+                                          >
+                                            {parsed.objectType}
+                                          </td>
+                                          <td
+                                            style={{
+                                              ...baseCellStyle,
+                                              width: `${colWidths.schema}px`,
+                                              paddingLeft: '14px',
+                                              color: isSkip ? '#94a3b8' : '#64748b',
+                                            }}
+                                            title={parsed.schemaOrBucket}
+                                          >
+                                            └ {parsed.schemaOrBucket}
+                                          </td>
+                                          <td
+                                            style={{
+                                              ...baseCellStyle,
+                                              width: `${colWidths.name}px`,
+                                              fontWeight: 600,
+                                              color: isSkip ? '#94a3b8' : '#0f172a',
+                                            }}
+                                            title={parsed.objectName}
+                                          >
+                                            {parsed.objectName}
+                                          </td>
+                                          <td
+                                            style={{
+                                              ...baseCellStyle,
+                                              width: `${colWidths.size}px`,
+                                              textAlign: 'right',
+                                            }}
+                                          >
+                                            {formatMb(item.sizeMb)}
+                                          </td>
+                                          <td
+                                            style={{
+                                              ...baseCellStyle,
+                                              width: `${colWidths.createdAt}px`,
+                                              color: '#475569',
+                                            }}
+                                            title={formatDate(item.createdAt)}
+                                          >
+                                            {formatDate(item.createdAt)}
+                                          </td>
+                                          <td
+                                            style={{
+                                              ...baseCellStyle,
+                                              width: `${colWidths.updatedAt}px`,
+                                              color: '#475569',
+                                            }}
+                                            title={formatDate(item.updatedAt)}
+                                          >
+                                            {formatDate(item.updatedAt)}
+                                          </td>
+                                          <td
+                                            style={{
+                                              ...baseCellStyle,
+                                              width: `${colWidths.mode}px`,
+                                              textAlign: 'center',
+                                              padding: '1px 3px',
+                                            }}
+                                          >
+                                            {isBinary ? (
+                                              <div
+                                                style={{
+                                                  display: 'inline-flex',
+                                                  border: '1px solid #94a3b8',
+                                                  background: '#f1f5f9',
+                                                }}
+                                                role="group"
+                                                aria-label={`Binary export mode for ${parsed.key}`}
+                                              >
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleSetObjectMode(db.id, parsed.key, true, BINARY_COPY_MODES.EXCLUDE)}
+                                                  disabled={readOnly}
+                                                  style={{
+                                                    padding: '0 6px',
+                                                    height: '16px',
+                                                    fontSize: '8pt',
+                                                    fontFamily: 'inherit',
+                                                    fontWeight: isSkip ? 700 : 400,
+                                                    border: 'none',
+                                                    borderRight: '1px solid #cbd5e1',
+                                                    cursor: readOnly ? 'default' : 'pointer',
+                                                    background: isSkip ? '#dc2626' : 'transparent',
+                                                    color: isSkip ? '#ffffff' : '#334155',
+                                                    whiteSpace: 'nowrap',
+                                                  }}
+                                                >
+                                                  Exclude
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleSetObjectMode(db.id, parsed.key, true, BINARY_COPY_MODES.INCLUDE)}
+                                                  disabled={readOnly}
+                                                  style={{
+                                                    padding: '0 6px',
+                                                    height: '16px',
+                                                    fontSize: '8pt',
+                                                    fontFamily: 'inherit',
+                                                    fontWeight: !isSkip ? 700 : 400,
+                                                    border: 'none',
+                                                    cursor: readOnly ? 'default' : 'pointer',
+                                                    background: !isSkip ? '#1d4ed8' : 'transparent',
+                                                    color: !isSkip ? '#ffffff' : '#334155',
+                                                    whiteSpace: 'nowrap',
+                                                  }}
+                                                >
+                                                  Include
+                                                </button>
+                                              </div>
+                                            ) : (
+                                              <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                                <input
+                                                  type="checkbox"
+                                                  checked={!isSkip}
+                                                  onChange={() => handleToggleTableStructure(db.id, parsed.key, mode)}
+                                                  disabled={readOnly}
+                                                  style={{ display: 'none' }}
+                                                  aria-label={`Include structure for ${parsed.key}`}
+                                                />
+                                                <input
+                                                  type="checkbox"
+                                                  checked={isFull}
+                                                  disabled={isSkip || readOnly}
+                                                  onChange={() => handleToggleTableData(db.id, parsed.key, mode)}
+                                                  style={{ display: 'none' }}
+                                                  aria-label={`Include data for ${parsed.key}`}
+                                                />
+                                                <div
+                                                  style={{
+                                                    display: 'inline-flex',
+                                                    border: '1px solid #94a3b8',
+                                                    background: '#f1f5f9',
+                                                  }}
+                                                  role="group"
+                                                  aria-label={`Inclusion mode for ${parsed.key}`}
+                                                >
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleSetObjectMode(db.id, parsed.key, false, TABLE_COPY_MODES.SKIP)}
+                                                    disabled={readOnly}
+                                                    style={{
+                                                      padding: '0 5px',
+                                                      height: '16px',
+                                                      fontSize: '8pt',
+                                                      fontFamily: 'inherit',
+                                                      fontWeight: isSkip ? 700 : 400,
+                                                      border: 'none',
+                                                      borderRight: '1px solid #cbd5e1',
+                                                      cursor: readOnly ? 'default' : 'pointer',
+                                                      background: isSkip ? '#dc2626' : 'transparent',
+                                                      color: isSkip ? '#ffffff' : '#334155',
+                                                      whiteSpace: 'nowrap',
+                                                    }}
+                                                    title="Exclude object completely"
+                                                  >
+                                                    Exclude
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleSetObjectMode(db.id, parsed.key, false, TABLE_COPY_MODES.STRUCTURE_ONLY)}
+                                                    disabled={readOnly}
+                                                    style={{
+                                                      padding: '0 5px',
+                                                      height: '16px',
+                                                      fontSize: '8pt',
+                                                      fontFamily: 'inherit',
+                                                      fontWeight: isStructureOnlyRow ? 700 : 400,
+                                                      border: 'none',
+                                                      borderRight: '1px solid #cbd5e1',
+                                                      cursor: readOnly ? 'default' : 'pointer',
+                                                      background: isStructureOnlyRow ? '#15803d' : 'transparent',
+                                                      color: isStructureOnlyRow ? '#ffffff' : '#334155',
+                                                      whiteSpace: 'nowrap',
+                                                    }}
+                                                    title="Include structure only (DDL schema, 0 row data)"
+                                                  >
+                                                    Struct
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleSetObjectMode(db.id, parsed.key, false, TABLE_COPY_MODES.STRUCTURE_AND_DATA)}
+                                                    disabled={readOnly}
+                                                    style={{
+                                                      padding: '0 5px',
+                                                      height: '16px',
+                                                      fontSize: '8pt',
+                                                      fontFamily: 'inherit',
+                                                      fontWeight: isFull ? 700 : 400,
+                                                      border: 'none',
+                                                      cursor: readOnly ? 'default' : 'pointer',
+                                                      background: isFull ? '#1d4ed8' : 'transparent',
+                                                      color: isFull ? '#ffffff' : '#334155',
+                                                      whiteSpace: 'nowrap',
+                                                    }}
+                                                    title="Include structure and data"
+                                                  >
+                                                    Struct+Data
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </td>
+                                          <td
+                                            style={{
+                                              ...baseCellStyle,
+                                              width: `${colWidths.includedMb}px`,
+                                              textAlign: 'right',
+                                              fontWeight: 600,
+                                              color: isSkip ? '#94a3b8' : '#0f766e',
+                                            }}
+                                            title={`Object: +${rowIncludedMb.toFixed(2)} MB | Group Stacked: ${childRunningMb.toFixed(2)} MB`}
+                                          >
+                                            +{rowIncludedMb.toFixed(2)} (Σ {childRunningMb.toFixed(2)})
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+
+                                    {/* Load More / Show All Row when an expanded Schema or Bucket has >500 objects */}
+                                    {isGroupExpanded && remainingChildren > 0 && (
+                                      <tr style={{ height: '22px', background: '#f1f5f9' }}>
+                                        <td
+                                          colSpan={8}
+                                          style={{
+                                            fontSize: '8.5pt',
+                                            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                                            padding: '2px 12px',
+                                            borderBottom: '1px solid #94a3b8',
+                                            color: '#1e293b',
+                                          }}
+                                        >
+                                          Showing {visibleChildren.length} of {childItems.length} objects in {grp.objectType.toLowerCase()} &ldquo;{grp.schemaOrBucket}&rdquo; &mdash;{' '}
+                                          <button
+                                            type="button"
+                                            onClick={() => setGroupRowLimits((prev) => ({ ...prev, [limitKey]: rowLimit + 1000 }))}
+                                            style={{
+                                              border: '1px solid #94a3b8',
+                                              background: '#ffffff',
+                                              color: '#1d4ed8',
+                                              fontSize: '8pt',
+                                              fontFamily: 'inherit',
+                                              fontWeight: 700,
+                                              padding: '0 6px',
+                                              marginRight: '6px',
+                                              cursor: 'pointer',
+                                            }}
+                                          >
+                                            Show +1,000 more
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setGroupRowLimits((prev) => ({ ...prev, [limitKey]: childItems.length }))}
+                                            style={{
+                                              border: '1px solid #94a3b8',
+                                              background: '#ffffff',
+                                              color: '#0f172a',
+                                              fontSize: '8pt',
+                                              fontFamily: 'inherit',
+                                              fontWeight: 700,
+                                              padding: '0 6px',
+                                              cursor: 'pointer',
+                                            }}
+                                          >
+                                            Show all {childItems.length} objects
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </React.Fragment>
                                 );
                               })
                             )}

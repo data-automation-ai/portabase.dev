@@ -4,7 +4,11 @@ import {
   computeObjectIncludedMb,
   computeDatabaseScopeSummary,
   buildExportManifest,
+  groupDatabaseObjectsBySchemaAndBucket,
+  setSchemaModeInDatabase,
+  setBucketModeInDatabase,
 } from '../cloud/runner/database-scope.mjs';
+import { DISCOVERY_SQL } from '../cloud/runner/supabase-discovery.mjs';
 import { createCloudRunServer } from '../cloud/runner/cloud-run-server.mjs';
 
 const SAMPLE_MULTI_PROJECT_SCOPE = [
@@ -88,6 +92,66 @@ const SAMPLE_MULTI_PROJECT_SCOPE = [
   },
 ];
 
+test('DISCOVERY_SQL does not impose any 300-row LIMIT on database or binary storage objects', () => {
+  assert.doesNotMatch(DISCOVERY_SQL, /LIMIT\s+120/i);
+  assert.doesNotMatch(DISCOVERY_SQL, /LIMIT\s+30/i);
+  assert.doesNotMatch(DISCOVERY_SQL, /LIMIT\s+150/i);
+});
+
+test('groupDatabaseObjectsBySchemaAndBucket groups >1000 objects into SCHEMA and BUCKET summary rows with 1-click mode switches', () => {
+  const manyTables = Array.from({ length: 650 }, (_, i) => ({
+    name: `public.tbl_${i}`,
+    schema: 'public',
+    objectName: `tbl_${i}`,
+    objectType: 'TABLE',
+    sizeMb: 0.5,
+    mode: 'structure_and_data',
+  }));
+  const manyBins = Array.from({ length: 850 }, (_, i) => ({
+    name: `documents/doc_${i}.pdf`,
+    bucket: 'documents',
+    schema: 'documents',
+    objectName: `doc_${i}.pdf`,
+    objectType: 'BINARY',
+    sizeMb: 0.25,
+    mode: 'include',
+  }));
+  const db = {
+    id: 'db_large',
+    enabled: true,
+    mode: 'structure_and_data',
+    tables: manyTables,
+    binaries: manyBins,
+  };
+
+  const groups = groupDatabaseObjectsBySchemaAndBucket(db);
+  assert.equal(groups.length, 2);
+
+  const schemaGroup = groups.find((g) => g.objectType === 'SCHEMA' && g.schemaOrBucket === 'public');
+  assert.ok(schemaGroup);
+  assert.equal(schemaGroup.objectCount, 650);
+  assert.equal(schemaGroup.sizeMb, 325);
+  assert.equal(schemaGroup.mode, 'structure_and_data');
+
+  const bucketGroup = groups.find((g) => g.objectType === 'BUCKET' && g.schemaOrBucket === 'documents');
+  assert.ok(bucketGroup);
+  assert.equal(bucketGroup.objectCount, 850);
+  assert.equal(bucketGroup.sizeMb, 212.5);
+  assert.equal(bucketGroup.mode, 'include');
+
+  // 1-click Schema switch to structure_only updates all 650 tables in schema "public"
+  const afterSchemaStruct = setSchemaModeInDatabase(db, 'public', 'structure_only');
+  const groupsAfterStruct = groupDatabaseObjectsBySchemaAndBucket(afterSchemaStruct);
+  assert.equal(groupsAfterStruct.find((g) => g.schemaOrBucket === 'public').mode, 'structure_only');
+
+  // 1-click Bucket switch to skip excludes all 850 files in bucket "documents"
+  const afterBucketSkip = setBucketModeInDatabase(afterSchemaStruct, 'documents', 'skip');
+  const groupsAfterSkip = groupDatabaseObjectsBySchemaAndBucket(afterBucketSkip);
+  const updatedBucket = groupsAfterSkip.find((g) => g.schemaOrBucket === 'documents');
+  assert.equal(updatedBucket.mode, 'skip');
+  assert.equal(updatedBucket.includedMb, 0);
+});
+
 test('computeObjectIncludedMb handles 3-way DB object switch and 2-way BINARY switch', () => {
   const tableObj = { objectType: 'TABLE', name: 'public.orders', sizeMb: 120.5 };
 
@@ -157,6 +221,7 @@ test('createCloudRunServer serves /health, interior HTML /, and /api/runner/mani
     const html = await htmlRes.text();
     assert.match(html, /INSIDE GOOGLE CLOUD RUNNER/);
     assert.match(html, /Operation Switch \(3-Way DB \/ 2-Way Binary\)/);
+    assert.match(html, /Default view shows Schema &amp; Bucket level/);
     assert.match(html, /Grand Sum Total/);
 
     const manRes = await fetch(`${baseUrl}/api/runner/manifest`, {

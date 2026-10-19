@@ -1,3 +1,4 @@
+import zlib from 'node:zlib';
 import { jsonResponse } from '../shared/verify-user.mjs';
 import {
   generatePkcePair,
@@ -95,12 +96,29 @@ export async function handler(event) {
           inspectAllActive: true,
         });
         const scopeSummary = computeDatabaseScopeSummary(result.databases || []);
-        const exportManifest = buildExportManifest(result.databases || []);
-        return jsonResponse(200, {
+        const includeFullManifest = Boolean(query.includeManifest || body.includeManifest);
+        const payloadObj = {
           ...result,
           scopeSummary,
-          exportManifest,
-        });
+          ...(includeFullManifest ? { exportManifest: buildExportManifest(result.databases || []) } : {}),
+        };
+        const jsonStr = JSON.stringify(payloadObj);
+        const acceptEncoding = String(event.headers?.['accept-encoding'] || event.headers?.['Accept-Encoding'] || '');
+        if (jsonStr.length > 512 * 1024 && acceptEncoding.includes('gzip')) {
+          const gz = zlib.gzipSync(Buffer.from(jsonStr, 'utf8'));
+          return {
+            statusCode: 200,
+            isBase64Encoded: true,
+            headers: {
+              'Content-Type': 'application/json; charset=utf-8',
+              'Content-Encoding': 'gzip',
+              'Cache-Control': 'no-store',
+              'Access-Control-Allow-Origin': '*',
+            },
+            body: gz.toString('base64'),
+          };
+        }
+        return jsonResponse(200, payloadObj);
       } catch (err) {
         return jsonResponse(500, { ok: false, error: err.message });
       }

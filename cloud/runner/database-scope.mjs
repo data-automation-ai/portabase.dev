@@ -31,6 +31,8 @@ export const BINARY_COPY_MODES = Object.freeze({
 });
 
 export const OBJECT_TYPES = Object.freeze({
+  SCHEMA: 'SCHEMA',
+  BUCKET: 'BUCKET',
   TABLE: 'TABLE',
   VIEW: 'VIEW',
   FUNCTION: 'FUNCTION',
@@ -71,6 +73,193 @@ export function computeObjectIncludedMb(item, dbMode = DATABASE_COPY_MODES.STRUC
   }
 
   return Number(rawSizeMb.toFixed(3));
+}
+
+/**
+ * Groups a database's objects and binary files into Schema-level (SCHEMA) and Bucket-level (BUCKET) summary rows,
+ * each containing its child objects for inline expansion.
+ */
+export function groupDatabaseObjectsBySchemaAndBucket(db) {
+  if (!db) return [];
+  const dbMode = db.mode || DATABASE_COPY_MODES.STRUCTURE_AND_DATA;
+  const allObjects = [
+    ...(Array.isArray(db.tables) ? db.tables : []),
+    ...(Array.isArray(db.binaries) ? db.binaries : []),
+  ];
+
+  const schemaMap = new Map();
+  const bucketMap = new Map();
+
+  for (const item of allObjects) {
+    if (!item) continue;
+    const objType = String(item.objectType || OBJECT_TYPES.TABLE).toUpperCase();
+    const isBinary = objType === OBJECT_TYPES.BINARY;
+
+    if (isBinary) {
+      const bucket = item.bucket || item.schema || (typeof item.name === 'string' && item.name.includes('/') ? item.name.split('/')[0] : 'default');
+      if (!bucketMap.has(bucket)) {
+        bucketMap.set(bucket, {
+          groupKey: `bucket:${bucket}`,
+          objectType: OBJECT_TYPES.BUCKET,
+          isBinary: true,
+          schemaOrBucket: bucket,
+          items: [],
+          rawItems: [],
+          sizeMb: 0,
+          includedMb: 0,
+          createdAt: null,
+          updatedAt: null,
+          includeCount: 0,
+          skipCount: 0,
+        });
+      }
+      const grp = bucketMap.get(bucket);
+      grp.rawItems.push(item);
+      const isEmptyPlaceholder = Boolean(item.isEmptyBucket || (item.objectName === '(empty bucket)' && !item.sizeMb));
+      if (!isEmptyPlaceholder) {
+        grp.items.push(item);
+      }
+      const sz = typeof item.sizeMb === 'number' && item.sizeMb > 0 ? item.sizeMb : 0;
+      const inc = db.enabled === false ? 0 : computeObjectIncludedMb(item, dbMode);
+      grp.sizeMb += sz;
+      grp.includedMb += inc;
+      if (item.createdAt && (!grp.createdAt || item.createdAt < grp.createdAt)) grp.createdAt = item.createdAt;
+      if (item.updatedAt && (!grp.updatedAt || item.updatedAt > grp.updatedAt)) grp.updatedAt = item.updatedAt;
+      const mode = item.mode || BINARY_COPY_MODES.INCLUDE;
+      if (mode === TABLE_COPY_MODES.SKIP || mode === 'exclude') {
+        grp.skipCount += 1;
+      } else {
+        grp.includeCount += 1;
+      }
+    } else {
+      const rawName = String(item.name || '');
+      const parts = rawName.split('.');
+      const schema = item.schema || (parts.length > 1 ? parts[0] : 'public');
+      if (!schemaMap.has(schema)) {
+        schemaMap.set(schema, {
+          groupKey: `schema:${schema}`,
+          objectType: OBJECT_TYPES.SCHEMA,
+          isBinary: false,
+          schemaOrBucket: schema,
+          items: [],
+          tableCount: 0,
+          viewCount: 0,
+          functionCount: 0,
+          sizeMb: 0,
+          includedMb: 0,
+          createdAt: null,
+          updatedAt: null,
+          fullCount: 0,
+          structCount: 0,
+          skipCount: 0,
+        });
+      }
+      const grp = schemaMap.get(schema);
+      grp.items.push(item);
+      if (objType === OBJECT_TYPES.VIEW) grp.viewCount += 1;
+      else if (objType === OBJECT_TYPES.FUNCTION) grp.functionCount += 1;
+      else grp.tableCount += 1;
+
+      const sz = typeof item.sizeMb === 'number' && item.sizeMb > 0 ? item.sizeMb : 0;
+      const inc = db.enabled === false ? 0 : computeObjectIncludedMb(item, dbMode);
+      grp.sizeMb += sz;
+      grp.includedMb += inc;
+      if (item.createdAt && (!grp.createdAt || item.createdAt < grp.createdAt)) grp.createdAt = item.createdAt;
+      if (item.updatedAt && (!grp.updatedAt || item.updatedAt > grp.updatedAt)) grp.updatedAt = item.updatedAt;
+      const mode = item.mode || (dbMode === DATABASE_COPY_MODES.STRUCTURE_ONLY ? TABLE_COPY_MODES.STRUCTURE_ONLY : TABLE_COPY_MODES.STRUCTURE_AND_DATA);
+      if (mode === TABLE_COPY_MODES.SKIP || mode === 'exclude') grp.skipCount += 1;
+      else if (mode === TABLE_COPY_MODES.STRUCTURE_ONLY) grp.structCount += 1;
+      else grp.fullCount += 1;
+    }
+  }
+
+  const groups = [];
+  for (const grp of schemaMap.values()) {
+    const total = grp.items.length;
+    let mode = TABLE_COPY_MODES.STRUCTURE_AND_DATA;
+    if (grp.skipCount === total) mode = TABLE_COPY_MODES.SKIP;
+    else if (grp.structCount === total) mode = TABLE_COPY_MODES.STRUCTURE_ONLY;
+    else if (grp.fullCount === total) mode = TABLE_COPY_MODES.STRUCTURE_AND_DATA;
+    else mode = 'mixed';
+
+    const parts = [];
+    if (grp.tableCount > 0) parts.push(`${grp.tableCount} tables`);
+    if (grp.viewCount > 0) parts.push(`${grp.viewCount} views`);
+    if (grp.functionCount > 0) parts.push(`${grp.functionCount} functions`);
+    const breakdown = parts.length > 0 ? ` (${parts.join(', ')})` : '';
+
+    groups.push({
+      ...grp,
+      sizeMb: Number(grp.sizeMb.toFixed(2)),
+      includedMb: Number(grp.includedMb.toFixed(2)),
+      objectCount: total,
+      objectName: `${total} objects${breakdown}`,
+      mode,
+    });
+  }
+
+  for (const grp of bucketMap.values()) {
+    const rawTotal = grp.rawItems.length;
+    const fileTotal = grp.items.length;
+    let mode = BINARY_COPY_MODES.INCLUDE;
+    if (grp.skipCount === rawTotal) mode = BINARY_COPY_MODES.EXCLUDE;
+    else if (grp.includeCount === rawTotal) mode = BINARY_COPY_MODES.INCLUDE;
+    else mode = 'mixed';
+
+    groups.push({
+      ...grp,
+      sizeMb: Number(grp.sizeMb.toFixed(2)),
+      includedMb: Number(grp.includedMb.toFixed(2)),
+      objectCount: fileTotal,
+      objectName: fileTotal === 0 ? '0 files (empty bucket)' : `${fileTotal} binary files`,
+      mode,
+    });
+  }
+
+  return groups;
+}
+
+/**
+ * Sets the 3-way operation mode for all objects inside a specific PostgreSQL schema.
+ */
+export function setSchemaModeInDatabase(db, schemaName, mode) {
+  if (!db) return db;
+  const updateItem = (item) => {
+    const objType = String(item?.objectType || OBJECT_TYPES.TABLE).toUpperCase();
+    if (objType === OBJECT_TYPES.BINARY) return item;
+    const rawName = String(item?.name || '');
+    const parts = rawName.split('.');
+    const itemSchema = item?.schema || (parts.length > 1 ? parts[0] : 'public');
+    if (itemSchema === schemaName) {
+      return { ...item, mode };
+    }
+    return item;
+  };
+  return {
+    ...db,
+    tables: Array.isArray(db.tables) ? db.tables.map(updateItem) : [],
+  };
+}
+
+/**
+ * Sets the 2-way operation mode ('include' or 'skip') for all binary files inside a specific Storage bucket.
+ */
+export function setBucketModeInDatabase(db, bucketName, mode) {
+  if (!db) return db;
+  const updateBin = (item) => {
+    const objType = String(item?.objectType || OBJECT_TYPES.TABLE).toUpperCase();
+    if (objType !== OBJECT_TYPES.BINARY) return item;
+    const itemBucket = item?.bucket || item?.schema || (typeof item?.name === 'string' && item.name.includes('/') ? item.name.split('/')[0] : 'default');
+    if (itemBucket === bucketName) {
+      return { ...item, mode };
+    }
+    return item;
+  };
+  return {
+    ...db,
+    tables: Array.isArray(db.tables) ? db.tables.map(updateBin) : [],
+    binaries: Array.isArray(db.binaries) ? db.binaries.map(updateBin) : undefined,
+  };
 }
 
 /**
@@ -326,7 +515,7 @@ export function buildExportManifest(databases = []) {
           includedMb: computeObjectIncludedMb(o, db.mode),
         })),
       includedBinaries: allObjects
-        .filter(o => String(o.objectType || '').toUpperCase() === 'BINARY' && o.mode !== TABLE_COPY_MODES.SKIP && o.mode !== 'exclude')
+        .filter(o => String(o.objectType || '').toUpperCase() === 'BINARY' && !o.isEmptyBucket && o.objectName !== '(empty bucket)' && o.mode !== TABLE_COPY_MODES.SKIP && o.mode !== 'exclude')
         .map(o => ({
           bucket: o.bucket || o.schema || 'default',
           fileName: o.objectName || o.name,
