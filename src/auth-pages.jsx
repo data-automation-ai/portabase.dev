@@ -19,6 +19,7 @@ import { KEYS_COPY } from './data/never-hold-keys.js';
 import { isRecoveryAckComplete } from './data/recovery-acknowledgments.js';
 import { REQUIRED_ACK_KEYS } from './data/recovery-acknowledgments.js';
 import { RecoveryAcknowledgments, recordRecoveryAck } from './recovery-ack.jsx';
+import { ConsoleApp } from './console/ConsoleApp.jsx';
 
 const Arrow = () => <span aria-hidden="true">↗</span>;
 

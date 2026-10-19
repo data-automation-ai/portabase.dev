@@ -24,3 +24,11 @@ test('docs paths are the docs site, not the homepage', () => {
   assert.equal(isDocsPath('/docs/quickstart'), true);
   assert.equal(isDocsPath('/'), false);
 });
+
+test('auth-pages imports ConsoleApp and exports AppPage referencing ConsoleApp', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const authSource = await readFile(new URL('../src/auth-pages.jsx', import.meta.url), 'utf8');
+  assert.match(authSource, /import\s+\{\s*ConsoleApp\s*\}\s+from\s+['"]\.\/console\/ConsoleApp\.jsx['"]/);
+  assert.match(authSource, /export function AppPage\(\)\s*\{\s*return <ConsoleApp \/>;\s*\}/);
+});
+
