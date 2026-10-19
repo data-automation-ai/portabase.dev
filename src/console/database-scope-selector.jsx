@@ -69,6 +69,37 @@ export function DatabaseScopeSelector({
   const [newTableInputs, setNewTableInputs] = useState({});
   const [sortConfig, setSortConfig] = useState({});
   const [searchQuery, setSearchQuery] = useState({});
+  const [colWidths, setColWidths] = useState({
+    type: 76,
+    schema: 104,
+    name: 210,
+    size: 86,
+    createdAt: 116,
+    updatedAt: 116,
+    mode: 196,
+    includedMb: 132,
+  });
+
+  const handleStartResize = (e, colKey) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startWidth = colWidths[colKey] || 100;
+
+    const onMouseMove = (moveEv) => {
+      const delta = moveEv.clientX - startX;
+      const nextWidth = Math.max(54, startWidth + delta);
+      setColWidths((prev) => ({ ...prev, [colKey]: nextWidth }));
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
 
   const dbs = Array.isArray(databases) && databases.length > 0
     ? databases
@@ -323,23 +354,53 @@ export function DatabaseScopeSelector({
     const current = sortConfig[dbId] || { column: 'size', direction: 'desc' };
     const isActive = current.column === column;
     const arrow = isActive ? (current.direction === 'asc' ? ' ▲' : ' ▼') : ' ↕';
+    const widthPx = colWidths[column] || 100;
 
     return (
       <th
         onClick={() => handleSort(dbId, column)}
         style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 2,
+          width: `${widthPx}px`,
+          minWidth: `${widthPx}px`,
+          maxWidth: `${widthPx}px`,
           textAlign: align,
           cursor: 'pointer',
           userSelect: 'none',
-          color: isActive ? '#f0f6fc' : undefined,
-          background: isActive ? '#1c2128' : undefined,
-          padding: '10px 10px',
+          fontSize: '8.5pt',
+          fontWeight: 700,
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+          color: isActive ? '#0f172a' : '#334155',
+          background: isActive ? '#e2e8f0' : '#f1f5f9',
+          borderBottom: '1px solid #94a3b8',
+          borderRight: '1px solid #cbd5e1',
+          padding: '3px 6px',
+          height: '22px',
+          lineHeight: '1.15',
           whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
         }}
-        title={`Click to sort by ${label}`}
+        title={`Click to sort by ${label} · Drag right border to resize`}
       >
         <span>{label}</span>
-        <span style={{ fontSize: '10px', opacity: isActive ? 1 : 0.4, marginLeft: '4px' }}>{arrow}</span>
+        <span style={{ fontSize: '8pt', opacity: isActive ? 1 : 0.45, marginLeft: '3px' }}>{arrow}</span>
+        <span
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => handleStartResize(e, column)}
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: '5px',
+            cursor: 'col-resize',
+            zIndex: 3,
+          }}
+          title="Drag to resize column"
+        />
       </th>
     );
   };
@@ -754,9 +815,28 @@ export function DatabaseScopeSelector({
                         )}
                       </div>
 
-                      {/* Spreadsheet Table Grid */}
-                      <div className="pb-table-wrap" style={{ maxHeight: '460px', overflowY: 'auto' }}>
-                        <table className="pb-table" style={{ fontSize: '12px', minWidth: '860px', width: '100%' }}>
+                      {/* Dense 8.5pt Spreadsheet Grid (No pills, resizable & sortable columns) */}
+                      <div
+                        style={{
+                          maxHeight: '420px',
+                          overflowY: 'auto',
+                          overflowX: 'auto',
+                          border: '1px solid #94a3b8',
+                          background: '#ffffff',
+                        }}
+                      >
+                        <table
+                          style={{
+                            borderCollapse: 'collapse',
+                            tableLayout: 'fixed',
+                            width: `${Object.values(colWidths).reduce((a, b) => a + b, 0)}px`,
+                            minWidth: '100%',
+                            fontSize: '8.5pt',
+                            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                            background: '#ffffff',
+                            color: '#0f172a',
+                          }}
+                        >
                           <thead>
                             <tr>
                               {renderSortHeader(db.id, 'type', 'Object Type', 'left')}
@@ -772,14 +852,23 @@ export function DatabaseScopeSelector({
                           <tbody>
                             {sortedObjects.length === 0 ? (
                               <tr>
-                                <td colSpan={8} style={{ textAlign: 'center', padding: '24px', color: '#8b949e', fontSize: '12px' }}>
+                                <td
+                                  colSpan={8}
+                                  style={{
+                                    textAlign: 'center',
+                                    padding: '12px',
+                                    color: '#475569',
+                                    fontSize: '8.5pt',
+                                    background: '#ffffff',
+                                  }}
+                                >
                                   {allObjects.length === 0
                                     ? 'No objects discovered yet for this database. Connect via OAuth inside the runner or add custom objects below.'
                                     : 'No objects match the search filter.'}
                                 </td>
                               </tr>
                             ) : (
-                              sortedObjects.map((item) => {
+                              sortedObjects.map((item, rowIdx) => {
                                 const parsed = parseObjectRow(item);
                                 const isBinary = parsed.isBinary;
                                 const mode = item.mode || (isBinary ? BINARY_COPY_MODES.INCLUDE : TABLE_COPY_MODES.STRUCTURE_AND_DATA);
@@ -790,59 +879,105 @@ export function DatabaseScopeSelector({
                                 const rowIncludedMb = computeObjectIncludedMb(item, db.mode);
                                 runningStackedMb += rowIncludedMb;
 
+                                const rowBg = isSkip
+                                  ? '#fef2f2'
+                                  : rowIdx % 2 === 0
+                                    ? '#ffffff'
+                                    : '#f8fafc';
+
+                                const baseCellStyle = {
+                                  fontSize: '8.5pt',
+                                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                                  padding: '1px 6px',
+                                  height: '21px',
+                                  lineHeight: '1.15',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  borderBottom: '1px solid #cbd5e1',
+                                  borderRight: '1px solid #cbd5e1',
+                                  background: rowBg,
+                                  color: isSkip ? '#94a3b8' : '#0f172a',
+                                  verticalAlign: 'middle',
+                                };
+
                                 return (
-                                  <tr key={parsed.key} style={{ background: isSkip ? 'rgba(248, 81, 73, 0.04)' : undefined }}>
-                                    <td>
-                                      <span
-                                        className="pb-badge"
-                                        style={{
-                                          fontFamily: 'monospace',
-                                          fontSize: '10px',
-                                          background: isBinary ? '#1f2d3d' : '#21262d',
-                                          color: isBinary ? '#79c0ff' : '#3ecf8e',
-                                        }}
-                                      >
-                                        {parsed.objectType}
-                                      </span>
+                                  <tr key={parsed.key} style={{ height: '21px' }}>
+                                    <td
+                                      style={{
+                                        ...baseCellStyle,
+                                        width: `${colWidths.type}px`,
+                                        fontWeight: 600,
+                                        color: isSkip ? '#94a3b8' : isBinary ? '#9a3412' : '#1e293b',
+                                      }}
+                                      title={parsed.objectType}
+                                    >
+                                      {parsed.objectType}
                                     </td>
-                                    <td>
-                                      <span
-                                        className="pb-badge"
-                                        style={{
-                                          fontFamily: 'monospace',
-                                          fontSize: '11px',
-                                          background: '#21262d',
-                                          color: isBinary ? '#d2a8ff' : '#8b949e',
-                                        }}
-                                        title={isBinary ? 'Storage Bucket' : 'Database Schema'}
-                                      >
-                                        {isBinary ? `🪣 ${parsed.schemaOrBucket}` : parsed.schemaOrBucket}
-                                      </span>
+                                    <td
+                                      style={{
+                                        ...baseCellStyle,
+                                        width: `${colWidths.schema}px`,
+                                        color: isSkip ? '#94a3b8' : isBinary ? '#7c2d12' : '#334155',
+                                      }}
+                                      title={parsed.schemaOrBucket}
+                                    >
+                                      {parsed.schemaOrBucket}
                                     </td>
-                                    <td>
-                                      <strong style={{ fontFamily: 'monospace', fontSize: '12px', color: isSkip ? '#8b949e' : '#f0f6fc' }}>
-                                        {parsed.objectName}
-                                      </strong>
+                                    <td
+                                      style={{
+                                        ...baseCellStyle,
+                                        width: `${colWidths.name}px`,
+                                        fontWeight: 600,
+                                        color: isSkip ? '#94a3b8' : '#0f172a',
+                                      }}
+                                      title={parsed.objectName}
+                                    >
+                                      {parsed.objectName}
                                     </td>
-                                    <td style={{ textAlign: 'right', fontFamily: 'monospace', color: '#c9d1d9' }}>
+                                    <td
+                                      style={{
+                                        ...baseCellStyle,
+                                        width: `${colWidths.size}px`,
+                                        textAlign: 'right',
+                                      }}
+                                    >
                                       {formatMb(item.sizeMb)}
                                     </td>
-                                    <td style={{ fontFamily: 'monospace', fontSize: '11px', color: '#8b949e' }}>
+                                    <td
+                                      style={{
+                                        ...baseCellStyle,
+                                        width: `${colWidths.createdAt}px`,
+                                        color: '#475569',
+                                      }}
+                                      title={formatDate(item.createdAt)}
+                                    >
                                       {formatDate(item.createdAt)}
                                     </td>
-                                    <td style={{ fontFamily: 'monospace', fontSize: '11px', color: '#8b949e' }}>
+                                    <td
+                                      style={{
+                                        ...baseCellStyle,
+                                        width: `${colWidths.updatedAt}px`,
+                                        color: '#475569',
+                                      }}
+                                      title={formatDate(item.updatedAt)}
+                                    >
                                       {formatDate(item.updatedAt)}
                                     </td>
-                                    <td style={{ textAlign: 'center' }}>
+                                    <td
+                                      style={{
+                                        ...baseCellStyle,
+                                        width: `${colWidths.mode}px`,
+                                        textAlign: 'center',
+                                        padding: '1px 3px',
+                                      }}
+                                    >
                                       {isBinary ? (
-                                        /* Binary Object 2-Way Switch: Exclude vs Include in Manifest */
                                         <div
                                           style={{
                                             display: 'inline-flex',
-                                            background: '#0d1117',
-                                            borderRadius: '4px',
-                                            border: '1px solid #30363d',
-                                            padding: '2px',
+                                            border: '1px solid #94a3b8',
+                                            background: '#f1f5f9',
                                           }}
                                           role="group"
                                           aria-label={`Binary export mode for ${parsed.key}`}
@@ -852,14 +987,17 @@ export function DatabaseScopeSelector({
                                             onClick={() => handleSetObjectMode(db.id, parsed.key, true, BINARY_COPY_MODES.EXCLUDE)}
                                             disabled={readOnly}
                                             style={{
-                                              padding: '2px 8px',
-                                              fontSize: '11px',
-                                              fontWeight: 600,
-                                              borderRadius: '3px',
+                                              padding: '0 6px',
+                                              height: '16px',
+                                              fontSize: '8pt',
+                                              fontFamily: 'inherit',
+                                              fontWeight: isSkip ? 700 : 400,
                                               border: 'none',
+                                              borderRight: '1px solid #cbd5e1',
                                               cursor: readOnly ? 'default' : 'pointer',
-                                              background: isSkip ? '#b91c1c' : 'transparent',
-                                              color: isSkip ? '#fff' : '#8b949e',
+                                              background: isSkip ? '#dc2626' : 'transparent',
+                                              color: isSkip ? '#ffffff' : '#334155',
+                                              whiteSpace: 'nowrap',
                                             }}
                                           >
                                             Exclude
@@ -869,22 +1007,23 @@ export function DatabaseScopeSelector({
                                             onClick={() => handleSetObjectMode(db.id, parsed.key, true, BINARY_COPY_MODES.INCLUDE)}
                                             disabled={readOnly}
                                             style={{
-                                              padding: '2px 8px',
-                                              fontSize: '11px',
-                                              fontWeight: 600,
-                                              borderRadius: '3px',
+                                              padding: '0 6px',
+                                              height: '16px',
+                                              fontSize: '8pt',
+                                              fontFamily: 'inherit',
+                                              fontWeight: !isSkip ? 700 : 400,
                                               border: 'none',
                                               cursor: readOnly ? 'default' : 'pointer',
-                                              background: !isSkip ? '#1f6feb' : 'transparent',
-                                              color: !isSkip ? '#fff' : '#8b949e',
+                                              background: !isSkip ? '#1d4ed8' : 'transparent',
+                                              color: !isSkip ? '#ffffff' : '#334155',
+                                              whiteSpace: 'nowrap',
                                             }}
                                           >
-                                            Include in Manifest
+                                            Include
                                           </button>
                                         </div>
                                       ) : (
-                                        /* Database Object 3-Way Switch: Exclude | Include structure only | Include structure and data */
-                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                        <div style={{ display: 'inline-flex', alignItems: 'center' }}>
                                           <input
                                             type="checkbox"
                                             checked={!isSkip}
@@ -904,10 +1043,8 @@ export function DatabaseScopeSelector({
                                           <div
                                             style={{
                                               display: 'inline-flex',
-                                              background: '#0d1117',
-                                              borderRadius: '4px',
-                                              border: '1px solid #30363d',
-                                              padding: '2px',
+                                              border: '1px solid #94a3b8',
+                                              background: '#f1f5f9',
                                             }}
                                             role="group"
                                             aria-label={`Inclusion mode for ${parsed.key}`}
@@ -917,14 +1054,17 @@ export function DatabaseScopeSelector({
                                               onClick={() => handleSetObjectMode(db.id, parsed.key, false, TABLE_COPY_MODES.SKIP)}
                                               disabled={readOnly}
                                               style={{
-                                                padding: '2px 7px',
-                                                fontSize: '11px',
-                                                fontWeight: 600,
-                                                borderRadius: '3px',
+                                                padding: '0 5px',
+                                                height: '16px',
+                                                fontSize: '8pt',
+                                                fontFamily: 'inherit',
+                                                fontWeight: isSkip ? 700 : 400,
                                                 border: 'none',
+                                                borderRight: '1px solid #cbd5e1',
                                                 cursor: readOnly ? 'default' : 'pointer',
-                                                background: isSkip ? '#b91c1c' : 'transparent',
-                                                color: isSkip ? '#fff' : '#8b949e',
+                                                background: isSkip ? '#dc2626' : 'transparent',
+                                                color: isSkip ? '#ffffff' : '#334155',
+                                                whiteSpace: 'nowrap',
                                               }}
                                               title="Exclude object completely"
                                             >
@@ -935,48 +1075,57 @@ export function DatabaseScopeSelector({
                                               onClick={() => handleSetObjectMode(db.id, parsed.key, false, TABLE_COPY_MODES.STRUCTURE_ONLY)}
                                               disabled={readOnly}
                                               style={{
-                                                padding: '2px 7px',
-                                                fontSize: '11px',
-                                                fontWeight: 600,
-                                                borderRadius: '3px',
+                                                padding: '0 5px',
+                                                height: '16px',
+                                                fontSize: '8pt',
+                                                fontFamily: 'inherit',
+                                                fontWeight: isStructureOnlyRow ? 700 : 400,
                                                 border: 'none',
+                                                borderRight: '1px solid #cbd5e1',
                                                 cursor: readOnly ? 'default' : 'pointer',
-                                                background: isStructureOnlyRow ? '#238636' : 'transparent',
-                                                color: isStructureOnlyRow ? '#fff' : '#8b949e',
+                                                background: isStructureOnlyRow ? '#15803d' : 'transparent',
+                                                color: isStructureOnlyRow ? '#ffffff' : '#334155',
+                                                whiteSpace: 'nowrap',
                                               }}
                                               title="Include structure only (DDL schema, 0 row data)"
                                             >
-                                              Structure Only ⚡
+                                              Struct
                                             </button>
                                             <button
                                               type="button"
                                               onClick={() => handleSetObjectMode(db.id, parsed.key, false, TABLE_COPY_MODES.STRUCTURE_AND_DATA)}
                                               disabled={readOnly}
                                               style={{
-                                                padding: '2px 7px',
-                                                fontSize: '11px',
-                                                fontWeight: 600,
-                                                borderRadius: '3px',
+                                                padding: '0 5px',
+                                                height: '16px',
+                                                fontSize: '8pt',
+                                                fontFamily: 'inherit',
+                                                fontWeight: isFull ? 700 : 400,
                                                 border: 'none',
                                                 cursor: readOnly ? 'default' : 'pointer',
-                                                background: isFull ? '#1f6feb' : 'transparent',
-                                                color: isFull ? '#fff' : '#8b949e',
+                                                background: isFull ? '#1d4ed8' : 'transparent',
+                                                color: isFull ? '#ffffff' : '#334155',
+                                                whiteSpace: 'nowrap',
                                               }}
                                               title="Include structure and data"
                                             >
-                                              Structure + Data
+                                              Struct+Data
                                             </button>
                                           </div>
                                         </div>
                                       )}
                                     </td>
-                                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>
-                                      <div style={{ fontWeight: 700, color: isSkip ? '#6e7681' : '#3ecf8e' }}>
-                                        +{rowIncludedMb.toFixed(2)} MB
-                                      </div>
-                                      <div style={{ fontSize: '10px', color: '#8b949e' }}>
-                                        Σ {runningStackedMb.toFixed(2)} MB
-                                      </div>
+                                    <td
+                                      style={{
+                                        ...baseCellStyle,
+                                        width: `${colWidths.includedMb}px`,
+                                        textAlign: 'right',
+                                        fontWeight: 600,
+                                        color: isSkip ? '#94a3b8' : '#0f766e',
+                                      }}
+                                      title={`Row: +${rowIncludedMb.toFixed(2)} MB | Running Stacked Sum: ${runningStackedMb.toFixed(2)} MB`}
+                                    >
+                                      +{rowIncludedMb.toFixed(2)} (Σ {runningStackedMb.toFixed(2)})
                                     </td>
                                   </tr>
                                 );

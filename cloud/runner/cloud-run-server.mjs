@@ -211,65 +211,83 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
     }
     .db-row:hover { background: #1c222b; }
     table.spreadsheet {
-      width: 100%;
       border-collapse: collapse;
-      font-size: 12px;
+      table-layout: fixed;
+      width: max-content;
+      min-width: 100%;
+      font-size: 8.5pt;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      background: #ffffff;
+      color: #0f172a;
     }
     table.spreadsheet th {
-      padding: 9px 10px;
-      background: #0d1117;
-      border-bottom: 1px solid var(--border);
-      color: var(--muted);
+      position: sticky;
+      top: 0;
+      zIndex: 2;
+      padding: 2px 6px;
+      height: 22px;
+      line-height: 1.15;
+      background: #f1f5f9;
+      border-bottom: 1px solid #94a3b8;
+      border-right: 1px solid #cbd5e1;
+      color: #1e293b;
+      font-size: 8.5pt;
       font-weight: 700;
       cursor: pointer;
       user-select: none;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       text-align: left;
     }
-    table.spreadsheet th:hover { color: var(--text); }
+    table.spreadsheet th:hover { background: #e2e8f0; color: #0f172a; }
+    table.spreadsheet th .col-resizer {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 5px;
+      cursor: col-resize;
+      z-index: 3;
+    }
     table.spreadsheet td {
-      padding: 7px 10px;
-      border-bottom: 1px solid #161b22;
+      padding: 1px 6px;
+      height: 21px;
+      line-height: 1.15;
+      font-size: 8.5pt;
+      border-bottom: 1px solid #cbd5e1;
+      border-right: 1px solid #cbd5e1;
       vertical-align: middle;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #0f172a;
     }
-    table.spreadsheet tr:hover td {
-      background: rgba(255,255,255,0.02);
-    }
-    .type-pill {
-      display: inline-block;
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 10px;
-      font-weight: 700;
-      font-family: monospace;
-    }
-    .type-TABLE { background: rgba(62,207,142,0.14); color: #3ecf8e; border: 1px solid rgba(62,207,142,0.35); }
-    .type-VIEW { background: rgba(88,166,255,0.14); color: #58a6ff; border: 1px solid rgba(88,166,255,0.35); }
-    .type-FUNCTION { background: rgba(210,168,255,0.14); color: #d2a8ff; border: 1px solid rgba(210,168,255,0.35); }
-    .type-BINARY { background: rgba(210,153,34,0.16); color: #e3b341; border: 1px solid rgba(210,153,34,0.4); }
     .switch-group {
       display: inline-flex;
-      background: #0d1117;
-      border: 1px solid var(--border);
-      border-radius: 5px;
-      padding: 2px;
-      gap: 2px;
+      background: #f1f5f9;
+      border: 1px solid #94a3b8;
+      padding: 0;
+      gap: 0;
     }
     .switch-btn {
       border: none;
+      border-right: 1px solid #cbd5e1;
       background: transparent;
-      color: var(--muted);
-      font-size: 10px;
-      padding: 3px 8px;
-      border-radius: 3px;
+      color: #334155;
+      font-size: 8pt;
+      font-family: inherit;
+      height: 16px;
+      padding: 0 5px;
       cursor: pointer;
-      font-weight: 500;
+      font-weight: 400;
       white-space: nowrap;
     }
-    .switch-btn.active-skip { background: #da3633; color: #fff; font-weight: 700; }
-    .switch-btn.active-struct { background: #1f6feb; color: #fff; font-weight: 700; }
-    .switch-btn.active-full { background: #238636; color: #fff; font-weight: 700; }
-    .switch-btn.active-bin { background: #9e6a03; color: #fff; font-weight: 700; }
+    .switch-btn:last-child { border-right: none; }
+    .switch-btn.active-skip { background: #dc2626; color: #fff; font-weight: 700; }
+    .switch-btn.active-struct { background: #15803d; color: #fff; font-weight: 700; }
+    .switch-btn.active-full { background: #1d4ed8; color: #fff; font-weight: 700; }
+    .switch-btn.active-bin { background: #1d4ed8; color: #fff; font-weight: 700; }
     .grand-bar {
       position: sticky;
       bottom: 12px;
@@ -426,6 +444,34 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
     let expandedDbIds = {};
     let sortConfigByDb = {};
     let tokenMasked = true;
+    let colWidths = {
+      objectType: 76,
+      schemaOrBucket: 104,
+      objectName: 210,
+      sizeMb: 86,
+      createdAt: 118,
+      updatedAt: 118,
+      mode: 196,
+      stackedMb: 132,
+    };
+
+    function startColResize(ev, colKey) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const startX = ev.clientX;
+      const startW = colWidths[colKey] || 100;
+      function onMove(moveEv) {
+        const nextW = Math.max(54, startW + (moveEv.clientX - startX));
+        colWidths[colKey] = nextW;
+        renderAll();
+      }
+      function onUp() {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      }
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    }
 
     function toggleTokenMask() {
       tokenMasked = !tokenMasked;
@@ -717,40 +763,46 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
         const selectedTotalMb = Number((selectedDbMb + selectedBinMb).toFixed(2));
 
         let runningStackedMb = 0;
-        const rowsHtml = sortedRows.map(item => {
+        const rowsHtml = sortedRows.map((item, rowIdx) => {
           const isBin = item.objectType === 'BINARY';
           const contribMb = db.enabled ? computeRowIncludedMb(item, db.mode) : 0;
           runningStackedMb = Number((runningStackedMb + contribMb).toFixed(2));
           const isExcluded = item.mode === 'skip' || !db.enabled;
           const safeName = String(item.name).replace(/'/g, "\\\\'");
+          const rowBg = isExcluded ? '#fef2f2' : (rowIdx % 2 === 0 ? '#ffffff' : '#f8fafc');
+          const txtColor = isExcluded ? '#94a3b8' : '#0f172a';
 
           const switchHtml = isBin
             ? \`<div class="switch-group">
                 <button type="button" class="switch-btn \${item.mode === 'skip' ? 'active-skip' : ''}" onclick="setRowMode('\${db.id}', 'BINARY', '\${safeName}', 'skip')">Exclude</button>
-                <button type="button" class="switch-btn \${item.mode !== 'skip' ? 'active-bin' : ''}" onclick="setRowMode('\${db.id}', 'BINARY', '\${safeName}', 'include')">Include in Manifest</button>
+                <button type="button" class="switch-btn \${item.mode !== 'skip' ? 'active-bin' : ''}" onclick="setRowMode('\${db.id}', 'BINARY', '\${safeName}', 'include')">Include</button>
               </div>\`
             : \`<div class="switch-group">
                 <button type="button" class="switch-btn \${item.mode === 'skip' ? 'active-skip' : ''}" onclick="setRowMode('\${db.id}', '\${item.objectType}', '\${safeName}', 'skip')">Exclude</button>
-                <button type="button" class="switch-btn \${item.mode === 'structure_only' ? 'active-struct' : ''}" onclick="setRowMode('\${db.id}', '\${item.objectType}', '\${safeName}', 'structure_only')">Structure Only</button>
-                <button type="button" class="switch-btn \${item.mode === 'structure_and_data' ? 'active-full' : ''}" onclick="setRowMode('\${db.id}', '\${item.objectType}', '\${safeName}', 'structure_and_data')">Structure + Data</button>
+                <button type="button" class="switch-btn \${item.mode === 'structure_only' ? 'active-struct' : ''}" onclick="setRowMode('\${db.id}', '\${item.objectType}', '\${safeName}', 'structure_only')">Struct</button>
+                <button type="button" class="switch-btn \${item.mode === 'structure_and_data' ? 'active-full' : ''}" onclick="setRowMode('\${db.id}', '\${item.objectType}', '\${safeName}', 'structure_and_data')">Struct+Data</button>
               </div>\`;
 
-          return \`<tr style="opacity:\${isExcluded ? '0.45' : '1'};">
-            <td><span class="type-pill type-\${item.objectType}">\${item.objectType}</span></td>
-            <td style="font-family:monospace;color:\${isBin ? '#e3b341' : '#8b949e'};">\${isBin ? '🪣 ' + item.schemaOrBucket : item.schemaOrBucket}</td>
-            <td style="font-family:monospace;color:#f0f6fc;font-weight:600;word-break:break-all;">\${item.objectName}</td>
-            <td style="text-align:right;font-family:monospace;">\${Number(item.sizeMb || 0).toFixed(2)} MB</td>
-            <td style="font-family:monospace;color:#8b949e;font-size:11px;">\${item.createdAt || '—'}</td>
-            <td style="font-family:monospace;color:#8b949e;font-size:11px;">\${item.updatedAt || '—'}</td>
-            <td style="text-align:center;">\${switchHtml}</td>
-            <td style="text-align:right;font-family:monospace;background:rgba(13,17,23,0.55);">
-              <div style="font-weight:700;color:\${contribMb > 0 ? '#3ecf8e' : '#6e7681'};">\${contribMb > 0 ? '+' + contribMb.toFixed(2) + ' MB' : '0.00 MB'}</div>
-              <div style="font-size:10px;color:#8b949e;">Σ \${runningStackedMb.toFixed(2)} MB</div>
+          return \`<tr style="background:\${rowBg};height:21px;">
+            <td style="width:\${colWidths.objectType}px;background:\${rowBg};color:\${txtColor};font-weight:600;" title="\${item.objectType}">\${item.objectType}</td>
+            <td style="width:\${colWidths.schemaOrBucket}px;background:\${rowBg};color:\${txtColor};" title="\${item.schemaOrBucket}">\${item.schemaOrBucket}</td>
+            <td style="width:\${colWidths.objectName}px;background:\${rowBg};color:\${txtColor};font-weight:600;" title="\${item.objectName}">\${item.objectName}</td>
+            <td style="width:\${colWidths.sizeMb}px;background:\${rowBg};color:\${txtColor};text-align:right;">\${Number(item.sizeMb || 0).toFixed(2)} MB</td>
+            <td style="width:\${colWidths.createdAt}px;background:\${rowBg};color:#475569;">\${(item.createdAt || '—').slice(0, 16)}</td>
+            <td style="width:\${colWidths.updatedAt}px;background:\${rowBg};color:#475569;">\${(item.updatedAt || '—').slice(0, 16)}</td>
+            <td style="width:\${colWidths.mode}px;background:\${rowBg};text-align:center;">\${switchHtml}</td>
+            <td style="width:\${colWidths.stackedMb}px;background:\${rowBg};text-align:right;font-weight:600;color:\${contribMb > 0 ? '#0f766e' : '#94a3b8'};">
+              +\${contribMb.toFixed(2)} (Σ \${runningStackedMb.toFixed(2)})
             </td>
           </tr>\`;
         }).join('');
 
         const sortArrow = (col) => sortCfg.column === col ? (sortCfg.direction === 'asc' ? ' ▲' : ' ▼') : ' ↕';
+        const renderTh = (col, label, align = 'left') => \`
+          <th onclick="toggleSort('\${db.id}', '\${col}')" style="width:\${colWidths[col]}px;min-width:\${colWidths[col]}px;max-width:\${colWidths[col]}px;text-align:\${align};">
+            <span>\${label}\${sortArrow(col)}</span>
+            <span class="col-resizer" onclick="event.stopPropagation()" onmousedown="startColResize(event, '\${col}')"></span>
+          </th>\`;
 
         return \`<div class="project-card \${db.enabled ? 'active' : ''}">
           <div class="project-banner">
@@ -782,33 +834,33 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
           </div>
 
           \${isExpanded ? \`
-            <div style="border-top:1px solid #30363d;background:#090d13;padding:12px 14px;">
-              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-                <span style="font-size:11px;color:#8b949e;">Click any column header to sort. Configure 3-way operation for DB objects or 2-way manifest inclusion for binary storage files.</span>
+            <div style="border-top:1px solid #30363d;background:#090d13;padding:10px 12px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+                <span style="font-size:11px;color:#8b949e;">Click any column header to sort · Drag any column header border to resize.</span>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                  <button type="button" class="btn btn-sm" onclick="setDatabaseDefaultMode('\${db.id}', 'structure_and_data')">All DB Objects: Structure + Data</button>
-                  <button type="button" class="btn btn-sm" onclick="setDatabaseDefaultMode('\${db.id}', 'structure_only')">All DB Objects: Structure Only</button>
+                  <button type="button" class="btn btn-sm" onclick="setDatabaseDefaultMode('\${db.id}', 'structure_and_data')">All DB Objects: Struct+Data</button>
+                  <button type="button" class="btn btn-sm" onclick="setDatabaseDefaultMode('\${db.id}', 'structure_only')">All DB Objects: Struct Only</button>
                   <button type="button" class="btn btn-sm" onclick="setDatabaseBinariesMode('\${db.id}', 'include')">Include All Binaries</button>
                   <button type="button" class="btn btn-sm" onclick="setDatabaseBinariesMode('\${db.id}', 'skip')">Exclude All Binaries</button>
                 </div>
               </div>
               \${sortedRows.length === 0 ? \`
-                <div style="padding:18px;text-align:center;color:#8b949e;font-size:12px;">
+                <div style="padding:14px;text-align:center;color:#475569;background:#ffffff;border:1px solid #94a3b8;font-size:8.5pt;">
                   No individual objects returned for this project (status: \${db.status}). Database-level summation is \${rawTotalProjectMb.toFixed(2)} MB.
                 </div>
               \` : \`
-                <div style="overflow-x:auto;border:1px solid #21262d;border-radius:8px;max-height:480px;overflow-y:auto;">
-                  <table class="spreadsheet">
+                <div style="overflow-x:auto;border:1px solid #94a3b8;background:#ffffff;max-height:420px;overflow-y:auto;">
+                  <table class="spreadsheet" style="width:\${Object.values(colWidths).reduce((a,b)=>a+b,0)}px;">
                     <thead>
                       <tr>
-                        <th onclick="toggleSort('\${db.id}', 'objectType')">Object Type\${sortArrow('objectType')}</th>
-                        <th onclick="toggleSort('\${db.id}', 'schemaOrBucket')">Schema / Bucket\${sortArrow('schemaOrBucket')}</th>
-                        <th onclick="toggleSort('\${db.id}', 'objectName')">Object Name\${sortArrow('objectName')}</th>
-                        <th onclick="toggleSort('\${db.id}', 'sizeMb')" style="text-align:right;">Size (MB)\${sortArrow('sizeMb')}</th>
-                        <th onclick="toggleSort('\${db.id}', 'createdAt')">Date Created\${sortArrow('createdAt')}</th>
-                        <th onclick="toggleSort('\${db.id}', 'updatedAt')">Last Updated\${sortArrow('updatedAt')}</th>
-                        <th onclick="toggleSort('\${db.id}', 'mode')" style="text-align:center;">Operation Switch (3-Way DB / 2-Way Binary)\${sortArrow('mode')}</th>
-                        <th onclick="toggleSort('\${db.id}', 'stackedMb')" style="text-align:right;color:#3ecf8e;">Stacked MB\${sortArrow('stackedMb')}</th>
+                        \${renderTh('objectType', 'Object Type', 'left')}
+                        \${renderTh('schemaOrBucket', 'Schema / Bucket', 'left')}
+                        \${renderTh('objectName', 'Object Name', 'left')}
+                        \${renderTh('sizeMb', 'Size (MB)', 'right')}
+                        \${renderTh('createdAt', 'Date Created', 'left')}
+                        \${renderTh('updatedAt', 'Last Updated', 'left')}
+                        \${renderTh('mode', 'Operation Switch (3-Way DB / 2-Way Binary)', 'center')}
+                        \${renderTh('stackedMb', 'Stacked MB', 'right')}
                       </tr>
                     </thead>
                     <tbody>
