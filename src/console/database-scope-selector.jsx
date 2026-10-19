@@ -161,18 +161,40 @@ export function DatabaseScopeSelector({
     updateDatabases(next);
   };
 
+  const syncDbItemsWithDbMode = (db, mode) => {
+    const isStructOnly = mode === DATABASE_COPY_MODES.STRUCTURE_ONLY;
+    const mapItem = (item) => {
+      const parsed = parseObjectRow(item);
+      if (parsed.isBinary) {
+        return {
+          ...item,
+          mode: isStructOnly ? BINARY_COPY_MODES.EXCLUDE : BINARY_COPY_MODES.INCLUDE,
+        };
+      }
+      return {
+        ...item,
+        mode: isStructOnly ? TABLE_COPY_MODES.STRUCTURE_ONLY : TABLE_COPY_MODES.STRUCTURE_AND_DATA,
+      };
+    };
+    return {
+      ...db,
+      mode,
+      tables: Array.isArray(db.tables) ? db.tables.map(mapItem) : [],
+      binaries: Array.isArray(db.binaries) ? db.binaries.map(mapItem) : undefined,
+    };
+  };
+
   const handleSetDbMode = (id, mode) => {
     if (readOnly) return;
-    const next = dbs.map((db) => (db.id === id ? { ...db, mode } : db));
+    const next = dbs.map((db) => (db.id === id ? syncDbItemsWithDbMode(db, mode) : db));
     updateDatabases(next);
   };
 
   const handleSelectAll = (mode) => {
     if (readOnly) return;
     const next = dbs.map((db) => ({
-      ...db,
+      ...syncDbItemsWithDbMode(db, mode),
       enabled: true,
-      mode,
     }));
     updateDatabases(next);
   };
@@ -181,18 +203,28 @@ export function DatabaseScopeSelector({
     if (readOnly) return;
     const next = dbs.map((db) => {
       if (db.id !== dbId) return db;
-      const updateList = (list = []) =>
+      const isPromotingToData =
+        db.mode === DATABASE_COPY_MODES.STRUCTURE_ONLY &&
+        (mode === TABLE_COPY_MODES.STRUCTURE_AND_DATA || mode === BINARY_COPY_MODES.INCLUDE);
+      const updateList = (list = [], listIsBinary = false) =>
         list.map((item) => {
           const parsed = parseObjectRow(item);
           if (parsed.key === itemKey || item.name === itemKey) {
             return { ...item, mode };
           }
+          if (isPromotingToData && !item.mode) {
+            return {
+              ...item,
+              mode: (parsed.isBinary || listIsBinary) ? BINARY_COPY_MODES.EXCLUDE : TABLE_COPY_MODES.STRUCTURE_ONLY,
+            };
+          }
           return item;
         });
       return {
         ...db,
-        tables: updateList(db.tables || []),
-        binaries: Array.isArray(db.binaries) ? updateList(db.binaries) : undefined,
+        mode: isPromotingToData ? DATABASE_COPY_MODES.STRUCTURE_AND_DATA : db.mode,
+        tables: updateList(db.tables || [], false),
+        binaries: Array.isArray(db.binaries) ? updateList(db.binaries, true) : undefined,
       };
     });
     updateDatabases(next);
@@ -218,18 +250,22 @@ export function DatabaseScopeSelector({
     if (readOnly) return;
     const next = dbs.map((db) => {
       if (db.id !== dbId) return db;
+      const excludeBinaries = mode === TABLE_COPY_MODES.SKIP || mode === TABLE_COPY_MODES.STRUCTURE_ONLY;
       const mapItem = (item) => {
         const parsed = parseObjectRow(item);
         if (parsed.isBinary) {
           return {
             ...item,
-            mode: mode === TABLE_COPY_MODES.SKIP ? BINARY_COPY_MODES.EXCLUDE : BINARY_COPY_MODES.INCLUDE,
+            mode: excludeBinaries ? BINARY_COPY_MODES.EXCLUDE : BINARY_COPY_MODES.INCLUDE,
           };
         }
         return { ...item, mode };
       };
       return {
         ...db,
+        mode: mode === TABLE_COPY_MODES.STRUCTURE_ONLY
+          ? DATABASE_COPY_MODES.STRUCTURE_ONLY
+          : DATABASE_COPY_MODES.STRUCTURE_AND_DATA,
         tables: (db.tables || []).map(mapItem),
         binaries: Array.isArray(db.binaries) ? db.binaries.map(mapItem) : undefined,
       };
@@ -240,6 +276,7 @@ export function DatabaseScopeSelector({
   const handleSetFilteredMode = (dbId, mode, matchingItems = []) => {
     if (readOnly || !Array.isArray(matchingItems) || matchingItems.length === 0) return;
     const matchKeys = new Set(matchingItems.map((item) => parseObjectRow(item).key));
+    const excludeBinaries = mode === TABLE_COPY_MODES.SKIP || mode === TABLE_COPY_MODES.STRUCTURE_ONLY;
     const next = dbs.map((db) => {
       if (db.id !== dbId) return db;
       const updateItem = (item) => {
@@ -248,7 +285,7 @@ export function DatabaseScopeSelector({
           if (parsed.isBinary) {
             return {
               ...item,
-              mode: mode === TABLE_COPY_MODES.SKIP ? BINARY_COPY_MODES.EXCLUDE : BINARY_COPY_MODES.INCLUDE,
+              mode: excludeBinaries ? BINARY_COPY_MODES.EXCLUDE : BINARY_COPY_MODES.INCLUDE,
             };
           }
           return { ...item, mode };
@@ -792,9 +829,11 @@ export function DatabaseScopeSelector({
                         🗄️ {db.databaseName || db.name || 'postgres'}
                       </strong>
                       <span className="pb-badge pb-badge-ok" style={{ fontSize: '11px', fontFamily: 'monospace' }}>
-                        {typeof db.estimatedSizeMb === 'number' && db.estimatedSizeMb >= 0
-                          ? `~${db.estimatedSizeMb} MB`
-                          : '?? MB'}
+                        {typeof dbMetrics.includedMb === 'number'
+                          ? `${dbMetrics.includedMb.toFixed(2)} MB included`
+                          : (typeof db.estimatedSizeMb === 'number' && db.estimatedSizeMb >= 0
+                            ? `~${db.estimatedSizeMb} MB`
+                            : '?? MB')}
                       </span>
                     </div>
                     <div style={{ fontSize: '11px', color: '#8b949e', marginTop: '2px' }}>
@@ -1056,8 +1095,8 @@ export function DatabaseScopeSelector({
                                 const isGrpInclude = isBucket && grpMode === BINARY_COPY_MODES.INCLUDE;
 
                                 const grpIncludedMb = grp.includedMb || 0;
-                                runningStackedMb = Number((runningStackedMb + grpIncludedMb).toFixed(2));
-                                const stackedAfterGroup = runningStackedMb;
+                                runningStackedMb = Number((runningStackedMb + grpIncludedMb).toFixed(4));
+                                const stackedAfterGroup = Number(runningStackedMb.toFixed(2));
 
                                 const grpBg = isGrpSkip
                                   ? '#fef2f2'
@@ -1142,9 +1181,13 @@ export function DatabaseScopeSelector({
                                           width: `${colWidths.size}px`,
                                           textAlign: 'right',
                                           fontWeight: 700,
+                                          textDecoration: isGrpSkip ? 'line-through' : 'none',
                                         }}
+                                        title={`Included: ${formatMb(grpIncludedMb)} of ${formatMb(grp.sizeMb)} raw`}
                                       >
-                                        {formatMb(grp.sizeMb)}
+                                        {isGrpStruct || grpMode === 'mixed'
+                                          ? formatMb(grpIncludedMb)
+                                          : formatMb(grp.sizeMb)}
                                       </td>
                                       <td
                                         style={{
@@ -1649,7 +1692,7 @@ export function DatabaseScopeSelector({
                                             fontWeight: 700,
                                           }}
                                         >
-                                          ▴ Done picking records in {grp.objectType} &ldquo;{grp.schemaOrBucket}&rdquo; &mdash; Click to close
+                                          ▴ Done picking records in {grp.objectType} &ldquo;{grp.schemaOrBucket}&rdquo; (Subtotal: {formatMb(grpIncludedMb)} of {formatMb(grp.sizeMb)}) &mdash; Click to close
                                         </td>
                                       </tr>
                                     )}
@@ -1660,6 +1703,9 @@ export function DatabaseScopeSelector({
                             {/* Pinned Subtotal Row for this Database */}
                             {sortedGroups.length > 0 && (() => {
                               const subCellStyle = {
+                                position: 'sticky',
+                                bottom: 0,
+                                zIndex: 2,
                                 fontSize: '8.5pt',
                                 fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
                                 padding: '2px 6px',
@@ -1675,8 +1721,31 @@ export function DatabaseScopeSelector({
                                 color: '#0f172a',
                                 verticalAlign: 'middle',
                               };
-                              const dbObjCount = Array.isArray(db.tables) ? db.tables.length : 0;
-                              const binObjCount = Array.isArray(db.binaries) ? db.binaries.filter((r) => !r?.isEmptyBucket && r?.objectName !== '(empty bucket)').length : 0;
+                              const dbTables = Array.isArray(db.tables) ? db.tables : [];
+                              const dbBinaries = Array.isArray(db.binaries)
+                                ? db.binaries.filter((r) => !r?.isEmptyBucket && r?.objectName !== '(empty bucket)')
+                                : [];
+                              const isItemExcluded = (r) => r?.mode === TABLE_COPY_MODES.SKIP || r?.mode === 'exclude';
+                              const includedDbCount = db.enabled === false
+                                ? 0
+                                : dbTables.filter((r) => !isItemExcluded(r)).length;
+                              const includedBinCount = db.enabled === false
+                                ? 0
+                                : dbBinaries.filter((r) => {
+                                    if (isItemExcluded(r)) return false;
+                                    if (!r?.mode && db.mode === DATABASE_COPY_MODES.STRUCTURE_ONLY) return false;
+                                    return true;
+                                  }).length;
+                              const includedObjCount = includedDbCount + includedBinCount;
+                              const hasSearchFilter = Boolean((searchQuery[db.id] || '').trim());
+                              const stackedVisibleMb = Number(runningStackedMb.toFixed(2));
+                              const subtotalIncludedMb = hasSearchFilter
+                                ? stackedVisibleMb
+                                : (typeof dbMetrics.includedMb === 'number' ? dbMetrics.includedMb : stackedVisibleMb);
+                              const totalSourceMb = typeof dbMetrics.totalSourceMb === 'number'
+                                ? dbMetrics.totalSourceMb
+                                : stackedVisibleMb;
+                              const excludedMb = Math.max(0, Number((totalSourceMb - subtotalIncludedMb).toFixed(2)));
                               return (
                                 <tr style={{ background: '#f1f5f9', height: '24px' }}>
                                   <td style={{ ...subCellStyle, fontWeight: 700 }}>
@@ -1685,19 +1754,35 @@ export function DatabaseScopeSelector({
                                   <td style={{ ...subCellStyle, fontWeight: 700 }} title={db.projectName || db.name}>
                                     {db.projectName || db.name}
                                   </td>
-                                  <td style={{ ...subCellStyle, fontWeight: 600, color: '#475569' }}>
-                                    {allObjects.length} objects ({dbObjCount} DB, {binObjCount} files)
+                                  <td
+                                    style={{ ...subCellStyle, fontWeight: 600, color: '#0f172a' }}
+                                    title={`${includedObjCount} of ${allObjects.length} objects included (${includedDbCount} DB, ${includedBinCount} files)`}
+                                  >
+                                    {includedObjCount} of {allObjects.length} included ({includedDbCount} DB, {includedBinCount} files)
                                   </td>
-                                  <td style={{ ...subCellStyle, textAlign: 'right', fontWeight: 700 }}>
-                                    {formatMb(dbMetrics.totalSourceMb ?? runningStackedMb)}
+                                  <td
+                                    style={{ ...subCellStyle, textAlign: 'right', fontWeight: 700, color: '#0f766e', background: '#e0f2fe' }}
+                                    title={`Subtotal Included: ${formatMb(subtotalIncludedMb)} of ${formatMb(totalSourceMb)} total (${formatMb(excludedMb)} excluded)`}
+                                  >
+                                    {formatMb(subtotalIncludedMb)}
                                   </td>
-                                  <td style={{ ...subCellStyle, color: '#94a3b8' }}>—</td>
-                                  <td style={{ ...subCellStyle, color: '#94a3b8' }}>—</td>
+                                  <td
+                                    style={{ ...subCellStyle, color: '#475569', fontSize: '8pt' }}
+                                    title={`Total unfiltered source size: ${formatMb(totalSourceMb)}`}
+                                  >
+                                    Total: {formatMb(totalSourceMb)}
+                                  </td>
+                                  <td
+                                    style={{ ...subCellStyle, color: excludedMb > 0 ? '#b91c1c' : '#64748b', fontSize: '8pt' }}
+                                    title={`Excluded / saved size: ${formatMb(excludedMb)}`}
+                                  >
+                                    Excl: {formatMb(excludedMb)}
+                                  </td>
                                   <td style={{ ...subCellStyle, textAlign: 'center', fontWeight: 700, color: '#1e3a8a', background: '#e0f2fe' }}>
                                     Subtotal Included:
                                   </td>
                                   <td style={{ ...subCellStyle, textAlign: 'right', fontWeight: 700, color: '#0f766e', background: '#e0f2fe' }}>
-                                    {formatMb(dbMetrics.includedMb ?? runningStackedMb)}
+                                    {formatMb(subtotalIncludedMb)}
                                   </td>
                                 </tr>
                               );

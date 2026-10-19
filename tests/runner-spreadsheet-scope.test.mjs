@@ -238,3 +238,55 @@ test('createCloudRunServer serves /health, interior HTML /, and /api/runner/mani
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test('subtotal MBs update accurately when schemas and buckets are toggled between Include, Exclude, and Struct (511.png regression)', () => {
+  let db = {
+    id: 'db_data_automation',
+    projectRef: 'ekklokrukxmqlahtonnc',
+    projectName: 'DataAutomation',
+    name: 'DataAutomation',
+    estimatedSizeMb: 625.02, // pg_database_size can differ from sum of tables
+    enabled: true,
+    mode: 'structure_and_data',
+    tables: [
+      { name: 'public.events', schema: 'public', objectName: 'events', objectType: 'TABLE', sizeMb: 451.72, mode: 'structure_and_data' },
+      { name: 'auth.users', schema: 'auth', objectName: 'users', objectType: 'TABLE', sizeMb: 8.69, mode: 'structure_and_data' },
+      { name: 'storage.objects', schema: 'storage', objectName: 'objects', objectType: 'TABLE', sizeMb: 12.14, mode: 'structure_and_data' },
+      { name: 'cron.job_run_details', schema: 'cron', objectName: 'job_run_details', objectType: 'TABLE', sizeMb: 2.38, mode: 'structure_and_data' },
+    ],
+    binaries: [
+      { name: 'Storage/archive.tar', bucket: 'Storage', schema: 'Storage', objectName: 'archive.tar', objectType: 'BINARY', sizeMb: 11474.99, mode: 'include' },
+      { name: 'documents/bundle.zip', bucket: 'documents', schema: 'documents', objectName: 'bundle.zip', objectType: 'BINARY', sizeMb: 473.03, mode: 'include' },
+      { name: 'market-intel/report.pdf', bucket: 'market-intel', schema: 'market-intel', objectName: 'report.pdf', objectType: 'BINARY', sizeMb: 2.18, mode: 'include' },
+    ],
+  };
+
+  // Initial state: all included -> 12425.13 MB
+  const initialSummary = computeDatabaseScopeSummary([db]);
+  const initialMetrics = initialSummary.perDatabase[db.id];
+  assert.equal(initialMetrics.totalSourceMb, 12425.13);
+  assert.equal(initialMetrics.includedMb, 12425.13);
+  assert.equal(initialMetrics.excludedMb, 0);
+
+  // Exclude "Storage" bucket (11474.99 MB), "public" schema (451.72 MB), and "cron" schema (2.38 MB) -> 496.04 MB included
+  db = setBucketModeInDatabase(db, 'Storage', 'skip');
+  db = setSchemaModeInDatabase(db, 'public', 'skip');
+  db = setSchemaModeInDatabase(db, 'cron', 'skip');
+
+  const afterExcludeSummary = computeDatabaseScopeSummary([db]);
+  const afterExcludeMetrics = afterExcludeSummary.perDatabase[db.id];
+  const groupsAfterExclude = groupDatabaseObjectsBySchemaAndBucket(db);
+  const stackedGroupSum = Number(groupsAfterExclude.reduce((acc, g) => acc + g.includedMb, 0).toFixed(2));
+
+  assert.equal(afterExcludeMetrics.includedMb, 496.04);
+  assert.equal(stackedGroupSum, 496.04);
+  assert.equal(afterExcludeMetrics.excludedMb, 11929.09);
+  assert.equal(afterExcludeSummary.grandTotalMb, 496.04);
+
+  // Switch "storage" schema (12.14 MB) to structure_only (0.02 MB DDL)
+  db = setSchemaModeInDatabase(db, 'storage', 'structure_only');
+  const afterStructSummary = computeDatabaseScopeSummary([db]);
+  const afterStructMetrics = afterStructSummary.perDatabase[db.id];
+  assert.equal(afterStructMetrics.includedMb, 483.92);
+});
+

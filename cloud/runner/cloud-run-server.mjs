@@ -541,20 +541,20 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
     }
 
     function computeRowIncludedMb(item, dbMode) {
-      const fullMb = typeof item.sizeMb === 'number' && !Number.isNaN(item.sizeMb) ? item.sizeMb : 0;
+      const fullMb = typeof item.sizeMb === 'number' && !Number.isNaN(item.sizeMb) && item.sizeMb > 0 ? item.sizeMb : 0;
       if (item.objectType === 'BINARY') {
-        const mode = item.mode || 'include';
-        return mode === 'skip' ? 0 : Number(fullMb.toFixed(3));
+        const mode = item.mode || (dbMode === 'structure_only' ? 'skip' : 'include');
+        return mode === 'skip' || mode === 'exclude' ? 0 : Number(fullMb.toFixed(4));
       }
       const effectiveMode = item.mode || (dbMode === 'structure_only' ? 'structure_only' : 'structure_and_data');
-      if (effectiveMode === 'skip') return 0;
+      if (effectiveMode === 'skip' || effectiveMode === 'exclude') return 0;
       if (effectiveMode === 'structure_only') {
         const ddlMb = item.objectType === 'VIEW' || item.objectType === 'FUNCTION'
           ? fullMb
-          : Math.min(fullMb || 0.01, 0.02);
-        return Number(ddlMb.toFixed(3));
+          : (fullMb > 0 ? Math.min(fullMb, 0.02) : (item.sizeMb == null ? 0.01 : 0));
+        return Number(ddlMb.toFixed(4));
       }
-      return Number(fullMb.toFixed(3));
+      return Number(fullMb.toFixed(4));
     }
 
     async function discoverProjects(overrideToken) {
@@ -968,42 +968,50 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
         const activeGroupKey = activeGroupByDb[db.id] || null;
         const activeGroup = activeGroupKey ? groups.find(g => g.groupKey === activeGroupKey) : null;
 
-        const rawDbMb = typeof db.estimatedSizeMb === 'number'
-          ? db.estimatedSizeMb
-          : allRows.filter(r => r.objectType !== 'BINARY').reduce((s, r) => s + (r.sizeMb || 0), 0);
-        const rawBinMb = allRows.filter(r => r.objectType === 'BINARY').reduce((s, r) => s + (r.sizeMb || 0), 0);
+        const dbRows = allRows.filter(r => r.objectType !== 'BINARY');
+        const binRows = allRows.filter(r => r.objectType === 'BINARY');
+        const rawDbMb = dbRows.length > 0
+          ? dbRows.reduce((s, r) => s + (r.sizeMb || 0), 0)
+          : (typeof db.estimatedSizeMb === 'number' ? db.estimatedSizeMb : 0);
+        const rawBinMb = binRows.reduce((s, r) => s + (r.sizeMb || 0), 0);
         const rawTotalProjectMb = Number((rawDbMb + rawBinMb).toFixed(2));
 
         let selectedDbMb = 0;
         let selectedBinMb = 0;
         if (db.enabled) {
           enabledCount++;
-          const dbRows = allRows.filter(r => r.objectType !== 'BINARY');
           if (dbRows.length > 0) {
             for (const r of dbRows) selectedDbMb += computeRowIncludedMb(r, db.mode);
           } else {
             selectedDbMb = db.mode === 'structure_only' ? Math.max(0.05, Number((rawDbMb * 0.02).toFixed(2))) : rawDbMb;
           }
-          for (const b of allRows.filter(r => r.objectType === 'BINARY')) {
+          for (const b of binRows) {
             selectedBinMb += computeRowIncludedMb(b, db.mode);
           }
           grandDbMb += selectedDbMb;
           grandBinMb += selectedBinMb;
         }
         const selectedTotalMb = Number((selectedDbMb + selectedBinMb).toFixed(2));
+        const excludedTotalMb = Math.max(0, Number((rawTotalProjectMb - selectedTotalMb).toFixed(2)));
+        const includedDbCount = db.enabled ? dbRows.filter(r => r.mode !== 'skip').length : 0;
+        const includedBinCount = db.enabled ? binRows.filter(r => r.mode !== 'skip').length : 0;
+        const includedObjCount = includedDbCount + includedBinCount;
 
         let runningStackedMb = 0;
         const rowsHtml = groups.map((grp, grpIdx) => {
           const isBucket = grp.isBinary;
           const isGrpExpanded = activeGroupKey === grp.groupKey;
           const contribMb = db.enabled ? grp.includedMb : 0;
-          runningStackedMb = Number((runningStackedMb + contribMb).toFixed(2));
-          const stackedAfterGrp = runningStackedMb;
+          runningStackedMb = Number((runningStackedMb + contribMb).toFixed(4));
+          const stackedAfterGrp = Number(runningStackedMb.toFixed(2));
           const isExcluded = grp.mode === 'skip' || !db.enabled;
           const safeGrpName = String(grp.schemaOrBucket).replace(/'/g, "\\\\'");
           const safeGrpKey = String(grp.groupKey).replace(/'/g, "\\\\'");
           const grpBg = isExcluded ? '#fef2f2' : (isGrpExpanded ? '#dbeafe' : (grpIdx % 2 === 0 ? '#f8fafc' : '#f1f5f9'));
           const grpTxt = isExcluded ? '#94a3b8' : '#0f172a';
+          const grpDisplayMb = (grp.mode === 'structure_only' || grp.mode === 'mixed')
+            ? Number(contribMb || 0).toFixed(2)
+            : Number(grp.sizeMb || 0).toFixed(2);
 
           const grpSwitchHtml = isBucket
             ? \`<div class="switch-group" onclick="event.stopPropagation()">
@@ -1020,7 +1028,7 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
             <td style="width:\${colWidths.objectType}px;background:\${grpBg};color:\${isExcluded ? '#94a3b8' : (isBucket ? '#9a3412' : '#0f172a')};font-weight:700;">\${grp.objectType}</td>
             <td style="width:\${colWidths.schemaOrBucket}px;background:\${grpBg};color:\${isExcluded ? '#94a3b8' : (isBucket ? '#7c2d12' : '#1e3a8a')};font-weight:700;" title="\${grp.schemaOrBucket}">\${isGrpExpanded ? '▼ ' : '▶ '}\${grp.schemaOrBucket}</td>
             <td style="width:\${colWidths.objectName}px;background:\${grpBg};color:\${grpTxt};font-weight:700;" title="\${grp.objectName}">\${grp.objectName}\${isGrpExpanded ? ' <span style="color:#1d4ed8;margin-left:6px;">[▴ Done / Close]</span>' : ''}</td>
-            <td style="width:\${colWidths.sizeMb}px;background:\${grpBg};color:\${grpTxt};text-align:right;font-weight:700;">\${Number(grp.sizeMb || 0).toFixed(2)} MB</td>
+            <td style="width:\${colWidths.sizeMb}px;background:\${grpBg};color:\${grpTxt};text-align:right;font-weight:700;text-decoration:\${isExcluded ? 'line-through' : 'none'};" title="Included: \${Number(contribMb || 0).toFixed(2)} MB of \${Number(grp.sizeMb || 0).toFixed(2)} MB raw">\${grpDisplayMb} MB</td>
             <td style="width:\${colWidths.createdAt}px;background:\${grpBg};color:#475569;">\${(grp.createdAt || '—').slice(0, 16)}</td>
             <td style="width:\${colWidths.updatedAt}px;background:\${grpBg};color:#475569;">\${(grp.updatedAt || '—').slice(0, 16)}</td>
             <td style="width:\${colWidths.mode}px;background:\${grpBg};text-align:center;">\${grpSwitchHtml}</td>
@@ -1084,12 +1092,23 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
 
           const closeGroupFooterHtml = \`<tr style="background:#dbeafe;height:22px;cursor:pointer;" onclick="closeActiveGroup('\${db.id}')" title="Done picking records in \${grp.objectType} \${grp.schemaOrBucket} — click to close">
             <td colspan="8" style="padding:2px 12px;color:#1e3a8a;font-weight:700;background:#dbeafe;">
-              ▴ Done picking records in \${grp.objectType} "\${grp.schemaOrBucket}" — Click to close
+              ▴ Done picking records in \${grp.objectType} "\${grp.schemaOrBucket}" (Subtotal: \${Number(contribMb || 0).toFixed(2)} MB of \${Number(grp.sizeMb || 0).toFixed(2)} MB) — Click to close
             </td>
           </tr>\`;
 
           return grpRowHtml + childRowsHtml + loadMoreHtml + closeGroupFooterHtml;
         }).join('');
+
+        const subtotalRowHtml = \`<tr style="background:#f1f5f9;height:24px;">
+          <td style="position:sticky;bottom:0;z-index:2;background:#f1f5f9;border-top:2px solid #64748b;font-weight:700;color:#0f172a;">SUBTOTAL</td>
+          <td style="position:sticky;bottom:0;z-index:2;background:#f1f5f9;border-top:2px solid #64748b;font-weight:700;color:#0f172a;" title="\${db.projectName || db.name}">\${db.projectName || db.name}</td>
+          <td style="position:sticky;bottom:0;z-index:2;background:#f1f5f9;border-top:2px solid #64748b;font-weight:600;color:#0f172a;">\${includedObjCount} of \${allRows.length} included (\${includedDbCount} DB, \${includedBinCount} files)</td>
+          <td style="position:sticky;bottom:0;z-index:2;background:#e0f2fe;border-top:2px solid #64748b;text-align:right;font-weight:700;color:#0f766e;" title="Subtotal Included: \${selectedTotalMb.toFixed(2)} MB of \${rawTotalProjectMb.toFixed(2)} MB total">\${selectedTotalMb.toFixed(2)} MB</td>
+          <td style="position:sticky;bottom:0;z-index:2;background:#f1f5f9;border-top:2px solid #64748b;color:#475569;">Total: \${rawTotalProjectMb.toFixed(2)} MB</td>
+          <td style="position:sticky;bottom:0;z-index:2;background:#f1f5f9;border-top:2px solid #64748b;color:\${excludedTotalMb > 0 ? '#b91c1c' : '#64748b'};">Excl: \${excludedTotalMb.toFixed(2)} MB</td>
+          <td style="position:sticky;bottom:0;z-index:2;background:#e0f2fe;border-top:2px solid #64748b;text-align:center;font-weight:700;color:#1e3a8a;">Subtotal Included:</td>
+          <td style="position:sticky;bottom:0;z-index:2;background:#e0f2fe;border-top:2px solid #64748b;text-align:right;font-weight:700;color:#0f766e;">\${selectedTotalMb.toFixed(2)} MB</td>
+        </tr>\`;
 
         const sortArrow = (col) => sortCfg.column === col ? (sortCfg.direction === 'asc' ? ' ▲' : ' ▼') : ' ↕';
         const renderTh = (col, label, align = 'left') => \`
@@ -1116,9 +1135,9 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
               <input type="checkbox" \${db.enabled ? 'checked' : ''} onchange="toggleDatabaseEnabled('\${db.id}', this.checked)" style="width:16px;height:16px;accent-color:#3ecf8e;cursor:pointer;" />
               <strong style="font-size:14px;color:#f0f6fc;cursor:pointer;" onclick="toggleExpandDb('\${db.id}')">🗄️ Database: \${db.name}</strong>
               <span style="font-size:11px;padding:2px 8px;border-radius:10px;background:#21262d;color:#58a6ff;font-family:monospace;">
-                DB: \${rawDbMb.toFixed(2)} MB · Storage: \${rawBinMb.toFixed(2)} MB · Total: \${rawTotalProjectMb.toFixed(2)} MB
+                Included: \${selectedTotalMb.toFixed(2)} MB / \${rawTotalProjectMb.toFixed(2)} MB (DB: \${rawDbMb.toFixed(2)} MB · Storage: \${rawBinMb.toFixed(2)} MB)
               </span>
-              <span style="font-size:11px;color:#8b949e;">(\${groups.filter(g => !g.isBinary).length} schemas · \${groups.filter(g => g.isBinary).length} buckets · \${allRows.length} total objects)</span>
+              <span style="font-size:11px;color:#8b949e;">(\${groups.filter(g => !g.isBinary).length} schemas · \${groups.filter(g => g.isBinary).length} buckets · \${includedObjCount}/\${allRows.length} included)</span>
             </div>
             <div style="display:flex;align-items:center;gap:8px;">
               <button type="button" class="btn btn-sm" onclick="event.stopPropagation(); toggleExpandDb('\${db.id}')">
@@ -1159,7 +1178,7 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
                       </tr>
                     </thead>
                     <tbody>
-                      \${rowsHtml}
+                      \${rowsHtml}\${subtotalRowHtml}
                     </tbody>
                   </table>
                 </div>

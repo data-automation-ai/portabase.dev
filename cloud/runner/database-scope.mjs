@@ -49,7 +49,12 @@ export function computeObjectIncludedMb(item, dbMode = DATABASE_COPY_MODES.STRUC
   if (!item) return 0;
   const objType = String(item.objectType || OBJECT_TYPES.TABLE).toUpperCase();
   const rawSizeMb = typeof item.sizeMb === 'number' && item.sizeMb >= 0 ? item.sizeMb : 0;
-  const mode = item.mode || (objType === OBJECT_TYPES.BINARY ? BINARY_COPY_MODES.INCLUDE : TABLE_COPY_MODES.STRUCTURE_AND_DATA);
+  const explicitMode = item.mode;
+  const mode = explicitMode || (
+    objType === OBJECT_TYPES.BINARY
+      ? (dbMode === DATABASE_COPY_MODES.STRUCTURE_ONLY ? BINARY_COPY_MODES.EXCLUDE : BINARY_COPY_MODES.INCLUDE)
+      : (dbMode === DATABASE_COPY_MODES.STRUCTURE_ONLY ? TABLE_COPY_MODES.STRUCTURE_ONLY : TABLE_COPY_MODES.STRUCTURE_AND_DATA)
+  );
 
   if (dbMode === DATABASE_COPY_MODES.EXCLUDE || mode === TABLE_COPY_MODES.SKIP || mode === 'exclude') {
     return 0;
@@ -57,22 +62,21 @@ export function computeObjectIncludedMb(item, dbMode = DATABASE_COPY_MODES.STRUC
 
   if (objType === OBJECT_TYPES.BINARY) {
     // Binary storage objects are either excluded (0 MB) or included in the export manifest (full sizeMb)
-    if (dbMode === DATABASE_COPY_MODES.STRUCTURE_ONLY) {
-      return mode === BINARY_COPY_MODES.INCLUDE || mode === TABLE_COPY_MODES.STRUCTURE_AND_DATA ? rawSizeMb : 0;
-    }
-    return rawSizeMb;
+    return mode === BINARY_COPY_MODES.INCLUDE || mode === TABLE_COPY_MODES.STRUCTURE_AND_DATA ? rawSizeMb : 0;
   }
 
   // Database object (TABLE, VIEW, FUNCTION)
   const ddlMb = typeof item.structureSizeMb === 'number' && item.structureSizeMb >= 0
     ? item.structureSizeMb
-    : (objType === OBJECT_TYPES.VIEW || objType === OBJECT_TYPES.FUNCTION ? rawSizeMb : Math.min(rawSizeMb || 0.01, 0.02));
+    : (objType === OBJECT_TYPES.VIEW || objType === OBJECT_TYPES.FUNCTION
+      ? rawSizeMb
+      : (rawSizeMb > 0 ? Math.min(rawSizeMb, 0.02) : (item.sizeMb == null ? 0.01 : 0)));
 
-  if (dbMode === DATABASE_COPY_MODES.STRUCTURE_ONLY || mode === TABLE_COPY_MODES.STRUCTURE_ONLY) {
-    return Number(ddlMb.toFixed(3));
+  if (mode === TABLE_COPY_MODES.STRUCTURE_ONLY || (!explicitMode && dbMode === DATABASE_COPY_MODES.STRUCTURE_ONLY)) {
+    return Number(ddlMb.toFixed(4));
   }
 
-  return Number(rawSizeMb.toFixed(3));
+  return Number(rawSizeMb.toFixed(4));
 }
 
 /**
@@ -224,6 +228,7 @@ export function groupDatabaseObjectsBySchemaAndBucket(db) {
  */
 export function setSchemaModeInDatabase(db, schemaName, mode) {
   if (!db) return db;
+  const isPromotingToData = mode === TABLE_COPY_MODES.STRUCTURE_AND_DATA && db.mode === DATABASE_COPY_MODES.STRUCTURE_ONLY;
   const updateItem = (item) => {
     const objType = String(item?.objectType || OBJECT_TYPES.TABLE).toUpperCase();
     if (objType === OBJECT_TYPES.BINARY) return item;
@@ -233,10 +238,14 @@ export function setSchemaModeInDatabase(db, schemaName, mode) {
     if (itemSchema === schemaName) {
       return { ...item, mode };
     }
+    if (isPromotingToData && !item?.mode) {
+      return { ...item, mode: TABLE_COPY_MODES.STRUCTURE_ONLY };
+    }
     return item;
   };
   return {
     ...db,
+    mode: isPromotingToData ? DATABASE_COPY_MODES.STRUCTURE_AND_DATA : db.mode,
     tables: Array.isArray(db.tables) ? db.tables.map(updateItem) : [],
   };
 }
@@ -352,19 +361,22 @@ export function computeDatabaseScopeSummary(databases = []) {
     }
 
     const dbRawObjectsMb = dbRawTablesMb + dbRawBinariesMb;
+    const hasFullInventory = Array.isArray(db.binaries) && allObjects.length > 0;
     const isSizeKnown = (typeof db.estimatedSizeMb === 'number' && db.estimatedSizeMb >= 0) || allObjects.length > 0;
-    const baseDbSize = typeof db.estimatedSizeMb === 'number' && db.estimatedSizeMb >= 0
-      ? Math.max(db.estimatedSizeMb, dbRawTablesMb) + dbRawBinariesMb
-      : (allObjects.length > 0 ? dbRawObjectsMb : null);
+    const baseDbSize = hasFullInventory
+      ? dbRawObjectsMb
+      : (typeof db.estimatedSizeMb === 'number' && db.estimatedSizeMb >= 0
+        ? Math.max(db.estimatedSizeMb, dbRawTablesMb) + dbRawBinariesMb
+        : (allObjects.length > 0 ? dbRawObjectsMb : null));
 
-    // If baseDbSize includes unlisted catalog/table overhead beyond the listed tables,
-    // only compute net from the listed objects when all objects are accounted for, OR subtract savedMb
-    const unlistedDbOverheadMb = (typeof db.estimatedSizeMb === 'number' && db.estimatedSizeMb > dbRawTablesMb && dbRawBinariesMb === 0)
+    // If baseDbSize includes unlisted catalog/table overhead beyond a partial table list,
+    // only add overhead when binaries is not present (legacy partial table list) and at least one table is included
+    const unlistedDbOverheadMb = (!hasFullInventory && typeof db.estimatedSizeMb === 'number' && db.estimatedSizeMb > dbRawTablesMb && dbRawBinariesMb === 0 && dbIncludedTableMb > 0)
       ? (db.estimatedSizeMb - dbRawTablesMb)
       : 0;
 
-    const effectiveIncludedTableMb = db.mode === DATABASE_COPY_MODES.STRUCTURE_ONLY
-      ? (allObjects.length > 0 ? dbIncludedTableMb : Math.min(baseDbSize ?? 0, 1))
+    const effectiveIncludedTableMb = db.mode === DATABASE_COPY_MODES.STRUCTURE_ONLY && allObjects.length === 0
+      ? Math.min(baseDbSize ?? 0, 1)
       : (dbIncludedTableMb + unlistedDbOverheadMb);
 
     const dbIncludedTotalMb = allObjects.length > 0
@@ -376,6 +388,7 @@ export function computeDatabaseScopeSummary(databases = []) {
     perDatabase[db.id] = {
       totalSourceMb: baseDbSize !== null ? Number(baseDbSize.toFixed(2)) : null,
       includedMb: db.enabled === false ? 0 : (dbIncludedTotalMb !== null ? Number(dbIncludedTotalMb.toFixed(2)) : null),
+      excludedMb: db.enabled === false ? (baseDbSize !== null ? Number(baseDbSize.toFixed(2)) : 0) : Number(dbSavedObjectsMb.toFixed(2)),
       includedTableMb: db.enabled === false ? 0 : Number(effectiveIncludedTableMb.toFixed(2)),
       includedBinaryMb: db.enabled === false ? 0 : Number(dbIncludedBinaryMb.toFixed(2)),
     };
