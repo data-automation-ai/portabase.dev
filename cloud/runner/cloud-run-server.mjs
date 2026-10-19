@@ -406,8 +406,9 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
           </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <a href="/oauth/supabase/start" class="btn btn-primary">🚀 1-Click Supabase OAuth Sign-In</a>
-          ${hasServerDefaultToken ? `<button type="button" class="btn" onclick="discoverProjects('')">⚡ Load Connected Org Workspace</button>` : ''}
+          <a href="/oauth/supabase/start" class="btn btn-primary" onclick="localStorage.removeItem('pb_supabase_disconnected')">🚀 1-Click Supabase OAuth Sign-In</a>
+          ${hasServerDefaultToken ? `<button type="button" class="btn" onclick="localStorage.removeItem('pb_supabase_disconnected');discoverProjects('')">⚡ Load Connected Org Workspace</button>` : ''}
+          <button type="button" class="btn" style="background:rgba(248,81,73,0.14);color:#f85149;border-color:rgba(248,81,73,0.6);" onclick="disconnectSupabase()">✕ Logout / Disconnect Supabase</button>
         </div>
       </div>
 
@@ -424,8 +425,11 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
           autocomplete="off"
         />
         <button type="button" class="btn btn-sm" onclick="toggleTokenMask()">Show/Hide</button>
-        <button type="button" class="btn btn-primary" id="connectBtn" onclick="discoverProjects()">
+        <button type="button" class="btn btn-primary" id="connectBtn" onclick="localStorage.removeItem('pb_supabase_disconnected');discoverProjects()">
           🔍 Connect &amp; Discover Projects
+        </button>
+        <button type="button" class="btn btn-sm" style="background:rgba(248,81,73,0.14);color:#f85149;border-color:rgba(248,81,73,0.6);" onclick="disconnectSupabase()">
+          ✕ Logout / Disconnect
         </button>
       </div>
       <div id="statusBanner" style="margin-top:10px;font-size:12px;color:var(--accent);display:none;"></div>
@@ -447,6 +451,7 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
           <button type="button" class="btn btn-sm" onclick="setAllDatabases(true, 'structure_only')">All Structure Only</button>
           <button type="button" class="btn btn-sm" onclick="setAllBinaries('include')">Include All Binaries</button>
           <button type="button" class="btn btn-sm" onclick="setAllBinaries('skip')">Exclude All Binaries</button>
+          <button type="button" class="btn btn-sm" style="background:rgba(248,81,73,0.14);color:#f85149;border-color:rgba(248,81,73,0.6);" onclick="disconnectSupabase()">✕ Logout / Disconnect Supabase</button>
         </div>
       </div>
 
@@ -1177,8 +1182,34 @@ function renderRunnerInteriorHtml({ hasServerDefaultToken, oauthStatus, oauthErr
       }
     }
 
-    // Automatically discover on load if session cookie or server org credential is available
+    async function disconnectSupabase() {
+      try { localStorage.setItem('pb_supabase_disconnected', '1'); } catch (e) {}
+      stateDatabases = [];
+      expandedDbIds = {};
+      activeGroupByDb = {};
+      const inp = document.getElementById('sbTokenInput');
+      if (inp) inp.value = '';
+      const banner = document.getElementById('statusBanner');
+      if (banner) {
+        banner.style.display = 'block';
+        banner.style.color = '#f85149';
+        banner.textContent = 'Logged out / Disconnected from Supabase. Click Connect or 1-Click Supabase OAuth Sign-In to reconnect.';
+      }
+      try { await fetch('/api/runner/disconnect', { method: 'POST' }); } catch (e) {}
+      renderAll();
+    }
+
+    // Automatically discover on load if session cookie or server org credential is available (unless explicitly disconnected)
     window.addEventListener('DOMContentLoaded', () => {
+      try {
+        if (localStorage.getItem('pb_supabase_disconnected') === '1') {
+          const container = document.getElementById('projectsContainer');
+          if (container) {
+            container.innerHTML = '<div style="padding:28px;text-align:center;color:var(--muted);font-size:13px;">Disconnected from Supabase. Click <strong>1-Click Supabase OAuth Sign-In</strong> or <strong>Connect &amp; Discover Projects</strong> above to connect.</div>';
+          }
+          return;
+        }
+      } catch (e) {}
       discoverProjects('');
     });
   </script>
@@ -1295,6 +1326,18 @@ export function createCloudRunServer() {
         res.end();
         return;
       }
+    }
+
+    // 3b. Disconnect endpoint inside the Cloud Run runner
+    if (pathname === '/api/runner/disconnect') {
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Set-Cookie': clearCookie('pb_runner_sb_token'),
+        'Cache-Control': 'no-store',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.end(JSON.stringify({ ok: true, connected: false, disconnected: true, databases: [], projects: [] }));
+      return;
     }
 
     // 4. Discovery API inside the Cloud Run runner

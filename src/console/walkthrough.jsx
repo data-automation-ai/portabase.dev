@@ -185,8 +185,16 @@ export function GuidedWalkthrough({
     } catch {
       // Ignore network errors on disconnect
     }
-    toast?.('Disconnected from Supabase.', 'ok');
+    toast?.('Logged out / Disconnected from Supabase.', 'ok');
   };
+
+  useEffect(() => {
+    const onDisconnectEvent = () => {
+      handleSupabaseDisconnect();
+    };
+    window.addEventListener('pb-supabase-disconnect', onDisconnectEvent);
+    return () => window.removeEventListener('pb-supabase-disconnect', onDisconnectEvent);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const validateStep1 = () => {
     if (!cleanRef || !/^[a-z0-9]{20}$/i.test(cleanRef)) {
@@ -732,6 +740,7 @@ export function GuidedWalkthrough({
             <DatabaseScopeSelector
               databases={databaseScope}
               onChange={setDatabaseScope}
+              onDisconnect={handleSupabaseDisconnect}
             />
 
             <div style={{ marginTop: '4px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>

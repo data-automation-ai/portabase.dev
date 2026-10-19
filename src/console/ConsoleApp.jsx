@@ -609,8 +609,21 @@ export function ConsoleApp() {
               <span>{me?.user?.email || user?.email}</span>
             </div>
           </div>
+          <button
+            type="button"
+            className="pb-btn pb-btn-sm pb-btn-danger"
+            style={{ width: '100%' }}
+            onClick={async () => {
+              try { window.localStorage?.setItem('pb_supabase_disconnected', '1'); } catch { /* ignore */ }
+              window.dispatchEvent(new CustomEvent('pb-supabase-disconnect'));
+              try { await fetch('/api/cloud/oauth?provider=supabase&action=disconnect', { method: 'POST' }); } catch { /* ignore */ }
+              navigate('dashboard');
+            }}
+          >
+            <Icon name="logout" size={14} /> Disconnect Supabase
+          </button>
           <button type="button" className="pb-btn pb-btn-sm" style={{ width: '100%' }} onClick={signOut}>
-            <Icon name="logout" size={14} /> Sign out
+            <Icon name="logout" size={14} /> Sign out of Portabase
           </button>
         </div>
       </aside>
@@ -636,6 +649,19 @@ export function ConsoleApp() {
               <span style={{ marginLeft: 6 }}>{getCloudPlan(me?.subscription?.plan || state.billing?.plan).shortLabel}</span>
             </button>
             <span className="pb-badge pb-badge-acid" style={{ height: 28, padding: '0 10px' }}>Supabase</span>
+            <button
+              type="button"
+              className="pb-btn pb-btn-sm pb-btn-danger"
+              title="Logout / Disconnect current Supabase connection"
+              onClick={async () => {
+                try { window.localStorage?.setItem('pb_supabase_disconnected', '1'); } catch { /* ignore */ }
+                window.dispatchEvent(new CustomEvent('pb-supabase-disconnect'));
+                try { await fetch('/api/cloud/oauth?provider=supabase&action=disconnect', { method: 'POST' }); } catch { /* ignore */ }
+                navigate('dashboard');
+              }}
+            >
+              <Icon name="logout" size={13} /> Disconnect Supabase
+            </button>
             <a className="pb-btn pb-btn-sm pb-btn-ghost" href="/cloud" target="_blank" rel="noreferrer">
               <Icon name="external" size={14} />
             </a>

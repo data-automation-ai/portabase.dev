@@ -60,6 +60,7 @@ function formatDate(iso) {
 export function DatabaseScopeSelector({
   databases = [],
   onChange = null,
+  onDisconnect = null,
   readOnly = false,
 }) {
   const [expandedDbId, setExpandedDbId] = useState(() => {
@@ -597,6 +598,27 @@ export function DatabaseScopeSelector({
             >
               <Icon name="plus" size={12} /> Add Project / Database
             </button>
+            {onDisconnect && (
+              <button
+                type="button"
+                onClick={onDisconnect}
+                style={{
+                  fontSize: '12px',
+                  padding: '5px 10px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  background: 'rgba(248,81,73,0.14)',
+                  color: '#f85149',
+                  border: '1px solid rgba(248,81,73,0.6)',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                <Icon name="logout" size={12} /> Logout / Disconnect Supabase
+              </button>
+            )}
           </div>
         )}
       </div>
