@@ -280,9 +280,9 @@ export function GuidedWalkthrough({
       style={{
         background: 'linear-gradient(180deg, #12181f 0%, #0d1117 100%)',
         border: '1px solid #30363d',
-        borderRadius: '12px',
-        padding: '24px',
-        marginBottom: '24px',
+        borderRadius: '10px',
+        padding: '12px',
+        marginBottom: '16px',
         boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
         overflowWrap: 'break-word',
         minWidth: 0,
@@ -290,21 +290,21 @@ export function GuidedWalkthrough({
       aria-label="Step-by-step setup walkthrough"
     >
       {/* Friendly 1-2-3 Stepper Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px', marginBottom: '22px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
         <div>
           <span
             className="pb-badge pb-badge-ok"
-            style={{ textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.06em', marginBottom: '6px', display: 'inline-block' }}
+            style={{ textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.06em', marginBottom: '4px', display: 'inline-block' }}
           >
             QUICK ONBOARDING · STEP {step} OF 3
           </span>
-          <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 700, color: '#f0f6fc' }}>
+          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#f0f6fc' }}>
             Portabase 1-2-3 Quick Setup
           </h2>
-          <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#8b949e' }}>
+          <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: '#8b949e' }}>
             Set up automatic, self-owned encrypted backups of your Supabase databases in 3 simple steps.
           </p>
-          <div style={{ marginTop: '6px' }}>
+          <div style={{ marginTop: '4px' }}>
             <button
               type="button"
               className="pb-text-link"
@@ -339,12 +339,12 @@ export function GuidedWalkthrough({
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                padding: '8px 14px',
+                padding: '7px 12px',
                 borderRadius: '999px',
                 border: step === item.num ? '1px solid #3ecf8e' : '1px solid #30363d',
                 background: step === item.num ? '#132a1e' : item.valid ? '#161b22' : '#0d1117',
                 color: step === item.num ? '#3ecf8e' : item.valid ? '#7ee787' : '#8b949e',
-                fontSize: '13px',
+                fontSize: '12.5px',
                 fontWeight: 600,
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
@@ -395,19 +395,19 @@ export function GuidedWalkthrough({
       {/* STEP 1: Connect Your Supabase Account */}
       {step === 1 && (
         <div className="pb-walkthrough-step">
-          <div style={{ background: '#161b22', padding: '20px', borderRadius: '10px', border: '1px solid #30363d', marginBottom: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
-              <h3 style={{ margin: 0, fontSize: '17px', color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ background: '#161b22', padding: '12px', borderRadius: '8px', border: '1px solid #30363d', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{
-                  width: '28px',
-                  height: '28px',
+                  width: '24px',
+                  height: '24px',
                   borderRadius: '50%',
                   background: '#238636',
                   color: '#fff',
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '14px',
+                  fontSize: '13px',
                   fontWeight: 700,
                 }}>1</span>
                 Connect Your Supabase Account
@@ -441,18 +441,18 @@ export function GuidedWalkthrough({
               </div>
             </div>
 
-            <p style={{ margin: '0 0 18px 38px', fontSize: '13px', color: '#8b949e', lineHeight: 1.5 }}>
+            <p style={{ margin: '0 0 12px 0', fontSize: '12.5px', color: '#8b949e', lineHeight: 1.45 }}>
               Connect securely with official 1-Click Supabase OAuth, or paste your project URL / reference below.
               Portabase Cloud never sees or stores your database password.
             </p>
 
-            <div style={{ marginLeft: '38px', display: 'grid', gap: '16px' }}>
+            <div style={{ display: 'grid', gap: '12px' }}>
               {/* Big Friendly 1-Click OAuth Banner */}
               <div style={{
                 background: 'linear-gradient(180deg, #132a1e 0%, #0d1e15 100%)',
                 border: '1px solid #238636',
                 borderRadius: '8px',
-                padding: '16px 20px',
+                padding: '12px 16px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -460,10 +460,10 @@ export function GuidedWalkthrough({
                 gap: '12px',
               }}>
                 <div>
-                  <div style={{ fontSize: '15px', fontWeight: 600, color: '#3ecf8e', marginBottom: '4px' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: '#3ecf8e', marginBottom: '2px' }}>
                     Sign in with Supabase (1-Click)
                   </div>
-                  <div style={{ fontSize: '13px', color: '#8b949e' }}>
+                  <div style={{ fontSize: '12px', color: '#8b949e' }}>
                     Connects automatically — no API keys or passwords to copy.
                   </div>
                 </div>
@@ -474,7 +474,7 @@ export function GuidedWalkthrough({
                     onClick={handleSupabaseOAuthConnect}
                     disabled={isDiscovering}
                     className="pb-btn pb-btn-primary"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontSize: '14px', cursor: isDiscovering ? 'wait' : 'pointer' }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', fontSize: '13px', cursor: isDiscovering ? 'wait' : 'pointer' }}
                   >
                     {isDiscovering ? '⏳ Connecting to Supabase...' : '🚀 Connect with Supabase (1-Click)'}
                   </button>
@@ -486,8 +486,8 @@ export function GuidedWalkthrough({
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '6px',
-                        padding: '10px 14px',
-                        fontSize: '13px',
+                        padding: '8px 12px',
+                        fontSize: '12.5px',
                         fontWeight: 600,
                         borderRadius: '6px',
                         border: '1px solid rgba(248,81,73,0.55)',
@@ -503,14 +503,14 @@ export function GuidedWalkthrough({
               </div>
 
               {oauthFeedback && (
-                <div style={{ background: '#07100b', border: '1px solid #238636', borderRadius: '6px', padding: '10px 14px', fontSize: '13px', color: '#3ecf8e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                <div style={{ background: '#07100b', border: '1px solid #238636', borderRadius: '6px', padding: '8px 12px', fontSize: '12.5px', color: '#3ecf8e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                   <span>{oauthFeedback}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <button
                       type="button"
                       className="pb-btn pb-btn-sm pb-btn-primary"
                       onClick={() => setStep(2)}
-                      style={{ fontSize: '12px', padding: '6px 14px' }}
+                      style={{ fontSize: '12px', padding: '5px 12px' }}
                     >
                       Open Pick Databases Spreadsheet &rarr;
                     </button>
@@ -522,7 +522,7 @@ export function GuidedWalkthrough({
                         color: '#f85149',
                         border: '1px solid rgba(248,81,73,0.55)',
                         borderRadius: '6px',
-                        padding: '6px 12px',
+                        padding: '5px 10px',
                         fontSize: '12px',
                         fontWeight: 600,
                         cursor: 'pointer',
@@ -535,9 +535,9 @@ export function GuidedWalkthrough({
               )}
 
               {/* Project Reference Input */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', marginTop: '6px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px', marginTop: '4px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '4px' }}>
                     Supabase Project URL or 20-character Reference
                   </label>
                   <input
@@ -549,14 +549,14 @@ export function GuidedWalkthrough({
                     style={{ width: '100%', fontFamily: 'monospace' }}
                   />
                   {cleanRef && (
-                    <div style={{ marginTop: '6px', fontSize: '12px', color: /^[a-z0-9]{20}$/i.test(cleanRef) ? '#3ecf8e' : '#f85149' }}>
+                    <div style={{ marginTop: '4px', fontSize: '12px', color: /^[a-z0-9]{20}$/i.test(cleanRef) ? '#3ecf8e' : '#f85149' }}>
                       {/^[a-z0-9]{20}$/i.test(cleanRef) ? `✓ Project Ref: ${cleanRef}` : 'Ref must be 20 lowercase letters and digits'}
                     </div>
                   )}
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '6px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#c9d1d9', marginBottom: '4px' }}>
                     Friendly Project Name
                   </label>
                   <input
@@ -571,11 +571,11 @@ export function GuidedWalkthrough({
               </div>
 
               {/* Gentle Secondary Options Tab */}
-              <details style={{ marginTop: '4px', fontSize: '12px', color: '#8b949e' }}>
+              <details style={{ marginTop: '2px', fontSize: '12px', color: '#8b949e' }}>
                 <summary style={{ cursor: 'pointer', color: '#58a6ff', userSelect: 'none', fontWeight: 500 }}>
                   Need to enter credentials manually? (Refresh Token or DB Password) ▾
                 </summary>
-                <div style={{ marginTop: '10px', padding: '12px', background: '#0d1117', borderRadius: '6px', border: '1px solid #30363d', display: 'grid', gap: '10px' }}>
+                <div style={{ marginTop: '8px', padding: '10px', background: '#0d1117', borderRadius: '6px', border: '1px solid #30363d', display: 'grid', gap: '10px' }}>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     <button
                       type="button"
@@ -649,13 +649,13 @@ export function GuidedWalkthrough({
                 </div>
               </details>
 
-              <div style={{ marginTop: '8px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <div style={{ marginTop: '4px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   className="pb-btn pb-btn-primary"
                   onClick={validateStep1}
                   disabled={!cleanRef || !/^[a-z0-9]{20}$/i.test(cleanRef)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 20px', fontSize: '14px' }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', fontSize: '13px' }}
                 >
                   <Icon name="check" size={14} /> Continue to Step 2: Pick Databases &rarr;
                 </button>
@@ -668,8 +668,8 @@ export function GuidedWalkthrough({
                       color: '#f85149',
                       border: '1px solid rgba(248,81,73,0.55)',
                       borderRadius: '6px',
-                      padding: '10px 16px',
-                      fontSize: '13px',
+                      padding: '8px 14px',
+                      fontSize: '12.5px',
                       fontWeight: 600,
                       cursor: 'pointer',
                     }}
@@ -686,86 +686,83 @@ export function GuidedWalkthrough({
       {/* STEP 2: Pick Databases (Structure + Data vs. Structure Only) */}
       {step === 2 && (
         <div className="pb-walkthrough-step" style={{ minWidth: 0, maxWidth: '100%' }}>
-          <div style={{ background: '#161b22', padding: '14px', borderRadius: '10px', border: '1px solid #30363d', marginBottom: '16px', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
-              <h3 style={{ margin: 0, fontSize: '17px', color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: '50%',
-                  background: '#238636',
-                  color: '#fff',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '14px',
-                  fontWeight: 700,
-                }}>2</span>
-                Choose Which Databases to Back Up
-              </h3>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                {step2Valid && <span className="pb-badge pb-badge-ok">✓ Scope Ready</span>}
-                <button
-                  type="button"
-                  onClick={handleSupabaseDisconnect}
-                  style={{
-                    background: 'rgba(248,81,73,0.12)',
-                    color: '#f85149',
-                    border: '1px solid rgba(248,81,73,0.55)',
-                    borderRadius: '6px',
-                    padding: '4px 10px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  ✕ Disconnect Supabase
-                </button>
-              </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '6px' }}>
+            <h3 style={{ margin: 0, fontSize: '16px', color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                background: '#238636',
+                color: '#fff',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '13px',
+                fontWeight: 700,
+              }}>2</span>
+              Choose Which Databases to Back Up
+            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {step2Valid && <span className="pb-badge pb-badge-ok">✓ Scope Ready</span>}
+              <button
+                type="button"
+                onClick={handleSupabaseDisconnect}
+                style={{
+                  background: 'rgba(248,81,73,0.12)',
+                  color: '#f85149',
+                  border: '1px solid rgba(248,81,73,0.55)',
+                  borderRadius: '6px',
+                  padding: '4px 10px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                ✕ Disconnect Supabase
+              </button>
             </div>
+          </div>
 
-            <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#8b949e', lineHeight: 1.5 }}>
-              Choose whether each database gets a full backup with all row data, or a fast structure-only blueprint.
-              You can protect multiple databases under your plan.
-            </p>
+          <p style={{ margin: '0 0 8px 0', fontSize: '12.5px', color: '#8b949e', lineHeight: 1.4 }}>
+            Choose whether each database gets a full backup with all row data, or a fast structure-only blueprint.
+          </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '14px', minWidth: 0, maxWidth: '100%' }}>
-              {/* Embedded Multi-Database Scope Selector */}
-              <DatabaseScopeSelector
-                databases={databaseScope}
-                onChange={setDatabaseScope}
-              />
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '10px', minWidth: 0, maxWidth: '100%' }}>
+            {/* Embedded Multi-Database Scope Selector */}
+            <DatabaseScopeSelector
+              databases={databaseScope}
+              onChange={setDatabaseScope}
+            />
 
-              <div style={{ marginTop: '8px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  className="pb-btn pb-btn-primary"
-                  onClick={validateStep2}
-                  disabled={scopeSummary.selectedCount === 0}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 20px', fontSize: '14px' }}
-                >
-                  <Icon name="check" size={14} /> Continue to Step 3: Save &amp; Lock Vault &rarr;
-                </button>
-                <button type="button" className="pb-btn" onClick={() => setStep(1)} style={{ background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d' }}>
-                  &larr; Back to Step 1
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSupabaseDisconnect}
-                  style={{
-                    background: 'rgba(248,81,73,0.12)',
-                    color: '#f85149',
-                    border: '1px solid rgba(248,81,73,0.55)',
-                    borderRadius: '6px',
-                    padding: '8px 14px',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  ✕ Disconnect Supabase
-                </button>
-              </div>
+            <div style={{ marginTop: '4px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="pb-btn pb-btn-primary"
+                onClick={validateStep2}
+                disabled={scopeSummary.selectedCount === 0}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 18px', fontSize: '13px' }}
+              >
+                <Icon name="check" size={14} /> Continue to Step 3: Save &amp; Lock Vault &rarr;
+              </button>
+              <button type="button" className="pb-btn" onClick={() => setStep(1)} style={{ background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d' }}>
+                &larr; Back to Step 1
+              </button>
+              <button
+                type="button"
+                onClick={handleSupabaseDisconnect}
+                style={{
+                  background: 'rgba(248,81,73,0.12)',
+                  color: '#f85149',
+                  border: '1px solid rgba(248,81,73,0.55)',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  fontSize: '12.5px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                ✕ Disconnect Supabase
+              </button>
             </div>
           </div>
         </div>
@@ -774,61 +771,59 @@ export function GuidedWalkthrough({
       {/* STEP 3: Choose Backup Storage & Lock Vault */}
       {step === 3 && (
         <div className="pb-walkthrough-step" style={{ minWidth: 0, maxWidth: '100%' }}>
-          <div style={{ background: '#161b22', padding: '14px', borderRadius: '10px', border: '1px solid #30363d', marginBottom: '16px', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
-              <h3 style={{ margin: 0, fontSize: '17px', color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: '50%',
-                  background: '#238636',
-                  color: '#fff',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '14px',
-                  fontWeight: 700,
-                }}>3</span>
-                Choose Where to Save &amp; Lock Your Vault
-              </h3>
-              {step3Valid && <span className="pb-badge pb-badge-ok">✓ Protected</span>}
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '6px' }}>
+            <h3 style={{ margin: 0, fontSize: '16px', color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                background: '#238636',
+                color: '#fff',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '13px',
+                fontWeight: 700,
+              }}>3</span>
+              Choose Where to Save &amp; Lock Your Vault
+            </h3>
+            {step3Valid && <span className="pb-badge pb-badge-ok">✓ Protected</span>}
+          </div>
 
-            <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#8b949e', lineHeight: 1.5 }}>
-              All backup files are encrypted on your side before writing to your chosen cloud destination.
-              Lock your vault below to generate the encrypted runner configuration.
-              {' '}
+          <p style={{ margin: '0 0 10px 0', fontSize: '12.5px', color: '#8b949e', lineHeight: 1.45 }}>
+            All backup files are encrypted on your side before writing to your chosen cloud destination.
+            Lock your vault below to generate the encrypted runner configuration.
+            {' '}
+            <button
+              type="button"
+              className="pb-text-link"
+              onClick={() => setShowProofModal(true)}
+              style={{ fontSize: '12px', color: '#3ecf8e', cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              Inspect demonstrable proof &rarr;
+            </button>
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '12px', minWidth: 0, maxWidth: '100%' }}>
+            {/* Embedded Private Sealed Vault */}
+            <PrivateSealedVault
+              projectRef={cleanRef}
+              initialDatabaseScope={databaseScope}
+              onVaultSealed={completeWalkthrough}
+            />
+
+            <div style={{ marginTop: '8px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <button
                 type="button"
-                className="pb-text-link"
-                onClick={() => setShowProofModal(true)}
-                style={{ fontSize: '12px', color: '#3ecf8e', cursor: 'pointer', textDecoration: 'underline' }}
+                className="pb-btn pb-btn-primary"
+                onClick={completeWalkthrough}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
               >
-                Inspect demonstrable proof &rarr;
+                <Icon name="check" size={14} /> Mark Setup Complete ✓
               </button>
-            </p>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '14px', minWidth: 0, maxWidth: '100%' }}>
-              {/* Embedded Private Sealed Vault */}
-              <PrivateSealedVault
-                projectRef={cleanRef}
-                initialDatabaseScope={databaseScope}
-                onVaultSealed={completeWalkthrough}
-              />
-
-              <div style={{ marginTop: '12px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  className="pb-btn pb-btn-primary"
-                  onClick={completeWalkthrough}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                >
-                  <Icon name="check" size={14} /> Mark Setup Complete ✓
-                </button>
-                <button type="button" className="pb-btn" onClick={() => setStep(2)} style={{ background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d' }}>
-                  &larr; Back to Step 2
-                </button>
-              </div>
+              <button type="button" className="pb-btn" onClick={() => setStep(2)} style={{ background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d' }}>
+                &larr; Back to Step 2
+              </button>
             </div>
           </div>
         </div>

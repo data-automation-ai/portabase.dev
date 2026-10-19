@@ -540,10 +540,9 @@ export function DatabaseScopeSelector({
     <div
       className="pb-scope-selector"
       style={{
-        background: '#0d1117',
-        border: '1px solid #30363d',
-        borderRadius: '10px',
-        padding: '14px',
+        background: 'transparent',
+        border: 'none',
+        padding: 0,
         color: '#f0f6fc',
         overflowWrap: 'break-word',
         minWidth: 0,
@@ -694,7 +693,7 @@ export function DatabaseScopeSelector({
                 background: db.enabled ? '#161b22' : '#0e1217',
                 border: db.enabled ? '1px solid #30363d' : '1px solid #21262d',
                 borderRadius: '8px',
-                padding: '12px 14px',
+                padding: '8px 10px',
                 opacity: db.enabled ? 1 : 0.65,
                 transition: 'all 0.15s ease',
                 minWidth: 0,
@@ -851,7 +850,7 @@ export function DatabaseScopeSelector({
 
               {/* Database Objects Spreadsheet Drawer Toggle */}
               {db.enabled && (
-                <div style={{ marginTop: '12px', borderTop: '1px solid #21262d', paddingTop: '10px' }}>
+                <div style={{ marginTop: '8px', borderTop: '1px solid #21262d', paddingTop: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                     <button
                       type="button"
@@ -886,18 +885,15 @@ export function DatabaseScopeSelector({
                   {isExpanded && (
                     <div
                       style={{
-                        marginTop: '12px',
-                        background: '#0d1117',
-                        borderRadius: '8px',
-                        border: '1px solid #30363d',
-                        padding: '10px',
+                        marginTop: '8px',
+                        padding: 0,
                         minWidth: 0,
                         maxWidth: '100%',
                         boxSizing: 'border-box',
                       }}
                     >
                       {/* Spreadsheet Header Toolbar: Search, Expand/Collapse Schemas & Buckets, and Bulk Action Controls */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px', marginBottom: '6px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '180px', flexWrap: 'wrap' }}>
                           <input
                             type="text"
