@@ -78,12 +78,14 @@ export function computeObjectIncludedMb(item, dbMode = DATABASE_COPY_MODES.STRUC
  */
 export function createDefaultDatabaseScope(projectRef = '', name = 'Primary Supabase App') {
   const cleanRef = String(projectRef || '').trim().toLowerCase();
+  const displayName = name.trim() || 'Primary Supabase App';
   return [
     {
       id: cleanRef ? `db_${cleanRef.slice(0, 8)}` : 'db_primary',
       projectRef: cleanRef,
-      projectName: name.trim() || 'Primary Supabase App',
-      name: 'postgres (Primary Database)',
+      projectName: displayName,
+      name: displayName,
+      databaseName: 'postgres',
       estimatedSizeMb: null,
       enabled: true,
       mode: DATABASE_COPY_MODES.STRUCTURE_AND_DATA,
@@ -133,15 +135,21 @@ export function computeDatabaseScopeSummary(databases = []) {
       ...(Array.isArray(db.binaries) ? db.binaries : []),
     ];
 
-    let dbRawObjectsMb = 0;
+    let dbRawTablesMb = 0;
+    let dbRawBinariesMb = 0;
     let dbIncludedTableMb = 0;
     let dbIncludedBinaryMb = 0;
+    let dbSavedObjectsMb = 0;
 
     for (const item of allObjects) {
       if (!item) continue;
       const objType = String(item.objectType || OBJECT_TYPES.TABLE).toUpperCase();
       const rawMb = typeof item.sizeMb === 'number' && item.sizeMb >= 0 ? item.sizeMb : 0;
-      dbRawObjectsMb += rawMb;
+      if (objType === OBJECT_TYPES.BINARY) {
+        dbRawBinariesMb += rawMb;
+      } else {
+        dbRawTablesMb += rawMb;
+      }
 
       if (db.enabled !== false) {
         const incMb = computeObjectIncludedMb(item, db.mode);
@@ -150,16 +158,28 @@ export function computeDatabaseScopeSummary(databases = []) {
         } else {
           dbIncludedTableMb += incMb;
         }
+        dbSavedObjectsMb += Math.max(0, rawMb - incMb);
       }
     }
 
+    const dbRawObjectsMb = dbRawTablesMb + dbRawBinariesMb;
     const isSizeKnown = (typeof db.estimatedSizeMb === 'number' && db.estimatedSizeMb >= 0) || allObjects.length > 0;
     const baseDbSize = typeof db.estimatedSizeMb === 'number' && db.estimatedSizeMb >= 0
-      ? Math.max(db.estimatedSizeMb, dbRawObjectsMb)
+      ? Math.max(db.estimatedSizeMb, dbRawTablesMb) + dbRawBinariesMb
       : (allObjects.length > 0 ? dbRawObjectsMb : null);
 
+    // If baseDbSize includes unlisted catalog/table overhead beyond the listed tables,
+    // only compute net from the listed objects when all objects are accounted for, OR subtract savedMb
+    const unlistedDbOverheadMb = (typeof db.estimatedSizeMb === 'number' && db.estimatedSizeMb > dbRawTablesMb && dbRawBinariesMb === 0)
+      ? (db.estimatedSizeMb - dbRawTablesMb)
+      : 0;
+
+    const effectiveIncludedTableMb = db.mode === DATABASE_COPY_MODES.STRUCTURE_ONLY
+      ? (allObjects.length > 0 ? dbIncludedTableMb : Math.min(baseDbSize ?? 0, 1))
+      : (dbIncludedTableMb + unlistedDbOverheadMb);
+
     const dbIncludedTotalMb = allObjects.length > 0
-      ? (dbIncludedTableMb + dbIncludedBinaryMb)
+      ? (effectiveIncludedTableMb + dbIncludedBinaryMb)
       : (baseDbSize !== null
         ? (db.mode === DATABASE_COPY_MODES.STRUCTURE_ONLY ? Math.min(baseDbSize, 1) : baseDbSize)
         : null);
@@ -167,14 +187,14 @@ export function computeDatabaseScopeSummary(databases = []) {
     perDatabase[db.id] = {
       totalSourceMb: baseDbSize !== null ? Number(baseDbSize.toFixed(2)) : null,
       includedMb: db.enabled === false ? 0 : (dbIncludedTotalMb !== null ? Number(dbIncludedTotalMb.toFixed(2)) : null),
-      includedTableMb: db.enabled === false ? 0 : Number(dbIncludedTableMb.toFixed(2)),
+      includedTableMb: db.enabled === false ? 0 : Number(effectiveIncludedTableMb.toFixed(2)),
       includedBinaryMb: db.enabled === false ? 0 : Number(dbIncludedBinaryMb.toFixed(2)),
     };
 
     if (db.enabled === false) continue;
     selectedCount += 1;
 
-    if ( db.mode === DATABASE_COPY_MODES.STRUCTURE_ONLY) {
+    if (db.mode === DATABASE_COPY_MODES.STRUCTURE_ONLY) {
       structureOnlyCount += 1;
     } else {
       structureAndDataCount += 1;
@@ -187,11 +207,11 @@ export function computeDatabaseScopeSummary(databases = []) {
 
     totalSourceMb += baseDbSize;
     if (allObjects.length > 0) {
-      includedDatabaseMb += dbIncludedTableMb;
+      includedDatabaseMb += effectiveIncludedTableMb;
       includedBinaryMb += dbIncludedBinaryMb;
-      const net = dbIncludedTableMb + dbIncludedBinaryMb;
+      const net = effectiveIncludedTableMb + dbIncludedBinaryMb;
       totalNetMb += net;
-      totalSavedMb += Math.max(0, baseDbSize - net);
+      totalSavedMb += dbSavedObjectsMb;
     } else if (db.mode === DATABASE_COPY_MODES.STRUCTURE_ONLY) {
       const schemaOnlySizeMb = Math.min(baseDbSize, 1);
       includedDatabaseMb += schemaOnlySizeMb;
