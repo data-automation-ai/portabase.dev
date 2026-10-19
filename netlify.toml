@@ -187,5 +187,4 @@
 
 [[edge_functions]]
   path = "/*"
-  excludedPath = ["/api/*", "/oauth/*", "/.netlify/*", "/auth/callback"]
   function = "site-gate"
