@@ -86,14 +86,14 @@ export function DatabaseScopeSelector({
   const [searchQuery, setSearchQuery] = useState({});
   const [targetCapMb, setTargetCapMb] = useState(1000);
   const [colWidths, setColWidths] = useState({
-    type: 78,
-    schema: 124,
-    name: 230,
-    size: 88,
-    createdAt: 116,
-    updatedAt: 116,
-    mode: 196,
-    includedMb: 136,
+    type: 58,
+    schema: 96,
+    name: 178,
+    size: 68,
+    createdAt: 100,
+    updatedAt: 100,
+    mode: 150,
+    includedMb: 112,
   });
 
   const handleStartResize = (e, colKey) => {
@@ -543,10 +543,12 @@ export function DatabaseScopeSelector({
         background: '#0d1117',
         border: '1px solid #30363d',
         borderRadius: '10px',
-        padding: '18px',
+        padding: '14px',
         color: '#f0f6fc',
         overflowWrap: 'break-word',
         minWidth: 0,
+        maxWidth: '100%',
+        boxSizing: 'border-box',
       }}
       aria-label="Multi-database and table copy-mode selector"
     >
@@ -576,7 +578,7 @@ export function DatabaseScopeSelector({
               type="button"
               className="pb-btn pb-btn-sm"
               onClick={() => handleSelectAll(DATABASE_COPY_MODES.STRUCTURE_AND_DATA)}
-              style={{ fontSize: '12px', padding: '5px 10px' }}
+              style={{ fontSize: '12px', padding: '5px 10px', background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d' }}
             >
               Select All (Structure + Data)
             </button>
@@ -584,7 +586,7 @@ export function DatabaseScopeSelector({
               type="button"
               className="pb-btn pb-btn-sm"
               onClick={() => handleSelectAll(DATABASE_COPY_MODES.STRUCTURE_ONLY)}
-              style={{ fontSize: '12px', padding: '5px 10px' }}
+              style={{ fontSize: '12px', padding: '5px 10px', background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d' }}
             >
               All Structure Only ⚡
             </button>
@@ -669,7 +671,7 @@ export function DatabaseScopeSelector({
       )}
 
       {/* Project -> Database Cards List */}
-      <div style={{ display: 'grid', gap: '12px', marginBottom: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '12px', marginBottom: '16px', minWidth: 0, maxWidth: '100%' }}>
         {dbs.map((db) => {
           const isExpanded = expandedDbId === db.id;
           const isStructureOnly = db.mode === DATABASE_COPY_MODES.STRUCTURE_ONLY;
@@ -692,9 +694,12 @@ export function DatabaseScopeSelector({
                 background: db.enabled ? '#161b22' : '#0e1217',
                 border: db.enabled ? '1px solid #30363d' : '1px solid #21262d',
                 borderRadius: '8px',
-                padding: '14px 16px',
+                padding: '12px 14px',
                 opacity: db.enabled ? 1 : 0.65,
                 transition: 'all 0.15s ease',
+                minWidth: 0,
+                maxWidth: '100%',
+                boxSizing: 'border-box',
               }}
             >
               {/* Project Banner Header */}
@@ -702,13 +707,15 @@ export function DatabaseScopeSelector({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '8px',
                 fontSize: '11px',
                 color: '#8b949e',
                 marginBottom: '6px',
                 paddingBottom: '6px',
                 borderBottom: '1px dashed #21262d',
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <span style={{ textTransform: 'uppercase', letterSpacing: '0.06em', color: '#58a6ff', fontWeight: 700 }}>
                     PROJECT: {db.projectName || db.name || 'Supabase Project'}
                   </span>
@@ -883,12 +890,15 @@ export function DatabaseScopeSelector({
                         background: '#0d1117',
                         borderRadius: '8px',
                         border: '1px solid #30363d',
-                        padding: '12px',
+                        padding: '10px',
+                        minWidth: 0,
+                        maxWidth: '100%',
+                        boxSizing: 'border-box',
                       }}
                     >
                       {/* Spreadsheet Header Toolbar: Search, Expand/Collapse Schemas & Buckets, and Bulk Action Controls */}
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '220px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '180px', flexWrap: 'wrap' }}>
                           <input
                             type="text"
                             placeholder="Filter schemas, buckets, or individual object names..."
@@ -896,7 +906,7 @@ export function DatabaseScopeSelector({
                             onChange={(e) => setSearchQuery({ ...searchQuery, [db.id]: e.target.value })}
                             style={{
                               width: '100%',
-                              maxWidth: '340px',
+                              maxWidth: '300px',
                               background: '#161b22',
                               border: '1px solid #30363d',
                               borderRadius: '6px',
@@ -925,7 +935,7 @@ export function DatabaseScopeSelector({
                               ▴ Done Picking / Close &ldquo;{activeGroup.schemaOrBucket}&rdquo;
                             </button>
                           ) : (
-                            <span style={{ fontSize: '11px', color: '#8b949e', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: '11px', color: '#8b949e' }}>
                               Click one Schema or Bucket row to explode, pick its records, then close
                             </span>
                           )}
@@ -970,6 +980,9 @@ export function DatabaseScopeSelector({
                           overflowX: 'auto',
                           border: '1px solid #94a3b8',
                           background: '#ffffff',
+                          width: '100%',
+                          maxWidth: '100%',
+                          boxSizing: 'border-box',
                         }}
                       >
                         <table
@@ -1627,30 +1640,50 @@ export function DatabaseScopeSelector({
                               })
                             )}
                             {/* Pinned Subtotal Row for this Database */}
-                            {sortedGroups.length > 0 && (
-                              <tr style={{ background: '#f8fafc', borderTop: '2px solid #64748b', height: '26px' }}>
-                                <td style={{ ...baseCellStyle, fontWeight: 700, color: '#0f172a', background: '#f1f5f9' }}>
-                                  SUBTOTAL
-                                </td>
-                                <td style={{ ...baseCellStyle, fontWeight: 700, color: '#0f172a', background: '#f1f5f9' }}>
-                                  {db.projectName || db.name}
-                                </td>
-                                <td style={{ ...baseCellStyle, fontWeight: 600, color: '#475569', background: '#f1f5f9' }}>
-                                  {allObjects.length} objects ({tables.length} tables, {binaries.length} binaries)
-                                </td>
-                                <td style={{ ...baseCellStyle, textAlign: 'right', fontWeight: 700, color: '#0f172a', background: '#f1f5f9' }}>
-                                  {formatMb(dbSummary.totalSourceMb)}
-                                </td>
-                                <td style={{ ...baseCellStyle, color: '#94a3b8', background: '#f1f5f9' }}>—</td>
-                                <td style={{ ...baseCellStyle, color: '#94a3b8', background: '#f1f5f9' }}>—</td>
-                                <td style={{ ...baseCellStyle, textAlign: 'center', fontWeight: 700, color: '#1e3a8a', background: '#e0f2fe' }}>
-                                  Database Subtotal Included:
-                                </td>
-                                <td style={{ ...baseCellStyle, textAlign: 'right', fontWeight: 700, color: '#0f766e', fontSize: '9pt', background: '#e0f2fe' }}>
-                                  {formatMb(dbSummary.includedMb)}
-                                </td>
-                              </tr>
-                            )}
+                            {sortedGroups.length > 0 && (() => {
+                              const subCellStyle = {
+                                fontSize: '8.5pt',
+                                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                                padding: '2px 6px',
+                                height: '24px',
+                                lineHeight: '1.15',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                borderTop: '2px solid #64748b',
+                                borderBottom: '1px solid #94a3b8',
+                                borderRight: '1px solid #cbd5e1',
+                                background: '#f1f5f9',
+                                color: '#0f172a',
+                                verticalAlign: 'middle',
+                              };
+                              const dbObjCount = Array.isArray(db.tables) ? db.tables.length : 0;
+                              const binObjCount = Array.isArray(db.binaries) ? db.binaries.filter((r) => !r?.isEmptyBucket && r?.objectName !== '(empty bucket)').length : 0;
+                              return (
+                                <tr style={{ background: '#f1f5f9', height: '24px' }}>
+                                  <td style={{ ...subCellStyle, fontWeight: 700 }}>
+                                    SUBTOTAL
+                                  </td>
+                                  <td style={{ ...subCellStyle, fontWeight: 700 }} title={db.projectName || db.name}>
+                                    {db.projectName || db.name}
+                                  </td>
+                                  <td style={{ ...subCellStyle, fontWeight: 600, color: '#475569' }}>
+                                    {allObjects.length} objects ({dbObjCount} DB, {binObjCount} files)
+                                  </td>
+                                  <td style={{ ...subCellStyle, textAlign: 'right', fontWeight: 700 }}>
+                                    {formatMb(dbMetrics.totalSourceMb ?? runningStackedMb)}
+                                  </td>
+                                  <td style={{ ...subCellStyle, color: '#94a3b8' }}>—</td>
+                                  <td style={{ ...subCellStyle, color: '#94a3b8' }}>—</td>
+                                  <td style={{ ...subCellStyle, textAlign: 'center', fontWeight: 700, color: '#1e3a8a', background: '#e0f2fe' }}>
+                                    Subtotal Included:
+                                  </td>
+                                  <td style={{ ...subCellStyle, textAlign: 'right', fontWeight: 700, color: '#0f766e', background: '#e0f2fe' }}>
+                                    {formatMb(dbMetrics.includedMb ?? runningStackedMb)}
+                                  </td>
+                                </tr>
+                              );
+                            })()}
                           </tbody>
                         </table>
                       </div>
@@ -1678,7 +1711,7 @@ export function DatabaseScopeSelector({
                             type="button"
                             className="pb-btn pb-btn-sm"
                             onClick={() => handleAddTable(db.id)}
-                            style={{ fontSize: '11px', padding: '4px 12px' }}
+                            style={{ fontSize: '11px', padding: '4px 12px', background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d' }}
                           >
                             + Add Table
                           </button>

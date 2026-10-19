@@ -511,9 +511,9 @@ export function GuidedWalkthrough({
 
       {/* STEP 2: Pick Databases (Structure + Data vs. Structure Only) */}
       {step === 2 && (
-        <div className="pb-walkthrough-step">
-          <div style={{ background: '#161b22', padding: '20px', borderRadius: '10px', border: '1px solid #30363d', marginBottom: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+        <div className="pb-walkthrough-step" style={{ minWidth: 0, maxWidth: '100%' }}>
+          <div style={{ background: '#161b22', padding: '14px', borderRadius: '10px', border: '1px solid #30363d', marginBottom: '16px', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
               <h3 style={{ margin: 0, fontSize: '17px', color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{
                   width: '28px',
@@ -532,12 +532,12 @@ export function GuidedWalkthrough({
               {step2Valid && <span className="pb-badge pb-badge-ok">✓ Scope Ready</span>}
             </div>
 
-            <p style={{ margin: '0 0 18px 38px', fontSize: '13px', color: '#8b949e', lineHeight: 1.5 }}>
+            <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#8b949e', lineHeight: 1.5 }}>
               Choose whether each database gets a full backup with all row data, or a fast structure-only blueprint.
               You can protect multiple databases under your plan.
             </p>
 
-            <div style={{ marginLeft: '38px', display: 'grid', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '14px', minWidth: 0, maxWidth: '100%' }}>
               {/* Embedded Multi-Database Scope Selector */}
               <DatabaseScopeSelector
                 databases={databaseScope}
@@ -554,7 +554,7 @@ export function GuidedWalkthrough({
                 >
                   <Icon name="check" size={14} /> Continue to Step 3: Save &amp; Lock Vault &rarr;
                 </button>
-                <button type="button" className="pb-btn" onClick={() => setStep(1)}>
+                <button type="button" className="pb-btn" onClick={() => setStep(1)} style={{ background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d' }}>
                   &larr; Back to Step 1
                 </button>
               </div>
@@ -565,9 +565,9 @@ export function GuidedWalkthrough({
 
       {/* STEP 3: Choose Backup Storage & Lock Vault */}
       {step === 3 && (
-        <div className="pb-walkthrough-step">
-          <div style={{ background: '#161b22', padding: '20px', borderRadius: '10px', border: '1px solid #30363d', marginBottom: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+        <div className="pb-walkthrough-step" style={{ minWidth: 0, maxWidth: '100%' }}>
+          <div style={{ background: '#161b22', padding: '14px', borderRadius: '10px', border: '1px solid #30363d', marginBottom: '16px', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
               <h3 style={{ margin: 0, fontSize: '17px', color: '#f0f6fc', display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{
                   width: '28px',
@@ -586,7 +586,7 @@ export function GuidedWalkthrough({
               {step3Valid && <span className="pb-badge pb-badge-ok">✓ Protected</span>}
             </div>
 
-            <p style={{ margin: '0 0 18px 38px', fontSize: '13px', color: '#8b949e', lineHeight: 1.5 }}>
+            <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#8b949e', lineHeight: 1.5 }}>
               All backup files are encrypted on your side before writing to your chosen cloud destination.
               Lock your vault below to generate the encrypted runner configuration.
               {' '}
@@ -600,7 +600,7 @@ export function GuidedWalkthrough({
               </button>
             </p>
 
-            <div style={{ marginLeft: '38px', display: 'grid', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '14px', minWidth: 0, maxWidth: '100%' }}>
               {/* Embedded Private Sealed Vault */}
               <PrivateSealedVault
                 projectRef={cleanRef}
@@ -617,7 +617,7 @@ export function GuidedWalkthrough({
                 >
                   <Icon name="check" size={14} /> Mark Setup Complete ✓
                 </button>
-                <button type="button" className="pb-btn" onClick={() => setStep(2)}>
+                <button type="button" className="pb-btn" onClick={() => setStep(2)} style={{ background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d' }}>
                   &larr; Back to Step 2
                 </button>
               </div>
