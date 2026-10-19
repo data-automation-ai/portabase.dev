@@ -134,9 +134,12 @@ test('rls-check page resolves, sits in nav, and blames the default', () => {
   assert.match(app, /Three exposure checks/);
   assert.match(app, /relrowsecurity/);
   assert.match(app, /pg_policies/);
-  assert.match(app, /apikey: YOUR-ANON-KEY/);
   assert.match(app, /villain.*default|default.*villain/i);
   assert.match(app, /never you/i);
+  assert.match(app, /Make sure anon access is not available to RLS tables/);
+  assert.match(app, /roles @> '\{anon\}'/);
+  assert.match(app, /revoke all on all tables in schema public from anon/);
+  assert.match(app, /alter default privileges in schema public revoke all on tables from anon/);
 });
 
 test('homepage reality grid has 4 articles and does not contain public database banner', () => {

@@ -352,6 +352,38 @@ async function doctor() {
   }
   const health = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY ? await authenticatedHealth() : { ok: false };
   checks.push(['Authenticated Storage read', health.ok, health.ok ? `HTTP ${health.status}` : `credential check failed${health.status ? ` (HTTP ${health.status})` : ''}`]);
+  if (process.env.SUPABASE_DB_URL && resolveTool('psql')) {
+    try {
+      const rlsAudit = JSON.parse(psqlValue(process.env.SUPABASE_DB_URL, `SELECT json_build_object(
+        'totalTables', count(*),
+        'noRls', COALESCE(json_agg(n.nspname || '.' || c.relname) FILTER (WHERE NOT c.relrowsecurity), '[]'::json),
+        'anonPolicies', (
+          SELECT COALESCE(json_agg(p.schemaname || '.' || p.tablename || ' (' || p.policyname || ')') , '[]'::json)
+          FROM pg_catalog.pg_policies p
+          WHERE p.schemaname = 'public'
+            AND (p.roles @> '{anon}' OR p.roles @> '{public}' OR p.roles = '{public}')
+            AND p.tablename <> 'keepalive'
+        )
+      )
+      FROM pg_catalog.pg_class c
+      JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relkind IN ('r','p') AND n.nspname = 'public';`));
+
+      const unshielded = (rlsAudit.noRls || []).length;
+      const exposedPolicies = (rlsAudit.anonPolicies || []).length;
+      if (unshielded === 0 && exposedPolicies === 0) {
+        checks.push(['RLS enforcement', true, `all ${rlsAudit.totalTables || 0} public tables have RLS; no anon policies`]);
+      } else {
+        const issues = [];
+        if (unshielded > 0) issues.push(`${unshielded} table(s) without RLS`);
+        if (exposedPolicies > 0) issues.push(`${exposedPolicies} policy(ies) open to anon`);
+        checks.push(['RLS enforcement', false, `EXPOSED: ${issues.join(', ')}`]);
+        installHints.push('Make sure anon access is not available to RLS tables: see /docs/rls-check or REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon;');
+      }
+    } catch {
+      /* ignore DB connection/query errors in local tool doctor */
+    }
+  }
   console.log(`Portabase ${VERSION} · ${config.provider.type} destination · max agents (Cloud plan): 12\n`);
   for (const [name, ok, note] of checks) console.log(`${ok ? 'PASS' : 'MISS'}  ${name.padEnd(28)} ${note}`);
   if (installHints.length) {
@@ -3151,10 +3183,73 @@ async function sizes() {
   const totalBytes = tables.reduce((sum, table) => sum + (Number(table.bytes) || 0), 0);
   console.log('');
   console.log('Tables by size in MB (descending):');
+  let unshieldedCount = 0;
   for (const table of tables) {
-    console.log(`  ${table.schema}.${table.name}  rows=${table.rows}  ${toMB(table.bytes).toFixed(2)} MB`);
+    const isPublic = table.schema === 'public';
+    const noRls = isPublic && !table.rls;
+    if (noRls) unshieldedCount += 1;
+    const badge = noRls ? '  [RLS OFF · ANON EXPOSED]' : '';
+    console.log(`  ${table.schema}.${table.name}  rows=${table.rows}  ${toMB(table.bytes).toFixed(2)} MB${badge}`);
   }
   console.log(`  TOTAL  tables=${tables.length}  ${toMB(totalBytes).toFixed(2)} MB (${formatBytes(totalBytes)})`);
+  if (unshieldedCount > 0) {
+    console.log(`\n  ⚠️  WARNING: ${unshieldedCount} table(s) in schema 'public' have RLS disabled and are exposed to the anon key.`);
+    console.log(`     See /docs/rls-check or run: REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon;`);
+  }
+}
+
+async function rlsCheckCommand() {
+  const { config } = await loadConfig();
+  const dbUrl = process.env.SUPABASE_DB_URL || await uiDatabaseUrl(config);
+  if (!dbUrl) throw new Error('SUPABASE_DB_URL is required to audit table RLS.');
+  if (!resolveTool('psql')) throw new Error('psql is required to run rls-check.');
+
+  console.log(`Portabase RLS & Anon Exposure Audit for ${config.projectRef || 'database'}\n`);
+  const rlsAudit = JSON.parse(psqlValue(dbUrl, `SELECT json_build_object(
+    'tables', (
+      SELECT COALESCE(json_agg(json_build_object(
+        'table', c.relname,
+        'rls', c.relrowsecurity,
+        'anonPolicies', (
+          SELECT COALESCE(json_agg(p.policyname), '[]'::json)
+          FROM pg_catalog.pg_policies p
+          WHERE p.schemaname = n.nspname
+            AND p.tablename = c.relname
+            AND (p.roles @> '{anon}' OR p.roles @> '{public}' OR p.roles = '{public}')
+            AND p.tablename <> 'keepalive'
+        )
+      ) ORDER BY c.relname), '[]'::json)
+      FROM pg_catalog.pg_class c
+      JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relkind IN ('r','p') AND n.nspname = 'public'
+    )
+  );`));
+
+  const tables = rlsAudit.tables || [];
+  let violations = 0;
+  for (const t of tables) {
+    const hasAnonPolicy = (t.anonPolicies || []).length > 0;
+    if (!t.rls) {
+      violations += 1;
+      console.log(`  FAIL  public.${t.table.padEnd(28)} RLS OFF · full anonymous read/write exposure`);
+    } else if (hasAnonPolicy) {
+      violations += 1;
+      console.log(`  WARN  public.${t.table.padEnd(28)} RLS ON · anon policy active: ${t.anonPolicies.join(', ')}`);
+    } else {
+      console.log(`  PASS  public.${t.table.padEnd(28)} RLS ON · anon access blocked`);
+    }
+  }
+
+  console.log('');
+  if (violations === 0) {
+    console.log(`All ${tables.length} public tables enforce RLS and block anonymous access.`);
+  } else {
+    console.log(`Found ${violations} table(s) exposed to anonymous access.`);
+    console.log(`To ensure anon access is not available to RLS tables, run in psql / SQL editor:`);
+    console.log(`  REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon;`);
+    console.log(`  ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon;`);
+    process.exitCode = 2;
+  }
 }
 async function status() {
   const { config } = await loadConfig();
@@ -3540,6 +3635,7 @@ Destinations:
 Commands:
   init                Create a non-secret configuration
   doctor              Test tools, credentials, destination, and live authorization
+  rls-check           Audit table RLS enforcement and verify anon access is blocked
   plan                Show the capture and destination plan
   ui                  Local read-only GUI: inventory, sizes, capsule checklist
                       (127.0.0.1 only; --port N, --no-open, --trial)
@@ -3736,6 +3832,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   try {
     if (command === 'init') await init();
     else if (command === 'doctor') await doctor();
+    else if (command === 'rls-check') await rlsCheckCommand();
     else if (command === 'plan') await plan();
     else if (command === 'ui') await ui();
     else if (command === 'backup') await backup();

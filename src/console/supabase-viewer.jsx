@@ -5,6 +5,7 @@ import {
   LIVE_VIEWER_COPY,
   createLiveClient,
   fetchLiveCatalog,
+  isServiceRoleKey,
   listLiveBuckets,
   listLiveObjects,
   liveCliFallback,
@@ -35,12 +36,15 @@ export function SupabaseViewerPage({ toast, navigate }) {
   const [tables, setTables] = useState([]);
   const [tableName, setTableName] = useState('');
   const [rows, setRows] = useState([]);
+  const [tableQueried, setTableQueried] = useState(false);
   const [buckets, setBuckets] = useState([]);
   const [bucketId, setBucketId] = useState('');
   const [objects, setObjects] = useState([]);
   const [error, setError] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userPassword, setUserPassword] = useState('');
+
+  const isServiceRole = useMemo(() => isServiceRoleKey(key), [key]);
 
   const connect = async (event) => {
     event?.preventDefault();
@@ -72,6 +76,7 @@ export function SupabaseViewerPage({ toast, navigate }) {
     setPersist(false);
     setTables([]);
     setRows([]);
+    setTableQueried(false);
     setBuckets([]);
     setObjects([]);
     setTableName('');
@@ -82,6 +87,7 @@ export function SupabaseViewerPage({ toast, navigate }) {
 
   const loadRows = async (name) => {
     setTableName(name);
+    setTableQueried(true);
     setBusy(true);
     setError('');
     try {
@@ -257,6 +263,32 @@ export function SupabaseViewerPage({ toast, navigate }) {
               </div>
               <div className="pb-card">
                 <div className="pb-card-head"><h3>Row preview</h3><span>{tableName || 'pick a table'}</span></div>
+                {tableQueried && Boolean(tableName) && !busy && (
+                  !isServiceRole ? (
+                    rows.length > 0 ? (
+                      <div className="pb-callout danger" style={{ margin: '8px 0 12px' }}>
+                        <Icon name="warn" size={16} />
+                        <div>
+                          <strong>⚠️ Public Anon Access Active:</strong> This table answered the anon key with {rows.length} row(s). If this contains private user or customer data, verify your RLS policies and revoke anon permissions.
+                        </div>
+                      </div>
+                    ) : !error ? (
+                      <div className="pb-callout ok" style={{ margin: '8px 0 12px' }}>
+                        <Icon name="shield" size={16} />
+                        <div>
+                          <strong>🛡️ Anon Access Blocked:</strong> 0 rows returned to the anon key. RLS is enforced (or the table is empty).
+                        </div>
+                      </div>
+                    ) : null
+                  ) : (
+                    <div className="pb-callout info" style={{ margin: '8px 0 12px' }}>
+                      <Icon name="key" size={16} />
+                      <div>
+                        <strong>Service Role Preview:</strong> Bypass RLS active. To test whether anonymous access is blocked, connect using your project&apos;s publishable anon key.
+                      </div>
+                    </div>
+                  )
+                )}
                 {!rows.length && <p className="pb-muted">Optional preview — results stay in this tab. {busy ? 'Loading…' : ''}</p>}
                 {rows.length > 0 && (
                   <div className="pb-table-wrap">

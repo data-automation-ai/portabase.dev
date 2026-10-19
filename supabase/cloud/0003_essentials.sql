@@ -86,4 +86,10 @@ comment on table portabase_cloud.capsule_hashes is
 
 revoke all on schema portabase_cloud from public, anon, authenticated;
 revoke all on all tables in schema portabase_cloud from public, anon, authenticated;
+revoke all on all sequences in schema portabase_cloud from public, anon, authenticated;
+revoke all on all routines in schema portabase_cloud from public, anon, authenticated;
+
+alter default privileges in schema portabase_cloud revoke all on tables from public, anon, authenticated;
+alter default privileges in schema portabase_cloud revoke all on sequences from public, anon, authenticated;
+alter default privileges in schema portabase_cloud revoke all on routines from public, anon, authenticated;
 

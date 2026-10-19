@@ -202,3 +202,21 @@ export function neverSendLiveSecretsTo() {
     'portabase.dev APIs',
   ];
 }
+
+export function isServiceRoleKey(k) {
+  if (!k || typeof k !== 'string') return false;
+  try {
+    const parts = k.split('.');
+    if (parts.length === 3) {
+      const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const pad = b64.length % 4 ? '='.repeat(4 - (b64.length % 4)) : '';
+      const payload = typeof atob === 'function'
+        ? JSON.parse(atob(b64 + pad))
+        : JSON.parse(Buffer.from(b64, 'base64').toString('utf8'));
+      return payload.role === 'service_role';
+    }
+  } catch {
+    /* not a JWT or unparseable */
+  }
+  return false;
+}

@@ -702,11 +702,54 @@ order by tablename, policyname;`}</Code>
         Repeat it per table. A <code>200</code> with rows on a table you assumed was private is the finding.
         Expect a denial (or empty-by-policy) everywhere except the sacrificial keepalive row.
       </p>
+      <h2>Make sure anon access is not available to RLS tables</h2>
+      <p>
+        Many operators turn on RLS and assume their tables are secured. But if a policy grants
+        access to <code>anon</code> or <code>public</code> (which in PostgreSQL includes unauthenticated
+        callers), the table remains exposed to anyone holding your publishable key.
+      </p>
+      <h3>Find RLS tables with anon policies</h3>
+      <Code>{`-- Find RLS tables where policies grant access to anon or public
+select tablename, policyname, roles, cmd, qual
+from pg_policies
+where schemaname = 'public'
+  and (roles @> '{anon}' or roles @> '{public}' or roles = '{public}')
+  and tablename <> 'keepalive'
+order by tablename, policyname;`}</Code>
+      <p>
+        Every row returned here is an RLS table that permits anonymous access. Narrow the policy to
+        {' '}<code>to authenticated</code> with an explicit owner check (e.g. <code>using (auth.uid() = user_id)</code>).
+      </p>
+      <h3>Lock down anon at the database level</h3>
+      <p>
+        The most foolproof defense is to revoke table access from the <code>anon</code> role entirely
+        on the application schema, and ensure future migrations do not grant it automatically:
+      </p>
+      <Code>{`-- 1. Revoke table permissions from the anon role
+revoke all on all tables in schema public from anon;
+revoke all on all sequences in schema public from anon;
+revoke all on all routines in schema public from anon;
+
+-- 2. Alter default privileges so future tables never grant anon access
+alter default privileges in schema public revoke all on tables from anon;
+alter default privileges in schema public revoke all on sequences from anon;
+alter default privileges in schema public revoke all on routines from anon;
+
+-- 3. Confirm authenticated users can still use the schema
+grant usage on schema public to authenticated;
+grant all on all tables in schema public to authenticated;
+grant all on all sequences in schema public to authenticated;
+grant all on all routines in schema public to authenticated;`}</Code>
+      <p>
+        With these grants in place, PostgreSQL rejects anonymous queries before policy evaluation,
+        ensuring an accidental <code>using (true)</code> policy never leaks private customer data.
+      </p>
       <h2>Fix order</h2>
       <p>
-        Enable RLS on every data table, add the narrowest policy each feature needs, then re-run
-        all three checks. Keep the proof: the queries above should show RLS on everywhere, policies
-        only where intended, and anonymous reads denied on everything but the dummy row.
+        Enable RLS on every data table, add the narrowest policy each feature needs, revoke anon table
+        permissions, then re-run all exposure checks. Keep the proof: the queries above should show RLS
+        on everywhere, zero anon policies on sensitive tables, and anonymous reads denied on everything
+        except the sacrificial dummy keepalive row.
       </p>
     </>
   );
