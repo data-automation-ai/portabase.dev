@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Icon } from './icons.jsx';
 import {
   DATABASE_COPY_MODES,
@@ -63,9 +63,18 @@ export function DatabaseScopeSelector({
   readOnly = false,
 }) {
   const [expandedDbId, setExpandedDbId] = useState(() => {
-    const first = Array.isArray(databases) && databases[0]?.id;
-    return first || null;
+    if (!Array.isArray(databases) || databases.length === 0) return null;
+    const firstWithObjects = databases.find((d) => (d.tables && d.tables.length > 0) || (d.binaries && d.binaries.length > 0));
+    return (firstWithObjects || databases[0])?.id || null;
   });
+  useEffect(() => {
+    if (!Array.isArray(databases) || databases.length === 0) return;
+    setExpandedDbId((prev) => {
+      if (prev && databases.some((d) => d.id === prev)) return prev;
+      const firstWithObjects = databases.find((d) => (d.tables && d.tables.length > 0) || (d.binaries && d.binaries.length > 0));
+      return (firstWithObjects || databases[0])?.id || null;
+    });
+  }, [databases]);
   // Default view shows Schema-level & Bucket-level rows ONLY; at most ONE schema/bucket per DB may be exploded at a time
   const [activeGroupByDb, setActiveGroupByDb] = useState({});
   const [groupRowLimits, setGroupRowLimits] = useState({});

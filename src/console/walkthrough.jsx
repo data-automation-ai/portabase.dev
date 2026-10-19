@@ -81,6 +81,7 @@ export function GuidedWalkthrough({
           }
           setStep1Valid(true);
           setOauthFeedback(`✓ Connected to Supabase! Loaded ${data.databases.length} database(s) and live tables.`);
+          setStep(2);
         }
       } catch {
         // Leave defaults if discovery fails or offline
@@ -110,10 +111,12 @@ export function GuidedWalkthrough({
         setStep1Valid(true);
         setOauthFeedback(`✓ Connected to Supabase! Loaded ${data.databases.length} database(s) and live tables.`);
         toast?.(`Connected! Discovered ${data.databases.length} projects.`, 'ok');
+        setStep(2);
       } else {
         setStep1Valid(true);
         setOauthFeedback('✓ Connected to Supabase! Ready for backup selection.');
         toast?.('Connected to Supabase!', 'ok');
+        setStep(2);
       }
     } catch {
       setStep1Valid(true);
@@ -362,8 +365,16 @@ export function GuidedWalkthrough({
               </div>
 
               {oauthFeedback && (
-                <div style={{ background: '#07100b', border: '1px solid #238636', borderRadius: '6px', padding: '10px 14px', fontSize: '13px', color: '#3ecf8e' }}>
-                  {oauthFeedback}
+                <div style={{ background: '#07100b', border: '1px solid #238636', borderRadius: '6px', padding: '10px 14px', fontSize: '13px', color: '#3ecf8e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                  <span>{oauthFeedback}</span>
+                  <button
+                    type="button"
+                    className="pb-btn pb-btn-sm pb-btn-primary"
+                    onClick={() => setStep(2)}
+                    style={{ fontSize: '12px', padding: '6px 14px' }}
+                  >
+                    Open Pick Databases Spreadsheet &rarr;
+                  </button>
                 </div>
               )}
 
