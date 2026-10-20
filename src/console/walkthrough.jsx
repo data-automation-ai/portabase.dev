@@ -216,13 +216,25 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
                 style={{ width: '100%', fontSize: '12px' }}
               >
                 {databases.map(d => {
-                  const mb = typeof d.totalProjectMb === 'number' && d.totalProjectMb > 0
+                  const rawName = d.projectName || (d.name ? d.name.replace(/\s*\(postgres\)$/i, '') : '') || d.projectRef;
+                  const mb = typeof d.totalProjectMb === 'number' && d.totalProjectMb >= 0
                     ? d.totalProjectMb
-                    : (typeof d.estimatedSizeMb === 'number' && d.estimatedSizeMb > 0 ? d.estimatedSizeMb : null);
-                  const sizeLabel = mb !== null ? `${mb.toFixed(2)} MB` : 'Pending inspection';
+                    : (typeof d.estimatedSizeMb === 'number' && d.estimatedSizeMb >= 0 ? d.estimatedSizeMb : null);
+                  let sizeLabel = 'Size pending inspection';
+                  if (mb !== null) {
+                    if (mb >= 1024) {
+                      sizeLabel = `${(mb / 1024).toFixed(2)} GB (${mb.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })} MB)`;
+                    } else if (mb >= 0.01) {
+                      sizeLabel = `${mb.toFixed(2)} MB`;
+                    } else if (mb > 0) {
+                      sizeLabel = `${mb.toFixed(3)} MB`;
+                    } else {
+                      sizeLabel = '0.00 MB';
+                    }
+                  }
                   return (
                     <option key={d.id} value={d.id}>
-                      {d.projectName || d.name || d.projectRef} ({d.projectRef}) — {sizeLabel}
+                      {rawName} ({d.projectRef}) — {sizeLabel}
                     </option>
                   );
                 })}
@@ -326,7 +338,7 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
             </div>
           </div>
         </div>
-        <DatabaseScopeSelector databases={databases} onChange={setDatabases} readOnly={false} />
+        <DatabaseScopeSelector databases={databases} activeDbId={selectedDbId} onChange={setDatabases} readOnly={false} />
       </div>
 
       {/* Row 3: Primary Action Bar */}

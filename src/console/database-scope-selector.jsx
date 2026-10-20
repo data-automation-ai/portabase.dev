@@ -62,20 +62,26 @@ export function DatabaseScopeSelector({
   onChange = null,
   onDisconnect = null,
   readOnly = false,
+  activeDbId = null,
 }) {
   const [expandedDbId, setExpandedDbId] = useState(() => {
+    if (activeDbId) return activeDbId;
     if (!Array.isArray(databases) || databases.length === 0) return null;
     const firstWithObjects = databases.find((d) => (d.tables && d.tables.length > 0) || (d.binaries && d.binaries.length > 0));
     return (firstWithObjects || databases[0])?.id || null;
   });
   useEffect(() => {
+    if (activeDbId) {
+      setExpandedDbId(activeDbId);
+      return;
+    }
     if (!Array.isArray(databases) || databases.length === 0) return;
     setExpandedDbId((prev) => {
       if (prev && databases.some((d) => d.id === prev)) return prev;
       const firstWithObjects = databases.find((d) => (d.tables && d.tables.length > 0) || (d.binaries && d.binaries.length > 0));
       return (firstWithObjects || databases[0])?.id || null;
     });
-  }, [databases]);
+  }, [databases, activeDbId]);
   // Default view shows Schema-level & Bucket-level rows ONLY; at most ONE schema/bucket per DB may be exploded at a time
   const [activeGroupByDb, setActiveGroupByDb] = useState({});
   const [groupRowLimits, setGroupRowLimits] = useState({});
@@ -709,7 +715,7 @@ export function DatabaseScopeSelector({
 
       {/* Database Cards List */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '12px', marginBottom: '16px', minWidth: 0, maxWidth: '100%' }}>
-        {dbs.map((db) => {
+        {(activeDbId && dbs.some((d) => d.id === activeDbId) ? dbs.filter((d) => d.id === activeDbId) : dbs).map((db) => {
           const isExpanded = expandedDbId === db.id;
           const isStructureOnly = db.mode === DATABASE_COPY_MODES.STRUCTURE_ONLY;
           const allObjects = getAllRowsForDb(db);
@@ -768,13 +774,20 @@ export function DatabaseScopeSelector({
                 <div style={{ fontFamily: 'monospace', fontWeight: 600, color: '#c9d1d9' }}>
                   Database + Storage Total:{' '}
                   <span style={{ color: '#3ecf8e' }}>
-                    {typeof dbMetrics.totalSourceMb === 'number'
-                      ? `${(dbMetrics?.totalSourceMb ?? 0).toFixed(2)} MB`
-                      : (typeof db.estimatedSizeMb === 'number' && db.estimatedSizeMb >= 0 ? `~${db.estimatedSizeMb} MB` : '?? MB')}
+                    {(() => {
+                      const total = typeof dbMetrics.totalSourceMb === 'number' && dbMetrics.totalSourceMb > 0
+                        ? dbMetrics.totalSourceMb
+                        : (typeof db.totalProjectMb === 'number' && db.totalProjectMb > 0
+                          ? db.totalProjectMb
+                          : (typeof db.estimatedSizeMb === 'number' && db.estimatedSizeMb >= 0 ? db.estimatedSizeMb : null));
+                      if (total === null) return 'Pending inspection';
+                      if (total >= 1024) return `${total.toFixed(2)} MB (${(total / 1024).toFixed(2)} GB)`;
+                      return `${total.toFixed(2)} MB`;
+                    })()}
                   </span>
                   {typeof dbMetrics.includedMb === 'number' && (
                     <span style={{ marginLeft: '10px', color: '#7ee787' }}>
-                      (Selected: {(dbMetrics?.includedMb ?? 0).toFixed(2)} MB)
+                      (Selected: {dbMetrics.includedMb >= 1024 ? `${dbMetrics.includedMb.toFixed(2)} MB (${(dbMetrics.includedMb / 1024).toFixed(2)} GB)` : `${dbMetrics.includedMb.toFixed(2)} MB`})
                     </span>
                   )}
                 </div>
