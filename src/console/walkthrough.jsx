@@ -205,10 +205,27 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
           {databases.length > 0 ? (
             <div>
               <label style={{ fontSize: '11px', color: '#8b949e', display: 'block', marginBottom: '4px' }}>Active Database Scope</label>
-              <select value={selectedDbId} onChange={e => setSelectedDbId(e.target.value)} className="pb-input mono" style={{ width: '100%', fontSize: '12px' }}>
-                {databases.map(d => (
-                  <option key={d.id} value={d.id}>{d.name || d.projectRef} ({d.projectRef}) — {d.totalMb ? `${d.totalMb.toFixed(2)} MB` : '< 0.01 MB'}</option>
-                ))}
+              <select
+                value={selectedDbId}
+                onChange={e => {
+                  const id = e.target.value;
+                  setSelectedDbId(id);
+                  setDatabases(prev => prev.map(db => ({ ...db, enabled: db.id === id })));
+                }}
+                className="pb-input mono"
+                style={{ width: '100%', fontSize: '12px' }}
+              >
+                {databases.map(d => {
+                  const mb = typeof d.totalProjectMb === 'number' && d.totalProjectMb > 0
+                    ? d.totalProjectMb
+                    : (typeof d.estimatedSizeMb === 'number' && d.estimatedSizeMb > 0 ? d.estimatedSizeMb : null);
+                  const sizeLabel = mb !== null ? `${mb.toFixed(2)} MB` : 'Pending inspection';
+                  return (
+                    <option key={d.id} value={d.id}>
+                      {d.projectName || d.name || d.projectRef} ({d.projectRef}) — {sizeLabel}
+                    </option>
+                  );
+                })}
               </select>
               <div style={{ marginTop: '8px', fontSize: '11px', color: '#3fb950', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Icon name="check" size={12} /> Connected to Supabase Management API
