@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { fetchStorageConnectors, testStorageConnector, disconnectStorageConnector } from '../lib/cloud-api.js';
+import { LedIndicator } from './storage-led.jsx';
 
 export function StorageProvidersPage({ state, setState, toast, navigate }) {
   const [connectors, setConnectors] = useState(null);
@@ -24,10 +25,12 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
   }, []);
 
   const handleDropboxOAuth = () => {
+    setTesting('dropbox');
     window.location.href = '/oauth/dropbox/start';
   };
 
   const handleGoogleDriveOAuth = () => {
+    setTesting('google-drive');
     window.location.href = '/oauth/google-drive/start';
   };
 
@@ -35,6 +38,7 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
     try {
       await disconnectStorageConnector(state?.version || 'supabase', provider);
       toast(`Disconnected ${provider}.`, 'info');
+      setTestResult(prev => ({ ...prev, [provider]: null }));
       await refreshConnectors();
     } catch (err) {
       toast(`Failed to disconnect: ${err.message}`, 'error');
@@ -64,6 +68,38 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
   const dropboxConnected = connectors?.dropbox?.oauthConnected || connectors?.dropbox?.configured;
   const gdriveConnected = connectors?.['google-drive']?.oauthConnected || connectors?.['google-drive']?.configured;
 
+  const getDropboxState = () => {
+    if (testing === 'dropbox') return 'yellow';
+    if (testResult['dropbox']) {
+      return testResult['dropbox'].success ? 'green' : (dropboxConnected ? 'red-flash' : 'yellow-flash');
+    }
+    return dropboxConnected ? 'green' : 'red';
+  };
+
+  const getGdriveState = () => {
+    if (testing === 'google-drive') return 'yellow';
+    if (testResult['google-drive']) {
+      return testResult['google-drive'].success ? 'green' : (gdriveConnected ? 'red-flash' : 'yellow-flash');
+    }
+    return gdriveConnected ? 'green' : 'red';
+  };
+
+  const getR2State = () => {
+    if (testing === 'r2') return 'yellow';
+    if (testResult['r2']) {
+      return testResult['r2'].success ? 'green' : (r2Config.bucket ? 'red-flash' : 'yellow-flash');
+    }
+    return r2Config.bucket && r2Config.accountId ? 'green' : 'red';
+  };
+
+  const getS3State = () => {
+    if (testing === 's3') return 'yellow';
+    if (testResult['s3']) {
+      return testResult['s3'].success ? 'green' : (s3Config.bucket ? 'red-flash' : 'yellow-flash');
+    }
+    return s3Config.bucket && s3Config.accessKeyId ? 'green' : 'red';
+  };
+
   return (
     <div className="pb-page pb-storage-providers">
       <div className="pb-page-head">
@@ -74,6 +110,16 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
             Keys and cryptographic capsules stay in your accounts — zero platform lock-in.
           </p>
         </div>
+      </div>
+
+      {/* LED Status Indicator Legend */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'center', background: '#161b22', border: '1px solid #30363d', borderRadius: '8px', padding: '12px 16px', marginTop: '12px', fontSize: '12px' }}>
+        <span style={{ fontWeight: 600, color: '#8b949e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LED Status Guide:</span>
+        <LedIndicator state="red" label="No Connection" size={10} />
+        <LedIndicator state="yellow" label="Connecting..." size={10} />
+        <LedIndicator state="yellow-flash" label="Problem Connecting" size={10} />
+        <LedIndicator state="green" label="Connected" size={10} />
+        <LedIndicator state="red-flash" label="Connection Lost (Was Working)" size={10} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '20px', marginTop: '16px' }}>
@@ -91,9 +137,7 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
                   <small style={{ color: '#8b949e' }}>OAuth 2.0 PKCE • /Portabase</small>
                 </div>
               </div>
-              <span className={`pb-badge ${dropboxConnected ? 'pb-badge-ok' : 'pb-badge-neutral'}`}>
-                {dropboxConnected ? 'Connected' : 'Not Connected'}
-              </span>
+              <LedIndicator state={getDropboxState()} />
             </div>
             <p style={{ fontSize: '13px', color: '#c9d1d9', lineHeight: 1.5 }}>
               One-click OAuth authentication. Capsules stream with native SHA-256 chunked cryptographic verification (<code style={{ color: '#58a6ff' }}>content_hash</code>).
@@ -104,21 +148,24 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
               </div>
             )}
           </div>
-          <div style={{ display: 'flex', gap: '10px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #30363d' }}>
-            {dropboxConnected ? (
-              <>
-                <button type="button" className="pb-btn pb-btn-sm pb-btn-primary" disabled={testing === 'dropbox'} onClick={() => handleTest('dropbox')}>
-                  {testing === 'dropbox' ? 'Testing...' : 'Test Connection'}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #30363d' }}>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              {dropboxConnected ? (
+                <>
+                  <button type="button" className="pb-btn pb-btn-sm pb-btn-primary" disabled={testing === 'dropbox'} onClick={() => handleTest('dropbox')}>
+                    {testing === 'dropbox' ? 'Testing...' : 'Test Connection'}
+                  </button>
+                  <button type="button" className="pb-btn pb-btn-sm pb-btn-ghost" onClick={() => handleDisconnect('dropbox')}>
+                    Disconnect
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="pb-btn pb-btn-sm pb-btn-primary" style={{ background: '#0061FE', borderColor: '#0061FE', color: '#fff' }} onClick={handleDropboxOAuth}>
+                  Connect Dropbox
                 </button>
-                <button type="button" className="pb-btn pb-btn-sm pb-btn-ghost" onClick={() => handleDisconnect('dropbox')}>
-                  Disconnect
-                </button>
-              </>
-            ) : (
-              <button type="button" className="pb-btn pb-btn-sm pb-btn-primary" style={{ background: '#0061FE', borderColor: '#0061FE', color: '#fff' }} onClick={handleDropboxOAuth}>
-                Connect Dropbox
-              </button>
-            )}
+              )}
+            </div>
+            <LedIndicator state={getDropboxState()} label="" size={10} />
           </div>
         </div>
 
@@ -135,16 +182,17 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
                   <small style={{ color: '#8b949e' }}>Zero-Egress Object Storage (S3 API)</small>
                 </div>
               </div>
-              <span className="pb-badge pb-badge-neutral">S3-Compatible</span>
+              <LedIndicator state={getR2State()} />
             </div>
             <p style={{ fontSize: '13px', color: '#c9d1d9', lineHeight: 1.5 }}>
               Zero egress fees. S3-compatible endpoints for ultra-low cost storage of multi-gigabyte Postgres &amp; storage backups.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '10px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #30363d' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #30363d' }}>
             <button type="button" className="pb-btn pb-btn-sm pb-btn-secondary" onClick={() => setActiveModal('r2')}>
-              Configure R2 Bucket
+              {r2Config.bucket ? 'Reconfigure R2 Bucket' : 'Configure R2 Bucket'}
             </button>
+            <LedIndicator state={getR2State()} label="" size={10} />
           </div>
         </div>
 
@@ -163,9 +211,7 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
                   <small style={{ color: '#8b949e' }}>OAuth 2.0 PKCE • GCS Buckets</small>
                 </div>
               </div>
-              <span className={`pb-badge ${gdriveConnected ? 'pb-badge-ok' : 'pb-badge-neutral'}`}>
-                {gdriveConnected ? 'Connected' : 'Not Connected'}
-              </span>
+              <LedIndicator state={getGdriveState()} />
             </div>
             <p style={{ fontSize: '13px', color: '#c9d1d9', lineHeight: 1.5 }}>
               Direct integration with Google Cloud Storage and Google Drive folders with strict cryptographic read-back proof.
@@ -176,21 +222,24 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
               </div>
             )}
           </div>
-          <div style={{ display: 'flex', gap: '10px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #30363d' }}>
-            {gdriveConnected ? (
-              <>
-                <button type="button" className="pb-btn pb-btn-sm pb-btn-primary" disabled={testing === 'google-drive'} onClick={() => handleTest('google-drive')}>
-                  {testing === 'google-drive' ? 'Testing...' : 'Test Connection'}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #30363d' }}>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              {gdriveConnected ? (
+                <>
+                  <button type="button" className="pb-btn pb-btn-sm pb-btn-primary" disabled={testing === 'google-drive'} onClick={() => handleTest('google-drive')}>
+                    {testing === 'google-drive' ? 'Testing...' : 'Test Connection'}
+                  </button>
+                  <button type="button" className="pb-btn pb-btn-sm pb-btn-ghost" onClick={() => handleDisconnect('google-drive')}>
+                    Disconnect
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="pb-btn pb-btn-sm pb-btn-primary" onClick={handleGoogleDriveOAuth}>
+                  Connect Google Drive / GCS
                 </button>
-                <button type="button" className="pb-btn pb-btn-sm pb-btn-ghost" onClick={() => handleDisconnect('google-drive')}>
-                  Disconnect
-                </button>
-              </>
-            ) : (
-              <button type="button" className="pb-btn pb-btn-sm pb-btn-primary" onClick={handleGoogleDriveOAuth}>
-                Connect Google Drive / GCS
-              </button>
-            )}
+              )}
+            </div>
+            <LedIndicator state={getGdriveState()} label="" size={10} />
           </div>
         </div>
 
@@ -207,16 +256,17 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
                   <small style={{ color: '#8b949e' }}>Customer BYO Bucket • IAM / KMS</small>
                 </div>
               </div>
-              <span className="pb-badge pb-badge-neutral">Customer Vault</span>
+              <LedIndicator state={getS3State()} />
             </div>
             <p style={{ fontSize: '13px', color: '#c9d1d9', lineHeight: 1.5 }}>
               Standard AWS S3 vaults with customer-managed SSE-KMS keys, object lock compliance, or cross-region replication.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '10px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #30363d' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #30363d' }}>
             <button type="button" className="pb-btn pb-btn-sm pb-btn-secondary" onClick={() => setActiveModal('s3')}>
-              Configure S3 Bucket
+              {s3Config.bucket ? 'Reconfigure S3 Bucket' : 'Configure S3 Bucket'}
             </button>
+            <LedIndicator state={getS3State()} label="" size={10} />
           </div>
         </div>
 
@@ -235,7 +285,7 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
                   <small style={{ color: '#8b949e' }}>On-Premises • USB • Network Share</small>
                 </div>
               </div>
-              <span className="pb-badge pb-badge-ok">Ready</span>
+              <LedIndicator state="green" />
             </div>
             <p style={{ fontSize: '13px', color: '#c9d1d9', lineHeight: 1.5 }}>
               Save capsules locally on this workstation or mapped network drive. 100% offline, zero network egress.
@@ -250,10 +300,11 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
               />
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '10px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #30363d' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #30363d' }}>
             <button type="button" className="pb-btn pb-btn-sm pb-btn-primary" onClick={() => toast(`Local vault directory set to: ${localPath}`, 'success')}>
               Save Local Path
             </button>
+            <LedIndicator state="green" label="" size={10} />
           </div>
         </div>
 
