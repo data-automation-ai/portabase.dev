@@ -306,6 +306,7 @@ export function computeDatabaseScopeSummary(databases = []) {
       structureOnlyCount: 0,
       estimatedCompressedMb: 0,
       grandTotalMb: 0,
+      includedMb: 0,
       totalSourceMb: 0,
       includedDatabaseMb: 0,
       includedBinaryMb: 0,

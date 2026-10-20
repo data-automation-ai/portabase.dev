@@ -769,12 +769,12 @@ export function DatabaseScopeSelector({
                   Database + Storage Total:{' '}
                   <span style={{ color: '#3ecf8e' }}>
                     {typeof dbMetrics.totalSourceMb === 'number'
-                      ? `${dbMetrics.totalSourceMb.toFixed(2)} MB`
+                      ? `${(dbMetrics?.totalSourceMb ?? 0).toFixed(2)} MB`
                       : (typeof db.estimatedSizeMb === 'number' && db.estimatedSizeMb >= 0 ? `~${db.estimatedSizeMb} MB` : '?? MB')}
                   </span>
                   {typeof dbMetrics.includedMb === 'number' && (
                     <span style={{ marginLeft: '10px', color: '#7ee787' }}>
-                      (Selected: {dbMetrics.includedMb.toFixed(2)} MB)
+                      (Selected: {(dbMetrics?.includedMb ?? 0).toFixed(2)} MB)
                     </span>
                   )}
                 </div>
@@ -809,7 +809,7 @@ export function DatabaseScopeSelector({
                       </strong>
                       <span className="pb-badge pb-badge-ok" style={{ fontSize: '11px', fontFamily: 'monospace' }}>
                         {typeof dbMetrics.includedMb === 'number'
-                          ? `${dbMetrics.includedMb.toFixed(2)} MB included`
+                          ? `${(dbMetrics?.includedMb ?? 0).toFixed(2)} MB included`
                           : (typeof db.estimatedSizeMb === 'number' && db.estimatedSizeMb >= 0
                             ? `~${db.estimatedSizeMb} MB`
                             : '?? MB')}
@@ -1848,7 +1848,7 @@ export function DatabaseScopeSelector({
             <div style={{ fontSize: '11px', color: '#8b949e', textTransform: 'uppercase' }}>Grand Sum Total (All Databases + Binaries)</div>
             <div style={{ fontSize: '16px', fontWeight: 700, fontFamily: 'monospace', color: '#3ecf8e' }}>
               {typeof summary.grandTotalMb === 'number' && summary.grandTotalMb >= 0
-                ? `${summary.grandTotalMb.toFixed(2)} MB`
+                ? `${(summary?.grandTotalMb ?? 0).toFixed(2)} MB`
                 : '?? MB'}
               {summary.savedMb > 0 && (
                 <span style={{ fontSize: '12px', fontWeight: 500, color: '#7ee787', marginLeft: '8px' }}>
