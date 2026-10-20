@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { fetchStorageConnectors, testStorageConnector, disconnectStorageConnector } from '../lib/cloud-api.js';
 import { LedIndicator } from './storage-led.jsx';
+import { InMemoryTrustPanel } from './in-memory-trust-panel.jsx';
 
 export function StorageProvidersPage({ state, setState, toast, navigate }) {
   const [connectors, setConnectors] = useState(null);
@@ -111,6 +112,8 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
           </p>
         </div>
       </div>
+
+      <InMemoryTrustPanel />
 
       {/* LED Status Indicator Legend */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'center', background: '#161b22', border: '1px solid #30363d', borderRadius: '8px', padding: '12px 16px', marginTop: '12px', fontSize: '12px' }}>
