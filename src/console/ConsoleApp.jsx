@@ -26,6 +26,7 @@ import {
   OverviewPage, ProjectsPage, ProjectDetailPage, RestoresPage,
   BackupsHubPage, AgentsHubPage, AlertsHubPage, AccountHubPage,
 } from './pages.jsx';
+import { StorageProvidersPage } from './storage-providers-page.jsx';
 import { TelemetryPage } from './telemetry-page.jsx';
 import { liveEventToHealthEvent } from '../lib/telemetry-view.js';
 import { ConnectSupabaseFlow } from './connect-supabase.jsx';
@@ -35,6 +36,7 @@ import { CustomerDashboardPage } from './customer-dashboard.jsx';
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: 'home' },
   { id: 'home', label: 'Ops Overview', icon: 'activity' },
+  { id: 'storage', label: 'Vault Storage', icon: 'cloud' },
   { id: 'projects', label: 'Supabase Sources', icon: 'folder' },
   { id: 'supabase-viewer', label: 'Connect Database', icon: 'table' },
   { id: 'backups', label: 'Backup Capsules', icon: 'capsule' },
@@ -54,7 +56,9 @@ const ALIASES = {
   overview: 'home',
   capsules: 'backups',
   schedules: 'backups',
-  destinations: 'account',
+  destinations: 'storage',
+  vaults: 'storage',
+  storage: 'storage',
   restores: 'restore',
   activity: 'alerts',
   reports: 'telemetry',
@@ -557,6 +561,7 @@ export function ConsoleApp() {
 
   let body;
   switch (route.page) {
+    case 'storage': body = <StorageProvidersPage {...pageProps} />; break;
     case 'projects': body = <ProjectsPage {...pageProps} />; break;
     case 'project': body = <ProjectDetailPage {...pageProps} />; break;
     case 'backups': body = <BackupsHubPage {...pageProps} />; break;
