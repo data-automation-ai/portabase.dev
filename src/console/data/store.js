@@ -448,13 +448,31 @@ export function loadLiveConsoleState(user) {
     if (raw) {
       const data = JSON.parse(raw);
       if (data?.workspace && data.demoMode !== true) {
-        if (user?.email) data.profile = { ...data.profile, email: user.email, name: user.name || data.profile?.name, id: user.id || data.profile?.id };
+        const base = emptyWorkspace(user || {});
+        const merged = {
+          ...base,
+          ...data,
+          workspace: { ...base.workspace, ...data.workspace },
+          profile: { ...base.profile, ...data.profile },
+          billing: { ...base.billing, ...data.billing },
+          projects: Array.isArray(data.projects) ? data.projects : base.projects,
+          agents: Array.isArray(data.agents) ? data.agents : base.agents,
+          destinations: Array.isArray(data.destinations) ? data.destinations : base.destinations,
+          capsules: Array.isArray(data.capsules) ? data.capsules : base.capsules,
+          events: Array.isArray(data.events) ? data.events : base.events,
+          jobs: Array.isArray(data.jobs) ? data.jobs : base.jobs,
+          databases: Array.isArray(data.databases) ? data.databases : [],
+          schedules: Array.isArray(data.schedules) ? data.schedules : base.schedules,
+          restores: Array.isArray(data.restores) ? data.restores : base.restores,
+          members: Array.isArray(data.members) ? data.members : base.members,
+        };
+        if (user?.email) merged.profile = { ...merged.profile, email: user.email, name: user.name || merged.profile?.name, id: user.id || merged.profile?.id };
         if (user?.cloudVersion) {
-          data.workspace.cloudVersion = user.cloudVersion;
-          data.billing = { ...data.billing, cloudVersion: user.cloudVersion };
+          merged.workspace.cloudVersion = user.cloudVersion;
+          merged.billing = { ...merged.billing, cloudVersion: user.cloudVersion };
         }
-        data.workspace.name = sanitizeWorkspaceName(data.workspace.name, { ...data.profile, ...user });
-        return data;
+        merged.workspace.name = sanitizeWorkspaceName(merged.workspace.name, { ...merged.profile, ...user });
+        return merged;
       }
     }
   } catch {

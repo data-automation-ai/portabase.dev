@@ -89,20 +89,24 @@ function copyText(text, toast) {
 
 /* ─── HOME ─── */
 export function OverviewPage({ state, navigate, toast, me, startAddon, busy, demoMode }) {
-  const healthy = state.projects.filter(p => p.status === 'healthy').length;
-  const issues = state.projects.filter(p => p.status !== 'healthy').length;
-  const lastEvents = [...state.events].sort((a, b) => new Date(b.occurredAt) - new Date(a.occurredAt)).slice(0, 6);
+  const projects = Array.isArray(state?.projects) ? state.projects : [];
+  const events = Array.isArray(state?.events) ? state.events : [];
+  const capsules = Array.isArray(state?.capsules) ? state.capsules : [];
+  const agents = Array.isArray(state?.agents) ? state.agents : [];
+  const healthy = projects.filter(p => p.status === 'healthy').length;
+  const issues = projects.filter(p => p.status !== 'healthy').length;
+  const lastEvents = [...events].sort((a, b) => new Date(b.occurredAt) - new Date(a.occurredAt)).slice(0, 6);
   const spark = [0.4, 0.7, 0.55, 0.9, 0.65, 1, 0.8, 0.95, 0.7, 0.85, 1, 0.6].map((h, i) => ({ h, fail: i === 4 || i === 9 }));
   const trialDays = Math.max(0, Math.ceil((new Date(state.billing.trialEndsAt) - Date.now()) / 86400e3));
-  const success = state.capsules.filter(c => c.status === 'COMPLETE').length;
-  const failed = state.capsules.filter(c => c.status === 'FAILED').length;
-  const verified = state.capsules.filter(c => c.verified).length;
-  const rescueReady = state.capsules.filter(c => c.status === 'COMPLETE' && c.verified).length;
+  const success = capsules.filter(c => c.status === 'COMPLETE').length;
+  const failed = capsules.filter(c => c.status === 'FAILED').length;
+  const verified = capsules.filter(c => c.verified).length;
+  const rescueReady = capsules.filter(c => c.status === 'COMPLETE' && c.verified).length;
   const plan = getCloudPlan(state.billing?.planId || state.billing?.plan);
-  const usedBytes = state.capsules.reduce((sum, c) => sum + (Number(c.sizeBytes) || 0), 0);
+  const usedBytes = capsules.reduce((sum, c) => sum + (Number(c.sizeBytes) || 0), 0);
   const usage = storageUsage(usedBytes, plan.id);
-  const agentsOnline = state.agents.filter(a => a.status === 'online').length;
-  const lastCapsule = [...state.capsules].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+  const agentsOnline = agents.filter(a => a.status === 'online').length;
+  const lastCapsule = [...capsules].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
   const onboarding = state.onboarding?.steps || {};
   const proof = proofFromConsoleState(state, { demoMode: Boolean(demoMode) });
   const paidPlan = getCloudPlan(me?.subscription?.plan || me?.subscription?.planId || state.billing?.planId || state.billing?.plan);

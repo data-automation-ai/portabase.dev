@@ -493,8 +493,10 @@ export function ConsoleApp() {
 
   const alertCount = useMemo(() => {
     if (!state) return 0;
-    return state.projects.filter(p => p.status !== 'healthy').length
-      + state.events.filter(e => e.level === 'error' || e.level === 'warn').slice(0, 5).length;
+    const projects = Array.isArray(state.projects) ? state.projects : [];
+    const events = Array.isArray(state.events) ? state.events : [];
+    return projects.filter(p => p.status !== 'healthy').length
+      + events.filter(e => e.level === 'error' || e.level === 'warn').slice(0, 5).length;
   }, [state]);
 
   const filteredNav = useMemo(() => {
