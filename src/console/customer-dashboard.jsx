@@ -143,110 +143,117 @@ export function CustomerDashboardPage({
         onOpenSizer={() => { setTab('sizer'); setWizard(true); }}
       />
 
-      {model.demo && (
-        <div className="pb-sample-banner" role="status">
-          <span className="pb-sample-chip">SAMPLE</span>
-          <strong>Demo workspace</strong>
-          <p>This is labeled sample data, not a live customer project. The proof lamp stays red.</p>
-        </div>
-      )}
+      <details className="pb-card" style={{ marginTop: 16 }} open={tab !== 'overview'}>
+        <summary style={{ cursor: 'pointer', fontWeight: 600, padding: '8px 12px' }}>
+          Advanced Telemetry, Sizer &amp; Diagnostics
+        </summary>
+        <div style={{ marginTop: 12 }}>
+          {model.demo && (
+            <div className="pb-sample-banner" role="status">
+              <span className="pb-sample-chip">SAMPLE</span>
+              <strong>Demo workspace</strong>
+              <p>This is labeled sample data, not a live customer project. The proof lamp stays red.</p>
+            </div>
+          )}
 
-      <div className={`pb-callout ${model.proof.proven ? 'ok' : 'danger'}`} data-proof-tone={model.proof.tone}>
-        <Icon name={model.proof.proven ? 'shield' : 'warn'} size={18} />
-        <div>
-          <strong>{model.proof.proven ? 'Dry-run MATCH' : 'Proof lamp · RED'}</strong>
-          <p>
-            {model.proof.detail} The lamp stays red until a real dry-run or compare from the free CLI / Cloud Runner reports MATCH.
-            Demo and empty workspaces cannot turn this green.
-          </p>
-        </div>
-      </div>
+          <div className={`pb-callout ${model.proof.proven ? 'ok' : 'danger'}`} data-proof-tone={model.proof.tone}>
+            <Icon name={model.proof.proven ? 'shield' : 'warn'} size={18} />
+            <div>
+              <strong>{model.proof.proven ? 'Dry-run MATCH' : 'Proof lamp · RED'}</strong>
+              <p>
+                {model.proof.detail} The lamp stays red until a real dry-run or compare from the free CLI / Cloud Runner reports MATCH.
+                Demo and empty workspaces cannot turn this green.
+              </p>
+            </div>
+          </div>
 
-      <div className="pb-keys-strip" role="note">
-        <Icon name="key" size={18} />
-        <div>
-          <span>CONTROL PLANE · BLIND</span>
-          <strong>{KEYS_COPY.dashTitle}</strong>
-          <p>{KEYS_COPY.dashBody}</p>
-          <p className="pb-keys-honest">{KEYS_COPY.honest}</p>
-          <button type="button" className="pb-text-link" onClick={() => navigate?.('agents', { tab: 'seal' })}>
-            Seal keys to runner
-          </button>
-        </div>
-      </div>
+          <div className="pb-keys-strip" role="note">
+            <Icon name="key" size={18} />
+            <div>
+              <span>CONTROL PLANE · BLIND</span>
+              <strong>{KEYS_COPY.dashTitle}</strong>
+              <p>{KEYS_COPY.dashBody}</p>
+              <p className="pb-keys-honest">{KEYS_COPY.honest}</p>
+              <button type="button" className="pb-text-link" onClick={() => navigate?.('agents', { tab: 'seal' })}>
+                Seal keys to runner
+              </button>
+            </div>
+          </div>
 
-      <AccountStrip
-        model={model}
-        plan={plan}
-        me={me}
-        state={state}
-        startTrial={startTrial}
-        startAddon={startAddon}
-        busy={busy}
-        navigate={navigate}
-      />
+          <AccountStrip
+            model={model}
+            plan={plan}
+            me={me}
+            state={state}
+            startTrial={startTrial}
+            startAddon={startAddon}
+            busy={busy}
+            navigate={navigate}
+          />
 
-      <div className="pb-tabs pb-tabs-mobile" role="tablist" aria-label="Dashboard sections">
-        {[
-          ['overview', 'Telemetry'],
-          ['charts', 'Charts'],
-          ['sizer', 'Table sizer'],
-          ['sizes', 'Capsule sizes'],
-          ['log', 'Backup log'],
-          ['utilities', 'Utilities'],
-        ].map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            className={tab === id ? 'is-active' : ''}
-            onClick={() => go(id)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+          <div className="pb-tabs pb-tabs-mobile" role="tablist" aria-label="Dashboard sections">
+            {[
+              ['overview', 'Telemetry'],
+              ['charts', 'Charts'],
+              ['sizer', 'Table sizer'],
+              ['sizes', 'Capsule sizes'],
+              ['log', 'Backup log'],
+              ['utilities', 'Utilities'],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={tab === id}
+                className={tab === id ? 'is-active' : ''}
+                onClick={() => go(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-      {tab === 'overview' && <TelemetrySection model={model} navigate={navigate} onOpenJob={openJob} />}
-      {tab === 'charts' && <ChartsSection model={model} plan={plan} />}
-      {tab === 'sizer' && (
-        <div className="pb-stack">
-          <ConnectSupabaseFlow demo={model.demo} plan={plan} navigate={navigate} />
-          <details className="pb-card">
-            <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
-              Advanced: sizer from the free-engine doctor report
-            </summary>
-            <p className="pb-muted">
-              Measure and choose live backup contents in the private runner workspace.
-              This view displays any size inventory already present in this workspace;
-              changing it does not update a private runner configuration.
-            </p>
-            <TableSizer
-              inventory={model.inventory}
-              planId={sizerPlan}
-              onPlanId={setSizerPlan}
-              selection={sizerSelection}
-              onSelection={setSizerSelection}
-              excludeBinaries={excludeBinaries}
-              onExcludeBinaries={setExcludeBinaries}
-              demo={model.demo}
+          {tab === 'overview' && <TelemetrySection model={model} navigate={navigate} onOpenJob={openJob} />}
+          {tab === 'charts' && <ChartsSection model={model} plan={plan} />}
+          {tab === 'sizer' && (
+            <div className="pb-stack">
+              <ConnectSupabaseFlow demo={model.demo} plan={plan} navigate={navigate} />
+              <details className="pb-card">
+                <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
+                  Advanced: sizer from the free-engine doctor report
+                </summary>
+                <p className="pb-muted">
+                  Measure and choose live backup contents in the private runner workspace.
+                  This view displays any size inventory already present in this workspace;
+                  changing it does not update a private runner configuration.
+                </p>
+                <TableSizer
+                  inventory={model.inventory}
+                  planId={sizerPlan}
+                  onPlanId={setSizerPlan}
+                  selection={sizerSelection}
+                  onSelection={setSizerSelection}
+                  excludeBinaries={excludeBinaries}
+                  onExcludeBinaries={setExcludeBinaries}
+                  demo={model.demo}
+                />
+              </details>
+            </div>
+          )}
+          {tab === 'sizes' && <SizesSection model={model} onOpenJob={openJob} />}
+          {tab === 'log' && <BackupLogSection model={model} onOpenJob={openJob} />}
+          {tab === 'utilities' && (
+            <UtilitiesSection
+              model={model}
+              state={state}
+              setState={setState}
+              toast={toast}
+              smsAllowed={smsAllowed}
+              plan={plan}
             />
-          </details>
+          )}
         </div>
-      )}
-      {tab === 'sizes' && <SizesSection model={model} onOpenJob={openJob} />}
-      {tab === 'log' && <BackupLogSection model={model} onOpenJob={openJob} />}
-      {tab === 'utilities' && (
-        <UtilitiesSection
-          model={model}
-          state={state}
-          setState={setState}
-          toast={toast}
-          smsAllowed={smsAllowed}
-          plan={plan}
-        />
-      )}
+      </details>
 
       {selectedJob && (
         <JobDrawer job={selectedJob} demo={model.demo} proof={model.proof} onClose={() => setSelectedJobId(null)} />

@@ -945,7 +945,6 @@ function StorageConnectorsCard({ state, setState, toast }) {
         folderPath: folderPath.trim(),
         accessToken: tokenInput.trim() || undefined,
         appKey: appKeyInput.trim() || undefined,
-        simulate: !tokenInput.trim() && !oauthConnectors?.[provider]?.oauthConnected,
       };
       const res = await testStorageConnector(state?.version || 'supabase', payload);
       setResult(res);
@@ -986,7 +985,6 @@ function StorageConnectorsCard({ state, setState, toast }) {
         provider,
         folderPath: folderPath.trim(),
         accessToken: tokenInput.trim() || undefined,
-        simulate: !tokenInput.trim(),
       };
       const res = await uploadCapsuleToConnector(state?.version || 'supabase', payload);
       setResult(res);
@@ -1067,7 +1065,7 @@ function StorageConnectorsCard({ state, setState, toast }) {
             type="password"
             value={tokenInput}
             onChange={e => setTokenInput(e.target.value)}
-            placeholder={currentOauth ? 'Using OAuth Cookie' : 'Leave empty for env/simulated token'}
+            placeholder={currentOauth ? 'Using OAuth Cookie' : oauthConnectors?.[provider]?.configured ? 'Using Server OAuth Token' : 'Paste Access Token or sign in via OAuth'}
             data-testid="storage-connector-token-input"
             style={{ width: '100%', padding: '6px 8px', fontSize: 13 }}
           />

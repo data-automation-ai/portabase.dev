@@ -625,7 +625,7 @@ export function DatabaseScopeSelector({
               onClick={() => handleSelectAll(DATABASE_COPY_MODES.STRUCTURE_ONLY)}
               style={{ fontSize: '12px', padding: '5px 10px', background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d' }}
             >
-              All Structure Only ⚡
+              All Structure Only
             </button>
             <button
               type="button"
@@ -635,27 +635,6 @@ export function DatabaseScopeSelector({
             >
               <Icon name="plus" size={12} /> Add Supabase Database
             </button>
-            {onDisconnect && (
-              <button
-                type="button"
-                onClick={onDisconnect}
-                style={{
-                  fontSize: '12px',
-                  padding: '5px 10px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  background: 'rgba(248,81,73,0.14)',
-                  color: '#f85149',
-                  border: '1px solid rgba(248,81,73,0.6)',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                <Icon name="logout" size={12} /> Logout / Disconnect Supabase
-              </button>
-            )}
           </div>
         )}
       </div>
@@ -826,7 +805,7 @@ export function DatabaseScopeSelector({
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <strong style={{ fontSize: '14px', color: '#f0f6fc', textDecoration: 'underline', textDecorationColor: '#30363d' }}>
-                        🗄️ {db.databaseName || db.name || 'postgres'}
+                        {db.databaseName || db.name || 'postgres'}
                       </strong>
                       <span className="pb-badge pb-badge-ok" style={{ fontSize: '11px', fontFamily: 'monospace' }}>
                         {typeof dbMetrics.includedMb === 'number'
@@ -840,7 +819,7 @@ export function DatabaseScopeSelector({
                       {!db.enabled
                         ? 'Database deselected from backup and restore target'
                         : isStructureOnly
-                          ? '⚡ Structure Only: Schemas, tables, DDL & RLS (0 table rows saved)'
+                          ? ' Structure Only: Schemas, tables, DDL & RLS (0 table rows saved)'
                           : `${sortedGroups.filter((g) => !g.isBinary).length} schemas · ${sortedGroups.filter((g) => g.isBinary).length} buckets · ${allObjects.length} total objects (${fullCount} included, ${structOnlyTableCount} structure-only, ${skippedCount} excluded)`}
                     </div>
                   </div>
@@ -891,7 +870,7 @@ export function DatabaseScopeSelector({
                         color: isStructureOnly ? '#ffffff' : '#8b949e',
                       }}
                     >
-                      Structure Only ⚡
+                      Structure Only
                     </button>
                   </div>
 
@@ -936,7 +915,7 @@ export function DatabaseScopeSelector({
                     </button>
 
                     <div style={{ fontSize: '11px', color: '#8b949e' }}>
-                      {structOnlyTableCount > 0 && <span style={{ color: '#7ee787', marginRight: '8px' }}>⚡ {structOnlyTableCount} Structure Only</span>}
+                      {structOnlyTableCount > 0 && <span style={{ color: '#7ee787', marginRight: '8px' }}> {structOnlyTableCount} Structure Only</span>}
                       {skippedCount > 0 && <span style={{ color: '#f85149', marginRight: '8px' }}>✕ {skippedCount} Excluded</span>}
                       <span>✓ {fullCount} Included</span>
                     </div>
@@ -1015,7 +994,7 @@ export function DatabaseScopeSelector({
                               onClick={() => handleSetAllObjectsMode(db.id, TABLE_COPY_MODES.STRUCTURE_ONLY)}
                               style={{ fontSize: '11px', padding: '3px 8px', background: '#238636', color: '#fff' }}
                             >
-                              All Structure Only ⚡
+                              All Structure Only
                             </button>
                             <button
                               type="button"
@@ -1926,7 +1905,7 @@ export function DatabaseScopeSelector({
           <div style={{ fontSize: '10.5px', color: (summary.grandTotalMb || 0) > targetCapMb ? '#f85149' : '#8b949e', textAlign: 'right' }}>
             {(summary.grandTotalMb || 0) <= targetCapMb
               ? `${(targetCapMb - (summary.grandTotalMb || 0)).toFixed(2)} MB remaining under cap`
-              : `⚠️ Exceeds cap by ${((summary.grandTotalMb || 0) - targetCapMb).toFixed(2)} MB`}
+              : `Exceeds cap by ${((summary.grandTotalMb || 0) - targetCapMb).toFixed(2)} MB`}
           </div>
         </div>
       </div>

@@ -127,9 +127,7 @@ async function lambdaHandler(event) {
   const effectiveClientSecret = body.clientSecret || body.appSecret || (provider === 'dropbox' ? (process.env.DROPBOX_APP_SECRET || process.env.DROPBOX_CLIENT_SECRET) : process.env.GOOGLE_CLIENT_SECRET);
 
   const simulate = body.simulate === true ||
-    (typeof effectiveAccessToken === 'string' && effectiveAccessToken.startsWith('sim_')) ||
-    (!effectiveAccessToken && !effectiveRefreshToken && !hasDropboxToken && provider === 'dropbox') ||
-    (!effectiveAccessToken && !effectiveRefreshToken && !hasGoogleDriveToken && provider === 'google-drive');
+    (typeof effectiveAccessToken === 'string' && effectiveAccessToken.startsWith('sim_'));
 
   if (action === 'test') {
     if (simulate) {
