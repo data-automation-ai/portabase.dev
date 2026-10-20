@@ -609,19 +609,6 @@ export function ConsoleApp() {
               <span>{me?.user?.email || user?.email}</span>
             </div>
           </div>
-          <button
-            type="button"
-            className="pb-btn pb-btn-sm pb-btn-danger"
-            style={{ width: '100%' }}
-            onClick={async () => {
-              try { window.localStorage?.setItem('pb_supabase_disconnected', '1'); } catch { /* ignore */ }
-              window.dispatchEvent(new CustomEvent('pb-supabase-disconnect'));
-              try { await fetch('/api/cloud/oauth?provider=supabase&action=disconnect', { method: 'POST' }); } catch { /* ignore */ }
-              navigate('dashboard');
-            }}
-          >
-            <Icon name="logout" size={14} /> Disconnect Supabase
-          </button>
           <button type="button" className="pb-btn pb-btn-sm" style={{ width: '100%' }} onClick={signOut}>
             <Icon name="logout" size={14} /> Sign out of Portabase
           </button>
@@ -644,6 +631,9 @@ export function ConsoleApp() {
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter nav…" />
               <kbd>/</kbd>
             </div>
+            <a className="pb-btn pb-btn-sm pb-btn-primary" href="/oauth/dropbox/start" style={{ textDecoration: 'none' }}>
+              <Icon name="capsule" size={13} /> Connect Dropbox
+            </a>
             <button type="button" className="pb-btn pb-btn-sm" onClick={() => navigate('account', { tab: 'billing' })}>
               <BadgeInline status={state.billing.status} />
               <span style={{ marginLeft: 6 }}>{getCloudPlan(me?.subscription?.plan || state.billing?.plan).shortLabel}</span>

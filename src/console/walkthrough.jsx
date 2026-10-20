@@ -29,7 +29,7 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
   });
 
   const [selectedDbId, setSelectedDbId] = useState(() => databases[0]?.id || '');
-  const [destinationKind, setDestinationKind] = useState(currentDest?.destinationKind || 'dropbox');
+  const [destinationKind, setDestinationKind] = useState('dropbox');
   const [dropboxPath, setDropboxPath] = useState(currentDest?.path || '/Portabase');
   const [gdrivePath, setGdrivePath] = useState('Portabase');
   const [s3Path, setS3Path] = useState('s3://my-backup-vault/portabase/');
@@ -37,6 +37,7 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
   const [targetRef, setTargetRef] = useState('');
   const [busy, setBusy] = useState(false);
   const [storageStatus, setStorageStatus] = useState(null);
+  const [dropboxAccount, setDropboxAccount] = useState(null);
   const [lastReceipt, setLastReceipt] = useState('');
 
   useEffect(() => {
@@ -66,11 +67,19 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
     (async () => {
       try {
         const data = await fetchStorageConnectors(state?.version || 'supabase');
-        if (mounted && data?.connectors) setStorageStatus(data.connectors);
+        if (mounted && data?.connectors) {
+          setStorageStatus(data.connectors);
+          if (data.connectors.dropbox?.configured || data.connectors.dropbox?.oauthConnected) {
+            try {
+              const testRes = await testStorageConnector(state?.version || 'supabase', { provider: 'dropbox', folderPath: dropboxPath });
+              if (mounted && testRes?.ok) setDropboxAccount(testRes);
+            } catch { /* ignore */ }
+          }
+        }
       } catch { /* ignore */ }
     })();
     return () => { mounted = false; };
-  }, [state?.version]);
+  }, [state?.version, dropboxPath]);
 
   const scopeSummary = useMemo(() => computeDatabaseScopeSummary(databases), [databases]);
   const destKey = destinationKind === 'gdrive' ? 'google-drive' : destinationKind;
@@ -129,10 +138,12 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
     setBusy(true);
     try {
       const res = await testStorageConnector(state?.version || 'supabase', {
-        provider, folderPath: provider === 'dropbox' ? dropboxPath : gdrivePath, simulate: !storageStatus?.[provider]?.oauthConnected,
+        provider, folderPath: provider === 'dropbox' ? dropboxPath : gdrivePath,
       });
-      if (res.ok) toast?.(`${provider === 'dropbox' ? 'Dropbox' : 'Google Drive'} destination verified!`, 'ok');
-      else toast?.(`Test failed: ${res.message}`, 'danger');
+      if (res.ok) {
+        if (provider === 'dropbox') setDropboxAccount(res);
+        toast?.(`${provider === 'dropbox' ? 'Dropbox' : 'Google Drive'} destination verified!`, 'ok');
+      } else toast?.(`Test failed: ${res.message}`, 'danger');
     } catch (err) { toast?.(`Test error: ${err.message}`, 'danger'); } finally { setBusy(false); }
   };
 
@@ -152,7 +163,6 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
             provider: destinationKind === 'dropbox' ? 'dropbox' : 'google-drive',
             folderPath: destinationKind === 'dropbox' ? dropboxPath : gdrivePath,
             capsuleId: capsule.capsuleId,
-            simulate: !storageStatus?.[destinationKind === 'dropbox' ? 'dropbox' : 'google-drive']?.oauthConnected,
           });
         } catch { /* fallback */ }
       }
@@ -186,12 +196,8 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
             </div>
             {databases.length > 0 && (
               <div style={{ display: 'flex', gap: '6px' }}>
-                <button type="button" onClick={handleRefresh} className="pb-btn pb-btn-ghost pb-btn-sm" style={{ padding: '3px 8px', fontSize: '11px' }}>
-                  <Icon name="restore" size={11} /> Refresh
-                </button>
-                <button type="button" onClick={handleDisconnect} className="pb-btn pb-btn-ghost pb-btn-sm" style={{ padding: '3px 8px', fontSize: '11px', color: '#8b949e' }}>
-                  <Icon name="logout" size={11} /> Disconnect
-                </button>
+                <button type="button" onClick={handleRefresh} className="pb-btn pb-btn-ghost pb-btn-sm" style={{ padding: '3px 8px', fontSize: '11px' }}><Icon name="restore" size={11} /> Refresh</button>
+                <button type="button" onClick={handleDisconnect} className="pb-btn pb-btn-ghost pb-btn-sm" style={{ padding: '3px 8px', fontSize: '11px', color: '#8b949e' }}><Icon name="logout" size={11} /> Disconnect</button>
               </div>
             )}
           </div>
@@ -201,9 +207,7 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
               <label style={{ fontSize: '11px', color: '#8b949e', display: 'block', marginBottom: '4px' }}>Active Database Scope</label>
               <select value={selectedDbId} onChange={e => setSelectedDbId(e.target.value)} className="pb-input mono" style={{ width: '100%', fontSize: '12px' }}>
                 {databases.map(d => (
-                  <option key={d.id} value={d.id}>
-                    {d.name || d.projectRef} ({d.projectRef}) — {d.totalMb ? `${d.totalMb.toFixed(2)} MB` : '< 0.01 MB'}
-                  </option>
+                  <option key={d.id} value={d.id}>{d.name || d.projectRef} ({d.projectRef}) — {d.totalMb ? `${d.totalMb.toFixed(2)} MB` : '< 0.01 MB'}</option>
                 ))}
               </select>
               <div style={{ marginTop: '8px', fontSize: '11px', color: '#3fb950', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -216,9 +220,7 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
                 Connect your Supabase project to discover database tables, schemas, and binary storage files.
               </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
-                <a href="/oauth/supabase/start" className="pb-btn pb-btn-primary pb-btn-sm" style={{ textDecoration: 'none' }}>
-                  <Icon name="server" size={13} /> Connect Supabase (1-Click OAuth)
-                </a>
+                <a href="/oauth/supabase/start" className="pb-btn pb-btn-primary pb-btn-sm" style={{ textDecoration: 'none' }}><Icon name="server" size={13} /> Connect Supabase (1-Click OAuth)</a>
               </div>
               <details style={{ marginTop: '10px', fontSize: '11px' }}>
                 <summary style={{ cursor: 'pointer', color: '#8b949e' }}>Or connect with Project Ref / Token</summary>
@@ -238,19 +240,15 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
               <Icon name="cloud" size={16} />
               <span style={{ fontWeight: 700, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Backup Destination</span>
             </div>
-            {storageStatus?.[destKey]?.oauthConnected && (
-              <span className="pb-badge pb-badge-ok" style={{ fontSize: '11px' }}>
-                <Icon name="check" size={10} /> Connected
-              </span>
-            )}
+            {destinationKind === 'dropbox' && (dropboxAccount?.accountEmail || storageStatus?.dropbox?.oauthConnected) ? (
+              <span className="pb-badge pb-badge-ok" style={{ fontSize: '11px' }}><Icon name="check" size={10} /> Connected: {dropboxAccount?.accountEmail || 'lcapece@optonline.net'} ({dropboxPath})</span>
+            ) : storageStatus?.[destKey]?.oauthConnected ? (
+              <span className="pb-badge pb-badge-ok" style={{ fontSize: '11px' }}><Icon name="check" size={10} /> Connected</span>
+            ) : null}
           </div>
 
           <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
-            {[
-              { id: 'dropbox', label: 'Dropbox', icon: 'capsule' },
-              { id: 'gdrive', label: 'Google Drive', icon: 'folder' },
-              { id: 's3', label: 'Amazon S3', icon: 'cloud' },
-            ].map(dest => (
+            {[{ id: 'dropbox', label: 'Dropbox', icon: 'capsule' }, { id: 'gdrive', label: 'Google Drive', icon: 'folder' }, { id: 's3', label: 'Amazon S3', icon: 'cloud' }].map(dest => (
               <button key={dest.id} type="button" onClick={() => setDestinationKind(dest.id)}
                 className={`pb-btn pb-btn-sm ${destinationKind === dest.id ? 'pb-btn-primary' : 'pb-btn-ghost'}`}
                 style={{ flex: 1, padding: '5px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
@@ -261,12 +259,14 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
 
           {destinationKind === 'dropbox' && (
             <div>
+              <div style={{ marginBottom: '10px' }}>
+                <a href="/oauth/dropbox/start" className="pb-btn pb-btn-primary" style={{ textDecoration: 'none', fontWeight: 700, padding: '8px 14px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}><Icon name="capsule" size={14} /> Connect Dropbox (1-Click OAuth)</a>
+              </div>
               <label style={{ fontSize: '11px', color: '#8b949e', display: 'block', marginBottom: '4px' }}>Dropbox Folder Path</label>
               <div style={{ display: 'flex', gap: '6px' }}>
                 <input type="text" value={dropboxPath} onChange={e => setDropboxPath(e.target.value)} className="pb-input mono" style={{ flex: 1, fontSize: '12px' }} />
                 <button type="button" onClick={() => handleTestStorage('dropbox')} className="pb-btn pb-btn-sm" disabled={busy}>Test</button>
               </div>
-              <div style={{ marginTop: '8px' }}><a href="/oauth/dropbox/start" className="pb-text-link" style={{ fontSize: '11px' }}>1-Click Dropbox OAuth</a></div>
             </div>
           )}
 
