@@ -396,38 +396,6 @@ export async function handler(event) {
       };
     }
 
-    const serverRefreshToken = (process.env.DROPBOX_REFRESH_TOKEN || '').trim();
-    const serverAccessToken = (process.env.DROPBOX_ACCESS_TOKEN || '').trim();
-    if ((serverRefreshToken || serverAccessToken) && !query.clientId && !query.appKey && !query.force_oauth) {
-      try {
-        let accessToken = serverAccessToken;
-        if (!accessToken && serverRefreshToken) {
-          const refreshed = await refreshDropboxOAuthToken({
-            refreshToken: serverRefreshToken,
-            clientId,
-            clientSecret: process.env.DROPBOX_APP_SECRET || process.env.DROPBOX_CLIENT_SECRET,
-          });
-          accessToken = refreshed.accessToken;
-        }
-        const tokenCookie = serializeCookie('pb_oauth_dropbox_token', {
-          accessToken,
-          refreshToken: serverRefreshToken || null,
-          clientId,
-        }, 86400);
-        return {
-          statusCode: 302,
-          headers: {
-            Location: '/dashboard?storage_oauth=dropbox-connected',
-            'Set-Cookie': tokenCookie,
-            'Cache-Control': 'no-store',
-          },
-          multiValueHeaders: { 'Set-Cookie': [tokenCookie] },
-        };
-      } catch {
-        // Fall through to standard OAuth authorize redirect if server token refresh fails
-      }
-    }
-
     const { codeVerifier, codeChallenge } = generatePkcePair();
     const state = generateOAuthState();
     const redirectUri = `${origin}/oauth/dropbox/callback`;
