@@ -136,7 +136,7 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
         <span style={{ fontSize: '12px', color: '#8b949e' }}>Where recovery capsules are stored</span>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '20px', marginTop: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: '20px', marginTop: '16px' }}>
         
         {/* Dropbox Card */}
         <div className="pb-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderTop: '4px solid #0061FE' }}>

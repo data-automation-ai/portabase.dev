@@ -133,7 +133,7 @@ export function OneTwoThreeDone({ state, setState, toast, navigate }) {
       
       {/* 1-2-3-Done Header */}
       <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '28px', fontWeight: 800, margin: '0 0 8px', color: '#f0f6fc', letterSpacing: '-0.02em' }}>
+        <h1 style={{ fontSize: 'clamp(22px, 5vw, 28px)', fontWeight: 800, margin: '0 0 8px', color: '#f0f6fc', letterSpacing: '-0.02em' }}>
           Supabase Escape: <span style={{ color: '#3ecf8e' }}>1-2-3-Done</span>
         </h1>
         <p style={{ fontSize: '15px', color: '#8b949e', margin: 0 }}>
@@ -145,7 +145,7 @@ export function OneTwoThreeDone({ state, setState, toast, navigate }) {
 
         {/* STEP 1: Connect Supabase */}
         <div className="pb-card" style={{ borderLeft: '5px solid #3ecf8e', padding: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', background: '#3ecf8e', color: '#0d1117', fontWeight: 800, fontSize: '14px' }}>1</span>
               <h2 style={{ margin: 0, fontSize: '18px', color: '#f0f6fc' }}>Connect Supabase</h2>
@@ -157,7 +157,7 @@ export function OneTwoThreeDone({ state, setState, toast, navigate }) {
             Authorize Portabase via OAuth 2.0 PKCE to discover your databases, schemas, tables, and Storage buckets.
           </p>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
+          <div className="pb-123-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
             <a href="/oauth/supabase/start" className="pb-btn pb-btn-primary" style={{ background: '#3ecf8e', borderColor: '#3ecf8e', color: '#0d1117', fontWeight: 700, textDecoration: 'none' }}>
               {databases.length > 0 ? '✓ Reconnect Supabase (OAuth)' : 'Connect Supabase (1-Click OAuth)'}
             </a>
@@ -186,7 +186,7 @@ export function OneTwoThreeDone({ state, setState, toast, navigate }) {
 
         {/* STEP 2: Choose Destination Vault */}
         <div className="pb-card" style={{ borderLeft: '5px solid #0061FE', padding: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', background: '#0061FE', color: '#fff', fontWeight: 800, fontSize: '14px' }}>2</span>
               <h2 style={{ margin: 0, fontSize: '18px', color: '#f0f6fc' }}>Choose Destination Vault</h2>
@@ -198,7 +198,7 @@ export function OneTwoThreeDone({ state, setState, toast, navigate }) {
             Select where your encrypted AES-256-GCM capsule will be stored. You own the storage.
           </p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 150px), 1fr))', gap: '12px' }}>
             
             <button
               type="button"
@@ -268,7 +268,7 @@ export function OneTwoThreeDone({ state, setState, toast, navigate }) {
               onClick={handleRunBackup}
               disabled={running}
               className="pb-btn pb-btn-primary"
-              style={{ background: '#3ecf8e', borderColor: '#3ecf8e', color: '#0d1117', fontSize: '16px', fontWeight: 800, padding: '14px 32px', borderRadius: '8px', cursor: 'pointer', boxShadow: '0 0 20px rgba(62, 207, 142, 0.3)' }}
+              style={{ background: '#3ecf8e', borderColor: '#3ecf8e', color: '#0d1117', fontSize: '16px', fontWeight: 800, padding: '14px 28px', borderRadius: '8px', cursor: 'pointer', boxShadow: '0 0 20px rgba(62, 207, 142, 0.3)', width: '100%', maxWidth: '380px' }}
             >
               {running ? 'Creating Encrypted Capsule...' : '🔒 Back Up Now — Create Capsule'}
             </button>

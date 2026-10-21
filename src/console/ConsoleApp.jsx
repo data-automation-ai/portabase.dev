@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import './console.css';
+import './console-mobile.css';
 import { Icon } from './icons.jsx';
 import {
   loadConsoleState, saveConsoleState, resetConsoleState, updateConsoleState,
@@ -571,13 +572,13 @@ export function ConsoleApp() {
 
   return (
     <div className="pb-console pb-single-view">
-      <header className="pb-top-clean" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 28px', background: '#0d1117', borderBottom: '1px solid #21262d' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-          <a href="/" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
+      <header className="pb-top-clean">
+        <div className="pb-top-clean-brand-nav">
+          <a href="/" className="pb-top-clean-logo">
             <span className="logo-mark"><i /><i /><i /></span>
             <strong style={{ fontSize: '18px', color: '#f0f6fc', letterSpacing: '-0.02em' }}>PORTABASE</strong>
           </a>
-          <nav style={{ display: 'flex', gap: '6px' }}>
+          <nav className="pb-top-clean-nav">
             {NAV.map(item => (
               <button
                 key={item.id}
@@ -592,9 +593,9 @@ export function ConsoleApp() {
             ))}
           </nav>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <span style={{ fontSize: '12px', color: '#8b949e' }}>{me?.user?.email || user?.email}</span>
-          <button type="button" className="pb-btn pb-btn-sm pb-btn-ghost" onClick={signOut} style={{ fontSize: '12px', color: '#8b949e' }}>
+        <div className="pb-top-clean-user">
+          <span className="pb-top-clean-email" style={{ fontSize: '12px', color: '#8b949e' }}>{me?.user?.email || user?.email}</span>
+          <button type="button" className="pb-btn pb-btn-sm pb-btn-ghost pb-top-clean-signout" onClick={signOut} style={{ fontSize: '12px', color: '#8b949e' }}>
             <Icon name="logout" size={13} /> Sign Out
           </button>
         </div>
