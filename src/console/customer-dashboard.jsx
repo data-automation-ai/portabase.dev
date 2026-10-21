@@ -18,7 +18,7 @@ import { formatOperatorTime } from '../lib/operator-time.js';
 import { JobSetupWizard, TableSizer } from './table-sizer.jsx';
 import { ConnectSupabaseFlow } from './connect-supabase.jsx';
 import { NotificationPreferences } from './notification-preferences.jsx';
-import { GuidedWalkthrough } from './walkthrough.jsx';
+import { OneTwoThreeDone } from './one-two-three-done.jsx';
 
 function Badge({ tone, children }) {
   const t = tone === 'ok' || tone === 'COMPLETE' || tone === 'green' || tone === 'MATCH'
@@ -133,15 +133,7 @@ export function CustomerDashboardPage({
         }
       />
 
-      <GuidedWalkthrough
-        state={state}
-        setState={setState}
-        toast={toast}
-        navigate={navigate}
-        plan={plan}
-        me={me}
-        onOpenSizer={() => { setTab('sizer'); setWizard(true); }}
-      />
+      <OneTwoThreeDone state={state} setState={setState} toast={toast} navigate={navigate} />
 
       <details className="pb-card" style={{ marginTop: 16 }} open={tab !== 'overview'}>
         <summary style={{ cursor: 'pointer', fontWeight: 600, padding: '8px 12px' }}>

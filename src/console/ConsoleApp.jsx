@@ -34,16 +34,9 @@ import { CustomerDashboardPage } from './customer-dashboard.jsx';
 
 /** Portabase-native IA — recovery ops only (not a Supabase Studio clone). */
 const NAV = [
-  { id: 'dashboard', label: 'Dashboard', icon: 'home' },
-  { id: 'home', label: 'Ops Overview', icon: 'activity' },
+  { id: 'dashboard', label: '1-2-3 Backup', icon: 'capsule' },
   { id: 'storage', label: 'Connections & Vaults', icon: 'cloud' },
-  { id: 'projects', label: 'Supabase Sources', icon: 'folder' },
-  { id: 'supabase-viewer', label: 'Connect Database', icon: 'table' },
-  { id: 'backups', label: 'Backup Capsules', icon: 'capsule' },
-  { id: 'telemetry', label: 'System Health', icon: 'chart' },
-  { id: 'inspect', label: 'Inspect Capsules', icon: 'key' },
-  { id: 'agents', label: 'Runners & Vault', icon: 'cpu' },
-  { id: 'alerts', label: 'Alerts', icon: 'bell' },
+  { id: 'backups', label: 'Backup Capsules', icon: 'folder' },
   { id: 'restore', label: 'Restore & Replay', icon: 'restore' },
   { id: 'account', label: 'Account & Plan', icon: 'settings' },
 ];
