@@ -574,90 +574,37 @@ export function ConsoleApp() {
     : (TITLES[route.page] || 'Home');
 
   return (
-    <div className="pb-console">
-      <aside className={`pb-side${sideOpen ? ' is-open' : ''}`}>
-        <div className="pb-side-brand">
-          <a href="/" className="logo-mark" aria-label="Portabase home"><i /><i /><i /></a>
-          <b>Portabase</b>
-          <em>Cloud</em>
+    <div className="pb-console pb-single-view">
+      <header className="pb-top-clean" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 28px', background: '#0d1117', borderBottom: '1px solid #21262d' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+          <a href="/" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
+            <span className="logo-mark"><i /><i /><i /></span>
+            <strong style={{ fontSize: '18px', color: '#f0f6fc', letterSpacing: '-0.02em' }}>PORTABASE</strong>
+          </a>
+          <nav style={{ display: 'flex', gap: '6px' }}>
+            {NAV.map(item => (
+              <button
+                key={item.id}
+                type="button"
+                className={`pb-btn pb-btn-sm ${route.page === item.id ? 'pb-btn-primary' : 'pb-btn-ghost'}`}
+                onClick={() => navigate(item.id)}
+                style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Icon name={item.icon} size={14} />
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </nav>
         </div>
-        <div className="pb-ws">
-          <small>Workspace</small>
-          <strong>{state.workspace.name}</strong>
-          <span>{meta.short} · {getCloudPlan(state.billing?.plan || state.billing?.planId).shortLabel} · {state.billing.status}</span>
-        </div>
-        <nav className="pb-nav">
-          <div className="pb-nav-section">Recovery</div>
-          {filteredNav.map(item => (
-            <button
-              key={item.id}
-              type="button"
-              className={route.page === item.id || (route.page === 'project' && item.id === 'projects') ? 'is-active' : ''}
-              onClick={() => navigate(item.id)}
-            >
-              <Icon name={item.icon} size={15} />
-              {item.label}
-              {item.id === 'alerts' && alertCount > 0 && <span className="pb-nav-badge">{Math.min(alertCount, 9)}</span>}
-            </button>
-          ))}
-        </nav>
-        <div className="pb-side-foot">
-          <div className="pb-side-user">
-            <div className="pb-avatar">{(me?.user?.email || user?.email || 'U').slice(0, 1).toUpperCase()}</div>
-            <div>
-              <strong>{me?.user?.name || user?.name || me?.user?.email || user?.email || 'Operator'}</strong>
-              <span>{me?.user?.email || user?.email}</span>
-            </div>
-          </div>
-          <button type="button" className="pb-btn pb-btn-sm" style={{ width: '100%' }} onClick={signOut}>
-            <Icon name="logout" size={14} /> Sign out of Portabase
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <span style={{ fontSize: '12px', color: '#8b949e' }}>{me?.user?.email || user?.email}</span>
+          <button type="button" className="pb-btn pb-btn-sm pb-btn-ghost" onClick={signOut} style={{ fontSize: '12px', color: '#8b949e' }}>
+            <Icon name="logout" size={13} /> Sign Out
           </button>
         </div>
-      </aside>
+      </header>
 
-      <div className="pb-main">
-        <header className="pb-top">
-          <button type="button" className="pb-mobile-toggle" onClick={() => setSideOpen(o => !o)} aria-label="Menu">
-            <Icon name="menu" size={18} />
-          </button>
-          <div className="pb-crumb">
-            <span>Cloud</span>
-            <span>/</span>
-            <strong>{crumb}</strong>
-          </div>
-          <div className="pb-top-actions">
-            <div className="pb-search">
-              <Icon name="search" size={14} />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Filter nav…" />
-              <kbd>/</kbd>
-            </div>
-            <a className="pb-btn pb-btn-sm pb-btn-primary" href="/oauth/dropbox/start" style={{ textDecoration: 'none' }}>
-              <Icon name="capsule" size={13} /> Connect Dropbox
-            </a>
-            <button type="button" className="pb-btn pb-btn-sm" onClick={() => navigate('account', { tab: 'billing' })}>
-              <BadgeInline status={state.billing.status} />
-              <span style={{ marginLeft: 6 }}>{getCloudPlan(me?.subscription?.plan || state.billing?.plan).shortLabel}</span>
-            </button>
-            <span className="pb-badge pb-badge-acid" style={{ height: 28, padding: '0 10px' }}>Supabase</span>
-            <button
-              type="button"
-              className="pb-btn pb-btn-sm pb-btn-danger"
-              title="Logout / Disconnect current Supabase connection"
-              onClick={async () => {
-                try { window.localStorage?.setItem('pb_supabase_disconnected', '1'); } catch { /* ignore */ }
-                window.dispatchEvent(new CustomEvent('pb-supabase-disconnect'));
-                try { await fetch('/api/cloud/oauth?provider=supabase&action=disconnect', { method: 'POST' }); } catch { /* ignore */ }
-                navigate('dashboard');
-              }}
-            >
-              <Icon name="logout" size={13} /> Disconnect Supabase
-            </button>
-            <a className="pb-btn pb-btn-sm pb-btn-ghost" href="/cloud" target="_blank" rel="noreferrer">
-              <Icon name="external" size={14} />
-            </a>
-          </div>
-        </header>
-        <div className="pb-body">
+      <div className="pb-body" style={{ flex: 1, width: '100%', maxWidth: '1024px', margin: '0 auto', padding: '24px 16px' }}>
           {checkout && !isDemoMode() && <CheckoutConfirmation checkout={checkout} onVerified={checkoutVerified} />}
           {dashboardLoading && !isDemoMode() && ['dashboard', 'home'].includes(route.page) && <div className="pb-callout" role="status"><div>
             <strong>Loading account activity</strong>
@@ -670,7 +617,6 @@ export function ConsoleApp() {
           </div></div>}
           {!isDemoMode() && dashboardLoading && ['dashboard', 'home'].includes(route.page) ? null : body}
         </div>
-      </div>
 
       <div className="pb-toasts" aria-live="polite">
         {toasts.map(t => (
