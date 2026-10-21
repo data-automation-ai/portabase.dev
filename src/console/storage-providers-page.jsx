@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { fetchStorageConnectors, testStorageConnector, disconnectStorageConnector } from '../lib/cloud-api.js';
 import { LedIndicator } from './storage-led.jsx';
 import { InMemoryTrustPanel } from './in-memory-trust-panel.jsx';
+import { SupabaseSourceCard } from './supabase-source-card.jsx';
 
 export function StorageProvidersPage({ state, setState, toast, navigate }) {
   const [connectors, setConnectors] = useState(null);
@@ -123,6 +124,16 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
         <LedIndicator state="yellow-flash" label="Problem Connecting" size={10} />
         <LedIndicator state="green" label="Connected" size={10} />
         <LedIndicator state="red-flash" label="Connection Lost (Was Working)" size={10} />
+      </div>
+
+      {/* Primary Source: Supabase */}
+      <div style={{ marginTop: '20px' }}>
+        <SupabaseSourceCard toast={toast} />
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+        <h3 style={{ margin: 0, fontSize: '16px', color: '#c9d1d9' }}>Secondary Destinations: Customer BYO Vaults</h3>
+        <span style={{ fontSize: '12px', color: '#8b949e' }}>Where recovery capsules are stored</span>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '20px', marginTop: '16px' }}>

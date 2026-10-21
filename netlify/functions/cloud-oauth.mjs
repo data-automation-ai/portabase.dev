@@ -68,6 +68,7 @@ export async function handler(event) {
   if (
     pathname.startsWith('/api/cloud/oauth') ||
     query.action === 'discover' ||
+    query.action === 'test' ||
     query.action === 'disconnect' ||
     query.action === 'generate_capsule' ||
     query.action === 'restore_capsule'
@@ -146,7 +147,7 @@ export async function handler(event) {
       );
     }
 
-    if (provider === 'supabase' && action === 'discover') {
+    if (provider === 'supabase' && (action === 'discover' || action === 'test')) {
       const authHeader = ((event.headers?.authorization || event.headers?.Authorization) || '')
         .replace(/^Bearer\s+/i, '')
         .trim();
@@ -162,6 +163,13 @@ export async function handler(event) {
         '';
 
       if (!token) {
+        if (action === 'test') {
+          return jsonResponse(200, {
+            ok: false,
+            connected: false,
+            error: 'No active Supabase OAuth token or session found. Click "Connect Supabase (OAuth PKCE)" first.',
+          });
+        }
         return jsonResponse(200, {
           ok: true,
           connected: false,
@@ -175,8 +183,18 @@ export async function handler(event) {
         const result = await discoverSupabaseProjectsAndDatabases({
           token,
           targetRef,
-          inspectAllActive: true,
+          inspectAllActive: action !== 'test',
         });
+        if (action === 'test') {
+          const count = result.projects?.length || 0;
+          return jsonResponse(200, {
+            ok: true,
+            connected: true,
+            projectCount: count,
+            databaseCount: result.databases?.length || 0,
+            message: `Connection verified! Successfully authenticated with Supabase Management API (${count} accessible project${count === 1 ? '' : 's'}).`,
+          });
+        }
         const scopeSummary = computeDatabaseScopeSummary(result.databases || []);
         const includeFullManifest = Boolean(query.includeManifest || body.includeManifest);
         const payloadObj = {

@@ -36,7 +36,7 @@ import { CustomerDashboardPage } from './customer-dashboard.jsx';
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: 'home' },
   { id: 'home', label: 'Ops Overview', icon: 'activity' },
-  { id: 'storage', label: 'Vault Storage', icon: 'cloud' },
+  { id: 'storage', label: 'Connections & Vaults', icon: 'cloud' },
   { id: 'projects', label: 'Supabase Sources', icon: 'folder' },
   { id: 'supabase-viewer', label: 'Connect Database', icon: 'table' },
   { id: 'backups', label: 'Backup Capsules', icon: 'capsule' },

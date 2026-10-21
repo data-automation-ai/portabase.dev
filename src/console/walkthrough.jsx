@@ -6,6 +6,7 @@ import {
   generateRunnerCapsule, buildRunnerCapsuleRestorePlan,
 } from '../../cloud/runner/database-scope.mjs';
 import { fetchStorageConnectors, testStorageConnector, uploadCapsuleToConnector } from '../lib/cloud-api.js';
+import { LedIndicator } from './storage-led.jsx';
 
 export function extractProjectRef(input) {
   if (!input) return '';
@@ -39,6 +40,29 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
   const [storageStatus, setStorageStatus] = useState(null);
   const [dropboxAccount, setDropboxAccount] = useState(null);
   const [lastReceipt, setLastReceipt] = useState('');
+  const [supabaseTest, setSupabaseTest] = useState(null);
+  const [testingSupabase, setTestingSupabase] = useState(false);
+
+  const handleTestSupabase = async () => {
+    setTestingSupabase(true);
+    setSupabaseTest(null);
+    try {
+      const res = await fetch('/api/cloud/oauth?provider=supabase&action=test');
+      const data = await res.json();
+      if (data.ok) {
+        setSupabaseTest({ success: true, message: data.message || 'Supabase connection verified!' });
+        toast?.(data.message || 'Supabase connection verified!', 'ok');
+      } else {
+        setSupabaseTest({ success: false, message: data.error || 'Connection check failed' });
+        toast?.(data.error || 'Connection check failed', 'danger');
+      }
+    } catch (err) {
+      setSupabaseTest({ success: false, message: err.message });
+      toast?.(`Test error: ${err.message}`, 'danger');
+    } finally {
+      setTestingSupabase(false);
+    }
+  };
 
   useEffect(() => {
     try {
@@ -239,9 +263,24 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
                   );
                 })}
               </select>
-              <div style={{ marginTop: '8px', fontSize: '11px', color: '#3fb950', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Icon name="check" size={12} /> Connected to Supabase Management API
+              <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button type="button" onClick={handleTestSupabase} disabled={testingSupabase} className="pb-btn pb-btn-sm pb-btn-secondary" style={{ fontSize: '11px', padding: '3px 8px' }}>
+                    {testingSupabase ? 'Testing...' : 'Test Connection'}
+                  </button>
+                  <a href="/oauth/supabase/start" className="pb-btn pb-btn-sm pb-btn-ghost" style={{ textDecoration: 'none', fontSize: '11px', padding: '3px 8px', color: '#58a6ff' }}>
+                    <Icon name="server" size={11} /> Reconnect OAuth
+                  </a>
+                </div>
+                <div style={{ fontSize: '11px', color: '#3fb950', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Icon name="check" size={12} /> Connected
+                </div>
               </div>
+              {supabaseTest && (
+                <div style={{ marginTop: '8px', padding: '6px 10px', borderRadius: '4px', fontSize: '11px', background: supabaseTest.success ? '#0d281e' : '#3d1214', color: supabaseTest.success ? '#3ecf8e' : '#ff7b72', border: `1px solid ${supabaseTest.success ? '#238636' : '#da3633'}` }}>
+                  {supabaseTest.message}
+                </div>
+              )}
             </div>
           ) : (
             <div>
