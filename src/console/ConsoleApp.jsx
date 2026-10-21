@@ -27,6 +27,7 @@ import {
   BackupsHubPage, AgentsHubPage, AlertsHubPage, AccountHubPage,
 } from './pages.jsx';
 import { StorageProvidersPage } from './storage-providers-page.jsx';
+import { OneTwoThreeDone } from './one-two-three-done.jsx';
 import { TelemetryPage } from './telemetry-page.jsx';
 import { liveEventToHealthEvent } from '../lib/telemetry-view.js';
 import { ConnectSupabaseFlow } from './connect-supabase.jsx';
@@ -555,18 +556,13 @@ export function ConsoleApp() {
   let body;
   switch (route.page) {
     case 'storage': body = <StorageProvidersPage {...pageProps} />; break;
-    case 'projects': body = <ProjectsPage {...pageProps} />; break;
-    case 'project': body = <ProjectDetailPage {...pageProps} />; break;
     case 'backups': body = <BackupsHubPage {...pageProps} />; break;
-    case 'telemetry': body = <TelemetryPage {...pageProps} />; break;
-    case 'inspect': body = <ConnectSupabaseFlow {...pageProps} demo={pageProps.demoMode} operation="replay" />; break;
-    case 'supabase-viewer': body = <ConnectSupabaseFlow {...pageProps} demo={pageProps.demoMode} operation="backup" />; break;
-    case 'agents': body = <AgentsHubPage {...pageProps} tab={route.dashboardTab === 'seal' ? 'seal' : undefined} />; break;
-    case 'alerts': body = <AlertsHubPage {...pageProps} />; break;
     case 'restore': body = <RestoresPage {...pageProps} />; break;
     case 'account': body = <AccountHubPage {...pageProps} tab={route.accountTab} />; break;
-    case 'dashboard': body = <CustomerDashboardPage {...pageProps} section={route.dashboardTab === 'billing' ? 'overview' : (route.dashboardTab || 'overview')} />; break;
-    default: body = <CustomerDashboardPage {...pageProps} section="overview" />;
+    case 'dashboard':
+    default:
+      body = <OneTwoThreeDone {...pageProps} />;
+      break;
   }
 
   const crumb = route.page === 'project'
