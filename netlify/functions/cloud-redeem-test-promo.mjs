@@ -54,7 +54,8 @@ async function lambdaHandler(event) {
   const existing = await getSubscriptionForUser(user).catch(() => null);
 
   const nowIso = new Date().toISOString();
-  const endsAt = testPromoEndsAt(new Date(), 30);
+  const days = promo?.durationDays || 30;
+  const endsAt = testPromoEndsAt(new Date(), days);
 
   const record = await saveSubscription({
     ...existing,

@@ -71,7 +71,8 @@ return async function lambdaHandler(event) {
       });
       if (applied.ok && applied.priceMonthlyCents === 0) {
         const nowIso = new Date().toISOString();
-        const endsAt = testPromoEndsAt(new Date(), 30);
+        const days = applied.durationDays || applied.promo?.durationDays || 30;
+        const endsAt = testPromoEndsAt(new Date(), days);
         const record = await save({
           ...existing,
           userId: storeKey,
@@ -106,6 +107,8 @@ return async function lambdaHandler(event) {
         const promoAccess = deriveAccess(record);
         return jsonResponse(200, {
           ok: true,
+          active: true,
+          priceMonthlyCents: 0,
           promoActivated: true,
           planId: plan.id,
           promoCode: applied.promo.code,

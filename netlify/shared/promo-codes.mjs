@@ -10,6 +10,28 @@ export function normalizePromoCode(raw) {
 export function defaultPromoCatalog() {
   return [
     {
+      code: 'FREE30',
+      label: '30 Days Free Usage Promo',
+      percentOff: 100,
+      amountOffCents: null,
+      planIds: ['cloud-7', 'cloud-17'],
+      freeUsage: true,
+      durationDays: 30,
+      active: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      code: 'FREE30DAYS',
+      label: '30 Days Free Usage Promo',
+      percentOff: 100,
+      amountOffCents: null,
+      planIds: ['cloud-7', 'cloud-17'],
+      freeUsage: true,
+      durationDays: 30,
+      active: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
       code: 'FREE100',
       label: '100% Free Usage Promo',
       percentOff: 100,
@@ -144,6 +166,7 @@ export function applyPromoCode({ planId, baseCents = 0, code, catalog }) {
     discountCents,
     priceMonthlyCents,
     freeUsage: priceMonthlyCents === 0,
+    durationDays: promo.durationDays || (priceMonthlyCents === 0 ? 30 : null),
   };
 }
 

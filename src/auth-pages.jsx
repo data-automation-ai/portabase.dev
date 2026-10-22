@@ -173,7 +173,7 @@ function GoogleButton({ version, next, label, blocked = false, onStart }) {
 
 function SimulatedCustomerSection({ version, afterLogin }) {
   const [simEmail, setSimEmail] = useState('customer@example.com');
-  const [simPromo, setSimPromo] = useState('FREE100');
+  const [simPromo, setSimPromo] = useState('FREE30');
   const [simBusy, setSimBusy] = useState(false);
   const [simError, setSimError] = useState('');
 
@@ -241,7 +241,7 @@ function SimulatedCustomerSection({ version, afterLogin }) {
               type="text"
               value={simPromo}
               onChange={e => setSimPromo(e.target.value)}
-              placeholder="FREE100"
+              placeholder="FREE30"
               style={{ width: '100%', padding: '6px 8px', fontSize: 13, borderRadius: 4, border: '1px solid #ccc' }}
               data-testid="sim-customer-promo"
             />

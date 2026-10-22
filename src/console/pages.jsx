@@ -2113,7 +2113,7 @@ function PromoCodesCard({ version = 'supabase', toast, onRefreshed }) {
   const [newCode, setNewCode] = useState('');
   const [newLabel, setNewLabel] = useState('');
   const [newPercent, setNewPercent] = useState('100');
-  const [redeemCodeInput, setRedeemCodeInput] = useState('FREE100');
+  const [redeemCodeInput, setRedeemCodeInput] = useState('FREE30');
   const [busyAction, setBusyAction] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -2254,7 +2254,7 @@ function PromoCodesCard({ version = 'supabase', toast, onRefreshed }) {
               />
             </div>
             <p className="pb-muted" style={{ fontSize: 11, margin: '4px 0 10px' }}>
-              Built-in: <code>FREE100</code>, <code>PORTABASEFREE</code>.
+              Built-in: <code>FREE30</code> (30 days free usage), <code>FREE100</code>, <code>PORTABASEFREE</code>.
             </p>
             <button
               type="submit"

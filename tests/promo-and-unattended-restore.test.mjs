@@ -29,6 +29,51 @@ test('normalizePromoCode formats code correctly', () => {
   assert.equal(normalizePromoCode(null), '');
 });
 
+test('defaultPromoCatalog contains FREE30 and FREE30DAYS for 30 days free usage', () => {
+  const catalog = defaultPromoCatalog();
+  const free30 = catalog.find(p => p.code === 'FREE30');
+  assert.ok(free30, 'FREE30 must exist in catalog');
+  assert.equal(free30.durationDays, 30);
+  assert.equal(free30.percentOff, 100);
+  assert.equal(free30.freeUsage, true);
+
+  const free30days = catalog.find(p => p.code === 'FREE30DAYS');
+  assert.ok(free30days, 'FREE30DAYS must exist in catalog');
+  assert.equal(free30days.durationDays, 30);
+  assert.equal(free30days.percentOff, 100);
+  assert.equal(free30days.freeUsage, true);
+});
+
+test('applyPromoCode works with FREE30 giving 0 priceMonthlyCents and 30 durationDays', () => {
+  const result = applyPromoCode({ planId: 'cloud-7', baseCents: 700, code: 'FREE30' });
+  assert.equal(result.ok, true);
+  assert.equal(result.priceMonthlyCents, 0);
+  assert.equal(result.discountCents, 700);
+  assert.equal(result.freeUsage, true);
+  assert.equal(result.durationDays, 30);
+
+  const result17 = applyPromoCode({ planId: 'cloud-17', baseCents: 1700, code: 'FREE30' });
+  assert.equal(result17.ok, true);
+  assert.equal(result17.priceMonthlyCents, 0);
+  assert.equal(result17.discountCents, 1700);
+  assert.equal(result17.durationDays, 30);
+});
+
+test('testPromoCodeMatches checks FREE30 and FREE30DAYS as valid promos', () => {
+  assert.equal(testPromoCodeMatches('FREE30', null), true);
+  assert.equal(testPromoCodeMatches('FREE30DAYS', null), true);
+  assert.equal(testPromoCodeMatches('free30', null), true);
+  assert.equal(testPromoCodeMatches('free30days', null), true);
+});
+
+test('testPromoEndsAt calculates ~30 days duration', () => {
+  const now = new Date();
+  const endsAt = testPromoEndsAt(now, 30);
+  const diffMs = new Date(endsAt).getTime() - now.getTime();
+  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+  assert.equal(Math.round(diffDays), 30);
+});
+
 test('defaultPromoCatalog contains FREE100 and PORTABASEFREE', () => {
   const catalog = defaultPromoCatalog();
   assert.equal(catalog.length >= 2, true);

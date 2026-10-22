@@ -917,7 +917,7 @@ portabase replay --capsule ./portabase-capsules/<id> --confirm-target newproject
             </tr>
             <tr>
               <td><strong>Vault secrets</strong> (pgsodium)<br /><span style={{ fontSize: '11px', color: '#8b949e' }}>Less Common</span></td>
-              <td>The dump carries ciphertext only; only applies if you specifically use Vault to encrypt custom table columns.</td>
+              <td>The dump carries ciphertext only; the root key lives outside the database (only applies if you specifically use Vault to encrypt custom table columns).</td>
               <td>
                 Values cannot be read back out once saved. Rotate or set a known root key right now and copy it into your password manager or notes. If you do not use column-level Vault encryption, skip this.<br />
                 <span style={{ fontSize: '11px', color: '#8b949e', display: 'block', marginTop: '4px' }}>
