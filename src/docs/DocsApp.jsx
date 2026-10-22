@@ -859,47 +859,101 @@ portabase replay --capsule ./portabase-capsules/<id> --confirm-target newproject
         OAuth redirect URIs at each provider, and any mobile or desktop build that pinned the old
         URL — that one ships as an app update, so start it early.
       </p>
-      <h2>What the capsule does not cover — the honest list</h2>
+            <h2>What the capsule does not cover — the honest list</h2>
       <p>
         The capsule is database, Storage object bytes, Edge Function source, and the Auth
         inventory. Supabase keeps adding services that live outside those layers, and pretending
         otherwise would be the exact overclaim this product exists to fight:
       </p>
+
+      <div className="docs-callout" style={{ background: '#161b22', border: '1px solid #30363d', borderRadius: '8px', padding: '16px 18px', margin: '20px 0' }}>
+        <strong>Why passwords and API keys cannot be backed up automatically (and why this is standard security):</strong>
+        <p style={{ marginTop: '8px', fontSize: '13px', lineHeight: '1.6' }}>
+          When you enter a secret or password into Supabase, it is stored as a <strong>one-way cryptographic hash</strong> (like a digital fingerprint). Supabase never saves your readable plaintext password on their servers.
+        </p>
+        <p style={{ fontSize: '13px', lineHeight: '1.6' }}>
+          Because of this, <strong>no programmatic backup tool or automated data transfer script on earth can extract the original secret</strong>—it simply does not exist in readable form. The only thing Supabase can do when an API request runs is compare the incoming secret against the hash to see if it is <strong>True or False</strong>.
+        </p>
+        <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: 0 }}>
+          <strong>The easiest and safest move:</strong> The only chance you ever have to copy a secret value is when you create it or rotate it. Take 2 minutes to rotate any unknown keys now and copy them into your password manager or Notepad. Items below are grouped by <strong>Common</strong> (what almost every app uses) versus <strong>Less Common</strong> (specialized features like Vectors or Data Lakes).
+        </p>
+      </div>
+
       <div className="docs-table-wrap">
         <table className="docs-table">
           <thead>
-            <tr><th>Outside the capsule</th><th>Why</th><th>What to do</th></tr>
+            <tr><th>Outside the capsule</th><th>Why</th><th>How to gather or rotate beforehand</th></tr>
           </thead>
           <tbody>
             <tr>
-              <td><strong>Vault secrets</strong> (pgsodium)</td>
-              <td>The dump carries ciphertext only; the per-project root key lives outside the database</td>
-              <td>Values cannot be read back out once saved. Rotate or set a known root key right now and copy it into your password manager or notes. The only chance to copy a secret value is when you create or rotate it.</td>
+              <td><strong>Edge Function secret values</strong><br /><span style={{ fontSize: '11px', color: '#388bfd', fontWeight: 600 }}>★ Common</span></td>
+              <td>Stored as a one-way hash. The API returns names and digests only — plaintext is unrecoverable by design.</td>
+              <td>
+                Rotate them right now and paste into your password manager or Notepad.<br />
+                <span style={{ fontSize: '11px', color: '#8b949e', display: 'block', marginTop: '4px' }}>
+                  <strong>How to get there:</strong> 1. Click Edge Functions → 2. Click Secrets → 3. Click "Add new secret" or rotate value.
+                </span>
+              </td>
             </tr>
             <tr>
-              <td><strong>Edge Function secret values</strong></td>
-              <td>The API returns names and digests only — plaintext is unrecoverable by design</td>
-              <td>The easiest and safest move is to rotate them right now and copy them into your password manager, notes, or Notepad. The only chance you have to make a copy of a secret value is when you rotate a new one or know it already.</td>
+              <td><strong>Auth provider &amp; SMTP secrets</strong><br /><span style={{ fontSize: '11px', color: '#388bfd', fontWeight: 600 }}>★ Common</span></td>
+              <td>Stored as write-only credentials inside the Supabase control plane.</td>
+              <td>
+                Rotate or copy from your provider console (Google, GitHub, SendGrid) and save to your Notepad.<br />
+                <span style={{ fontSize: '11px', color: '#8b949e', display: 'block', marginTop: '4px' }}>
+                  <strong>How to get there:</strong> 1. Click Authentication → 2. Click Providers (or SMTP) → 3. View/rotate client secrets at provider.
+                </span>
+              </td>
             </tr>
             <tr>
-              <td><strong>Vector Buckets</strong> (Storage vector indexes)</td>
-              <td>Vectors live in a separate vector store, not in Postgres and not in ordinary Storage objects</td>
-              <td>If you use them, keep your own export or be able to re-embed from source data</td>
+              <td><strong>Project settings &amp; connection info</strong><br /><span style={{ fontSize: '11px', color: '#388bfd', fontWeight: 600 }}>★ Common</span></td>
+              <td>Control-plane config, not data.</td>
+              <td>
+                Note your custom domains, project ref, and connection settings into your Notepad so cutover takes under 2 minutes.<br />
+                <span style={{ fontSize: '11px', color: '#8b949e', display: 'block', marginTop: '4px' }}>
+                  <strong>How to get there:</strong> 1. Click Project Settings (gear icon) → 2. Click Database or API → 3. Copy reference details.
+                </span>
+              </td>
             </tr>
             <tr>
-              <td><strong>Analytics Buckets</strong> (Iceberg, alpha)</td>
-              <td>Parquet files in a separate analytics store; only a catalog row sits in Postgres</td>
-              <td>Usually re-derivable from the database the capsule does capture — verify for your case</td>
+              <td><strong>Vault secrets</strong> (pgsodium)<br /><span style={{ fontSize: '11px', color: '#8b949e' }}>Less Common</span></td>
+              <td>The dump carries ciphertext only; only applies if you specifically use Vault to encrypt custom table columns.</td>
+              <td>
+                Values cannot be read back out once saved. Rotate or set a known root key right now and copy it into your password manager or notes. If you do not use column-level Vault encryption, skip this.<br />
+                <span style={{ fontSize: '11px', color: '#8b949e', display: 'block', marginTop: '4px' }}>
+                  <strong>How to get there:</strong> 1. Click Project Settings → 2. Click Database → 3. Under Vault / pgsodium encryption, verify root key.
+                </span>
+              </td>
             </tr>
             <tr>
-              <td><strong>Replication / ETL destinations</strong></td>
-              <td>Publications ride along in the dump; pipeline and destination credentials do not</td>
-              <td>Re-create pipelines by hand; destination creds come from your own records</td>
+              <td><strong>Vector Buckets</strong> (Storage vector indexes)<br /><span style={{ fontSize: '11px', color: '#8b949e' }}>Less Common</span></td>
+              <td>Vectors live in a separate vector store, not in Postgres and not in ordinary Storage objects.</td>
+              <td>
+                Most projects do not use these. If you use AI vector stores, keep an export or ensure you can re-embed from source data.<br />
+                <span style={{ fontSize: '11px', color: '#8b949e', display: 'block', marginTop: '4px' }}>
+                  <strong>How to get there:</strong> 1. Click Storage → 2. Check if dedicated vector stores exist.
+                </span>
+              </td>
             </tr>
             <tr>
-              <td><strong>Project settings</strong> — custom domains, network restrictions, SSL, PITR, log drains, read replicas</td>
-              <td>Control-plane config, not data</td>
-              <td>Re-create on the lifeboat project; screenshot these pages today so cutover is transcription, not archaeology</td>
+              <td><strong>Analytics Buckets</strong> (Iceberg, alpha)<br /><span style={{ fontSize: '11px', color: '#8b949e' }}>Less Common</span></td>
+              <td>Parquet files in a separate analytics store; only a catalog row sits in Postgres.</td>
+              <td>
+                Most projects do not use Iceberg buckets. If you do, verify your analytics data is re-derivable from primary database rows.<br />
+                <span style={{ fontSize: '11px', color: '#8b949e', display: 'block', marginTop: '4px' }}>
+                  <strong>How to get there:</strong> 1. Check if experimental Iceberg features are enabled.
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td><strong>Replication / ETL destinations</strong><br /><span style={{ fontSize: '11px', color: '#8b949e' }}>Less Common</span></td>
+              <td>Publications ride along in the dump; third-party external pipeline logins do not.</td>
+              <td>
+                Only needed if you stream data to external data warehouses like Snowflake. Keep destination passwords in your records.<br />
+                <span style={{ fontSize: '11px', color: '#8b949e', display: 'block', marginTop: '4px' }}>
+                  <strong>How to get there:</strong> 1. Click Database → 2. Click Publications or Webhooks.
+                </span>
+              </td>
             </tr>
           </tbody>
         </table>
