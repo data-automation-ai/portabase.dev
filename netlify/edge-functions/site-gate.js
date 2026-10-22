@@ -9,7 +9,11 @@ export default async function siteGate(request, context) {
     url.pathname.includes('/oauth/') ||
     url.pathname.includes('/.netlify/') ||
     url.pathname.startsWith('/api') ||
-    url.pathname.startsWith('/oauth')
+    url.pathname.startsWith('/oauth') ||
+    url.pathname.startsWith('/assets/') ||
+    url.pathname.startsWith('/icons/') ||
+    url.pathname.startsWith('/images/') ||
+    /.(js|css|png|jpg|jpeg|gif|svg|webp|ico|woff2?)$/i.test(url.pathname)
   ) {
     return context.next();
   }
