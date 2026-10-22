@@ -124,6 +124,8 @@
   },
   "license": "Apache-2.0",
   "optionalDependencies": {
-    "@rolldown/binding-win32-x64-msvc": "^1.2.2"
+    "@esbuild/linux-x64": "^0.28.2",
+    "@rolldown/binding-win32-x64-msvc": "^1.2.2",
+    "@rollup/rollup-linux-x64-gnu": "^4.65.0"
   }
 }
