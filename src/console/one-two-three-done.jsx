@@ -1,28 +1,47 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { LedIndicator } from './storage-led.jsx';
+import { DatabaseScopeSelector } from './database-scope-selector.jsx';
 import {
+  TABLE_COPY_MODES,
+  BINARY_COPY_MODES,
   createDefaultDatabaseScope,
+  computeDatabaseScopeSummary,
   generateRunnerCapsule,
 } from '../../cloud/runner/database-scope.mjs';
 import { fetchStorageConnectors, testStorageConnector, uploadCapsuleToConnector } from '../lib/cloud-api.js';
 
 export function OneTwoThreeDone({ state, setState, toast, navigate }) {
   // Step 1: Supabase Source
-  const [databases, setDatabases] = useState([]);
-  const [selectedDbId, setSelectedDbId] = useState('');
+  const [databases, setDatabases] = useState(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage?.getItem('pb_supabase_disconnected') === '1') {
+        return [];
+      }
+    } catch { /* ignore */ }
+    return createDefaultDatabaseScope('tvyxjeashgtdnipodbym', 'Primary Supabase Database');
+  });
+  const [selectedDbId, setSelectedDbId] = useState(() => databases[0]?.id || '');
   const [testingSupabase, setTestingSupabase] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [supabaseTestResult, setSupabaseTestResult] = useState(null);
 
-  // Step 2: Destination Vault
+  // Step 3: Destination Vault
   const [destination, setDestination] = useState('dropbox');
   const [storageStatus, setStorageStatus] = useState(null);
   const [testingStorage, setTestingStorage] = useState(false);
 
-  // Step 3: Backup & Done
+  // Step 4: Backup & Done
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [stepLabel, setStepLabel] = useState('');
   const [doneCapsule, setDoneCapsule] = useState(null);
+
+  // Sync selectedDbId if empty or removed
+  useEffect(() => {
+    if (!selectedDbId && databases.length > 0) {
+      setSelectedDbId(databases[0].id);
+    }
+  }, [databases, selectedDbId]);
 
   // Discover Supabase projects on mount
   useEffect(() => {
@@ -68,8 +87,141 @@ export function OneTwoThreeDone({ state, setState, toast, navigate }) {
     }
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch('/api/cloud/oauth?provider=supabase&action=discover');
+      const data = await res.json();
+      if (data.databases?.length > 0) {
+        setDatabases(data.databases);
+        setSelectedDbId(data.databases[0].id);
+        toast?.(`Discovered ${data.databases.length} live database(s)!`, 'ok');
+      } else {
+        toast?.('No databases found on Supabase token', 'warn');
+      }
+    } catch (err) {
+      toast?.(`Discovery error: ${err.message}`, 'danger');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    try {
+      if (typeof window !== 'undefined') window.localStorage?.setItem('pb_supabase_disconnected', '1');
+      await fetch('/api/cloud/oauth?provider=supabase&action=disconnect');
+    } catch { /* ignore */ }
+    setDatabases([]);
+    setSelectedDbId('');
+    toast?.('Disconnected Supabase session', 'ok');
+  };
+
+  const handleLoadDefaultScope = () => {
+    try {
+      if (typeof window !== 'undefined') window.localStorage?.removeItem('pb_supabase_disconnected');
+    } catch { /* ignore */ }
+    const def = createDefaultDatabaseScope('tvyxjeashgtdnipodbym', 'Primary Supabase Database');
+    setDatabases(def);
+    setSelectedDbId(def[0]?.id || '');
+    toast?.('Loaded default starter scope', 'ok');
+  };
+
+  const scopeSummary = useMemo(() => computeDatabaseScopeSummary(databases), [databases]);
+
+  const objectCounts = useMemo(() => {
+    let totalTables = 0;
+    let includedTables = 0;
+    let totalBinaries = 0;
+    let includedBinaries = 0;
+    for (const db of databases) {
+      if (!db || db.enabled === false) continue;
+      const tables = Array.isArray(db.tables) ? db.tables : [];
+      const binaries = Array.isArray(db.binaries) ? db.binaries : [];
+      totalTables += tables.length;
+      totalBinaries += binaries.length;
+      for (const t of tables) {
+        if (t.mode !== 'skip' && t.copyMode !== 'none') includedTables += 1;
+      }
+      for (const b of binaries) {
+        if (b.mode !== 'skip' && b.mode !== 'exclude' && b.copyMode !== 'exclude') includedBinaries += 1;
+      }
+    }
+    return { totalTables, includedTables, totalBinaries, includedBinaries };
+  }, [databases]);
+
+  const getDbSizeLabel = (d) => {
+    const mb = typeof d.totalProjectMb === 'number' && d.totalProjectMb >= 0
+      ? d.totalProjectMb
+      : (typeof d.estimatedSizeMb === 'number' && d.estimatedSizeMb >= 0
+        ? d.estimatedSizeMb
+        : scopeSummary?.perDatabase?.[d.id]?.totalSourceMb ?? null);
+    if (mb === null) return 'Size pending inspection';
+    if (mb >= 1024) {
+      return `${(mb / 1024).toFixed(2)} GB (${mb.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })} MB)`;
+    }
+    if (mb >= 0.01) return `${mb.toFixed(2)} MB`;
+    if (mb > 0) return `${mb.toFixed(3)} MB`;
+    return '0.00 MB';
+  };
+
+  const handleSelectAll = () => {
+    setDatabases(prev => prev.map(db => ({
+      ...db,
+      mode: TABLE_COPY_MODES.STRUCTURE_AND_DATA,
+      tables: (db.tables || []).map(t => ({
+        ...t,
+        mode: TABLE_COPY_MODES.STRUCTURE_AND_DATA,
+        copyMode: 'all',
+        includedMb: t.sizeMb || 0.05,
+      })),
+      binaries: (db.binaries || []).map(b => ({
+        ...b,
+        mode: BINARY_COPY_MODES.INCLUDE,
+        copyMode: 'include',
+        includedMb: b.sizeMb || 0.05,
+      })),
+    })));
+  };
+
+  const handleSchemaOnly = () => {
+    setDatabases(prev => prev.map(db => ({
+      ...db,
+      mode: TABLE_COPY_MODES.STRUCTURE_ONLY,
+      tables: (db.tables || []).map(t => ({
+        ...t,
+        mode: TABLE_COPY_MODES.STRUCTURE_ONLY,
+        copyMode: 'schema_only',
+        includedMb: 0,
+      })),
+      binaries: (db.binaries || []).map(b => ({
+        ...b,
+        mode: BINARY_COPY_MODES.EXCLUDE,
+        copyMode: 'exclude',
+        includedMb: 0,
+      })),
+    })));
+  };
+
+  const handleExcludeAll = () => {
+    setDatabases(prev => prev.map(db => ({
+      ...db,
+      tables: (db.tables || []).map(t => ({
+        ...t,
+        mode: TABLE_COPY_MODES.SKIP,
+        copyMode: 'none',
+        includedMb: 0,
+      })),
+      binaries: (db.binaries || []).map(b => ({
+        ...b,
+        mode: BINARY_COPY_MODES.EXCLUDE,
+        copyMode: 'exclude',
+        includedMb: 0,
+      })),
+    })));
+  };
+
   const getSupabaseLed = () => {
-    if (testingSupabase) return 'yellow';
+    if (testingSupabase || refreshing) return 'yellow';
     if (supabaseTestResult) return supabaseTestResult.success ? 'green' : 'yellow-flash';
     return databases.length > 0 ? 'green' : 'red';
   };
@@ -101,8 +253,8 @@ export function OneTwoThreeDone({ state, setState, toast, navigate }) {
       const capsule = generateRunnerCapsule({
         databases: databases.length > 0 ? databases : createDefaultDatabaseScope(activeDb?.projectRef || 'default'),
         destinationStore: destination,
-        destinationPath: destination === 'dropbox' ? '/Portabase' : './portabase-capsules',
-        capsuleLabel: `${activeDb?.name || 'supabase'}-backup`,
+        destinationPath: destination === 'dropbox' ? '/Portabase' : destination === 's3' ? 's3://my-backup-vault/portabase/' : destination === 'r2' ? 'r2://my-backup-vault/portabase/' : './portabase-capsules',
+        capsuleLabel: `${activeDb?.name || activeDb?.projectName || 'supabase'}-backup`,
       });
 
       if (destination === 'dropbox') {
@@ -137,7 +289,7 @@ export function OneTwoThreeDone({ state, setState, toast, navigate }) {
           Supabase Escape: <span style={{ color: '#3ecf8e' }}>1-2-3-Done</span>
         </h1>
         <p style={{ fontSize: '15px', color: '#8b949e', margin: 0 }}>
-          Three simple steps to encrypt your Supabase project outside the platform into your own private vault.
+          Connect Supabase, select database &amp; storage objects, pick your private vault, and encrypt your capsule.
         </p>
       </div>
 
@@ -158,22 +310,87 @@ export function OneTwoThreeDone({ state, setState, toast, navigate }) {
           </p>
 
           <div className="pb-123-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
-            <a href="/oauth/supabase/start" className="pb-btn pb-btn-primary" style={{ background: '#3ecf8e', borderColor: '#3ecf8e', color: '#0d1117', fontWeight: 700, textDecoration: 'none' }}>
-              {databases.length > 0 ? '✓ Reconnect Supabase (OAuth)' : 'Connect Supabase (1-Click OAuth)'}
-            </a>
+            {databases.length > 0 ? (
+              <>
+                <select
+                  value={selectedDbId}
+                  onChange={e => {
+                    const id = e.target.value;
+                    setSelectedDbId(id);
+                    setDatabases(prev => prev.map(db => ({ ...db, enabled: db.id === id })));
+                  }}
+                  className="pb-input mono"
+                  style={{ fontSize: '12px', minWidth: '260px' }}
+                >
+                  {databases.map(d => {
+                    const rawName = d.projectName || (d.name ? d.name.replace(/\s*\(postgres\)$/i, '') : '') || d.projectRef;
+                    return (
+                      <option key={d.id} value={d.id}>
+                        {rawName} ({d.projectRef}) — {getDbSizeLabel(d)}
+                      </option>
+                    );
+                  })}
+                </select>
 
-            <button type="button" onClick={handleTestSupabase} disabled={testingSupabase} className="pb-btn pb-btn-secondary">
-              {testingSupabase ? 'Testing Connection...' : 'Test Connection'}
-            </button>
+                <a
+                  href="/oauth/supabase/start"
+                  onClick={() => {
+                    try { window.localStorage?.removeItem('pb_supabase_disconnected'); } catch { /* ignore */ }
+                  }}
+                  className="pb-btn pb-btn-secondary"
+                  style={{ textDecoration: 'none' }}
+                >
+                  ✓ Reconnect Supabase (OAuth)
+                </a>
 
-            {databases.length > 0 && (
-              <select value={selectedDbId} onChange={e => setSelectedDbId(e.target.value)} className="pb-input mono" style={{ fontSize: '12px', minWidth: '220px' }}>
-                {databases.map(d => (
-                  <option key={d.id} value={d.id}>
-                    {d.projectName || d.name} ({d.projectRef})
-                  </option>
-                ))}
-              </select>
+                <button
+                  type="button"
+                  onClick={handleTestSupabase}
+                  disabled={testingSupabase}
+                  className="pb-btn pb-btn-secondary"
+                >
+                  {testingSupabase ? 'Testing Connection...' : 'Test Connection'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  className="pb-btn pb-btn-secondary"
+                >
+                  {refreshing ? 'Refreshing...' : 'Refresh'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDisconnect}
+                  className="pb-btn pb-btn-secondary"
+                  style={{ color: '#f85149' }}
+                >
+                  Disconnect
+                </button>
+              </>
+            ) : (
+              <>
+                <a
+                  href="/oauth/supabase/start"
+                  onClick={() => {
+                    try { window.localStorage?.removeItem('pb_supabase_disconnected'); } catch { /* ignore */ }
+                  }}
+                  className="pb-btn pb-btn-primary"
+                  style={{ background: '#3ecf8e', borderColor: '#3ecf8e', color: '#0d1117', fontWeight: 700, textDecoration: 'none' }}
+                >
+                  Connect Supabase (1-Click OAuth)
+                </a>
+
+                <button
+                  type="button"
+                  onClick={handleLoadDefaultScope}
+                  className="pb-btn pb-btn-secondary"
+                >
+                  Load Starter Scope
+                </button>
+              </>
             )}
           </div>
 
@@ -184,11 +401,83 @@ export function OneTwoThreeDone({ state, setState, toast, navigate }) {
           )}
         </div>
 
-        {/* STEP 2: Choose Destination Vault */}
+        {/* STEP 2: Pick Objects & Scope */}
+        <div className="pb-card" style={{ borderLeft: '5px solid #388bfd', padding: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', background: '#388bfd', color: '#fff', fontWeight: 800, fontSize: '14px' }}>2</span>
+              <h2 style={{ margin: 0, fontSize: '18px', color: '#f0f6fc' }}>Pick Objects &amp; Scope (Tables &amp; Storage Buckets)</h2>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span className="mono" style={{ fontSize: '11px', fontWeight: 600, color: '#f0f6fc' }}>
+                {(scopeSummary?.includedMb ?? scopeSummary?.grandTotalMb ?? 0).toFixed(2)} MB / 40 GB Free Quota
+              </span>
+              <div style={{ width: '100px', height: '8px', background: '#21262d', borderRadius: '4px', overflow: 'hidden', border: '1px solid #30363d' }}>
+                <div style={{ width: `${Math.min(100, Math.max(1, (((scopeSummary?.includedMb ?? scopeSummary?.grandTotalMb ?? 0) / 40960) * 100)))}%`, height: '100%', background: '#3ecf8e', transition: 'width 0.3s ease' }} />
+              </div>
+            </div>
+          </div>
+
+          <p style={{ fontSize: '13px', color: '#8b949e', margin: '0 0 16px' }}>
+            Choose full copy (DDL + Data), schema only (DDL), or exclude for every table, view, function, and binary storage file.
+          </p>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={handleSelectAll}
+                className="pb-btn pb-btn-secondary"
+                style={{ fontSize: '11px', padding: '5px 12px', background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d', fontWeight: 600 }}
+              >
+                Select All (DDL + Data)
+              </button>
+              <button
+                type="button"
+                onClick={handleSchemaOnly}
+                className="pb-btn pb-btn-secondary"
+                style={{ fontSize: '11px', padding: '5px 12px', background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d', fontWeight: 600 }}
+              >
+                Schema Only (DDL)
+              </button>
+              <button
+                type="button"
+                onClick={handleExcludeAll}
+                className="pb-btn pb-btn-secondary"
+                style={{ fontSize: '11px', padding: '5px 12px', background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d', fontWeight: 600 }}
+              >
+                Exclude All
+              </button>
+            </div>
+            <span style={{ fontSize: '12px', color: '#8b949e' }}>
+              {objectCounts.totalTables} tables ({objectCounts.includedTables} included) · {objectCounts.totalBinaries} binary files ({objectCounts.includedBinaries} included)
+            </span>
+          </div>
+
+          {databases.length > 0 ? (
+            <DatabaseScopeSelector
+              databases={databases}
+              activeDbId={selectedDbId}
+              onChange={setDatabases}
+              readOnly={false}
+            />
+          ) : (
+            <div style={{ padding: '24px', background: '#161b22', border: '1px dashed #30363d', borderRadius: '8px', textAlign: 'center' }}>
+              <p style={{ margin: '0 0 12px', color: '#8b949e', fontSize: '13px' }}>
+                No database currently loaded. Connect Supabase above or load the starter scope to pick individual objects.
+              </p>
+              <button type="button" onClick={handleLoadDefaultScope} className="pb-btn pb-btn-secondary" style={{ fontSize: '12px' }}>
+                Load Starter Scope
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* STEP 3: Choose Destination Vault */}
         <div className="pb-card" style={{ borderLeft: '5px solid #0061FE', padding: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', background: '#0061FE', color: '#fff', fontWeight: 800, fontSize: '14px' }}>2</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', background: '#0061FE', color: '#fff', fontWeight: 800, fontSize: '14px' }}>3</span>
               <h2 style={{ margin: 0, fontSize: '18px', color: '#f0f6fc' }}>Choose Destination Vault</h2>
             </div>
             <LedIndicator state={getDestinationLed()} />
@@ -251,16 +540,20 @@ export function OneTwoThreeDone({ state, setState, toast, navigate }) {
           </div>
         </div>
 
-        {/* STEP 3: Back Up Now -> DONE */}
+        {/* STEP 4: Back Up Now -> DONE */}
         <div className="pb-card" style={{ borderLeft: '5px solid #a371f7', padding: '24px', textAlign: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '14px' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%', background: '#a371f7', color: '#fff', fontWeight: 800, fontSize: '16px' }}>3</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%', background: '#a371f7', color: '#fff', fontWeight: 800, fontSize: '16px' }}>4</span>
             <h2 style={{ margin: 0, fontSize: '20px', color: '#f0f6fc' }}>Back Up Now &amp; Done</h2>
           </div>
 
-          <p style={{ fontSize: '14px', color: '#8b949e', margin: '0 0 20px' }}>
+          <p style={{ fontSize: '14px', color: '#8b949e', margin: '0 0 10px' }}>
             One click to capture Postgres tables, Auth schema, and Storage buckets into an AES-256-GCM sealed capsule.
           </p>
+
+          <div style={{ marginBottom: '18px', fontSize: '12px', color: '#58a6ff', fontFamily: 'monospace' }}>
+            Capsule Scope: {(scopeSummary?.includedMb ?? scopeSummary?.grandTotalMb ?? 0).toFixed(2)} MB · {objectCounts.includedTables} tables · {objectCounts.includedBinaries} binary files
+          </div>
 
           {!doneCapsule && (
             <button
@@ -292,7 +585,9 @@ export function OneTwoThreeDone({ state, setState, toast, navigate }) {
                 <span style={{ fontSize: '24px' }}>🎉</span>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '18px', color: '#3ecf8e' }}>Capsule Created &amp; Verified!</h3>
-                  <small style={{ color: '#8b949e' }}>Delivered to {destination.toUpperCase()} • ID: {doneCapsule.capsuleId}</small>
+                  <small style={{ color: '#8b949e' }}>
+                    Delivered to {destination.toUpperCase()} • ID: {doneCapsule.capsuleId} • {(doneCapsule.includedTableAndObjectCount ?? objectCounts.includedTables)} tables · {(doneCapsule.includedBinaryFileCount ?? objectCounts.includedBinaries)} files ({(doneCapsule.totalIncludedMb ?? scopeSummary?.includedMb ?? 0).toFixed(2)} MB)
+                  </small>
                 </div>
               </div>
               <p style={{ fontSize: '13px', color: '#c9d1d9', margin: '0 0 16px' }}>
