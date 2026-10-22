@@ -880,7 +880,7 @@ export function DatabaseScopeSelector({
                         border: 'none',
                         cursor: db.enabled && !readOnly ? 'pointer' : 'default',
                         background: isStructureOnly ? '#238636' : 'transparent',
-                        color: isStructureOnly ? '#ffffff' : '#8b949e',
+                        color: isStructureOnly ? '#ffffff' : '#f0f6fc', border: '1px solid #30363d',
                       }}
                     >
                       Structure Only
@@ -891,8 +891,8 @@ export function DatabaseScopeSelector({
                     <button
                       type="button"
                       onClick={() => handleRemoveDatabase(db.id)}
-                      className="pb-btn pb-btn-sm pb-btn-ghost"
-                      style={{ color: '#f85149', padding: '4px 8px' }}
+                      className="pb-btn pb-btn-sm"
+                      style={{ background: '#21262d', color: '#ff7b72', border: '1px solid #30363d', padding: '4px 8px' }}
                       title="Remove database"
                     >
                       &times;
@@ -967,9 +967,9 @@ export function DatabaseScopeSelector({
                           {searchQuery[db.id] && (
                             <button
                               type="button"
-                              className="pb-btn pb-btn-sm pb-btn-ghost"
+                              className="pb-btn pb-btn-sm"
                               onClick={() => setSearchQuery({ ...searchQuery, [db.id]: '' })}
-                              style={{ fontSize: '11px', padding: '4px 8px' }}
+                              style={{ fontSize: '11px', padding: '4px 8px', background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d' }}
                             >
                               Clear
                             </button>
@@ -1011,9 +1011,9 @@ export function DatabaseScopeSelector({
                             </button>
                             <button
                               type="button"
-                              className="pb-btn pb-btn-sm pb-btn-ghost"
+                              className="pb-btn pb-btn-sm"
                               onClick={() => handleSetAllObjectsMode(db.id, TABLE_COPY_MODES.SKIP)}
-                              style={{ fontSize: '11px', padding: '3px 8px', color: '#f85149' }}
+                              style={{ fontSize: '11px', padding: '3px 8px', background: '#3d1214', color: '#ff7b72', border: '1px solid #da3633', fontWeight: 600 }}
                             >
                               Exclude All
                             </button>

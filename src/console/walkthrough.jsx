@@ -216,12 +216,12 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Icon name="server" size={16} />
-              <span style={{ fontWeight: 700, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Source Database</span>
+              <span style={{ fontWeight: 700, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.04em', color: '#f0f6fc' }}>Source Database</span>
             </div>
             {databases.length > 0 && (
               <div style={{ display: 'flex', gap: '6px' }}>
-                <button type="button" onClick={handleRefresh} className="pb-btn pb-btn-ghost pb-btn-sm" style={{ padding: '3px 8px', fontSize: '11px' }}><Icon name="restore" size={11} /> Refresh</button>
-                <button type="button" onClick={handleDisconnect} className="pb-btn pb-btn-ghost pb-btn-sm" style={{ padding: '3px 8px', fontSize: '11px', color: '#8b949e' }}><Icon name="logout" size={11} /> Disconnect</button>
+                <button type="button" onClick={handleRefresh} className="pb-btn pb-btn-sm" style={{ padding: '4px 10px', fontSize: '11px', background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d', fontWeight: 600 }}><Icon name="restore" size={11} /> Refresh</button>
+                <button type="button" onClick={handleDisconnect} className="pb-btn pb-btn-sm" style={{ padding: '4px 10px', fontSize: '11px', background: '#21262d', color: '#f85149', border: '1px solid #30363d', fontWeight: 600 }}><Icon name="logout" size={11} /> Disconnect</button>
               </div>
             )}
           </div>
@@ -306,7 +306,7 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Icon name="cloud" size={16} />
-              <span style={{ fontWeight: 700, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Backup Destination</span>
+              <span style={{ fontWeight: 700, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.04em', color: '#f0f6fc' }}>Backup Destination</span>
             </div>
             {destinationKind === 'dropbox' && (dropboxAccount?.accountEmail || storageStatus?.dropbox?.oauthConnected) ? (
               <span className="pb-badge pb-badge-ok" style={{ fontSize: '11px' }}><Icon name="check" size={10} /> Connected: {dropboxAccount?.accountEmail || 'lcapece@optonline.net'} ({dropboxPath})</span>
@@ -318,8 +318,14 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
           <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
             {[{ id: 'dropbox', label: 'Dropbox', icon: 'capsule' }, { id: 'gdrive', label: 'Google Drive', icon: 'folder' }, { id: 's3', label: 'Amazon S3', icon: 'cloud' }].map(dest => (
               <button key={dest.id} type="button" onClick={() => setDestinationKind(dest.id)}
-                className={`pb-btn pb-btn-sm ${destinationKind === dest.id ? 'pb-btn-primary' : 'pb-btn-ghost'}`}
-                style={{ flex: 1, padding: '5px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                className="pb-btn pb-btn-sm"
+                style={{
+                  flex: 1, padding: '6px 10px', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
+                  background: destinationKind === dest.id ? '#1f6feb' : '#21262d',
+                  color: '#f0f6fc',
+                  border: destinationKind === dest.id ? '1px solid #388bfd' : '1px solid #30363d',
+                  fontWeight: 600,
+                }}>
                 <Icon name={dest.icon} size={13} /> {dest.label}
               </button>
             ))}
@@ -364,14 +370,14 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Icon name="table" size={16} />
-            <span style={{ fontWeight: 700, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Tables &amp; Storage Buckets</span>
+            <span style={{ fontWeight: 700, fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.04em', color: '#f0f6fc' }}>Tables &amp; Storage Buckets</span>
             <div style={{ display: 'flex', gap: '6px' }}>
-              <button type="button" onClick={handleSelectAll} className="pb-btn pb-btn-ghost pb-btn-sm" style={{ fontSize: '11px', padding: '3px 8px' }}>Select All</button>
-              <button type="button" onClick={handleSchemaOnly} className="pb-btn pb-btn-ghost pb-btn-sm" style={{ fontSize: '11px', padding: '3px 8px' }}>Schema Only</button>
+              <button type="button" onClick={handleSelectAll} className="pb-btn pb-btn-sm" style={{ fontSize: '11px', padding: '4px 10px', background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d', fontWeight: 600 }}>Select All</button>
+              <button type="button" onClick={handleSchemaOnly} className="pb-btn pb-btn-sm" style={{ fontSize: '11px', padding: '4px 10px', background: '#21262d', color: '#f0f6fc', border: '1px solid #30363d', fontWeight: 600 }}>Schema Only</button>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '240px' }}>
-            <span className="mono" style={{ fontSize: '11px', fontWeight: 600 }}>{(scopeSummary?.includedMb ?? scopeSummary?.grandTotalMb ?? 0).toFixed(2)} MB / 40 GB Free Quota</span>
+            <span className="mono" style={{ fontSize: '11px', fontWeight: 600, color: '#f0f6fc' }}>{(scopeSummary?.includedMb ?? scopeSummary?.grandTotalMb ?? 0).toFixed(2)} MB / 40 GB Free Quota</span>
             <div style={{ flex: 1, height: '6px', background: '#222630', borderRadius: '3px', overflow: 'hidden' }}>
               <div style={{ width: `${Math.min(100, Math.max(1, (((scopeSummary?.includedMb ?? scopeSummary?.grandTotalMb ?? 0) / 40960) * 100)))}%`, height: '100%', background: '#2ea043' }} />
             </div>
