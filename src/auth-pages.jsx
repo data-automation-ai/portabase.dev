@@ -19,6 +19,7 @@ import { KEYS_COPY } from './data/never-hold-keys.js';
 import { isRecoveryAckComplete } from './data/recovery-acknowledgments.js';
 import { REQUIRED_ACK_KEYS } from './data/recovery-acknowledgments.js';
 import { RecoveryAcknowledgments, recordRecoveryAck } from './recovery-ack.jsx';
+import { HashSecurityIllustration } from './hash-security-illustration.jsx';
 import { ConsoleApp } from './console/ConsoleApp.jsx';
 
 const Arrow = () => <span aria-hidden="true">↗</span>;
@@ -57,7 +58,7 @@ function VersionPicker({ version, onChange }) {
   );
 }
 
-function AuthShell({ children, title, lead, version, cardLabel }) {
+function AuthShell({ children, title, lead, version, cardLabel, isWide = false }) {
   const meta = CLOUD_VERSIONS[version] || CLOUD_VERSIONS.supabase;
   return (
     <div className="auth-page">
@@ -73,39 +74,49 @@ function AuthShell({ children, title, lead, version, cardLabel }) {
         </div>
       </header>
       <main className="auth-main">
-        <div className="shell auth-shell">
-          <div className="auth-copy">
-            <div className="section-kicker green">PORTABASE CLOUD</div>
-            <h1>{title}</h1>
-            <p>{lead}</p>
-            <div className="version-callout">
-              <span>LAUNCH · SUPABASE ONLY</span>
-              <b>{meta.authLabel}</b>
-              <p>{meta.description}</p>
+        <div className={`shell auth-shell${isWide ? ' auth-shell-wide' : ''}`}>
+          {!isWide && (
+            <div className="auth-copy">
+              <div className="section-kicker green">PORTABASE CLOUD</div>
+              <h1>{title}</h1>
+              <p>{lead}</p>
+              <div className="version-callout">
+                <span>LAUNCH · SUPABASE ONLY</span>
+                <b>{meta.authLabel}</b>
+                <p>{meta.description}</p>
+              </div>
+              <ul className="auth-bullets">
+                <li><span aria-hidden="true">1</span> Sign in with email or Google</li>
+                <li><span aria-hidden="true">2</span> 7-day trial · card required · then $7/mo (upgrade capacity or cadence anytime in-app)</li>
+                <li><span aria-hidden="true">3</span> You own the capsule vault. Keys are never posted to Portabase servers.</li>
+              </ul>
+              <div className="auth-keys-note">
+                <span>KEYS NEVER POSTED HERE</span>
+                <b>{KEYS_COPY.loginTitle}</b>
+                <p>{KEYS_COPY.loginBody}</p>
+                <ol className="auth-keys-steps">
+                  {KEYS_COPY.paths.map((path) => (
+                    <li key={path.step}><strong>{path.title}</strong> {path.body}</li>
+                  ))}
+                </ol>
+                <p className="auth-keys-honest">{KEYS_COPY.honest}</p>
+              </div>
             </div>
-            <ul className="auth-bullets">
-              <li><span aria-hidden="true">1</span> Sign in with email or Google</li>
-              <li><span aria-hidden="true">2</span> 7-day trial · card required · then $7/mo (upgrade capacity or cadence anytime in-app)</li>
-              <li><span aria-hidden="true">3</span> You own the capsule vault. Keys are never posted to Portabase servers.</li>
-            </ul>
-            <div className="auth-keys-note">
-              <span>KEYS NEVER POSTED HERE</span>
-              <b>{KEYS_COPY.loginTitle}</b>
-              <p>{KEYS_COPY.loginBody}</p>
-              <ol className="auth-keys-steps">
-                {KEYS_COPY.paths.map((path) => (
-                  <li key={path.step}><strong>{path.title}</strong> {path.body}</li>
-                ))}
-              </ol>
-              <p className="auth-keys-honest">{KEYS_COPY.honest}</p>
-            </div>
-          </div>
-          <div className="auth-card" id="auth-card" aria-label={cardLabel || title}>
-            <div className="auth-keys-note auth-keys-note-card">
-              <span>KEYS NEVER POSTED HERE</span>
-              <b>{KEYS_COPY.loginTitle}</b>
-              <p>{KEYS_COPY.loginBody}</p>
-            </div>
+          )}
+          <div className={`auth-card${isWide ? ' auth-card-wide' : ''}`} id="auth-card" aria-label={cardLabel || title}>
+            {isWide ? (
+              <div style={{ marginBottom: 20 }}>
+                <div className="section-kicker green" style={{ marginBottom: 6 }}>PORTABASE CLOUD — PRE-ONBOARDING SAFETY CHECKLIST</div>
+                <h1 style={{ fontSize: 'clamp(24px, 4vw, 32px)', margin: '0 0 8px', color: '#f0f6fc', letterSpacing: '-0.02em' }}>{title}</h1>
+                <p style={{ fontSize: '14px', color: '#8b949e', margin: 0, maxWidth: '820px' }}>{lead}</p>
+              </div>
+            ) : (
+              <div className="auth-keys-note auth-keys-note-card">
+                <span>KEYS NEVER POSTED HERE</span>
+                <b>{KEYS_COPY.loginTitle}</b>
+                <p>{KEYS_COPY.loginBody}</p>
+              </div>
+            )}
             {children}
           </div>
         </div>
@@ -374,6 +385,7 @@ export function LoginPage() {
   return (
     <AuthShell
       version={version}
+      isWide={mode === 'signup' && !awaitingConfirm}
       title={mode === 'signup' ? 'Create your Cloud account' : mode === 'forgot' ? 'Reset password' : mode === 'update-password' ? 'Choose a new password' : 'Sign in to Cloud'}
       lead="Email, magic link, or Google. Cloud Free 40 GB, or $7/mo via Square — upgrade cadence or capacity anytime in-app. You bring capsule storage. Keys are never posted to Portabase servers."
       cardLabel={mode === 'signup' ? 'Create account' : mode === 'forgot' || mode === 'update-password' ? 'Reset password' : 'Sign in'}
@@ -389,12 +401,13 @@ export function LoginPage() {
 
       {mode === 'signup' && !awaitingConfirm && (
         <>
+          <HashSecurityIllustration />
           <RecoveryAcknowledgments checked={acks} onToggle={toggleAck} />
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', margin: '8px 0 12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', margin: '14px 0 18px', padding: '12px 16px', background: '#161b22', border: '1px solid #30363d', borderRadius: '8px' }}>
             <button
               type="button"
               className="button button-ghost"
-              style={{ fontSize: '12px', padding: '6px 12px' }}
+              style={{ fontSize: '12.5px', padding: '8px 16px', background: ackComplete ? '#21262d' : '#238636', color: '#fff', borderColor: ackComplete ? '#30363d' : '#2ea043', fontWeight: 600 }}
               onClick={() => {
                 if (ackComplete) {
                   setAcks(new Set());
@@ -406,7 +419,7 @@ export function LoginPage() {
               {ackComplete ? 'Clear all acknowledgments' : '✓ Acknowledge all & enable sign up'}
             </button>
             {!ackComplete && (
-              <p className="ack-hint" style={{ margin: 0 }}>Acknowledge every red and amber item above to enable sign-up.</p>
+              <p className="ack-hint" style={{ margin: 0, fontSize: '13px', color: '#e3b341' }}>Acknowledge every red and amber item above to enable sign-up.</p>
             )}
           </div>
         </>
