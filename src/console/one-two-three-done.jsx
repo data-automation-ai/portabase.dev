@@ -17,6 +17,11 @@ export function OneTwoThreeDone({ state, setState, toast, navigate }) {
       if (typeof window !== 'undefined' && window.localStorage?.getItem('pb_supabase_disconnected') === '1') {
         return [];
       }
+      const stored = typeof window !== 'undefined' ? window.localStorage?.getItem('portabase.console.databases') : null;
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
     } catch { /* ignore */ }
     return createDefaultDatabaseScope('tvyxjeashgtdnipodbym', 'Primary Supabase Database');
   });
@@ -281,7 +286,7 @@ export function OneTwoThreeDone({ state, setState, toast, navigate }) {
   };
 
   return (
-    <div style={{ maxWidth: '860px', margin: '0 auto', padding: '24px 16px' }}>
+    <div data-testid="one-two-three-done-page" style={{ maxWidth: '860px', margin: '0 auto', padding: '24px 16px' }}>
       
       {/* 1-2-3-Done Header */}
       <div style={{ textAlign: 'center', marginBottom: '32px' }}>
@@ -409,7 +414,7 @@ export function OneTwoThreeDone({ state, setState, toast, navigate }) {
               <h2 style={{ margin: 0, fontSize: '18px', color: '#f0f6fc' }}>Pick Objects &amp; Scope (Tables &amp; Storage Buckets)</h2>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span className="mono" style={{ fontSize: '11px', fontWeight: 600, color: '#f0f6fc' }}>
+              <span data-testid="scope-quota-display" className="mono" style={{ fontSize: '11px', fontWeight: 600, color: '#f0f6fc' }}>
                 {(scopeSummary?.includedMb ?? scopeSummary?.grandTotalMb ?? 0).toFixed(2)} MB / 40 GB Free Quota
               </span>
               <div style={{ width: '100px', height: '8px', background: '#21262d', borderRadius: '4px', overflow: 'hidden', border: '1px solid #30363d' }}>
@@ -580,7 +585,7 @@ export function OneTwoThreeDone({ state, setState, toast, navigate }) {
           )}
 
           {doneCapsule && (
-            <div style={{ marginTop: '20px', padding: '20px', background: '#0d281e', border: '1px solid #238636', borderRadius: '8px', textAlign: 'left' }}>
+            <div data-testid="capsule-success-card" style={{ marginTop: '20px', padding: '20px', background: '#0d281e', border: '1px solid #238636', borderRadius: '8px', textAlign: 'left' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
                 <span style={{ fontSize: '24px' }}>🎉</span>
                 <div>

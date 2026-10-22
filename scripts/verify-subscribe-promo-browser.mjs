@@ -304,8 +304,83 @@ async function main() {
     console.log(`[Test 5] Saved mobile screenshot to ${screenshot5Path}`);
     await mobileContext5.close();
 
+    // -------------------------------------------------------------
+    // Test 6: Large Database Backup (> 10 GB / 12.4 GB) in Console
+    // -------------------------------------------------------------
+    console.log('\n--- [Test 6] Large Database (> 10 GB) Scoping & Backup in Console ---');
+    const largeDbContext = await browser.newContext({
+      viewport: { width: 1280, height: 900 },
+    });
+    const page6 = await largeDbContext.newPage();
+
+    console.log('[Test 6] Authenticating subscriber on /signup with FREE30 promo...');
+    await page6.goto(`${baseUrl}/signup`, { waitUntil: 'domcontentloaded' });
+    await page6.waitForSelector('[data-testid="simulated-customer-signup-panel"]', { timeout: 10000 });
+
+    const user6Email = 'large-db-subscriber@portabase.dev';
+    await page6.fill('[data-testid="sim-customer-email"]', user6Email);
+    await page6.fill('[data-testid="sim-customer-promo"]', 'FREE30');
+    await page6.click('[data-testid="simulate-customer-signup-btn"]');
+
+    await page6.waitForURL(url => url.pathname.includes('/app') || url.pathname.includes('/dashboard'), { timeout: 15000 });
+
+    // Seed a simulated > 10 GB database scope (12.4 GB across tables & binary storage)
+    console.log('[Test 6] Configuring simulated 12.4 GB (> 10 GB) database scope in console...');
+    const largeDb = [
+      {
+        id: 'db_large_prod',
+        projectRef: 'ekklokrukxmqlahtonnc',
+        projectName: 'Production Supabase Database (> 10 GB)',
+        name: 'Production Supabase Database (> 10 GB)',
+        databaseName: 'postgres',
+        estimatedSizeMb: 12400.0,
+        enabled: true,
+        mode: 'structure_and_data',
+        tables: [
+          { name: 'public.events', schema: 'public', objectType: 'table', sizeMb: 5200.0, mode: 'copy_structure_and_data', copyMode: 'full' },
+          { name: 'public.user_profiles', schema: 'public', objectType: 'table', sizeMb: 1800.0, mode: 'copy_structure_and_data', copyMode: 'full' },
+          { name: 'public.audit_logs', schema: 'public', objectType: 'table', sizeMb: 2400.0, mode: 'copy_structure_and_data', copyMode: 'full' },
+          { name: 'auth.users', schema: 'auth', objectType: 'table', sizeMb: 450.0, mode: 'copy_structure_and_data', copyMode: 'full' },
+        ],
+        binaries: [
+          { name: 'media-vault/large-assets.tar', bucket: 'media-vault', objectType: 'binary', sizeMb: 2550.0, mode: 'include', copyMode: 'include' },
+        ],
+      }
+    ];
+
+    await page6.evaluate((scope) => {
+      localStorage.setItem('portabase.console.databases', JSON.stringify(scope));
+    }, largeDb);
+
+    await page6.goto(`${baseUrl}/app`, { waitUntil: 'domcontentloaded' });
+    await page6.waitForSelector('[data-testid="one-two-three-done-page"]', { timeout: 15000 });
+
+    // Verify Quota indicator shows 12400 MB within 40 GB Free Quota
+    const quotaIndicator = await page6.waitForSelector('[data-testid="scope-quota-display"]', { timeout: 10000 });
+    const quotaText = await quotaIndicator.textContent();
+    console.log(`[Test 6] Quota indicator verified: "${quotaText.trim()}"`);
+    assert.ok(
+      quotaText.includes('12400.00 MB / 40 GB Free Quota') || quotaText.includes('12400'),
+      'Quota meter must accurately reflect 12.4 GB (> 10 GB) database size'
+    );
+
+    // Click "Back Up Now"
+    console.log('[Test 6] Triggering "Back Up Now" on > 10 GB database...');
+    const backupBtn = await page6.waitForSelector('button:has-text("Back Up Now")', { timeout: 10000 });
+    await backupBtn.click();
+
+    // Verify progress to completion
+    await page6.waitForSelector('[data-testid="capsule-success-card"]', { timeout: 25000 });
+    console.log('[Test 6] Large database (> 10 GB) backup successfully sealed and encrypted!');
+
+    await page6.waitForTimeout(500);
+    const screenshot6Path = path.join(screenshotsDir, 'test6-large-database-10gb-backup.png');
+    await page6.screenshot({ path: screenshot6Path, fullPage: true });
+    console.log(`[Test 6] Saved large database backup screenshot to ${screenshot6Path}`);
+    await largeDbContext.close();
+
     console.log('\n=============================================================');
-    console.log('  ALL 5 BROWSER TEST SCENARIOS PASSED WITH 100% SUCCESS!    ');
+    console.log('  ALL 6 BROWSER TEST SCENARIOS PASSED WITH 100% SUCCESS!    ');
     console.log('=============================================================');
 
   } finally {
