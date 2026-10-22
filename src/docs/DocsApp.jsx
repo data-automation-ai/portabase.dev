@@ -874,12 +874,12 @@ portabase replay --capsule ./portabase-capsules/<id> --confirm-target newproject
             <tr>
               <td><strong>Vault secrets</strong> (pgsodium)</td>
               <td>The dump carries ciphertext only; the per-project root key lives outside the database</td>
-              <td>Fetch the root key while the project is healthy (Management API <code>/pgsodium</code>) and store it in your own vault, next to the capsule passphrase</td>
+              <td>Values cannot be read back out once saved. Rotate or set a known root key right now and copy it into your password manager or notes. The only chance to copy a secret value is when you create or rotate it.</td>
             </tr>
             <tr>
               <td><strong>Edge Function secret values</strong></td>
               <td>The API returns names and digests only — plaintext is unrecoverable by design</td>
-              <td>Keep your own copy of each value; the capsule's manifest lists the names you must re-enter</td>
+              <td>The easiest and safest move is to rotate them right now and copy them into your password manager, notes, or Notepad. The only chance you have to make a copy of a secret value is when you rotate a new one or know it already.</td>
             </tr>
             <tr>
               <td><strong>Vector Buckets</strong> (Storage vector indexes)</td>
