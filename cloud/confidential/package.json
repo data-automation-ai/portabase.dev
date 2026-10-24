@@ -1,0 +1,8 @@
+{
+  "name": "portabase-confidential-proof",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Synthetic confidential-compute proof; not a production backup service",
+  "dependencies": { "jose": "6.2.3" }
+}

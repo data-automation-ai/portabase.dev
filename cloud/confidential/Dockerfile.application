@@ -1,0 +1,35 @@
+FROM node:24-bookworm-slim
+# Native PostgreSQL 17 client is required for full Auth capture. No global
+# Supabase npm install: that package explicitly does not support global install.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+    && install -d /usr/share/postgresql-common/pgdg \
+    && curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+    && echo 'deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main' > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update && apt-get install -y --no-install-recommends postgresql-client-17 \
+    && rm -rf /var/lib/apt/lists/*
+# Match the CLI version in package-lock, verify the upstream release asset.
+RUN curl --fail --location --silent --show-error https://github.com/supabase/cli/releases/download/v2.109.1/supabase_2.109.1_linux_amd64.tar.gz -o /tmp/supabase.tar.gz \
+    && echo '36d87b7fe6b4bcfe89ac47a4354e526cff22480224de426d7b370f6934556976  /tmp/supabase.tar.gz' | sha256sum --check \
+    && tar -xzf /tmp/supabase.tar.gz -C /usr/local/bin supabase && rm /tmp/supabase.tar.gz
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+COPY utility ./utility
+COPY cloud/runner ./cloud/runner
+COPY cloud/confidential ./cloud/confidential
+RUN mkdir -p /opt/portabase/bin && for tool in psql pg_dump pg_dumpall; do \
+    printf '#!/bin/sh\nexec node /app/cloud/confidential/pg-command.mjs %s "$@"\n' "$tool" > /opt/portabase/bin/$tool; \
+    chmod 755 /opt/portabase/bin/$tool; done
+ENV PATH="/opt/portabase/bin:${PATH}"
+WORKDIR /app/cloud/confidential
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+WORKDIR /app
+LABEL "tee.launch_policy.allow_cmd_override"="false" \
+      "tee.launch_policy.allow_env_override"="" \
+      "tee.launch_policy.allow_capabilities"="false" \
+      "tee.launch_policy.allow_cgroups"="false" \
+      "tee.launch_policy.log_redirect"="never" \
+      "tee.launch_policy.monitoring_memory_allow"="never"
+EXPOSE 8080/tcp
+ENTRYPOINT ["node", "/app/cloud/confidential/production-workload.mjs"]
+CMD []

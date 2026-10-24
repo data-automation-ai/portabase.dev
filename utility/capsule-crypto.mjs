@@ -1,5 +1,5 @@
 /**
- * Portabase capsule key protection — **open source (Apache-2.0)**
+ * Portabase capsule key protection — **open source (MIT)**
  * ============================================================================
  * This module is the customer-auditable crypto path for Escape capsules.
  * Cloud and the CLI both call these functions; there is no separate closed-source
@@ -30,7 +30,7 @@
  * Read this file. Fork it. Pin a commit. That is the product promise for key protection code.
  *
  * @module capsule-crypto
- * @license Apache-2.0
+ * @license MIT
  */
 
 import {
@@ -177,6 +177,6 @@ export function capsuleCryptoPublicDescription() {
     `Cipher: ${CAPSULE_CIPHER}`,
     `KDF: scrypt N=${CAPSULE_SCRYPT.N} r=${CAPSULE_SCRYPT.r} p=${CAPSULE_SCRYPT.p} keylen=${CAPSULE_SCRYPT.keylen}`,
     `Passphrase minimum length: ${CAPSULE_PASSPHRASE_MIN_LENGTH}`,
-    'Source of truth: utility/capsule-crypto.mjs (Apache-2.0 open source)',
+    'Source of truth: utility/capsule-crypto.mjs (MIT open source)',
   ].join('\n');
 }

@@ -127,7 +127,7 @@ export {
   storageObjectIdentity,
 } from './portabase-core.mjs';
 
-const VERSION = '0.4.1';
+const VERSION = '0.5.0';
 const CONFIG_NAME = 'portabase.config.json';
 const argv = process.argv.slice(2);
 const command = argv[0] || 'help';
@@ -427,6 +427,9 @@ async function captureDatabase(rawDir, limits = null, excludeTables = []) {
   await mkdir(dbDir, { recursive: true });
   if (resolveTool('pg_dump') && resolveTool('pg_dumpall')) {
     return captureDatabaseNative(dbUrl, dbDir, limits, excludeTables);
+  }
+  if (!limits?.databaseSchemaOnly) {
+    throw new Error('Complete Auth capture requires pg_dump and pg_dumpall. The default Supabase CLI dump excludes auth data, including user password hashes.');
   }
   const supabase = resolveTool('supabase');
   if (!supabase) throw new Error('Install PostgreSQL client tools or the Supabase CLI for database capture.');
@@ -2600,6 +2603,7 @@ export async function restoreFunctions(extracted, manifest, targetRef, plan = nu
   try {
     for (const name of names) {
       const args = ['functions', 'deploy', name, '--project-ref', targetRef, '--workdir', workdir];
+      if (env.PORTABASE_CONFIDENTIAL_RUNNER === '1') args.push('--use-api');
       if (verifyMap[name] === false) args.push('--no-verify-jwt');
       try { await runCommand(supabase, args, { cwd: workdir, env, stdio: 'ignore' }); }
       catch { throw new Error('function_replay_deploy_failed'); }
@@ -3619,7 +3623,7 @@ async function probe() {
 }
 
 function help() {
-  console.log(`Portabase ${VERSION} (Apache-2.0 open core)
+  console.log(`Portabase ${VERSION} (MIT open core)
 
 Encrypted, customer-owned Supabase recovery capsules.
 Full capture is free. Credentials and encryption keys never leave your runner.

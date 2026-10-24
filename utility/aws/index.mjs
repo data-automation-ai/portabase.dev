@@ -1,6 +1,6 @@
 /**
  * Portabase AWS Capsule V2 — public module surface.
- * Open source (Apache-2.0). Read-only scaffold; no live AWS mutations.
+ * Open source (MIT). Read-only scaffold; no live AWS mutations.
  */
 
 export {
