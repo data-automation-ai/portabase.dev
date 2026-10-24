@@ -27,7 +27,7 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
       switch(operation) {
         case 'session.open': data={ connected:{source:!!profile.connections.source,target:!!profile.connections.target},selection:profile.selection,keyAcknowledged:!!profile.keyAcknowledged }; break;
         case 'key.acknowledge': profile.keyAcknowledged=true; data={acknowledged:true}; break;
-        case 'oauth.begin': data=connections.begin(profile,input.slot); break;
+        case 'oauth.begin': data=connections.begin(profile,input.slot,input.redirectUri); break;
         case 'oauth.finish': data=await connections.finish(profile,input); break;
         case 'oauth.disconnect': data=connections.disconnect(profile,input.slot); break;
         case 'projects.list': data={projects:await (await connections.access(profile,input.slot)).api.projects()}; break;

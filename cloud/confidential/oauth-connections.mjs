@@ -2,26 +2,29 @@ import { generatePkcePair, generateOAuthState, buildSupabaseAuthorizeUrl, exchan
   refreshSupabaseAccessToken, DEFAULT_SUPABASE_OAUTH_TOKEN_URL } from '../runner/supabase-oauth.mjs';
 import { supabaseAccess } from './supabase-access.mjs';
 const SLOT = new Set(['source','target']);
+const CALLBACKS=new Set(['https://portabase.dev/confidential/callback','http://127.0.0.1:58441/confidential/callback']);
 const fail = code => { throw new Error(code); };
 export function oauthConnections({ clientId, clientSecret, redirectUri, fetchImpl = fetch, now = Date.now }) {
   if (!clientId || !clientSecret || redirectUri !== 'https://portabase.dev/confidential/callback') fail('oauth_configuration_invalid');
   const refreshes=new WeakMap();
   const secureFetch=(url,options)=>fetchImpl(url,{...options,redirect:'error',signal:AbortSignal.timeout(30000)});
   return {
-    begin(profile, slot) {
+    begin(profile, slot, callback=redirectUri) {
       if (!SLOT.has(slot)) fail('invalid_connection_slot');
+      if(!CALLBACKS.has(callback))fail('invalid_oauth_callback');
       const pkce = generatePkcePair(), state = generateOAuthState();
       profile.pending ||= {};
-      profile.pending[slot] = { state, codeVerifier: pkce.codeVerifier, expires: now() + 10 * 60 * 1000 };
-      return { slot, state, url: buildSupabaseAuthorizeUrl({ clientId, redirectUri, codeChallenge: pkce.codeChallenge,
+      profile.pending[slot] = { state, codeVerifier: pkce.codeVerifier, redirectUri:callback, expires: now() + 10 * 60 * 1000 };
+      return { slot, state, url: buildSupabaseAuthorizeUrl({ clientId, redirectUri:callback, codeChallenge: pkce.codeChallenge,
         state, scope: '', authorizeUrl: 'https://api.supabase.com/v1/oauth/authorize' }) };
     },
     async finish(profile, {slot,code,state}) {
       if (!SLOT.has(slot) || typeof code !== 'string' || code.length > 4096 || !code.length) fail('invalid_oauth_callback');
       const pending = profile.pending?.[slot];
       if (!pending || pending.state !== state || pending.expires <= now()) fail('oauth_state_mismatch');
+      if(!CALLBACKS.has(pending.redirectUri||redirectUri))fail('invalid_oauth_callback');
       delete profile.pending[slot];
-      const tokens = await exchangeSupabaseOAuthCode({ code, codeVerifier: pending.codeVerifier, redirectUri,
+      const tokens = await exchangeSupabaseOAuthCode({ code, codeVerifier: pending.codeVerifier, redirectUri:pending.redirectUri||redirectUri,
         clientId, clientSecret, tokenUrl: DEFAULT_SUPABASE_OAUTH_TOKEN_URL, fetchImpl:secureFetch });
       profile.connections[slot] = tokens;
       return { slot, connected: true };
