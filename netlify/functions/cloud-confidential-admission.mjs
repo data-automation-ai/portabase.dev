@@ -35,4 +35,11 @@ export function confidentialAdmission({authenticate=verifyCloudUser,subscription
     } catch { return jsonResponse(503,{error:'quota_service_unavailable'}); }
   };
 }
-export const handler=confidentialAdmission();
+const admission=confidentialAdmission();
+// Native Functions v2 supplies the regional Blobs context required for strong
+// reads. Legacy connectLambda discards uncachedEdgeURL and cannot supply it.
+export default async function handler(request) {
+  const result=await admission({httpMethod:request.method,headers:Object.fromEntries(request.headers),
+    body:request.method==='POST'?await request.text():''});
+  return new Response(result.body,{status:result.statusCode,headers:result.headers});
+}
