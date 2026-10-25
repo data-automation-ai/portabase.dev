@@ -528,5 +528,3 @@ export const nightmares = [
     verified: 'Supabase-confirmed status incident · resolved'
   }
 ];
-  }
-];
