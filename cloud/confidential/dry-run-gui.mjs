@@ -39,8 +39,8 @@ function machineProgress(status) {
 }
 function sourceScopePanel(status,nonce) {
   const inventory=status.inventory;
-  if(!status.selection?.source)return '';
-  if(!inventory||inventory.ref!==status.selection.source)return `<section class="scope"><h2>Source object picker</h2><p>Source inventory is not available yet. ${status.error?`<strong>${esc(status.error)}</strong>`:'Select a source project to load its objects.'}</p></section>`;
+  if(!status.selection?.source)return `<section class="scope" id="source-object-picker"><h2>Source object picker</h2><p>Connect Source Supabase above and choose a project. Its tables, row and size estimates, Storage buckets, Auth users, and Edge Functions will appear here for selection.</p><p>Database schemas and table definitions are always included.</p></section>`;
+  if(!inventory||inventory.ref!==status.selection.source)return `<section class="scope" id="source-object-picker"><h2>Source object picker</h2><p>Source inventory is not available yet. ${status.error?`<strong>${esc(status.error)}</strong>`:'Loading the selected source project’s objects.'}</p></section>`;
   const scope=status.scope||{tables:inventory.tables.map(row=>row.name),buckets:inventory.buckets.map(row=>row.id),auth:true,functions:true};
   const tableSet=new Set(scope.tables),bucketSet=new Set(scope.buckets),schemas=new Map();
   inventory.tables.forEach((row,index)=>{if(!schemas.has(row.schema))schemas.set(row.schema,[]);schemas.get(row.schema).push({row,index});});

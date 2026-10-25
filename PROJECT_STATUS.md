@@ -7,24 +7,26 @@ confidential-runner status notes. See
 [`cloud/confidential/DRY-RUN-STATUS.md`](cloud/confidential/DRY-RUN-STATUS.md).
 The owner approved the same test OAuth grants earlier in this session. The
 local helper currently reports all connections pending and no executed capture
-or restore. This isolated branch now contains the homepage evidence update and
-source-object picker; neither has been released to the public site. Picker
-coverage is focused and the inventory-capable image is served by controller
-revision `portabase-confidential-controller-00011-tgt`; replacement TDX VM
-launch and live inventory remain pending while the prior VM stops.
+or restore. This isolated branch contains the homepage evidence update,
+Google-attestation headline, and source-object picker; none has been released to
+the public site. Picker coverage is focused, controller revision
+`portabase-confidential-controller-00011-tgt` serves the inventory-capable
+image, and a live TDX VM passed client-side attestation. Live source inventory
+still requires source OAuth and project selection.
 
 | Capability | Source | Provisioned | Configured | Deployed | Live proof | Security proof | Status | Blocker |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Attested application execution | `cloud/confidential/` | Dedicated Google project and TDX test VM | Pinned application and controller images | Isolated controller and expiring VM | Prior Google-signed attestation and encrypted session commands | Prior live wrong-image and substituted-key rejection | PARTIALLY VERIFIED | Full recovery and independently distributed customer verifier |
 | Supabase OAuth source and target | Application and native test helper | Dedicated OAuth app and two synthetic projects | PKCE and encrypted profile persistence | Candidate runtime; public GUI callback absent | Current helper: neither connection completed | Local encrypted-profile and command checks | INCOMPLETE | Complete approved grants, then verify refresh during actual capture |
-| Source-object picker | `cloud/confidential/` and native trial GUI | Source inventory queried through the attested workload | Table row data, Storage buckets, Auth and Edge Function choices | Controller `00011-tgt` serves inventory-capable image; replacement TDX VM pending | No live inventory shown yet | Selected object names are rechecked against fresh source inventory before capture | INCOMPLETE | Start attested VM, complete approved source OAuth and inspect inventory |
+| Source-object picker | `cloud/confidential/` and native trial GUI | Source inventory queried through the attested workload | Table row data, Storage buckets, Auth and Edge Function choices | Controller `00011-tgt` serves inventory-capable image; isolated TDX VM attested | Picker panel visible; live inventory waits for source OAuth and project selection | Selected object names are rechecked against fresh source inventory before capture | INCOMPLETE | Complete source OAuth, select project and inspect inventory |
 | Free manual admission | Native Netlify admission function | Isolated draft and strong Blobs store | One daily manual capture, 10 GiB limit | Isolated draft only | Prior persistent reservation, duplicate and limit checks | Prior anonymous denial and quota failure checks | PARTIALLY VERIFIED | Customer production integration |
 | Backup, vault and restored application | Engine and guarded dry-run helper | Named isolated source and blank target | Cloud staging and explicit target confirmation | Candidate runtime | Source baseline only; no capture or restore executed | Target guards implemented; live recovery denial tests pending | INCOMPLETE | Actual capture, customer vault delivery and independent recovered-app checks |
 
 The version/license source is now 0.5.0 / MIT. This checkpoint does not publish
-an npm release or promote the hosted website. The homepage now contains eight
-public user reports and six separate official status incidents dated Oct 15–25,
-2026; the public deploy remains unverified.
+an npm release or promote the hosted website. The homepage source contains eight
+public user reports, six separate official status incidents dated Oct 15–25,
+2026, and a Google-signed attestation headline; the public deploy remains
+unverified.
 
 ## Vertical customer flow checkpoint — 2026-10-05
 

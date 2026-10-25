@@ -8,9 +8,11 @@ and Edge Functions. Schema and table definitions remain included. The workload
 rechecks selected names against fresh source inventory before capture. Focused GUI,
 scope and progress checks passed 9/9 locally. The inventory-capable application
 image is built, and controller revision `portabase-confidential-controller-00011-tgt`
-serves it. The old validation VM is still stopping; no replacement VM has yet
-served a live inventory. No OAuth grants, capture, vault upload or restore have
-completed in the current local session.
+serves it. A replacement TDX VM is running, and the local client verified its
+Google-signed attestation against the pinned application digest. The local
+screen shows the object-picker panel before login; live tables and buckets
+appear after source OAuth and project selection. No OAuth grants, capture, vault
+upload or restore have completed in the current local session.
 
 **INCOMPLETE. This branch is a source checkpoint, not a customer release.**
 
@@ -22,13 +24,13 @@ baseline covered password login, authenticated/anonymous RLS, Storage bytes and
 an Edge Function invocation. These observations are narrower than recovery.
 
 On 2026-10-25 the attested Dropbox-capable image built and the controller was
-deployed, but the owner has not completed any of the three OAuth grants. No
-AWA data has been read, no capsule uploaded, and no restore executed. An earlier
-VM passed attestation and rendered the three connection controls. It had a
-110-minute application timeout, so it was stopped before any grant. The current
-replacement image extends that timeout to 230 minutes and adds source inventory.
-Its launch is pending completion of the prior VM shutdown. All connections
-remain false.
+deployed. Three earlier starts on the synthetic validation account had no
+backup or restore runs; their timestamps are preserved in the ignored local
+evidence record. The validation-only start counter was cleared with a
+compare-and-set update after confirming no run and no VM existed. The current
+replacement VM is running and the client verified the pinned digest. All three
+OAuth connections remain false. No AWA data has been read, no capsule uploaded,
+and no restore executed.
 
 ## Bound targets
 
@@ -44,9 +46,8 @@ remain false.
 
 ## Next validation steps
 
-1. Wait for the old validation VM to finish stopping, then confirm the new VM
-   and helper are attested to the application digest above. The helper listens
-   only on `127.0.0.1:58441`; the VM auto-deletes after four hours.
+1. Open the active local helper at `http://127.0.0.1:58441/`. It listens only
+   on loopback; the attested VM auto-deletes after four hours.
 2. Complete both approved Supabase grants for Portabase Confidential Recovery.
    Supabase rejects HTTP loopback redirects, so the test uses the registered
    HTTPS callback with a controlled handoff to the local verifier. Never print

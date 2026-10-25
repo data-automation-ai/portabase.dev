@@ -344,6 +344,21 @@ function NeverHoldKeys() {
   </section>;
 }
 
+function AttestationProof() {
+  return <section className="section attestation-proof" id="attestation-proof">
+    <div className="shell">
+      <div className="section-kicker green">GOOGLE-SIGNED RUNNER ATTESTATION</div>
+      <div className="split-heading">
+        <h2>Backup providers can promise confidentiality. Portabase provides Google-signed evidence for its runner.</h2>
+        <div>
+          <p>Before the client releases a recovery key or command to the workload, it verifies Google’s signature and checks the Intel TDX hardware claim, Google Cloud project identity, and exact workload image digest against a pinned policy.</p>
+          <p><a href="https://docs.cloud.google.com/confidential-computing/confidential-space/docs/reference/attestation-assertions" target="_blank" rel="noreferrer">See Google’s attestation assertions <Arrow /></a></p>
+        </div>
+      </div>
+    </div>
+  </section>;
+}
+
 function Faq() {
   return <section className="section faq" id="faq">
     <div className="shell">
@@ -2198,7 +2213,7 @@ function UseCases() {
 
 function HomePage() {
   useEffect(() => { document.title = 'Portabase — Your Supabase Escape'; }, []);
-  return <><Header /><main><Hero /><RecoveryOverviewImage /><Stories /><WhyNow /><Reality /><ClosureRisk /><TwoScenarios /><MidPageCta /><WhatIsThis /><NeverHoldKeys /><CliVsCloud /><HeroConcept /><RunnerArchitectureDiagram /><Escape /><InstallCta Arrow={Arrow} /><Faq /><Audit /><Cutover /><PublicDeal /><CloudTeaser /><UseCases /></main><Footer /></>;
+  return <><Header /><main><Hero /><RecoveryOverviewImage /><Stories /><WhyNow /><Reality /><ClosureRisk /><TwoScenarios /><MidPageCta /><WhatIsThis /><NeverHoldKeys /><AttestationProof /><CliVsCloud /><HeroConcept /><RunnerArchitectureDiagram /><Escape /><InstallCta Arrow={Arrow} /><Faq /><Audit /><Cutover /><PublicDeal /><CloudTeaser /><UseCases /></main><Footer /></>;
 }
 
 /** Mid-page conversion point placed at the emotional peak, after Stories + TwoScenarios. */
