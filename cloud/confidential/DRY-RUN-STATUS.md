@@ -6,10 +6,11 @@ The local trial GUI now loads a source inventory from the attested workload and
 lets the operator select table row data by schema, Storage buckets, Auth users,
 and Edge Functions. Schema and table definitions remain included. The workload
 rechecks selected names against fresh source inventory before capture. Focused GUI,
-scope and progress checks passed 9/9 locally. The running VM still has the
-previous application digest; the new inventory operation is not live until the
-isolated image is rebuilt and rolled forward. No OAuth grants, capture, vault
-upload or restore have completed in the current local session.
+scope and progress checks passed 9/9 locally. The inventory-capable application
+image is built, and controller revision `portabase-confidential-controller-00011-tgt`
+serves it. The old validation VM is still stopping; no replacement VM has yet
+served a live inventory. No OAuth grants, capture, vault upload or restore have
+completed in the current local session.
 
 **INCOMPLETE. This branch is a source checkpoint, not a customer release.**
 
@@ -22,12 +23,12 @@ an Edge Function invocation. These observations are narrower than recovery.
 
 On 2026-10-25 the attested Dropbox-capable image built and the controller was
 deployed, but the owner has not completed any of the three OAuth grants. No
-AWA data has been read, no capsule uploaded, and no restore executed. The
-first new VM passed attestation and rendered all three controls. It had a
-110-minute application timeout, so it was stopped before any grant. The
-replacement image extends that timeout to 230 minutes. At 18:37 UTC the fresh
-VM passed attestation for the pinned digest, and the local page rendered all
-three controls with the run button blocked. All connections remained false.
+AWA data has been read, no capsule uploaded, and no restore executed. An earlier
+VM passed attestation and rendered the three connection controls. It had a
+110-minute application timeout, so it was stopped before any grant. The current
+replacement image extends that timeout to 230 minutes and adds source inventory.
+Its launch is pending completion of the prior VM shutdown. All connections
+remain false.
 
 ## Bound targets
 
@@ -35,16 +36,17 @@ three controls with the run button blocked. All connections remained false.
 - Product Auth: `eoiqvdmvgaurlecdzqkp`.
 - Synthetic source: `uloqvqdkeiwvnnnfdvrc`, `portabase-confidential-source`.
 - Synthetic target: `jmqjsyyyhhwvkbqexxog`, `portabase-confidential-target`.
-- Candidate application: `sha256:c8637913f9adb74cce420d41521ada5769d77d639d4be467f8b4483c4eb14621`.
-- Candidate controller: `sha256:2c4beb01f9e9d5a9f58a74a98ad6728481e4ab66879c57723e9ccad95970bf4e`.
-- Controller revision: `portabase-confidential-controller-00010-8sr`.
+- Candidate application: `sha256:f01cfb2cf2010983b07f705e4b88f8f3bc7c43bf618aaad39c90ca1cffc76a31`.
+- Controller image: `sha256:73339126383e9da470c8380d1ef5978d02b62bbd6dcb1c2592e1459f45341ad3`.
+- Controller revision: `portabase-confidential-controller-00011-tgt` (100% traffic).
 - Admission draft: `6ade48b63705dca0f83861da`, 25 GiB cap only for the isolated validation identity and three bounded starts per 24 hours. The production admission path returned 404 during a read-only quota probe.
 - Google OAuth secret version 3 adds the existing public Dropbox app ID while preserving the prior Supabase OAuth fields. Previous version 2 is the rollback.
 
 ## Next validation steps
 
-1. Confirm the new VM and helper are attested to the application digest above.
-   The helper listens only on `127.0.0.1:58441`; the VM auto-deletes after four hours.
+1. Wait for the old validation VM to finish stopping, then confirm the new VM
+   and helper are attested to the application digest above. The helper listens
+   only on `127.0.0.1:58441`; the VM auto-deletes after four hours.
 2. Complete both approved Supabase grants for Portabase Confidential Recovery.
    Supabase rejects HTTP loopback redirects, so the test uses the registered
    HTTPS callback with a controlled handoff to the local verifier. Never print
