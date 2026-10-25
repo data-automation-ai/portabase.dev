@@ -21,9 +21,17 @@ export async function loadWorkloadConfig() {
   if(!config.clientId || !config.clientSecret) throw new Error('oauth_configuration_invalid');
   return config;
 }
+export function admissionEndpoint(value=process.env.PORTABASE_ADMISSION_ENDPOINT) {
+  const endpoint=value||'https://portabase.dev/api/cloud/confidential-admission';
+  if(endpoint!=='https://portabase.dev/api/cloud/confidential-admission' &&
+    !/^https:\/\/[a-f0-9]{24}--portabase-dev\.netlify\.app\/\.netlify\/functions\/cloud-confidential-admission$/.test(endpoint)) {
+    throw new Error('unapproved_admission_endpoint');
+  }
+  return endpoint;
+}
 export async function admitJob({authorization,operation,requestId}) {
   if(!/^[a-f0-9-]{36}$/i.test(requestId||'')) throw new Error('invalid_request_id');
-  const response=await fetch('https://portabase.dev/api/cloud/confidential-admission',{
+  const response=await fetch(admissionEndpoint(),{
     method:'POST',headers:{Authorization:authorization,'content-type':'application/json','x-portabase-cloud-version':'supabase'},
     body:JSON.stringify({operation,requestId}),redirect:'error',signal:AbortSignal.timeout(15000)});
   const result=await response.json();
