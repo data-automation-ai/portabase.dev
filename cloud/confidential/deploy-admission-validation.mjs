@@ -8,9 +8,11 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {operatorConfig,SITE_ID} from './operator-config.mjs';
 async function main(){
- const root=resolve('.worktrees/confidential-app-20261024'),git=promisify(execFile);
+ const root=resolve('.'),git=promisify(execFile);
  if((await git('git',['-C',root,'status','--porcelain'])).stdout.trim())throw new Error('release_source_not_clean');
  const commit=(await git('git',['-C',root,'rev-parse','HEAD'])).stdout.trim();
+ const branch=(await git('git',['-C',root,'branch','--show-current'])).stdout.trim();
+ if(branch!=='codex/12gb-timing-20261025')throw new Error('wrong_validation_branch');
  const cli=join(process.env.APPDATA,'npm/node_modules/netlify-cli');
  const {zipFunction}=await import(pathToFileURL(join(cli,'node_modules/@netlify/zip-it-and-ship-it/dist/main.js')));
  const stage=await mkdtemp(join(tmpdir(),'portabase-admission-v2-'));
@@ -22,7 +24,7 @@ async function main(){
  const sha=createHash('sha1').update(html).digest('hex'),op=await operatorConfig();
  const previous=op.site.published_deploy.id;
  const draft=await op.netlify(`/sites/${SITE_ID}/deploys?title=Native%20confidential%20admission%20validation`,{method:'POST',body:JSON.stringify({
-  draft:true,branch:'main',files:{'index.html':sha},functions:{'cloud-confidential-admission':digest},
+  draft:true,branch,files:{'index.html':sha},functions:{'cloud-confidential-admission':digest},
   functions_config:{'cloud-confidential-admission':{build_data:{runtimeAPIVersion:2,bootstrapVersion:bundle.bootstrapVersion},memory:1024}}})});
  const record={id:draft.id,url:`https://${draft.id}--portabase-dev.netlify.app`,sourceCommit:commit,functionDigest:digest,
   runtimeAPIVersion:2,bootstrapVersion:bundle.bootstrapVersion,invocationMode:bundle.invocationMode,stage,originalProduction:previous,productionPublished:false,createdAt:new Date().toISOString()};
