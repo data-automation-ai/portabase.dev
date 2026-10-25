@@ -22,6 +22,17 @@ test('free confirmed customer gets one 10 GiB manual backup, then another after 
   assert.equal((await run(event())).statusCode,429);
   advance(86400001);assert.equal((await run(event())).statusCode,200);
 });
+test('explicit validation cap applies to one verified owner without changing public free limits',async()=>{
+  const options={validationOwnerId:user.id,validationMaxBytes:String(16*1024**3)};
+  const allowed=await fixture(options).run(event('quota.inspect'));
+  assert.equal(JSON.parse(allowed.body).maxBytes,16*1024**3);
+  const other=await fixture({...options,authenticate:async()=>({...user,id:'another-customer'})}).run(event('quota.inspect'));
+  assert.equal(JSON.parse(other.body).maxBytes,10*1024**3);
+  for(const invalid of ['0','oops',String(26*1024**3)]){
+    const response=await fixture({...options,validationMaxBytes:invalid}).run(event('quota.inspect'));
+    assert.equal(JSON.parse(response.body).maxBytes,10*1024**3);
+  }
+});
 test('concurrent free submissions cannot reserve two backups',async()=>{
   const {run}=fixture();const results=await Promise.all([run(event()),run(event()),run(event())]);
   assert.equal(results.filter(r=>r.statusCode===200).length,1);

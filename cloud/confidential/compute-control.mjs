@@ -1,5 +1,6 @@
 import {googleAccessToken} from './cloud-config.mjs';
 const PROJECT='portabase-dev',ZONE='us-central1-a',REGION='us-central1';
+const MAX_RUN_SECONDS=4*60*60; // Two bounded 90-minute jobs plus setup and verification.
 const API=`https://compute.googleapis.com/compute/v1/projects/${PROJECT}`;
 export const runnerName=owner=>{
   if(!/^[a-f0-9]{64}$/.test(owner||''))throw new Error('invalid_customer');
@@ -12,7 +13,7 @@ export function instanceConfiguration(owner,image) {
     confidentialInstanceConfig:{confidentialInstanceType:'TDX'},
     shieldedInstanceConfig:{enableSecureBoot:true,enableVtpm:true,enableIntegrityMonitoring:true},
     scheduling:{onHostMaintenance:'TERMINATE',automaticRestart:false,provisioningModel:'STANDARD',
-      maxRunDuration:{seconds:'7200'},instanceTerminationAction:'DELETE'},
+      maxRunDuration:{seconds:String(MAX_RUN_SECONDS)},instanceTerminationAction:'DELETE'},
     disks:[{boot:true,autoDelete:true,type:'PERSISTENT',interface:'NVME',initializeParams:{diskSizeGb:'160',
       diskType:`zones/${ZONE}/diskTypes/pd-balanced`,sourceImage:'projects/confidential-space-images/global/images/confidential-space-261000'}}],
     networkInterfaces:[{network:`projects/${PROJECT}/global/networks/portabase-confidential`,
@@ -39,7 +40,7 @@ export function computeControl({image,token=googleAccessToken,fetchImpl=fetch}={
     const address=instance.networkInterfaces?.[0]?.networkIP;
     if(address && !/^10\.98\.0\.(?:[0-9]{1,3})$/.test(address))throw new Error('invalid_runner_address');
     return {name:instance.name,id:instance.id,status:instance.status,address,
-      createdAt:instance.creationTimestamp,expiresAt:new Date(Date.parse(instance.creationTimestamp)+7200000).toISOString()};
+      createdAt:instance.creationTimestamp,expiresAt:new Date(Date.parse(instance.creationTimestamp)+MAX_RUN_SECONDS*1000).toISOString()};
   }
   return {
     async get(owner){return own(await request(`/zones/${ZONE}/instances/${runnerName(owner)}`),owner);},

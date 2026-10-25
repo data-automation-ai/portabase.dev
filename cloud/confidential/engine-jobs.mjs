@@ -23,17 +23,23 @@ function runEngine(args, env, root, maxBytes, progress, { spawnImpl = spawn, sig
     const child = spawnImpl(process.execPath, [ENGINE, ...args], {
       cwd: root, env: { PATH: process.env.PATH, HOME: root, LANG: 'C.UTF-8',
         NODE_ENV: 'production', TMPDIR: root, ...env }, stdio: ['ignore','pipe','pipe'] });
-    let rejected = false, stderr = '', stdout = '';
+    let rejected = false, pendingProgress = '';
     const stop = code => { if (!rejected) { rejected = true; child.kill('SIGKILL'); reject(new Error(code)); } };
     const abort = () => stop('credential_refresh_failed');
     if(signal?.aborted)abort(); else signal?.addEventListener('abort',abort,{once:true});
     child.stdout.on('data', chunk => {
-      stdout = (stdout + chunk.toString()).slice(-8192);
-      for (const phase of ['database','storage','functions','package','encrypt','transfer']) {
-        if (stdout.toLowerCase().includes(phase)) progress(phase);
+      pendingProgress = (pendingProgress + chunk.toString()).slice(-8192);
+      const lines = pendingProgress.split('\n');
+      pendingProgress = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('@portabase ')) continue;
+        try {
+          const { phase } = JSON.parse(line.slice(11));
+          if (['database','storage','functions','package','encrypt','transfer'].includes(phase)) progress(phase);
+        } catch { /* An untrusted or partial progress line is ignored. */ }
       }
     });
-    child.stderr.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-8192); });
+    child.stderr.on('data', () => {});
     const deadline = setTimeout(() => stop('job_time_limit'), 90 * 60 * 1000);
     // Includes encrypted, raw and compressed intermediates. A dedicated VM also
     // bounds disk and memory. Never silently truncate data to make a quota fit.
@@ -47,7 +53,7 @@ function runEngine(args, env, root, maxBytes, progress, { spawnImpl = spawn, sig
     child.on('error', () => { clearTimeout(deadline); clearInterval(monitor); stop('engine_unavailable'); });
     child.on('close', code => {
       signal?.removeEventListener('abort',abort);
-      clearTimeout(deadline); clearInterval(monitor); stderr = ''; stdout = '';
+      clearTimeout(deadline); clearInterval(monitor); pendingProgress = '';
       if (rejected) return;
       if (code !== 0) reject(new Error('engine_job_failed')); else resolveJob();
     });
@@ -56,7 +62,11 @@ function runEngine(args, env, root, maxBytes, progress, { spawnImpl = spawn, sig
 export function engineJobs({ run = runEngine, access = supabaseAccess, platform = process.platform } = {}) {
   const jobs = new Map();
   function snapshot(job) { return { id: job.id, operation: job.operation, state: job.state, phase: job.phase,
-    startedAt: job.startedAt, finishedAt: job.finishedAt || null, result: job.result || null, error: job.error || null }; }
+    startedAt: job.startedAt, finishedAt: job.finishedAt || null,
+    durationMs: job.finishedAt ? Date.parse(job.finishedAt) - Date.parse(job.startedAt) : null,
+    phaseTimings: job.phaseTimings.map(({ phase, startedAt, finishedAt }) => ({ phase, startedAt,
+      durationMs: finishedAt ? Date.parse(finishedAt) - Date.parse(startedAt) : null })),
+    result: job.result || null, error: job.error || null }; }
   return {
     async start({ owner, sourceRef, targetRef, sourceToken, targetToken, passphrase, provider, maxBytes, operation = 'backup', capsuleId, authorize, refreshAccess }) {
       if (platform !== 'linux') fail('cloud_runner_required');
@@ -75,7 +85,17 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
       // Charge a manual run only after destination, size and capsule validation.
       if(authorize)await authorize();
       const root = await mkdtemp('/tmp/portabase-job-');
-      const job = { id: randomUUID(), owner, sourceRef, targetRef, operation, root, state: 'running', phase: 'preflight', startedAt: new Date().toISOString() };
+      const job = { id: randomUUID(), owner, sourceRef, targetRef, operation, root, vaultRequested: !!provider,
+        state: 'running', phase: 'preflight',
+        startedAt: new Date().toISOString(), phaseTimings: [] };
+      const phase = name => {
+        if (job.phase === name) return;
+        const at = new Date().toISOString(), prior = job.phaseTimings.at(-1);
+        if (prior && !prior.finishedAt) prior.finishedAt = at;
+        job.phase = name;
+        job.phaseTimings.push({ phase: name, startedAt: at });
+      };
+      job.phaseTimings.push({ phase: job.phase, startedAt: job.startedAt });
       jobs.set(job.id,job);
       job.completion = (async () => {
         let refreshTimer, refreshPromise;
@@ -104,13 +124,13 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
           let args;
           if (operation === 'backup') {
             Object.assign(env, { SUPABASE_PROJECT_REF: sourceRef, SUPABASE_URL: `https://${sourceRef}.supabase.co`, SUPABASE_DB_URL: credential.databaseUrl, SUPABASE_SERVICE_ROLE_KEY: credential.serviceKey });
-            args = ['backup'];
+            args = ['backup','--progress'];
           } else {
             Object.assign(env, { PORTABASE_TARGET_PROJECT_REF: targetRef, PORTABASE_TARGET_SUPABASE_URL: `https://${targetRef}.supabase.co`,
               PORTABASE_TARGET_DB_URL: credential.databaseUrl, PORTABASE_TARGET_SERVICE_ROLE_KEY: credential.serviceKey });
             args = ['replay', '--capsule', prior.capsulePath, '--confirm-target', targetRef];
           }
-          await run(args,env,root,maxBytes,phase => { job.phase=phase; },{signal:abort.signal});
+          await run(args,env,root,maxBytes,phase,{signal:abort.signal});
           if (operation === 'backup') {
             const status = JSON.parse(await readFile(join(root,'status/latest.json'),'utf8'));
             if (status.state !== 'COMPLETE' || !/^[a-z0-9_.-]+$/i.test(status.capsule || '')) fail('capture_incomplete');
@@ -118,18 +138,27 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
             job.capsulePath = join(root,'capsules',status.capsule);
             job.result = { capsuleId: status.capsule, bytes: status.sizeBytes, ciphertextSha256: status.capsuleHash,
               captureComplete: true, vaultVerified: !!provider && status.destinationVerified === true, restoreVerified: false,
-              destinationKind: provider?.type || 'download', measuredSourceBytes: sourceStatus.measuredBytes };
+              destinationKind: provider?.type || 'temporary_runner', temporaryCapsuleRetained: !provider,
+              measuredSourceBytes: sourceStatus.measuredBytes };
           } else {
             const files = await readdir(join(root,'evidence'));
             const name = files.filter(n => n.endsWith('.json')).sort().at(-1);
             if (!name) fail('restore_evidence_missing');
             const evidence = JSON.parse(await readFile(join(root,'evidence',name),'utf8'));
-            job.result = { captureComplete: true, restoreVerified: evidence.status === 'RECOVERY_DATA_PATH_VERIFIED', evidence };
+            job.result = { captureComplete: true, restoreVerified: evidence.status === 'RECOVERY_DATA_PATH_VERIFIED',
+              verificationScope: 'database_inventory_and_row_counts;storage_object_hashes;function_status',
+              databaseContentIdentityVerified: false, applicationBehaviorVerified: false, evidence };
             if (!job.result.restoreVerified) fail('restore_verification_incomplete');
+            if (!prior.vaultRequested) {
+              await rm(prior.root,{recursive:true,force:true});
+              prior.capsulePath = null;
+              prior.result.temporaryCapsuleRetained = false;
+            }
           }
-          job.state = 'complete'; job.phase = 'complete';
+          job.state = 'complete'; phase('complete');
         } catch (error) { job.state = 'failed'; job.error = /^[a-z0-9_]{3,80}$/.test(error.message) ? error.message : 'job_failed'; }
         finally { clearInterval(refreshTimer); if(refreshPromise)await refreshPromise; job.finishedAt = new Date().toISOString();
+          const current = job.phaseTimings.at(-1); if (current && !current.finishedAt) current.finishedAt = job.finishedAt;
           await rm(join(root,'database-access.json'),{force:true});
           if (!job.capsulePath) await rm(root,{recursive:true,force:true}); }
       })();

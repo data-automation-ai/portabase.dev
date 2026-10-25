@@ -9,7 +9,7 @@ test('compute config requires an immutable image and bounds the hardware lifecyc
   assert.equal(config.confidentialInstanceConfig.confidentialInstanceType,'TDX');
   assert.equal(config.shieldedInstanceConfig.enableSecureBoot,true);
   assert.equal(config.scheduling.instanceTerminationAction,'DELETE');
-  assert.equal(config.scheduling.maxRunDuration.seconds,'7200');
+  assert.equal(config.scheduling.maxRunDuration.seconds,'14400');
   assert.equal(config.disks[0].autoDelete,true);
   assert.ok(config.metadata.items.some(x=>x.key==='tee-restart-policy'&&x.value==='Never'));
 });
@@ -20,6 +20,9 @@ test('compute discovery rejects a substituted customer or an arbitrary proxy add
   await assert.rejects(compute.get(owner),/invalid_runner_address/);
   value.networkInterfaces[0].networkIP='10.98.0.5';value.labels.customer='other';
   await assert.rejects(compute.get(owner),/runner_identity_mismatch/);
+  value.labels.customer=owner.slice(0,40);
+  const found=await compute.get(owner);
+  assert.equal(Date.parse(found.expiresAt)-Date.parse(found.createdAt),4*60*60*1000);
 });
 async function serve(t,options) {
   const server=controllerServer(options);await new Promise(r=>server.listen(0,'127.0.0.1',r));

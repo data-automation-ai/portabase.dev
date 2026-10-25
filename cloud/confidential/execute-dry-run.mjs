@@ -1,13 +1,12 @@
 // A live drill writes only the explicitly named, blank synthetic target.
 import {randomUUID} from 'node:crypto';
-const SOURCE='uloqvqdkeiwvnnnfdvrc',TARGET='jmqjsyyyhhwvkbqexxog';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-export async function executeDryRun({command,status,persist}) {
+export async function executeDryRun({command,status,persist,sourceRef,targetRef}) {
  if(status.executing)throw new Error('drill_already_running');
  status.executing=true;status.state='checking_target';await persist();
  try {
   const check=await command('preflight');
-  if(!check.ready||check.source.ref!==SOURCE||check.target.ref!==TARGET||!check.target.blank)throw new Error('unsafe_test_selection');
+  if(!check.ready||check.source.ref!==sourceRef||check.target.ref!==targetRef||!check.target.blank)throw new Error('unsafe_test_selection');
   async function wait(job,kind){
    const deadline=Date.now()+90*60000;
    do {
@@ -25,7 +24,7 @@ export async function executeDryRun({command,status,persist}) {
   const captured=await wait(backup,'backup');
   if(!captured.result?.captureComplete)throw new Error('capture_not_complete');
   status.state='restoring';await persist();
-  const restore=await command('restore.start',{requestId:randomUUID(),capsuleId:backup.id,confirmTarget:TARGET,acknowledgeManualConfig:true});
+  const restore=await command('restore.start',{requestId:randomUUID(),capsuleId:backup.id,confirmTarget:targetRef,acknowledgeManualConfig:true});
   status.restoreExecuted=true;
   const restored=await wait(restore,'restore');
   if(!restored.result?.restoreVerified)throw new Error('restore_not_verified');

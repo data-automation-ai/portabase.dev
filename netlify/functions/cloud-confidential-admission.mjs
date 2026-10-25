@@ -4,7 +4,16 @@ import { getSubscriptionForUser } from '../shared/subscription-store.mjs';
 import { runnerAdmission } from '../shared/runner-admission.mjs';
 import { planTransfersPer24h } from '../shared/product.mjs';
 import { createHash } from 'node:crypto';
-export function confidentialAdmission({authenticate=verifyCloudUser,subscription=getSubscriptionForUser,database,clock=Date.now}={}) {
+// An explicitly configured, single-account validation allowance can exceed
+// the public free cap. It is disabled when either setting is absent or invalid.
+export function validationCap(user, ownerId, rawBytes) {
+  const bytes=Number(rawBytes);
+  return ownerId && user.id===ownerId && Number.isSafeInteger(bytes)
+    && bytes>10*1024**3 && bytes<=25*1024**3 ? bytes : null;
+}
+export function confidentialAdmission({authenticate=verifyCloudUser,subscription=getSubscriptionForUser,database,clock=Date.now,
+  validationOwnerId=process.env.PORTABASE_CONFIDENTIAL_VALIDATION_OWNER_ID,
+  validationMaxBytes=process.env.PORTABASE_CONFIDENTIAL_VALIDATION_MAX_BYTES}={}) {
   return async event=>{
     if(event.httpMethod!=='POST') return jsonResponse(405,{error:'method_not_allowed'});
     let user;try{user=await authenticate(event);}catch{return jsonResponse(401,{error:'unauthorized'});}
@@ -16,7 +25,7 @@ export function confidentialAdmission({authenticate=verifyCloudUser,subscription
     try {
       if(event.blobs)connectLambda(event);
       const admission=runnerAdmission(await subscription(user),clock());
-      const maxBytes=admission.plan.storageCapBytes;
+      const maxBytes=validationCap(user,validationOwnerId,validationMaxBytes) ?? admission.plan.storageCapBytes;
       const dailyLimit=admission.paid?planTransfersPer24h(admission.plan.id,{extraTransfersAddon:admission.extraTransfersAddon}):1;
       if(['restore.start','quota.inspect'].includes(body.operation)) return jsonResponse(200,{maxBytes,plan:admission.plan.id});
       const counter=body.operation==='runner.start'?'starts':'runs';
