@@ -24,6 +24,8 @@ ENV PATH="/opt/portabase/bin:${PATH}"
 WORKDIR /app/cloud/confidential
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 WORKDIR /app
+ARG VALIDATION_ADMISSION_ENDPOINT
+ENV PORTABASE_ADMISSION_ENDPOINT=${VALIDATION_ADMISSION_ENDPOINT}
 LABEL "tee.launch_policy.allow_cmd_override"="false" \
       "tee.launch_policy.allow_env_override"="" \
       "tee.launch_policy.allow_capabilities"="false" \

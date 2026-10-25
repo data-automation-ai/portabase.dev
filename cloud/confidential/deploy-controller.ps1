@@ -1,9 +1,11 @@
 param([Parameter(Mandatory=$true)][string]$ApplicationDigest,
   [Parameter(Mandatory=$true)][string]$ControllerDigest,
-  [Parameter(Mandatory=$true)][string]$ValidationCustomer)
+  [Parameter(Mandatory=$true)][string]$ValidationCustomer,
+  [Parameter(Mandatory=$true)][string]$AdmissionEndpoint)
 $ErrorActionPreference='Stop'
 if($ApplicationDigest -notmatch '^sha256:[a-f0-9]{64}$' -or $ControllerDigest -notmatch '^sha256:[a-f0-9]{64}$'){throw 'Immutable image digests required'}
 if($ValidationCustomer -notmatch '^[a-f0-9-]{36}$'){throw 'Explicit validation customer required'}
+if($AdmissionEndpoint -notmatch '^https://[a-f0-9]{24}--portabase-dev\.netlify\.app/\.netlify/functions/cloud-confidential-admission$'){throw 'Explicit isolated admission endpoint required'}
 $controlProject='portabase-dev';$controlAccount='rfiddomains@gmail.com';$controlRegion='us-central1'
 $network='portabase-confidential';$controller='pb-conf-controller@portabase-dev.iam.gserviceaccount.com'
 $runner='pb-conf-runtime@portabase-dev.iam.gserviceaccount.com'
@@ -33,5 +35,5 @@ $imageBase="$controlRegion-docker.pkg.dev/$controlProject/portabase-confidential
 G @('run','deploy','portabase-confidential-controller',"--region=$controlRegion","--image=$imageBase/controller@$ControllerDigest",
   "--service-account=$controller",'--execution-environment=gen2','--cpu=1','--memory=512Mi','--min-instances=0','--max-instances=3',
   '--concurrency=8','--timeout=75s',"--network=$network","--subnet=$network",'--vpc-egress=private-ranges-only',
-  "--set-env-vars=APPLICATION_IMAGE=$imageBase/application@$ApplicationDigest,VALIDATION_CUSTOMERS=$ValidationCustomer",
+  "--set-env-vars=APPLICATION_IMAGE=$imageBase/application@$ApplicationDigest,VALIDATION_CUSTOMERS=$ValidationCustomer,PORTABASE_ADMISSION_ENDPOINT=$AdmissionEndpoint",
   '--ingress=all','--allow-unauthenticated','--labels=product=portabase,purpose=confidential-validation','--async','--format=json(metadata.name,status.url)')
