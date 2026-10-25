@@ -1,0 +1,3 @@
+# Operator observations are local; review and sanitize before any publication.
+evidence/*
+!evidence/.gitkeep
