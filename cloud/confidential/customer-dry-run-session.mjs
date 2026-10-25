@@ -8,7 +8,7 @@ import {confidentialClient} from './client.mjs';
 import {executeDryRun} from './execute-dry-run.mjs';
 import {parsePastedCallback,renderDryRunPage} from './dry-run-gui.mjs';
 const CONTROLLER='https://portabase-confidential-controller-26ulj3ikia-uc.a.run.app';
-const DIGEST='sha256:d41325201a8db099eadad8a08b711ba73b7c4e0373dac2bc2f3a0ae74cc52e74';
+const DIGEST='sha256:e7de0b727c3a6253af035d54ec664fdf88105f05073990103c82f6fe8926b7cf';
 const REF='eoiqvdmvgaurlecdzqkp',ID='6f454f7b-b490-4fe9-9c49-48ce5b6f4408';
 // Supabase's live authorize endpoint rejects HTTP loopback callbacks even
 // when registered. The test verifier receives the HTTPS callback by handoff.
@@ -153,6 +153,6 @@ async function main(){
  });
  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(58441,'127.0.0.1',resolve);});
  console.log(JSON.stringify({state:status.state,url:'http://127.0.0.1:58441',attestation:status.attestation}));
- setTimeout(()=>server.close(),60*60000).unref();
+ setTimeout(()=>server.close(),230*60000).unref();
 }
 main().catch(e=>{console.error(/^[a-z0-9_:.-]{3,120}$/i.test(e.message)?e.message:'customer_session_failed');process.exitCode=1;});
