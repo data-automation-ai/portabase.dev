@@ -626,7 +626,7 @@ function Stories() {
       <div className="section-kicker">The evidence</div>
       <div className="split-heading">
         <h2>Real projects.<br />Real consequences.</h2>
-        <p>Account lockouts, interrupted businesses, and difficult recoveries. Read the public reports and Supabase’s own incident records.</p>
+        <p>Account lockouts, interrupted businesses, and difficult recoveries. Read public user reports from Oct 15–25, 2026, alongside Supabase’s own incident records.</p>
       </div>
       <div className="story-controls">
         <p>{order === 'recent' ? 'Newest month first; higher impact first within each month.' : 'Newest year first; higher impact first within each year.'} Dates refer to the original report or official incident.</p>
@@ -649,7 +649,7 @@ function Stories() {
           </article>
         ))}
       </div>
-      <p className="source-note">No policies, feature requests, hypotheticals or backup-market discussions are counted. Community reports document what the poster reported; official incidents document what Supabase confirmed. A report is not presented as independent proof of cause.</p>
+      <p className="source-note">No policies, feature requests, hypotheticals or backup-market discussions are counted. Community reports document what the poster reported; official incidents document what Supabase confirmed. A report is not presented as independent proof of cause or as a measure of how often an issue occurs.</p>
     </div>
   </section>;
 }

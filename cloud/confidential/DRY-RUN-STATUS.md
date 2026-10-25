@@ -1,5 +1,16 @@
 # Confidential recovery checkpoint — 2026-10-25
 
+## Source-object picker update — 2026-10-25
+
+The local trial GUI now loads a source inventory from the attested workload and
+lets the operator select table row data by schema, Storage buckets, Auth users,
+and Edge Functions. Schema and table definitions remain included. The workload
+rechecks selected names against fresh source inventory before capture. Focused GUI,
+scope and progress checks passed 9/9 locally. The running VM still has the
+previous application digest; the new inventory operation is not live until the
+isolated image is rebuilt and rolled forward. No OAuth grants, capture, vault
+upload or restore have completed in the current local session.
+
 **INCOMPLETE. This branch is a source checkpoint, not a customer release.**
 
 The previous live validation recorded real Google-signed Intel TDX attestation,

@@ -73,8 +73,18 @@ async function main(){
   projects[slot]=result.projects;
   if(status.selection[slot]&&!projects[slot].some(p=>p.ref===status.selection[slot]))delete status.selection[slot];
  }
+ async function refreshSourceInventory(){
+  const ref=status.selection.source;
+  if(!status.connections.source||!ref){status.inventory=null;status.scope=null;return null;}
+  if(status.inventory?.ref===ref)return status.inventory;
+  const result=await command('source.inventory');
+  status.inventory=result.inventory;
+  status.scope={tables:result.inventory.tables.map(row=>row.name),buckets:result.inventory.buckets.map(row=>row.id),auth:true,functions:true};
+  return status.inventory;
+ }
  async function preflight(){
   delete status.preflight;delete status.error;
+  if(status.connections.source&&status.selection.source)await refreshSourceInventory();
   if(!status.connections.source||!status.connections.target||!status.connections.dropbox||!status.selection.source||!status.selection.target){
    status.state='select_projects';await persist();return;
   }
@@ -104,10 +114,10 @@ async function main(){
   res.setHeader('content-security-policy',"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
   const url=new URL(req.url,'http://127.0.0.1:58441');
   try{
-   if(req.method==='POST'&&['/callback','/dropbox','/select','/execute'].includes(url.pathname)){
+   if(req.method==='POST'&&['/callback','/dropbox','/select','/scope','/execute'].includes(url.pathname)){
     if(req.headers.origin&&req.headers.origin!=='http://127.0.0.1:58441'){res.writeHead(403);return res.end();}
     if(!req.headers['content-type']?.startsWith('application/x-www-form-urlencoded')){res.writeHead(415);return res.end();}
-    let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>8192)throw new Error('request_too_large');}
+    let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>1024*1024)throw new Error('request_too_large');}
     const form=new URLSearchParams(raw);
     if(form.get('nonce')!==runNonce)throw new Error('test_confirmation_required');
     if(url.pathname==='/callback'){
@@ -124,15 +134,33 @@ async function main(){
      if(status.executing)throw new Error('drill_already_running');
      const slot=form.get('slot'),ref=form.get('ref');
      if(!['source','target'].includes(slot)||!status.connections[slot]||!projects[slot].some(p=>p.ref===ref))throw new Error('project_not_authorized');
-     await command('project.select',{slot,ref});status.selection[slot]=ref;
+     await command('project.select',{slot,ref});
+     if(status.selection[slot]!==ref){delete status.preflight;if(slot==='source'){status.inventory=null;status.scope=null;}}
+     status.selection[slot]=ref;
+     await preflight();res.writeHead(303,{location:'/'});return res.end();
+    }
+    if(url.pathname==='/scope'){
+     if(status.executing||!status.inventory||status.inventory.ref!==status.selection.source)throw new Error('source_inventory_required');
+     const indices=(key,max)=>form.getAll(key).map(value=>{
+      if(!/^(0|[1-9][0-9]*)$/.test(value))throw new Error('invalid_source_scope');
+      const index=Number(value);if(!Number.isSafeInteger(index)||index<0||index>=max)throw new Error('invalid_source_scope');return index;
+     });
+     const tableIndices=indices('tableIndex',status.inventory.tables.length);
+     const bucketIndices=indices('bucketIndex',status.inventory.buckets.length);
+     const tables=[...new Set(tableIndices)].map(index=>status.inventory.tables[index].name);
+     const buckets=[...new Set(bucketIndices)].map(index=>status.inventory.buckets[index].id);
+     if(tables.length!==status.inventory.tables.length&&status.inventory.tables.some(row=>!row.selectable))throw new Error('selective_table_names_unsupported');
+     if(buckets.length!==status.inventory.buckets.length&&buckets.some(id=>!status.inventory.buckets.find(row=>row.id===id)?.selectable))throw new Error('selective_bucket_names_unsupported');
+     status.scope={tables,buckets,auth:form.get('auth')==='yes',functions:form.get('functions')==='yes'};
      await preflight();res.writeHead(303,{location:'/'});return res.end();
     }
     if(form.get('confirmSource')!==status.selection.source||form.get('confirmTarget')!==status.selection.target
-      ||form.get('acknowledgeBlankTarget')!=='yes')throw new Error('test_confirmation_required');
+      ||form.get('acknowledgeBlankTarget')!=='yes'||form.get('acknowledgeScope')!=='yes')throw new Error('test_confirmation_required');
     if(status.state!=='preflight_passed'||status.preflight?.target?.blank!==true)throw new Error('preflight_required');
     if(status.executing)throw new Error('drill_already_running');
     if(!status.connections.dropbox)throw new Error('dropbox_connection_required');
-    executeDryRun({command,status,persist,sourceRef:status.selection.source,targetRef:status.selection.target,vault:'dropbox'}).catch(()=>{});
+    if(!status.inventory||!status.scope)throw new Error('source_scope_required');
+    executeDryRun({command,status,persist,sourceRef:status.selection.source,targetRef:status.selection.target,vault:'dropbox',scope:status.scope}).catch(()=>{});
     res.writeHead(303,{location:'/'});return res.end();
    }
    if(req.method!=='GET'){res.writeHead(405);return res.end();}

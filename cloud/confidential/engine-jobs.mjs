@@ -81,13 +81,13 @@ export function confidentialJobSnapshot(job) {
     durationMs: job.finishedAt ? Date.parse(job.finishedAt) - Date.parse(job.startedAt) : null,
     phaseTimings: job.phaseTimings.map(({ phase, startedAt, finishedAt }) => ({ phase, startedAt,
       durationMs: finishedAt ? Date.parse(finishedAt) - Date.parse(startedAt) : null })),
-    result: job.result || null, error: job.error || null };
+    result: job.result || null, error: job.error || null, scopeSummary: job.scopeSummary || null };
 }
 export function engineJobs({ run = runEngine, access = supabaseAccess, platform = process.platform } = {}) {
   const jobs = new Map();
   const snapshot = confidentialJobSnapshot;
   return {
-    async start({ owner, sourceRef, targetRef, sourceToken, targetToken, passphrase, provider, maxBytes, operation = 'backup', capsuleId, authorize, refreshAccess }) {
+    async start({ owner, sourceRef, targetRef, sourceToken, targetToken, passphrase, provider, maxBytes, operation = 'backup', capsuleId, scope, scopeSummary, authorize, refreshAccess }) {
       if (platform !== 'linux') fail('cloud_runner_required');
       if (!/^[a-f0-9]{64}$/.test(owner || '') || !/^[A-Za-z0-9_-]{43}$/.test(passphrase || '')) fail('invalid_job');
       if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 100 * 1024 ** 3) fail('invalid_job_limit');
@@ -101,10 +101,11 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
       if (sourceStatus.measuredBytes > maxBytes) fail('plan_size_limit');
       const prior = operation === 'restore' ? jobs.get(capsuleId) : null;
       if (operation === 'restore' && (!prior || prior.owner !== owner || prior.state !== 'complete' || !prior.capsulePath || prior.sourceRef !== sourceRef)) fail('capsule_not_available');
+      if (operation === 'backup' && (!scope || typeof scope.storage !== 'boolean' || typeof scope.auth !== 'boolean' || typeof scope.functions !== 'boolean')) fail('source_scope_required');
       // Charge a manual run only after destination, size and capsule validation.
       if(authorize)await authorize();
       const root = await mkdtemp('/tmp/portabase-job-');
-      const job = { id: randomUUID(), owner, sourceRef, targetRef, operation, root, vaultRequested: !!provider,
+      const job = { id: randomUUID(), owner, sourceRef, targetRef, operation, root, vaultRequested: !!provider, scopeSummary: scopeSummary || null,
         state: 'running', phase: 'preflight',
         startedAt: new Date().toISOString(), phaseTimings: [], estimatedPercent: operation === 'backup' ? 0 : null };
       const phase = name => {
@@ -135,6 +136,7 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
             })().finally(()=>{refreshPromise=null;});
           },60000);
           const config = { projectRef: sourceRef, backupDirectory: join(root,'capsules'), statusDirectory: join(root,'status'),
+            ...(operation === 'backup' ? { capture: scope } : {}),
             encryption: { passphraseEnv: 'PORTABASE_ENCRYPTION_PASSPHRASE' }, provider: provider || { type: 'local', maxBytes, allowLargeLocal: true } };
           const env = { PORTABASE_RUNTIME_CONFIG: JSON.stringify(config), PORTABASE_ENCRYPTION_PASSPHRASE: passphrase,
             PORTABASE_JOB_MAX_CAPSULE_BYTES: String(maxBytes), PORTABASE_EVIDENCE_DIRECTORY: join(root,'evidence'),

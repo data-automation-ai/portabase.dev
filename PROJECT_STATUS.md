@@ -5,20 +5,25 @@
 **INCOMPLETE; isolated validation only.** This checkpoint supersedes older
 confidential-runner status notes. See
 [`cloud/confidential/DRY-RUN-STATUS.md`](cloud/confidential/DRY-RUN-STATUS.md).
-The owner approved both test OAuth grants. The local helper currently reports
-both connections pending and no executed capture or restore. No new approval
-request is needed for those same grants.
+The owner approved the same test OAuth grants earlier in this session. The
+local helper currently reports all connections pending and no executed capture
+or restore. This isolated branch now contains the homepage evidence update and
+source-object picker; neither has been released to the public site. The picker
+has focused local coverage, but the live TDX image has not yet been rolled
+forward to support its inventory request.
 
 | Capability | Source | Provisioned | Configured | Deployed | Live proof | Security proof | Status | Blocker |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Attested application execution | `cloud/confidential/` | Dedicated Google project and TDX test VM | Pinned application and controller images | Isolated controller and expiring VM | Prior Google-signed attestation and encrypted session commands | Prior live wrong-image and substituted-key rejection | PARTIALLY VERIFIED | Full recovery and independently distributed customer verifier |
 | Supabase OAuth source and target | Application and native test helper | Dedicated OAuth app and two synthetic projects | PKCE and encrypted profile persistence | Candidate runtime; public GUI callback absent | Current helper: neither connection completed | Local encrypted-profile and command checks | INCOMPLETE | Complete approved grants, then verify refresh during actual capture |
+| Source-object picker | `cloud/confidential/` and native trial GUI | Source inventory queried through the attested workload | Table row data, Storage buckets, Auth and Edge Function choices | Local code only; current TDX image predates inventory operation | No live inventory shown yet | Selected object names are rechecked against fresh source inventory before capture | INCOMPLETE | Roll forward the isolated TDX image and inspect a connected source |
 | Free manual admission | Native Netlify admission function | Isolated draft and strong Blobs store | One daily manual capture, 10 GiB limit | Isolated draft only | Prior persistent reservation, duplicate and limit checks | Prior anonymous denial and quota failure checks | PARTIALLY VERIFIED | Customer production integration |
 | Backup, vault and restored application | Engine and guarded dry-run helper | Named isolated source and blank target | Cloud staging and explicit target confirmation | Candidate runtime | Source baseline only; no capture or restore executed | Target guards implemented; live recovery denial tests pending | INCOMPLETE | Actual capture, customer vault delivery and independent recovered-app checks |
 
 The version/license source is now 0.5.0 / MIT. This checkpoint does not publish
-an npm release or promote the hosted website. Unrelated homepage and GUI edits
-remain in the original checkout.
+an npm release or promote the hosted website. The homepage now contains eight
+public user reports and six separate official status incidents dated Oct 15–25,
+2026; the public deploy remains unverified.
 
 ## Vertical customer flow checkpoint — 2026-10-05
 

@@ -31,13 +31,34 @@ test('GUI requires source, blank destination and connected Dropbox before run',(
     selection:{source:'a'.repeat(20),target:'b'.repeat(20)}});
   assert.doesNotMatch(ready,/action="\/execute"/);
   const withDropbox=renderDryRunPage({...base,status:{...base.status,connections:{...base.status.connections,dropbox:true},
-    state:'preflight_passed',preflight:{source:{databaseBytes:12*1024**3},target:{blank:true}}},
+    state:'preflight_passed',preflight:{source:{databaseBytes:12*1024**3},target:{blank:true}},
+    selection:{source:'a'.repeat(20),target:'b'.repeat(20)},
+    inventory:{ref:'a'.repeat(20),tables:[{name:'public.orders',schema:'public',table:'orders',bytes:1024**2,estimatedRows:30,selectable:true}],
+      buckets:[{id:'avatars',bytes:1024,objects:2,selectable:true}],authUsers:4,functions:1},
+    scope:{tables:['public.orders'],buckets:['avatars'],auth:true,functions:true}},
     selection:{source:'a'.repeat(20),target:'b'.repeat(20)}});
   assert.match(withDropbox,/action="\/execute"/);
   assert.match(ready,/12\.00 GiB/);
   assert.match(withDropbox,/Type destination project ref/);
+  assert.match(withDropbox,/Source object picker/);
+  assert.match(withDropbox,/public/);
+  assert.match(withDropbox,/avatars/);
+  assert.match(withDropbox,/acknowledgeScope/);
   const occupied=renderDryRunPage({...base,status:{...base.status,state:'preflight_blocked',preflight:{target:{blank:false}}}});
   assert.doesNotMatch(occupied,/action="\/execute"/);
+});
+
+test('source picker makes schema inclusion and row-data scope explicit',()=>{
+  const html=renderDryRunPage({status:{state:'preflight_passed',connections:{source:true,target:true,dropbox:true},
+    selection:{source:'a'.repeat(20),target:'b'.repeat(20)},preflight:{target:{blank:true}},
+    inventory:{ref:'a'.repeat(20),tables:[{name:'public.users',schema:'public',table:'users',bytes:1024**3,estimatedRows:120,selectable:true}],
+      buckets:[],authUsers:2,functions:0},scope:{tables:['public.users'],buckets:[],auth:true,functions:false}},
+    projects:{source:[],target:[]},selection:{source:'a'.repeat(20),target:'b'.repeat(20)},links:{},nonce:'nonce'});
+  assert.match(html,/Database schemas and table definitions are always captured/);
+  assert.match(html,/name="tableIndex" value="0" checked/);
+  assert.match(html,/Auth users/);
+  assert.match(html,/Edge Functions/);
+  assert.match(html,/Apply source selection/);
 });
 
 test('machine shows estimated capture progress and keeps restore separate',()=>{
