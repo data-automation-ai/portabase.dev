@@ -172,11 +172,9 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
               verificationScope: 'database_inventory_and_row_counts;storage_object_hashes;function_status',
               databaseContentIdentityVerified: false, applicationBehaviorVerified: false, evidence };
             if (!job.result.restoreVerified) fail('restore_verification_incomplete');
-            if (!prior.vaultRequested) {
-              await rm(prior.root,{recursive:true,force:true});
-              prior.capsulePath = null;
-              prior.result.temporaryCapsuleRetained = false;
-            }
+            await rm(prior.root,{recursive:true,force:true});
+            prior.capsulePath = null;
+            prior.result.temporaryCapsuleRetained = false;
           }
           job.state = 'complete'; phase('complete');
         } catch (error) { job.state = 'failed'; job.error = /^[a-z0-9_]{3,80}$/.test(error.message) ? error.message : 'job_failed'; }

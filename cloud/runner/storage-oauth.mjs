@@ -282,14 +282,14 @@ export async function exchangeDropboxOAuthCode({
 }) {
   if (!code || typeof code !== 'string') fail('missing_code', 'OAuth code is required');
   if (!codeVerifier || typeof codeVerifier !== 'string') fail('missing_code_verifier', 'PKCE codeVerifier is required');
-  if (!redirectUri || typeof redirectUri !== 'string') fail('missing_redirect_uri', 'redirectUri is required');
+  if (redirectUri !== undefined && (typeof redirectUri !== 'string' || !redirectUri)) fail('invalid_redirect_uri', 'redirectUri must be a URL');
 
   const params = new URLSearchParams({
     grant_type: 'authorization_code',
     code,
     code_verifier: codeVerifier,
-    redirect_uri: redirectUri,
   });
+  if (redirectUri) params.set('redirect_uri', redirectUri);
   if (clientId) params.set('client_id', clientId);
   if (clientSecret) params.set('client_secret', clientSecret);
 

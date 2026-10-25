@@ -12,15 +12,15 @@ test('pasted OAuth callback accepts only one code and state on the registered HT
   ])assert.throws(()=>parsePastedCallback(url),/invalid_oauth_callback/);
 });
 
-test('GUI offers source and destination selection, optional vault, and gates run on blank target',()=>{
-  const base={status:{state:'select_projects',connections:{source:true,target:true},selection:{}},
+test('GUI requires source, blank destination and connected Dropbox before run',()=>{
+  const base={status:{state:'select_projects',connections:{source:true,target:true,dropbox:false},selection:{}},
     projects:{source:[{name:'Owner <source>',ref:'a'.repeat(20)}],target:[{name:'New destination',ref:'b'.repeat(20)}]},
     selection:{},links:{},nonce:'nonce'};
   const before=renderDryRunPage(base);
-  assert.match(before,/Capsule storage \(optional\)/);
+  assert.match(before,/Capsule destination · Dropbox/);
   assert.match(before,/Portabase Machine/);
   assert.match(before,/class="route"/);
-  assert.match(before,/Dropbox · unavailable for this trial/);
+  assert.match(before,/Authorize Dropbox/);
   assert.match(before,/Source Supabase/);
   assert.match(before,/Destination Supabase/);
   assert.doesNotMatch(before,/Estimated capsule creation:/);
@@ -29,9 +29,13 @@ test('GUI offers source and destination selection, optional vault, and gates run
   const ready=renderDryRunPage({...base,status:{...base.status,state:'preflight_passed',preflight:{
     source:{name:'Owner source',databaseBytes:12*1024**3,storageBytes:0},target:{name:'New destination',blank:true}}},
     selection:{source:'a'.repeat(20),target:'b'.repeat(20)}});
-  assert.match(ready,/action="\/execute"/);
+  assert.doesNotMatch(ready,/action="\/execute"/);
+  const withDropbox=renderDryRunPage({...base,status:{...base.status,connections:{...base.status.connections,dropbox:true},
+    state:'preflight_passed',preflight:{source:{databaseBytes:12*1024**3},target:{blank:true}}},
+    selection:{source:'a'.repeat(20),target:'b'.repeat(20)}});
+  assert.match(withDropbox,/action="\/execute"/);
   assert.match(ready,/12\.00 GiB/);
-  assert.match(ready,/Type destination project ref/);
+  assert.match(withDropbox,/Type destination project ref/);
   const occupied=renderDryRunPage({...base,status:{...base.status,state:'preflight_blocked',preflight:{target:{blank:false}}}});
   assert.doesNotMatch(occupied,/action="\/execute"/);
 });

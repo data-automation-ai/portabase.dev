@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 
 import {
   computeDropboxContentHash,
+  computeDropboxFileContentHash,
   computeSha256,
   testDropboxConnection,
   uploadCapsuleToDropbox,
@@ -36,6 +37,16 @@ test('computeDropboxContentHash: matches official Dropbox algorithm', () => {
 
   const actualMultiHash = computeDropboxContentHash(fiveMb);
   assert.equal(actualMultiHash, expectedMultiHash);
+});
+
+test('streamed Dropbox file hash matches 4 MB block hash', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pb-hash-test-'));
+  try {
+    const file = path.join(dir, 'sample.bin');
+    const bytes = Buffer.alloc(5 * 1024 * 1024 + 17, 0x41);
+    fs.writeFileSync(file, bytes);
+    assert.equal(await computeDropboxFileContentHash(file), computeDropboxContentHash(bytes));
+  } finally { fs.rmSync(dir, {recursive:true,force:true}); }
 });
 
 test('testDropboxConnection: simulated and mock fetchImpl', async () => {
@@ -118,7 +129,7 @@ test('uploadCapsuleToDropbox: verifies content_hash and rejects mismatch', async
           name: 'manifest.json',
           path_display: '/Portabase/test-capsule/manifest.json',
           content_hash: expectedHash,
-          size: 100,
+          size: fs.statSync(testFile).size,
         }),
       };
     }
@@ -142,7 +153,7 @@ test('uploadCapsuleToDropbox: verifies content_hash and rejects mismatch', async
           name: 'manifest.json',
           path_display: '/Portabase/test-capsule/manifest.json',
           content_hash: '0000000000000000000000000000000000000000000000000000000000000000',
-          size: 100,
+          size: fs.statSync(testFile).size,
         }),
       };
     }

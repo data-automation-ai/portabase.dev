@@ -1,7 +1,7 @@
 // A live drill writes only the explicitly named, blank synthetic target.
 import {randomUUID} from 'node:crypto';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-export async function executeDryRun({command,status,persist,sourceRef,targetRef}) {
+export async function executeDryRun({command,status,persist,sourceRef,targetRef,vault}) {
  if(status.executing)throw new Error('drill_already_running');
  status.executing=true;status.state='checking_target';await persist();
  try {
@@ -19,10 +19,11 @@ export async function executeDryRun({command,status,persist,sourceRef,targetRef}
    }while(true);
   }
   status.state='capturing';
-  const backup=await command('backup.start',{requestId:randomUUID()});
+  const backup=await command('backup.start',{requestId:randomUUID(),vault});
   status.backupExecuted=true;
   const captured=await wait(backup,'backup');
   if(!captured.result?.captureComplete)throw new Error('capture_not_complete');
+  if(vault==='dropbox' && (captured.result?.destinationKind!=='dropbox'||captured.result?.vaultVerified!==true))throw new Error('dropbox_delivery_unverified');
   status.state='restoring';await persist();
   const restore=await command('restore.start',{requestId:randomUUID(),capsuleId:backup.id,confirmTarget:targetRef,acknowledgeManualConfig:true});
   status.restoreExecuted=true;

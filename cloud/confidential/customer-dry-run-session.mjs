@@ -13,7 +13,7 @@ const REF='eoiqvdmvgaurlecdzqkp',ID='6f454f7b-b490-4fe9-9c49-48ce5b6f4408';
 // Supabase's live authorize endpoint rejects HTTP loopback callbacks even
 // when registered. The test verifier receives the HTTPS callback by handoff.
 const CALLBACK='https://portabase.dev/confidential/callback';
-const status={state:'starting',connections:{source:false,target:false},allocation:'customer-authenticated admission',
+const status={state:'starting',connections:{source:false,target:false,dropbox:false},allocation:'customer-authenticated admission',
  selection:{},backupExecuted:false,restoreExecuted:false};
 const pending=new Map(),links={},offers={},projects={source:[],target:[]},runNonce=randomUUID();
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -42,7 +42,7 @@ async function main(){
  async function command(operation,input={}){
   const result=await client.command(operation,input);
   if(result.sealedProfile){sealedProfile=result.sealedProfile;delete result.sealedProfile;}
-  if(sealedProfile&&(operation==='oauth.finish'||Date.now()-lastProfileSave>30000)){
+  if(sealedProfile&&(['oauth.finish','vault.finish'].includes(operation)||Date.now()-lastProfileSave>30000)){
    if(!await google(profileSecret))await google('/v1/projects/portabase-dev/secrets?secretId=portabase-confidential-validation-profile',{method:'POST',body:{replication:{automatic:{}}}});
    await google(profileSecret+':addVersion',{method:'POST',body:{payload:{data:Buffer.from(JSON.stringify({sealedProfile})).toString('base64')}}});lastProfileSave=Date.now();
   }
@@ -59,6 +59,10 @@ async function main(){
  await command('key.acknowledge');
  Object.assign(status,{state:'awaiting_oauth',attestation:client.evidence(),connections:opened.connected,
    selection:opened.selection||{}});
+ async function beginDropbox(){
+  if(status.connections.dropbox)return;
+  const offer=await command('vault.begin');links.dropbox=offer.url;offers.dropbox=Date.now();
+ }
  async function begin(slot){
   for(const [state,oldSlot] of pending)if(oldSlot===slot)pending.delete(state);
   const offer=await command('oauth.begin',{slot,redirectUri:CALLBACK});
@@ -71,7 +75,7 @@ async function main(){
  }
  async function preflight(){
   delete status.preflight;delete status.error;
-  if(!status.connections.source||!status.connections.target||!status.selection.source||!status.selection.target){
+  if(!status.connections.source||!status.connections.target||!status.connections.dropbox||!status.selection.source||!status.selection.target){
    status.state='select_projects';await persist();return;
   }
   for(const slot of ['source','target']){
@@ -91,6 +95,7 @@ async function main(){
  }
  async function persist(){await writeFile(new URL('./evidence/customer-session-live.json',import.meta.url),JSON.stringify({...status,checkedAt:new Date().toISOString()},null,2)+'\n');}
  for(const slot of ['source','target'])if(!status.connections[slot])await begin(slot);
+ if(!status.connections.dropbox)await beginDropbox();
  for(const slot of ['source','target'])if(status.connections[slot])await refreshProjects(slot);
  await preflight();await persist();
  const server=createServer(async(req,res)=>{
@@ -99,7 +104,7 @@ async function main(){
   res.setHeader('content-security-policy',"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
   const url=new URL(req.url,'http://127.0.0.1:58441');
   try{
-   if(req.method==='POST'&&['/callback','/select','/execute'].includes(url.pathname)){
+   if(req.method==='POST'&&['/callback','/dropbox','/select','/execute'].includes(url.pathname)){
     if(req.headers.origin&&req.headers.origin!=='http://127.0.0.1:58441'){res.writeHead(403);return res.end();}
     if(!req.headers['content-type']?.startsWith('application/x-www-form-urlencoded')){res.writeHead(415);return res.end();}
     let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>8192)throw new Error('request_too_large');}
@@ -108,6 +113,12 @@ async function main(){
     if(url.pathname==='/callback'){
      await finishCallback(parsePastedCallback(form.get('callbackUrl')));
      res.writeHead(303,{location:'/'});return res.end();
+    }
+    if(url.pathname==='/dropbox'){
+     if(status.connections.dropbox)throw new Error('dropbox_already_connected');
+     await command('vault.finish',{code:form.get('code')});
+     status.connections.dropbox=true;delete links.dropbox;delete offers.dropbox;
+     await preflight();res.writeHead(303,{location:'/'});return res.end();
     }
     if(url.pathname==='/select'){
      if(status.executing)throw new Error('drill_already_running');
@@ -120,7 +131,8 @@ async function main(){
       ||form.get('acknowledgeBlankTarget')!=='yes')throw new Error('test_confirmation_required');
     if(status.state!=='preflight_passed'||status.preflight?.target?.blank!==true)throw new Error('preflight_required');
     if(status.executing)throw new Error('drill_already_running');
-    executeDryRun({command,status,persist,sourceRef:status.selection.source,targetRef:status.selection.target}).catch(()=>{});
+    if(!status.connections.dropbox)throw new Error('dropbox_connection_required');
+    executeDryRun({command,status,persist,sourceRef:status.selection.source,targetRef:status.selection.target,vault:'dropbox'}).catch(()=>{});
     res.writeHead(303,{location:'/'});return res.end();
    }
    if(req.method!=='GET'){res.writeHead(405);return res.end();}
@@ -133,6 +145,7 @@ async function main(){
    if(url.pathname!=='/'){res.writeHead(404);return res.end();}
    // Fresh offers when a reviewer resumes after consent expiry.
    for(const slot of ['source','target'])if(!status.connections[slot]&&(!links[slot]||Date.now()-offers[slot]>8*60000))await begin(slot);
+   if(!status.connections.dropbox&&(!links.dropbox||Date.now()-offers.dropbox>8*60000))await beginDropbox();
    res.setHeader('content-type','text/html; charset=utf-8');
    res.end(renderDryRunPage({status,projects,selection:status.selection,links,nonce:runNonce}));
   }catch(e){status.error=/^[a-z0-9_:.-]{3,120}$/i.test(e.message)?e.message:'validation_request_failed';await persist();

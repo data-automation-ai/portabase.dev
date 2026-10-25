@@ -23,10 +23,10 @@ $stage=Join-Path ([IO.Path]::GetTempPath()) "portabase-confidential-app-$BuildId
 if(Test-Path -LiteralPath $stage){throw 'Stage already exists; inspect before reuse'}
 New-Item -ItemType Directory -Path "$stage/cloud/confidential","$stage/cloud/runner","$stage/utility" | Out-Null
 $runtime=@('attestation.mjs','google-token.mjs','command-channel.mjs','customer-identity.mjs','customer-profile.mjs',
-  'oauth-connections.mjs','supabase-access.mjs','pg-command.mjs','supabase-root.crt','engine-jobs.mjs','application.mjs',
+  'oauth-connections.mjs','dropbox-vault.mjs','supabase-access.mjs','pg-command.mjs','supabase-root.crt','engine-jobs.mjs','application.mjs',
   'cloud-config.mjs','server.mjs','production-workload.mjs','Dockerfile.application','package.json','package-lock.json',
   'controller.mjs','controller-main.mjs','compute-control.mjs','Dockerfile.controller')
-$paths=@('package.json','package-lock.json','cloud/runner/supabase-oauth.mjs')
+$paths=@('package.json','package-lock.json','cloud/runner/supabase-oauth.mjs','cloud/runner/storage-oauth.mjs')
 $paths+=@($runtime | ForEach-Object {"cloud/confidential/$_"})
 $paths+=@(& git -C $source ls-files 'utility/*.mjs' 'utility/**/*.mjs' 'utility/aws/schema/*.json' | Where-Object {$_ -notmatch '\.test\.mjs$'})
 $manifest=@()
