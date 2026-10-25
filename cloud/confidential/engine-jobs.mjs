@@ -7,6 +7,19 @@ import { supabaseAccess, projectRef } from './supabase-access.mjs';
 const ENGINE = fileURLToPath(new URL('../../utility/portabase.mjs', import.meta.url));
 const PROTECTED_REF = 'eoiqvdmvgaurlecdzqkp';
 const fail = code => { throw new Error(code); };
+// Phase weights are estimates, not byte-accurate measurements. Database tables
+// can vary wildly in size; only Storage reports a completed/total object count.
+export function estimateCapturePercent(previous, event) {
+  const phase = typeof event === 'string' ? event : event?.phase;
+  const milestones = { 'database-manifest': 2, database: 5, storage: 45, functions: 78,
+    package: 85, encrypt: 91, transfer: 96, done: 99 };
+  let estimate = milestones[phase];
+  if (phase === 'storage' && Number.isSafeInteger(event?.completed) && Number.isSafeInteger(event?.total)
+    && event.total > 0 && event.completed >= 0) {
+    estimate = 45 + Math.floor(30 * Math.min(event.completed, event.total) / event.total);
+  }
+  return Math.max(0, Math.min(99, Math.max(previous || 0, estimate ?? 0)));
+}
 async function directorySize(root) {
   let size = 0;
   for (const e of await readdir(root, { withFileTypes: true })) {
@@ -34,8 +47,9 @@ function runEngine(args, env, root, maxBytes, progress, { spawnImpl = spawn, sig
       for (const line of lines) {
         if (!line.startsWith('@portabase ')) continue;
         try {
-          const { phase } = JSON.parse(line.slice(11));
-          if (['database','storage','functions','package','encrypt','transfer'].includes(phase)) progress(phase);
+          const event = JSON.parse(line.slice(11));
+          if (['database-manifest','database','storage','functions','package','encrypt','transfer','done'].includes(event?.phase))
+            progress({ phase: event.phase, completed: event.completed, total: event.total });
         } catch { /* An untrusted or partial progress line is ignored. */ }
       }
     });
@@ -59,14 +73,19 @@ function runEngine(args, env, root, maxBytes, progress, { spawnImpl = spawn, sig
     });
   });
 }
-export function engineJobs({ run = runEngine, access = supabaseAccess, platform = process.platform } = {}) {
-  const jobs = new Map();
-  function snapshot(job) { return { id: job.id, operation: job.operation, state: job.state, phase: job.phase,
+export function confidentialJobSnapshot(job) {
+  return { id: job.id, operation: job.operation, state: job.state, phase: job.phase,
     startedAt: job.startedAt, finishedAt: job.finishedAt || null,
+    estimatedPercent: job.operation === 'backup' ? (job.state === 'complete' ? 100 : job.estimatedPercent) : null,
+    progressKind: job.operation === 'backup' ? 'estimate' : null,
     durationMs: job.finishedAt ? Date.parse(job.finishedAt) - Date.parse(job.startedAt) : null,
     phaseTimings: job.phaseTimings.map(({ phase, startedAt, finishedAt }) => ({ phase, startedAt,
       durationMs: finishedAt ? Date.parse(finishedAt) - Date.parse(startedAt) : null })),
-    result: job.result || null, error: job.error || null }; }
+    result: job.result || null, error: job.error || null };
+}
+export function engineJobs({ run = runEngine, access = supabaseAccess, platform = process.platform } = {}) {
+  const jobs = new Map();
+  const snapshot = confidentialJobSnapshot;
   return {
     async start({ owner, sourceRef, targetRef, sourceToken, targetToken, passphrase, provider, maxBytes, operation = 'backup', capsuleId, authorize, refreshAccess }) {
       if (platform !== 'linux') fail('cloud_runner_required');
@@ -87,7 +106,7 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
       const root = await mkdtemp('/tmp/portabase-job-');
       const job = { id: randomUUID(), owner, sourceRef, targetRef, operation, root, vaultRequested: !!provider,
         state: 'running', phase: 'preflight',
-        startedAt: new Date().toISOString(), phaseTimings: [] };
+        startedAt: new Date().toISOString(), phaseTimings: [], estimatedPercent: operation === 'backup' ? 0 : null };
       const phase = name => {
         if (job.phase === name) return;
         const at = new Date().toISOString(), prior = job.phaseTimings.at(-1);
@@ -130,7 +149,11 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
               PORTABASE_TARGET_DB_URL: credential.databaseUrl, PORTABASE_TARGET_SERVICE_ROLE_KEY: credential.serviceKey });
             args = ['replay', '--capsule', prior.capsulePath, '--confirm-target', targetRef];
           }
-          await run(args,env,root,maxBytes,phase,{signal:abort.signal});
+          await run(args,env,root,maxBytes,event => {
+            const name = typeof event === 'string' ? event : event?.phase;
+            if (operation === 'backup') job.estimatedPercent = estimateCapturePercent(job.estimatedPercent,event);
+            if (typeof name === 'string' && name !== 'done') phase(name);
+          },{signal:abort.signal});
           if (operation === 'backup') {
             const status = JSON.parse(await readFile(join(root,'status/latest.json'),'utf8'));
             if (status.state !== 'COMPLETE' || !/^[a-z0-9_.-]+$/i.test(status.capsule || '')) fail('capture_incomplete');
