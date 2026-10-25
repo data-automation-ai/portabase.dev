@@ -414,5 +414,117 @@ export const nightmares = [
     source: 'GitHub Discussions · Mar 16, 2026',
     href: 'https://github.com/orgs/supabase/discussions/43795',
     verified: 'Firsthand production outage · ticket SU-342355 · failed automated PITR'
+  },
+  {
+    id: 'N53', kind: 'firsthand', tag: 'POOLER AUTH FAILURE',
+    title: 'Repeated password resets reportedly did not restore pooler access.',
+    body: 'A Free-plan user said Supavisor authentication kept failing after repeated database-password resets and that support had not replied. The author later shared a scoped Management API password reset that restored access; the underlying cause was not established.',
+    source: 'Reddit · Oct 23, 2026',
+    href: 'https://www.reddit.com/r/Supabase/comments/1x7q91a/need_supabase_support_to_manually_resync_pooler/',
+    verified: 'User-reported · author later shared a workaround · cause unconfirmed'
+  },
+  {
+    id: 'N54', kind: 'firsthand', tag: 'API LATENCY',
+    title: 'Browser RPCs reportedly stalled at the gateway while upstream work took milliseconds.',
+    body: 'A hosted-project owner reported intermittent browser RPCs taking 4.8–6.4 seconds while gateway logs showed 3–5 ms upstream service time. A second GitHub user reported the same symptom; Supabase had not confirmed a cause in the issue.',
+    source: 'GitHub Issues · Oct 20, 2026',
+    href: 'https://github.com/supabase/supabase/issues/52011',
+    verified: 'Detailed external report · corroborating user comment · unconfirmed'
+  },
+  {
+    id: 'N55', kind: 'firsthand', tag: 'EDGE FUNCTION RESPONSE',
+    title: 'Function-generated errors reportedly closed HTTP/2 connections without a response.',
+    body: 'The author reported hosted Edge Function 4xx responses closing HTTP/2 connections while the same requests returned 401 over HTTP/1.1. Their sample showed 0/10 responses for one production project and 1/10 for staging; this remains an external report, not a Supabase-confirmed incident.',
+    source: 'GitHub Issues · Oct 18, 2026',
+    href: 'https://github.com/supabase/supabase/issues/51893',
+    verified: 'Reproduction details supplied by reporter · unconfirmed'
+  },
+  {
+    id: 'N56', kind: 'firsthand', tag: 'DEPLOYMENT INTEGRITY',
+    title: 'Overlapping GitHub deployments reportedly left older Edge Function code live.',
+    body: 'A developer described overlapping production deploy runs in which an older commit finished later and overwrote newer Function code despite green checks. The author reported about 80 affected runs on a busy day; the issue is an external report, not an official finding.',
+    source: 'GitHub Issues · Oct 20, 2026',
+    href: 'https://github.com/supabase/supabase/issues/52048',
+    verified: 'Detailed external report · unconfirmed'
+  },
+  {
+    id: 'N57', kind: 'firsthand', tag: 'CAPACITY OUTAGE',
+    title: 'A viral launch reportedly pushed a free database into timeouts for about ten hours.',
+    body: 'The developer reported 1.6 million requests in one night, Supabase Free database statement timeouts, and a site that was effectively down for roughly ten hours. The account describes overload on one free-tier app, not a Supabase-wide outage.',
+    source: 'Reddit · Oct 25, 2026',
+    href: 'https://www.reddit.com/r/SideProject/comments/1xdar7y/my_joke_when_will_ai_take_your_job_got_viral_and/',
+    verified: 'Detailed first-person account · not a platform-wide incident'
+  },
+  {
+    id: 'N58', kind: 'firsthand', tag: 'DASHBOARD LOCKOUT',
+    title: 'A paid Pro organization reported a dashboard lockout after an email migration.',
+    body: 'The author said sign-in succeeded but the dashboard then looped on profile 404/500 errors. Two projects were reported healthy through the Management API, while a support ticket had gone unanswered for more than four days. The external issue was still awaiting triage when checked.',
+    source: 'GitHub Issues · Oct 24, 2026',
+    href: 'https://github.com/supabase/supabase/issues/52264',
+    verified: 'Detailed external report · awaiting triage · unconfirmed'
+  },
+  {
+    id: 'N59', kind: 'firsthand', tag: 'AMBIGUOUS MFA CHANGE',
+    title: 'A TOTP removal reportedly succeeded even though the client received an error.',
+    body: 'The reporter described a committed MFA-factor removal followed by a notification-email timeout; a gateway retry then returned factor-not-found. The report documents one correlated event and explicitly says it was not an observed authorization bypass.',
+    source: 'GitHub Issues · Oct 25, 2026',
+    href: 'https://github.com/supabase/supabase/issues/52274',
+    verified: 'External report with owned test project · unconfirmed'
+  },
+  {
+    id: 'N60', kind: 'firsthand', tag: 'LOGIN BLOCKED',
+    title: 'A user reported password sign-in blocked by a generic security-check error.',
+    body: 'The author said password login failed with a security-check message and gave no recovery path or technical reproduction. This brief external report was marked to triage, so detail and independent confirmation are limited.',
+    source: 'GitHub Issues · Oct 25, 2026',
+    href: 'https://github.com/supabase/supabase/issues/52267',
+    verified: 'Low-detail external report · awaiting triage'
+  },
+  {
+    id: 'N61', kind: 'official', tag: 'OFFICIAL · PROJECT RECOVERY',
+    title: 'Projects became stuck in a restarting state.',
+    body: 'Supabase confirmed that affected projects were stuck restarting. The status incident was marked resolved after the fix rolled out and the projects recovered.',
+    source: 'Supabase Status · Oct 20–21, 2026',
+    href: 'https://status.supabase.com/incidents/01M5DN6V02FJHZTE9390XJM9YY',
+    verified: 'Supabase-confirmed status incident · resolved'
+  },
+  {
+    id: 'N62', kind: 'official', tag: 'OFFICIAL · PROJECT LIFECYCLE',
+    title: 'Project creation, pausing, and restoration failed across regions.',
+    body: 'Supabase reported failures in project lifecycle jobs across regions, affecting operations including creation, pausing, and restoration. The incident was later marked resolved.',
+    source: 'Supabase Status · Oct 21, 2026',
+    href: 'https://status.supabase.com/incidents/01M5FHP5PVQBY4NVTBBH9XG0CH',
+    verified: 'Supabase-confirmed status incident · resolved'
+  },
+  {
+    id: 'N63', kind: 'official', tag: 'OFFICIAL · PROJECT LIFECYCLE',
+    title: 'EU project lifecycle operations returned elevated errors.',
+    body: 'Supabase reported elevated errors affecting project lifecycle operations in the EU region, then marked the incident resolved after mitigation.',
+    source: 'Supabase Status · Oct 21–22, 2026',
+    href: 'https://status.supabase.com/incidents/01M5GVWF6HPD9H7PPKXA0JCBWN',
+    verified: 'Supabase-confirmed status incident · resolved'
+  },
+  {
+    id: 'N64', kind: 'official', tag: 'OFFICIAL · MANAGEMENT API',
+    title: 'Management API errors and latency increased across multiple regions.',
+    body: 'Supabase reported elevated Management API errors in several regions, affecting project creation and dashboard access. The incident was marked resolved after mitigations.',
+    source: 'Supabase Status · Oct 22, 2026',
+    href: 'https://status.supabase.com/incidents/01M5HNZ0A0GPJTF0WFWA5JF9E9',
+    verified: 'Supabase-confirmed status incident · resolved'
+  },
+  {
+    id: 'N65', kind: 'official', tag: 'OFFICIAL · MANAGEMENT API',
+    title: 'A later Management API incident remained under monitoring in Supabase’s Oct 23 update.',
+    body: 'Supabase’s published update said it was applying additional mitigations to reinforce the Management API. The incident page still showed monitoring when checked; this entry records the dated update, not a claim about its current state.',
+    source: 'Supabase Status · Oct 23, 2026',
+    href: 'https://status.supabase.com/incidents/01M5J8ZQ04EZXAYF10Q75MGC1T',
+    verified: 'Supabase-confirmed status incident · Oct 23 update said monitoring'
+  },
+  {
+    id: 'N66', kind: 'official', tag: 'OFFICIAL · LOGGING',
+    title: 'Some customers may have missed a subset of routed logs.',
+    body: 'Supabase said Log Drains in some regions may have missed logs for a subset of components. A rollback restored normal operation and the status incident was marked resolved.',
+    source: 'Supabase Status · Oct 22, 2026',
+    href: 'https://status.supabase.com/incidents/01M5JCGSKAHFMP1Y4YK2QJMGHH',
+    verified: 'Supabase-confirmed status incident · resolved'
   }
 ];
