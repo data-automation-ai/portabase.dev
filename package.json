@@ -4,7 +4,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Open-source Supabase Escape — encrypted customer-owned recovery capsules (database, Auth, Storage bytes, Edge Functions). Optional Portabase Cloud for GUI and alerts.",
   "homepage": "https://portabase.dev",
   "repository": {
@@ -122,7 +122,7 @@
       "uninstallDisplayName": "Portabase"
     }
   },
-  "license": "Apache-2.0",
+  "license": "MIT",
   "optionalDependencies": {
     "@esbuild/linux-x64": "^0.28.2",
     "@rolldown/binding-win32-x64-msvc": "^1.2.2",

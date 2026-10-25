@@ -102,6 +102,19 @@
 .recovery-evidence picture, .recovery-evidence img { display: block; width: 100%; height: auto; }
 .recovery-evidence figcaption { padding: 14px 18px; border-top: 1px solid var(--paper-line); font-size: 13px; line-height: 1.5; color: var(--ink-muted); }
 .stories { scroll-margin-top: 76px; }
+.enclave-premise { background: #eef5f2; color: var(--ink); border-top: 1px solid var(--paper-line); border-bottom: 1px solid var(--paper-line); }
+.enclave-premise h2 { max-width: 17ch; margin: 14px 0 20px; font-size: clamp(34px, 4vw, 56px); line-height: 1.08; letter-spacing: -.05em; }
+.enclave-premise-lead { max-width: 78ch; margin: 0 0 28px; color: var(--ink-muted); font-size: 17px; line-height: 1.65; }
+.enclave-premise-lead strong { color: var(--ink); }
+.enclave-premise-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.enclave-premise-grid article { min-width: 0; padding: 24px; background: #fff; border: 1px solid var(--paper-line); }
+.enclave-premise-grid span { font: 12px var(--mono); color: var(--accent-ink); }
+.enclave-premise-grid h3 { margin: 12px 0 10px; font-size: 22px; line-height: 1.2; }
+.enclave-premise-grid p { margin: 0; color: var(--ink-muted); font-size: 14px; line-height: 1.6; }
+.enclave-premise-status { margin: 20px 0 0; max-width: 95ch; font-size: 13px; line-height: 1.6; color: var(--ink-muted); }
+.enclave-premise-status strong { color: var(--ink); }
+.enclave-premise-status a { color: var(--accent-ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.enclave-premise a:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
 .recovery-overview { padding: 32px 0; background: #fff; border-bottom: 1px solid var(--paper-line); }
 .recovery-overview a { display: block; }
 .recovery-overview img { display: block; width: 100%; height: auto; }
@@ -120,6 +133,7 @@
 .story-row details[open] summary::after { content: '−'; }
 .recovery-hero a:focus-visible, .stories a:focus-visible, .stories summary:focus-visible, .story-controls select:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
 @media (max-width: 900px) {
+  .enclave-premise-grid { grid-template-columns: 1fr; }
   .hero.recovery-hero { padding: 32px 0; }
   .recovery-layout { grid-template-columns: minmax(0, 1fr); gap: 28px; }
   .recovery-hero h1 { font-size: clamp(32px, 5.5vw, 44px); max-width: 650px; }

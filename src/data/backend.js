@@ -21,8 +21,8 @@ export const capsuleAbout = [
 
 export const capsuleSteps = [
   {
-    title: 'CLI on a customer runner creates the capsule',
-    body: 'The Apache-2.0 engine (backup) captures database, Auth records, Storage object bytes, and Edge Function source on a machine you authorize — a VM, NAS, container, or optional Cloud-managed runner. Capture is free. There is no license gate on the full job.',
+    title: 'The engine runs on your runner or an attested managed VM',
+    body: 'The MIT engine captures database, Auth records, Storage bytes, and Function source. Standalone uses a machine you control. The managed design runs on a temporary Google Confidential Space VM with Intel TDX; that flow is still in isolated validation.',
   },
   {
     title: 'Encryption happens before the artifact is durable',
@@ -37,8 +37,8 @@ export const capsuleSteps = [
     body: 'verify checks hashes and the AES-GCM tag. restore / replay open the capsule on infrastructure that already has the passphrase and write into a new blank Supabase project — never a silent overwrite of the source. If Cloud is offline, this path still works.',
   },
   {
-    title: 'Cloud only hears about the job if you opt in',
-    body: 'Optional telemetry (cloud.enabled plus an agent token) may POST allowlisted health fields: event type, capsuleId, timing, error class. The schema strips unknown keys and rejects secret-shaped strings. Backup and restore continue if Cloud is down.',
+    title: 'Standalone telemetry is optional',
+    body: 'A customer-run agent can send allowlisted health fields if you opt in. The managed design also has a Cloud Run controller that starts the enclave VM and relays encrypted commands. It does not decrypt the payload.',
   },
 ];
 

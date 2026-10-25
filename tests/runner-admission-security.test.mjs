@@ -156,7 +156,7 @@ test('Cloud Free keeps one manual backup; concurrent requests cannot exceed it o
   assert.ok(lookups.every(key => key === 'supabase:a'));
   const jobs = await db.get('jobs:supabase:a');
   assert.equal(jobs.length, 1);
-  assert.deepEqual(jobs[0].admission, { paid: false, planId: 'cloud-free', maxBytes: 40 * 1024 * 1024 * 1024, manual: true });
+  assert.deepEqual(jobs[0].admission, { paid: false, planId: 'cloud-free', maxBytes: 10 * 1024 * 1024 * 1024, manual: true });
 });
 
 test('paid Starter gets three transfers only with a verified unexpired add-on', async () => {

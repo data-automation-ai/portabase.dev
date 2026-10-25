@@ -20,19 +20,19 @@ export function KeysFlow({ compact = false } = {}) {
   return (
     <figure className={`keys-diagram${compact ? ' keys-diagram-compact' : ''}`} aria-label="Never-hold-keys path">
       <div className="keys-diagram-chrome">
-        <span>NEVER-HOLD-KEYS</span>
-        <b>Status + hashes only</b>
+        <span>CONFIDENTIAL RUNNER · VALIDATION</span>
+        <b>Attest before sending</b>
       </div>
-      <div className="keys-flow" role="img" aria-label="Browser seals keys to your runner. Portabase receives status and hashes only.">
+      <div className="keys-flow" role="img" aria-label="Verifier checks Google attestation before encrypted commands reach the Intel TDX runner through the controller.">
         {KEYS_COPY.flow.map((node, i) => (
           <React.Fragment key={node.label}>
             {i > 0 && (
               <span className="keys-flow-arrow" aria-hidden="true">
-                {i === 1 ? 'seals →' : 'status →'}
+                {i === 1 ? 'verifies →' : 'encrypted →'}
               </span>
             )}
             <div className={`keys-flow-node${i === 2 ? ' is-blind' : ''}`}>
-              <small>{i === 2 ? 'BLIND' : i === 1 ? 'RUNNER' : 'YOU'}</small>
+              <small>{i === 2 ? 'CONTROL' : i === 1 ? 'PROTECTED VM' : 'YOU'}</small>
               <b>{node.label}</b>
               <span>{node.detail}</span>
             </div>
@@ -40,8 +40,8 @@ export function KeysFlow({ compact = false } = {}) {
         ))}
       </div>
       <figcaption>
-        <span>Customer browser → your Cloud Runner. Portabase site: status and hashes only.</span>
-        <small>Designed this way · checks in repo · not a completed isolation audit</small>
+        <span>The managed runner is in Portabase’s Google project. Its verified workload processes the job.</span>
+        <small>Live attestation tested · complete customer recovery still pending</small>
       </figcaption>
     </figure>
   );

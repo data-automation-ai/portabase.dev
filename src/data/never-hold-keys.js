@@ -4,8 +4,8 @@
  */
 export const KEYS_COPY = Object.freeze({
   kicker: 'KEY CUSTODY · CURRENT CAPABILITIES',
-  headline: 'Keep recovery credentials on infrastructure you control.',
-  lead: 'Supabase is an excellent product. Portabase does not replace it. The escape package lives in storage you own — and the secrets that seal it never belong on this website.',
+  headline: 'Choose where recovery runs.',
+  lead: 'The open-source CLI runs in your account. The managed design runs inside Google Confidential Space with Intel TDX. Both use the same capsule engine; the managed flow is still in isolated validation.',
   paths: Object.freeze([
     Object.freeze({
       step: '01',
@@ -15,27 +15,27 @@ export const KEYS_COPY = Object.freeze({
     }),
     Object.freeze({
       step: '02',
-      kicker: 'PAID CLOUD',
-      title: 'Private runner hosting is still being built.',
-      body: 'The private selection GUI can save configuration on a runner you operate. Managed provisioning and browser-to-runner credential sealing are not available yet.',
+      kicker: 'MANAGED CLOUD · VALIDATION',
+      title: 'Google Confidential Space runs the job.',
+      body: 'A small Cloud Run controller starts a temporary Intel TDX VM. The client checks Google-signed attestation and the approved image before sending encrypted commands. Full backup, vault delivery, and restore are not yet verified.',
     }),
     Object.freeze({
       step: '03',
       kicker: 'CONTROL PLANE',
-      title: 'Choose what the account dashboard receives.',
-      body: 'The private job path sends references and operational status. Manifest sharing requires consent. Older connection and selection flows still send credentials or inventory through the backend and are awaiting replacement.',
+      title: 'The controller manages the VM.',
+      body: 'It authenticates the account and relays encrypted commands. The protected workload uses Supabase credentials during a job; data still runs on Portabase-operated Google compute. The public GUI is not connected to this validation path yet.',
     }),
   ]),
-  honest: 'Cloud does not yet provide a verified zero-knowledge service. Managed runners, key custody and the remaining legacy flows need implementation and live verification. Use the standalone CLI on infrastructure you control for the currently available independent recovery path.',
+  honest: 'The Google enclave has passed live attestation and wrong-image/key rejection in an isolated test. Customer-controlled verifier distribution, durable vault delivery, public GUI integration, and a complete restore drill remain open. Use the standalone CLI on infrastructure you control when you need a path outside Portabase compute.',
   loginTitle: 'Create your account without source credentials.',
-  loginBody: 'This signup form does not request Supabase service keys or your capsule passphrase. Private runner provisioning and credential sealing are still under development.',
+  loginBody: 'This signup form does not request Supabase service keys or your capsule passphrase. The Google Confidential Space connection remains an isolated validation flow.',
   dashTitle: 'Runner telemetry uses approved operational fields.',
   dashBody: 'Private job references omit table and bucket names. Shared manifests require consent. Legacy connection and inventory flows have not yet been replaced throughout Cloud.',
-  sealTitle: 'Private runner setup is not available yet.',
-  sealBody: 'The private interface and credential-sealing connection still need to be implemented and verified.',
+  sealTitle: 'Managed enclave setup is not public yet.',
+  sealBody: 'The test verifier checks the Google Confidential Space workload before it sends encrypted commands. A customer-facing connection and complete recovery run still need live proof.',
   flow: Object.freeze([
-    Object.freeze({ label: 'Private GUI', detail: 'Selections on your runner' }),
-    Object.freeze({ label: 'Runner you operate', detail: 'Uses its configured credentials' }),
-    Object.freeze({ label: 'Account dashboard', detail: 'References and operational status' }),
+    Object.freeze({ label: 'Your verifier', detail: 'Checks Google attestation' }),
+    Object.freeze({ label: 'Intel TDX runner', detail: 'Uses credentials inside the VM' }),
+    Object.freeze({ label: 'Cloud controller', detail: 'Relays encrypted commands' }),
   ]),
 });

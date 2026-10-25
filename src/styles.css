@@ -1158,6 +1158,7 @@ footer{padding:72px 0 28px;border-top:1px solid var(--line);background:#0b0e13}.
 .cli-free-loud strong{color:#ffb3ad}
 
 /* Compact incident list — no large per-story tiles */
+.recent-incidents{margin:30px 0 38px}.recent-incidents h3{font-size:20px;margin:0 0 7px}.recent-incidents>p{font-size:13px;line-height:1.6;color:#94948f;margin:0 0 14px}.recent-incidents>p a{text-decoration:underline}.recent-incidents .story-row>div{min-width:0}.recent-incidents .story-row-title{display:inline}.recent-incidents .story-row small{display:block;margin-top:6px;color:#83848a;font:10px var(--mono);text-transform:capitalize}
 .story-list{border:1px solid #2c2d32;background:#121317}
 .story-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 16px;align-items:start;padding:10px 14px;border-bottom:1px solid #2c2d32}
 .story-row:last-child{border-bottom:0}
@@ -1584,3 +1585,17 @@ footer .logo{color:#fff}
 .ack-dot.amber{background:#b45309}
 .ack-dot.red{background:#b91c1c}
 .ack-hint{font-size:12px;color:#b45309;margin:8px 0 0}
+
+/* Mid-page research story */
+.security-story{background:#fff;color:var(--ink);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.security-story-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:clamp(28px,5vw,80px);align-items:start;margin-top:24px}
+.security-story h2{font-size:clamp(36px,4.4vw,64px);line-height:1.05;letter-spacing:-.055em;max-width:720px;margin:0 0 24px}
+.security-story-grid>div>p{font-size:16px;line-height:1.7;color:var(--ink-muted);max-width:680px;margin:0}
+.security-story-links{display:flex;flex-wrap:wrap;gap:12px 24px;margin-top:28px}
+.security-story-links a{font-size:13px;font-weight:700;color:var(--accent-ink);border-bottom:1px solid currentColor;padding-bottom:3px}
+.security-story-links a:hover{color:var(--ink)}
+.security-story-case{padding:clamp(24px,3vw,40px);background:var(--paper-2);border:1px solid var(--paper-line)}
+.security-story-case>span{font:10px var(--mono);letter-spacing:.12em;color:var(--accent-ink)}
+.security-story-case h3{font-size:clamp(23px,2.2vw,32px);line-height:1.2;letter-spacing:-.035em;margin:18px 0}
+.security-story-case p+p{margin-top:16px}
+@media(max-width:760px){.security-story-grid{grid-template-columns:1fr}.security-story-case{padding:24px}}

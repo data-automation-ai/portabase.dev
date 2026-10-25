@@ -3,9 +3,9 @@
  *
  * Launch target: Supabase projects only (DB, Auth, Storage, Edge Functions).
  * Payment: Square · public paid plans:
- *   Cloud Free — 40 GB, manual only (no scheduled service)
- *   $7/mo  — 1 project, up to 500 MB, 1 capsule / 24h
- *   $17/mo — unlimited projects & databases, incremental capsules up to 10 GB, 3 capsules / day
+ *   Cloud Free — 10 GB, one manual GUI backup / 24h (no schedule)
+ *   $7/mo  — 1 project, up to 10 GB, 1 scheduled capsule / 24h
+ *   $17/mo — unlimited projects & databases, capsules up to 25 GB, 3 / day
  * Hidden legacy `cloud-37` stays in the table for compile / existing Square pins only.
  * Capsule vault: ALWAYS customer-provided — never hosted by Portabase Cloud.
  * Encryption passphrases: customer-side only. Cloud is provably zero-knowledge of keys and capsule contents.
@@ -41,10 +41,10 @@ export const CLOUD_PLANS = Object.freeze({
     id: 'cloud-7',
     priceMonthlyUsd: 7,
     priceMonthlyCents: 700,
-    storageCapMb: 500,
-    storageCapGb: 500 / 1024,
-    storageCapBytes: 500 * MB,
-    storageCapLabel: '500 MB',
+    storageCapMb: 10 * 1024,
+    storageCapGb: 10,
+    storageCapBytes: 10 * GB,
+    storageCapLabel: '10 GB',
     projects: 1,
     databases: 1,
     databasesUnlimited: false,
@@ -55,8 +55,8 @@ export const CLOUD_PLANS = Object.freeze({
     scheduled: true,
     customerFacing: true,
     title: 'Starter Escape',
-    cadenceLabel: '1 project · up to 500 MB · 1 capsule / 24h',
-    shortLabel: '$7/mo · 1 project · 500 MB',
+    cadenceLabel: '1 project · up to 10 GB · 1 capsule / 24h',
+    shortLabel: '$7/mo · 1 project · 10 GB',
     squareEnvKey: 'SQUARE_CLOUD_PLAN_VARIATION_ID_7',
     smsOptional: false,
   }),
@@ -64,9 +64,9 @@ export const CLOUD_PLANS = Object.freeze({
     id: 'cloud-17',
     priceMonthlyUsd: 17,
     priceMonthlyCents: 1700,
-    storageCapGb: 10,
-    storageCapBytes: 10 * GB,
-    storageCapLabel: '10 GB',
+    storageCapGb: 25,
+    storageCapBytes: 25 * GB,
+    storageCapLabel: '25 GB',
     projects: null,
     databases: null,
     databasesUnlimited: true,
@@ -77,8 +77,8 @@ export const CLOUD_PLANS = Object.freeze({
     scheduled: true,
     customerFacing: true,
     title: 'Daily Escape',
-    cadenceLabel: 'unlimited projects · incremental capsules up to 10 GB · 3 capsules / day',
-    shortLabel: '$17/mo (+$10) · unlimited projects · 10 GB',
+    cadenceLabel: 'unlimited projects · capsules up to 25 GB · 3 capsules / day',
+    shortLabel: '$17/mo (+$10) · unlimited projects · 25 GB',
     squareEnvKey: 'SQUARE_CLOUD_PLAN_VARIATION_ID',
     smsOptional: true,
   }),
@@ -107,7 +107,7 @@ export const CLOUD_PLANS = Object.freeze({
 
 /**
  * Cloud Free — not a Square catalog plan.
- * 40 GB, dashboard + manual runs. No scheduled service.
+ * 10 GB, dashboard + one manual run per rolling 24 hours. No scheduled service.
  */
 export const CLOUD_FREE = Object.freeze({
   id: 'cloud-free',
@@ -115,15 +115,15 @@ export const CLOUD_FREE = Object.freeze({
   priceMonthlyCents: 0,
   title: 'Cloud Free',
   projects: 1,
-  storageCapMb: 40 * 1024,
-  storageCapGb: 40,
-  storageCapBytes: 40 * GB,
-  storageCapLabel: '40 GB',
+  storageCapMb: 10 * 1024,
+  storageCapGb: 10,
+  storageCapBytes: 10 * GB,
+  storageCapLabel: '10 GB',
   scheduled: false,
   smsOptional: false,
   transfersPer24h: 0,
-  shortLabel: 'Free · 40 GB · manual only',
-  summary: '40 GB. Dashboard and manual runs. No scheduled service.',
+  shortLabel: 'Free · 10 GB · 1 manual backup / 24h',
+  summary: '10 GB. One manual GUI backup per rolling 24 hours. No scheduled service.',
 });
 
 export function publicCloudPlans() {
@@ -471,7 +471,7 @@ export function whatCloudDoesNotInclude() {
     'Encryption passphrases or Supabase service keys — designed so Cloud never holds customer keys',
     'Capsule ciphertext (never lands in Portabase Cloud)',
     'Managed object store billed by Portabase',
-    'Unlimited vault size (choose Cloud Free 40 GB, $7 · 500 MB, or $17 · 10 GB)',
+    'Unlimited vault size (choose Cloud Free 10 GB, $7 · 10 GB, or $17 · 25 GB)',
     'Scheduled service on Cloud Free (manual runs only)',
     'Capsule plaintext, object names, or sealing keys (control plane: status and hashes only)',
   ];

@@ -95,7 +95,7 @@ export function BackendPage({ Logo, Arrow, Footer }) {
             <div className="security-hero-proof">
               <span>Open-source CLI = full capture</span>
               <span>Cloud = optional signals</span>
-              <span>Provably zero-knowledge</span>
+              <span>Customer-run path available</span>
               <span>No passphrase in our DB</span>
               <span>No capsule plaintext</span>
               <span>No object names</span>
@@ -103,10 +103,9 @@ export function BackendPage({ Logo, Arrow, Footer }) {
               <span>Workers pull jobs</span>
             </div>
             <div className="security-honest-banner" role="note">
-              <strong>Up front:</strong> Portabase Cloud does <strong>not</strong> hold your encryption passphrase, database URLs,
-              service-role keys, or capsule plaintext, and it is <strong>not</strong> the vault of record for <code>.pbase</code> ciphertext.
-              On optional <em>managed</em> Cloud runners, a job must still use crypto for the run — that residual visibility is documented on
-              {' '}<a href="/security">Security</a>. Customer-controlled workers keep secrets entirely on your side.
+              <strong>Up front:</strong> A customer-controlled runner can keep source credentials and backup data outside Portabase infrastructure.
+              A <em>managed</em> Cloud runner handles job data and may access credentials during the run; see
+              {' '}<a href="/security">Security</a>. Portabase is not the vault of record for <code>.pbase</code> ciphertext.
             </div>
             <div className="backend-jump">
               <a href="#capsules">
@@ -169,9 +168,9 @@ export function BackendPage({ Logo, Arrow, Footer }) {
             <figure className="flow-diagram">
               <figcaption>
                 <span>SEQUENCE · CAPSULE PATH</span>
-                <b>Runner writes ciphertext to your vault. Cloud hears status only if you opt in.</b>
+                <b>Standalone CLI path: your runner creates and stores the capsule.</b>
               </figcaption>
-              <div className="flow-track" role="img" aria-label="Supabase to runner encrypt to customer vault to optional Cloud health">
+              <div className="flow-track" role="img" aria-label="Standalone path from Supabase through a customer-controlled runner to a customer vault, with optional Cloud health reporting">
                 <div className="flow-node">
                   <small>SOURCE</small>
                   <strong>Supabase project</strong>
@@ -197,7 +196,7 @@ export function BackendPage({ Logo, Arrow, Footer }) {
                 </div>
               </div>
               <p className="flow-note">
-                Thick path = recovery data on your infrastructure. Dashed path = allowlisted telemetry
+                This diagram shows the standalone path. The managed design instead runs the engine inside a Google Confidential Space VM in Portabase’s project. Optional telemetry uses
                 (<code>docs/TELEMETRY_SCHEMA.md</code>). Forbidden: passphrase, secrets, connection strings, capsule bytes.
               </p>
             </figure>
@@ -209,7 +208,7 @@ export function BackendPage({ Logo, Arrow, Footer }) {
             </p>
             <div className="trust-columns backend-trust">
               <div className="trust-col trust-never">
-                <h5>Never sent to Cloud</h5>
+                <h5>Standalone job payload: not sent to Cloud</h5>
                 <ul>{capsuleNever.map((item) => <li key={item}>{item}</li>)}</ul>
               </div>
               <div className="trust-col trust-optional">
@@ -232,10 +231,9 @@ export function BackendPage({ Logo, Arrow, Footer }) {
               <b>Cloud never hosts capsule ciphertext as the vault of record.</b>
               <p>
                 Destinations are customer local disk, S3, Dropbox, Drive, or NAS.
-                Staging disk on a managed runner is ephemeral workspace for a job — then discarded.
-                The durable Escape copy is the sealed capsule in storage you own.
+                The Google enclave uses temporary working space. Customer vault delivery from that managed path still needs a completed live proof.
                 Standalone restore needs capsule + passphrase + a blank target, not this website.
-                Key injection (console or CLI) happens on the customer side — Portabase never receives the passphrase.
+                The standalone CLI keeps its passphrase on your side. The managed workload must use recovery material during a job.
               </p>
             </div>
           </div>
@@ -246,9 +244,7 @@ export function BackendPage({ Logo, Arrow, Footer }) {
             <div className="section-kicker">02 · CLOUD WORKERS</div>
             <h2>Communication with the cloud workers.</h2>
             <p className="security-prose">
-              Workers are the processes that actually run Escape: the CLI on a schedule, a self-hosted agent, or an optional
-              Cloud-managed runner. Portabase Cloud communicates with them as <strong>orchestration signals</strong> —
-              job intent, status, alerts — not as a proxy that holds or forwards your production secrets.
+              Standalone workers run the CLI on infrastructure you operate. The managed design uses a temporary Google Confidential Space VM with Intel TDX. Its Cloud Run controller authenticates the account and forwards encrypted commands; the protected workload handles credentials and job data.
             </p>
 
             <figure className="flow-diagram">
@@ -321,13 +317,10 @@ export function BackendPage({ Logo, Arrow, Footer }) {
                 </p>
               </article>
               <article>
-                <small>OPTIONAL · MANAGED CLOUD RUNNERS</small>
-                <b>Portabase-operated compute</b>
+                <small>MANAGED DESIGN · ISOLATED VALIDATION</small>
+                <b>Google Confidential Space with Intel TDX</b>
                 <p>
-                  Cloud can also stage jobs on isolated managed runners so you are not babysitting a laptop.
-                  Capsules still land in <em>your</em> BYO vault. Because that runner must use crypto for the job window,
-                  there is a residual possibility Portabase can see or use key material during the run —
-                  we do not pretend otherwise. Details and the trust dial live on{' '}
+                  A Cloud Run controller starts a temporary protected VM. A verifier checks signed attestation and the approved image before encrypting commands for it. Source data and credentials are used inside the VM in Portabase’s Google project. Customer vault delivery and complete restore remain unverified. Details live on{' '}
                   <a href="/security">Security</a>.
                 </p>
               </article>
@@ -338,14 +331,13 @@ export function BackendPage({ Logo, Arrow, Footer }) {
         <section className="section security-picture" id="trust-boundary">
           <div className="shell">
             <div className="section-kicker green">03 · TRUST BOUNDARY</div>
-            <h2>Your vault and keys vs optional Cloud telemetry.</h2>
+            <h2>Standalone custody and managed enclave custody.</h2>
             <p className="security-prose">
-              The thick line is customer infrastructure. The dashed line is allowlisted health.
-              Portabase is <strong>provably zero-knowledge</strong> of customer encryption keys / passphrases and never hosts capsule plaintext or object-name inventory.
+              This diagram shows the customer-run path. With managed recovery, a Google enclave in Portabase’s project processes credentials and backup bytes. The public GUI connection and full recovery path are still being validated.
             </p>
-            <figure className="trust-boundary-diagram" aria-label="Trust boundary between customer vault and Cloud telemetry">
+            <figure className="trust-boundary-diagram" aria-label="Standalone trust boundary between a customer-controlled runner and optional Cloud telemetry">
               <div className="trust-boundary-col yours">
-                <small>YOUR SIDE · ALWAYS</small>
+                <small>YOUR SIDE · STANDALONE CLI</small>
                 <b>Vault · keys · runner</b>
                 <ul>
                   <li>Encryption passphrase / wrap PIN</li>
@@ -360,14 +352,14 @@ export function BackendPage({ Logo, Arrow, Footer }) {
                 <em>no passphrase<br />no plaintext</em>
               </div>
               <div className="trust-boundary-col ours">
-                <small>OPTIONAL · CLOUD TELEMETRY</small>
+                <small>OPTIONAL · STANDALONE TELEMETRY</small>
                 <b>Jobs · status · alerts</b>
                 <ul>
                   <li>Job intent (backup / verify / replay)</li>
                   <li>capsuleId · status · timing · error class</li>
                   <li>Worker heartbeat / online</li>
                   <li>SMS / email / Slack — no capsule bytes</li>
-                  <li>Plan usage vs 40 GB / 10 GB / 25 GB cap</li>
+                  <li>Plan usage vs 10 GB / 10 GB / 25 GB cap</li>
                 </ul>
               </div>
             </figure>
@@ -462,7 +454,7 @@ export function BackendPage({ Logo, Arrow, Footer }) {
             <h2>See the trust dial, or run the engine yourself.</h2>
             <p>
               Backend describes the wires. Security explains residual key visibility on managed jobs.
-              Cloud is the optional GUI, telemetry, and SMS product — Cloud Free 40 GB, then $7 or $17 per month (10 GB / 25 GB), BYO storage.
+              Cloud is the optional GUI, telemetry, and SMS product — registered users get one manual backup up to 10 GB per 24 hours, then $7 or $17 per month for scheduling and capacity. BYO storage.
             </p>
             <div className="security-cta-actions">
               <a className="button button-primary" href="/security">Open Security <Arrow /></a>

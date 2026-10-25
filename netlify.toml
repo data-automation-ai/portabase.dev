@@ -4,6 +4,7 @@
 
 [build.environment]
   NODE_VERSION = "22"
+  SECRETS_SCAN_OMIT_KEYS = "VITE_SUPABASE_ANON_KEY"
 
 [[redirects]]
   from = "/api/square/checkout"
@@ -178,6 +179,11 @@
 [[redirects]]
   from = "/api/cloud/oauth"
   to = "/.netlify/functions/cloud-oauth"
+  status = 200
+
+[[redirects]]
+  from = "/api/incidents/recent"
+  to = "/.netlify/functions/recent-incidents"
   status = 200
 
 [[redirects]]

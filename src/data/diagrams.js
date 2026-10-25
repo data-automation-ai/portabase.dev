@@ -11,15 +11,9 @@ export const diagrams = [
     layer: 'community',
   },
   {
-    src: '/images/diagrams/02-zero-knowledge-topology.png',
-    title: 'Keys stay on your runner',
-    body: 'Source credentials and the encryption passphrase never leave the customer environment. Cloud, when enabled, only receives opt-in health metadata.',
-    layer: 'community',
-  },
-  {
     src: '/images/diagrams/03-portabase-essentials.png',
     title: 'Self-hosted Community engine',
-    body: 'Schedule the open-source CLI or agent on a VM, NAS, container, or workstation. Full capture is free under Apache-2.0 — no license file.',
+    body: 'Schedule the open-source CLI or agent on a VM, NAS, container, or workstation. Full capture is free under MIT — no license file.',
     layer: 'community',
   },
   {
@@ -33,12 +27,6 @@ export const diagrams = [
     title: 'Inside a recovery capsule',
     body: 'Database/Auth, Storage bytes, Function source, manifests, and checksums travel together as one encrypted artifact you can restore offline.',
     layer: 'community',
-  },
-  {
-    src: '/images/diagrams/07-who-holds-the-keys.png',
-    title: 'Who holds the keys',
-    body: 'You hold source credentials, destination access, and passphrase. Portabase Cloud holds only agent tokens for health events — never capsule keys.',
-    layer: 'both',
   },
   {
     src: '/images/diagrams/08-what-portabase-captures.png',
@@ -66,8 +54,8 @@ export const modelLayers = [
     id: 'community',
     kicker: 'LAYER 01 · OPEN SOURCE',
     title: 'Community engine',
-    price: 'Free · Apache-2.0',
-    promise: 'Everything that touches your data',
+    price: 'Free · MIT',
+    promise: 'Run the recovery engine yourself',
     points: [
       'CLI + self-hosted runner (VM, NAS, container, cloud box)',
       'Full encrypted capture by default — no license gate',
@@ -81,13 +69,14 @@ export const modelLayers = [
     kicker: 'LAYER 02 · HOSTED CONVENIENCE',
     title: 'Portabase Cloud',
     price: 'Paid · optional',
-    promise: 'Ops, visibility, and waking humans',
+    promise: 'Managed confidential compute and operations',
     points: [
-      'Hosted management console and setup niceties',
+      'Google Confidential Space runner with Intel TDX (isolated validation)',
+      'Cloud Run controller relays encrypted commands after attestation',
       'Opt-in agent telemetry (job status, timing, error class)',
       'Missed-backup / verify-failure / RPO-age monitoring',
       'Multi-person alert chains: SMS, email, Slack, webhooks',
-      'Fleet view and team seats — never capsule bytes or passphrases',
+      'Customer vault delivery and complete restore are still being verified',
     ],
   },
 ];
@@ -95,12 +84,12 @@ export const modelLayers = [
 export const trustBoundary = [
   {
     side: 'never',
-    title: 'Never sent to Cloud',
-    items: ['Encryption passphrase', 'DB URLs & passwords', 'Service-role / secret keys', 'Capsule bytes & decrypted dumps', 'Storage object contents'],
+    title: 'Standalone CLI · your infrastructure',
+    items: ['Your machine or cloud runs the engine', 'Credentials stay on your runner', 'Encrypted capsule goes to your vault', 'Portabase compute is outside this path'],
   },
   {
     side: 'optional',
-    title: 'Opt-in health only',
-    items: ['backup.completed / failed', 'Missed schedule heartbeats', 'Verify failure class', 'RPO age / duration metrics', 'Agent id + project ref label'],
+    title: 'Managed enclave · Portabase Google project',
+    items: ['Controller sees identity and encrypted commands', 'Intel TDX workload processes source data and keys', 'Client must verify signed attestation before key release', 'Vault delivery and full restore still need proof'],
   },
 ];
