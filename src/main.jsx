@@ -9,7 +9,6 @@ import { HOMEPAGE_FAQ } from './data/faq.js';
 import { KEYS_COPY } from './data/never-hold-keys.js';
 import { KeysFlow, KeysHonest, KeysPathCards } from './components/keys-flow.jsx';
 import { closureReasons, closureCases } from './data/closure-cases.js';
-import { InstallCta } from './install-cta.jsx';
 
 /* Route-level code splitting: keep console, auth, docs, legal and backend out of
    the landing bundle so the homepage ships only what it renders. */
@@ -223,7 +222,7 @@ function Header() {
         <Logo href="/#top" />
         <button className="menu" onClick={() => setOpen(!open)} aria-label="Toggle navigation">{open ? 'Close' : 'Menu'}</button>
         <nav className={open ? 'nav open' : 'nav'}>
-          <a href="/#escape">Escape</a>
+          <a href="/#never-hold-keys">Escape</a>
           <a href="/#never-hold-keys">Keys</a>
           <a href="/#cli-vs-cloud">CLI vs Cloud</a>
           <a href="/#faq">FAQ</a>
@@ -273,7 +272,7 @@ function Hero() {
           ))}
         </ul>
         <div className="recovery-actions">
-          <a className="button button-primary" href="#escape">See how recovery works <Arrow /></a>
+          <a className="button button-primary" href="#never-hold-keys">See how recovery works <Arrow /></a>
           <a className="button button-ghost" href="https://www.npmjs.com/package/portabase" target="_blank" rel="noreferrer">View on npm <Arrow /></a>
           <a className="recovery-evidence-link" href="#stories">Read the real cases <span aria-hidden="true">↓</span></a>
         </div>
@@ -550,7 +549,7 @@ function WhatIsThis() {
         <div className="what-actions">
         <a className="button button-primary" href="/cloud">Cloud vs open source <Arrow /></a>
         <a className="button button-ghost" href="/backend">Backend · capsules &amp; workers <Arrow /></a>
-        <a className="button button-ghost" href="#escape">See the escape plan <Arrow /></a>
+        <a className="button button-ghost" href="#never-hold-keys">See the escape plan <Arrow /></a>
       </div>
     </div>
   </section>;
@@ -608,7 +607,7 @@ function Reality() {
       <div className="wake-up">
         <div className="wake-time">06:41 <small>AM</small></div>
         <div><div className="section-kicker">A VERY POSSIBLE MORNING</div><h3>You wake up. The site is down. You can’t log in.</h3><p>Customers cannot pay. Staff cannot work. The status page is green. Password recovery goes nowhere. Support has your email; every passing hour takes another piece of the business with it.</p></div>
-        <a href="#escape">See the other ending <Arrow /></a>
+        <a href="#never-hold-keys">See the other ending <Arrow /></a>
       </div>
       <div className="forty-eight">
         <div className="forty-eight-head"><span>48:00:00</span><div><div className="section-kicker red">A RESPONSE TARGET IS NOT A RECOVERY TIME</div><h3>What happens while you wait?</h3></div></div>
@@ -1580,7 +1579,7 @@ function LegacyPurchaseNotice() {
 }
 
 function Footer() {
-  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#never-hold-keys">Keys</a><a href="/#faq">FAQ</a><a href="/#reality">The reality</a><a href="/#stories">Real incidents</a><a href="/#escape">Escape plan</a><a href="/#audit">Risk check</a><a href="/docs">Docs</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · {planPriceRangeLabel()}</a><a href="/legal">Legal</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/DataAutomation-ai/portabase-CLI" target="_blank" rel="noreferrer">GitHub · portabase-CLI</a><span>Independent product.<br />Not affiliated with Supabase, Inc.</span><span>Apache-2.0 open core. Cloud is ops subscription — designed so we never hold keys, never custody of capsule contents. Cloud Free 40 GB · $7 (500 MB) · $17 (10 GB).</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your vault. Your way out.</span></div></footer>;
+  return <footer><div className="shell footer-main"><div><Logo href="/" /><p>Your Supabase Escape.<br />Open source. Cloud optional.</p></div><div><b>EXPLORE</b><a href="/#never-hold-keys">Keys</a><a href="/#faq">FAQ</a><a href="/#reality">The reality</a><a href="/#stories">Real incidents</a><a href="/#never-hold-keys">Escape plan</a><a href="/#audit">Risk check</a><a href="/docs">Docs</a><a href="/security">Security &amp; trust</a><a href="/cloud">Cloud · {planPriceRangeLabel()}</a><a href="/legal">Legal</a></div><div><b>CONTACT</b><a href="mailto:escape@portabase.dev">escape@portabase.dev</a><a href="https://github.com/DataAutomation-ai/portabase-CLI" target="_blank" rel="noreferrer">GitHub · portabase-CLI</a><span>Independent product.<br />Not affiliated with Supabase, Inc.</span><span>Apache-2.0 open core. Cloud is ops subscription — designed so we never hold keys, never custody of capsule contents. Cloud Free 40 GB · $7 (500 MB) · $17 (10 GB).</span></div></div><div className="shell footer-bottom"><span>© 2026 Portabase</span><span>Your keys. Your vault. Your way out.</span></div></footer>;
 }
 
 /**
@@ -2204,16 +2203,28 @@ function UseCases() {
       </div>
     </div>
 
-      <figure className="hero-concept">
-        <img src="/images/escape-vaults.jpg" alt="Your Supabase Escape: courier carries the sealed capsule from the locked project to your vault (S3, Dropbox, Drive, or your disk), then restores it" width="1774" height="887" />
-        <figcaption><span>From locked project to your vault to restored.</span><small>The whole story on one screen</small></figcaption>
-      </figure>
   </section>;
 }
 
 function HomePage() {
   useEffect(() => { document.title = 'Portabase — Your Supabase Escape'; }, []);
-  return <><Header /><main><Hero /><RecoveryOverviewImage /><Stories /><WhyNow /><Reality /><ClosureRisk /><TwoScenarios /><MidPageCta /><WhatIsThis /><NeverHoldKeys /><AttestationProof /><CliVsCloud /><HeroConcept /><RunnerArchitectureDiagram /><Escape /><InstallCta Arrow={Arrow} /><Faq /><Audit /><Cutover /><PublicDeal /><CloudTeaser /><UseCases /></main><Footer /></>;
+  return <><Header /><main><Hero /><Stories /><WhyNow /><Reality /><ClosureRisk /><TwoScenarios /><CloakedArticleSummary /><MidPageCta /><WhatIsThis /><NeverHoldKeys /><AttestationProof /><CliVsCloud /><Faq /><Audit /><Cutover /><PublicDeal /><CloudTeaser /><UseCases /></main><Footer /></>;
+}
+
+function CloakedArticleSummary() {
+  return <section className="section cloaked-article" id="supabase-exposure-report">
+    <div className="shell">
+      <div className="section-kicker green">SUPABASE SECURITY · EXTERNAL REPORT</div>
+      <div className="split-heading">
+        <h2>Misconfigured access can expose far more than a database row.</h2>
+        <div>
+          <p>Cloaked’s article summarizes UpGuard research that identified more than 16,000 misconfigured Supabase databases in a scan of roughly 300,000 Supabase-linked domains. The reported exposures included personal information and, in some cases, plaintext passwords or authentication tokens.</p>
+          <p>The article points to missing or ineffective Row Level Security and mistaken assumptions about public API keys as common causes, and recommends checking what unauthenticated requests can actually read.</p>
+          <p><a href="https://www.cloaked.com/post/is-your-supabase-security-leaking-pii-passwords-or-auth-tokens-right-now" target="_blank" rel="noreferrer">Read Cloaked’s article and its security checklist <Arrow /></a></p>
+        </div>
+      </div>
+    </div>
+  </section>;
 }
 
 /** Mid-page conversion point placed at the emotional peak, after Stories + TwoScenarios. */
@@ -2225,7 +2236,7 @@ function MidPageCta() {
         <h2>Every story above ends the same way without a capsule.</h2>
         <p>With one, it ends in a restore: your encrypted capsule rebuilds into a brand-new Supabase account — often a free one — while the original account is still locked. That is fire insurance for your Supabase account: the CLI is the policy you write once for free; Cloud is the premium that keeps it current, watched, and ready to pay out.</p>
         <div className="hero-actions">
-          <a className="button button-primary" href="#escape">Build your Escape <Arrow /></a>
+          <a className="button button-primary" href="/docs/quickstart">Build your Escape <Arrow /></a>
           <a className="button button-ghost" href="/login?mode=signup&next=/app">Start free Cloud trial <Arrow /></a>
         </div>
       </div>
