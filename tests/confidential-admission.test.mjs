@@ -61,3 +61,13 @@ test('runner allocations have a separate daily limit and cannot be replayed',asy
   assert.equal((await run(event('runner.start'))).statusCode,429);
   assert.equal((await run(event())).statusCode,200);
 });
+test('isolated validation owner may restart a failed runner without changing public allowance',async()=>{
+  const {run}=fixture({validationOwnerId:user.id,validationMaxBytes:String(25*1024**3)});
+  for(let i=0;i<3;i++)assert.equal((await run(event('runner.start'))).statusCode,200);
+  assert.equal((await run(event('runner.start'))).statusCode,429);
+  assert.equal((await run(event())).statusCode,200);
+  assert.equal((await run(event())).statusCode,429);
+  const other=fixture({validationOwnerId:'other',validationMaxBytes:String(25*1024**3)});
+  assert.equal((await other.run(event('runner.start'))).statusCode,200);
+  assert.equal((await other.run(event('runner.start'))).statusCode,429);
+});

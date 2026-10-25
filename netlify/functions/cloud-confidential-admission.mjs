@@ -29,6 +29,7 @@ export function confidentialAdmission({authenticate=verifyCloudUser,subscription
       const dailyLimit=admission.paid?planTransfersPer24h(admission.plan.id,{extraTransfersAddon:admission.extraTransfersAddon}):1;
       if(['restore.start','quota.inspect'].includes(body.operation)) return jsonResponse(200,{maxBytes,plan:admission.plan.id});
       const counter=body.operation==='runner.start'?'starts':'runs';
+      const startLimit=counter==='starts' && validationCap(user,validationOwnerId,validationMaxBytes)?3:dailyLimit;
       // No disk or in-memory fallback: quotas must survive instance restarts.
       const db=database?database():getStore({name:'portabase-confidential-admission',consistency:'strong'});
       const key=createHash('sha256').update(`${user.cloudVersion}:${user.id}`).digest('hex');
@@ -36,7 +37,7 @@ export function confidentialAdmission({authenticate=verifyCloudUser,subscription
         const old=await db.getWithMetadata(key,{type:'json'}), now=clock();
         const recent=(old?.data?.[counter]||[]).filter(r=>r.at>now-86400000);
         if(recent.some(r=>r.id===body.requestId)) return jsonResponse(409,{error:'request_already_admitted'});
-        if(recent.length>=dailyLimit) return jsonResponse(429,{error:'daily_limit_reached',nextAvailableAt:new Date(Math.min(...recent.map(r=>r.at))+86400000).toISOString()});
+        if(recent.length>=startLimit) return jsonResponse(429,{error:'daily_limit_reached',nextAvailableAt:new Date(Math.min(...recent.map(r=>r.at))+86400000).toISOString()});
         const result=await db.setJSON(key,{...old?.data,[counter]:[...recent,{id:body.requestId,at:now}]},old?{onlyIfMatch:old.etag}:{onlyIfNew:true});
         if(result.modified) return jsonResponse(200,{maxBytes,plan:admission.plan.id,requestId:body.requestId});
       }
