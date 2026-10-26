@@ -21,6 +21,8 @@ test('GUI requires source and blank destination and offers explicit capsule hand
   assert.match(before,/Portabase Machine/);
   assert.match(before,/class="route"/);
   assert.match(before,/Authorize Dropbox/);
+  assert.doesNotMatch(before,/http-equiv="refresh"/i);
+  assert.match(before,/data-refresh-ms="30000"/);
   assert.match(before,/Source Supabase/);
   assert.match(before,/Destination Supabase/);
   assert.match(before,/Authorizing as/);
@@ -78,6 +80,7 @@ test('machine shows estimated capture progress and keeps restore separate',()=>{
   const base={projects:{source:[],target:[]},selection:{},links:{},nonce:'nonce',status:{
     state:'capturing',executing:true,connections:{source:false,target:false}}};
   const pending=renderDryRunPage(base);
+  assert.match(pending,/data-refresh-ms="5000"/);
   assert.match(pending,/estimate pending/);
   assert.doesNotMatch(pending,/Estimated capsule creation:/);
   const phase=renderDryRunPage({...base,status:{...base.status,backup:{state:'running',phase:'encrypt'}}});

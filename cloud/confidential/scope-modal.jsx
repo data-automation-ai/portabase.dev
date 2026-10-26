@@ -3,13 +3,13 @@ import {createRoot} from 'react-dom/client';
 import {DatabaseScopeSelector} from '../../src/console/database-scope-selector.jsx';
 import {computeDatabaseScopeSummary} from '../runner/database-scope.mjs';
 import {inventoryScope,scopeForm} from './scope-ui-model.mjs';
+import {startSafeRefresh} from './safe-page-refresh.mjs';
 
 function ScopeModal(){
   const [status,setStatus]=useState(null),[databases,setDatabases]=useState([]);
   const [buckets,setBuckets]=useState([]),[error,setError]=useState(''),[busy,setBusy]=useState(false);
   const dialog=document.getElementById('advanced-object-dialog');
   async function open(){
-    document.querySelector('meta[http-equiv="refresh"]')?.remove();
     setError('');setBusy(true);dialog.showModal();
     try {
       const response=await fetch('/status',{cache:'no-store'});
@@ -58,3 +58,4 @@ function ScopeModal(){
 import {createPortal} from 'react-dom';
 const root=document.getElementById('advanced-object-control');
 if(root)createRoot(root).render(<ScopeModal/>);
+startSafeRefresh(document,window);
