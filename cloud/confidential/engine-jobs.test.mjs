@@ -4,6 +4,17 @@ import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { engineJobs } from './engine-jobs.mjs';
 
+test('a selected scope cannot bypass the populated-target guard',async()=>{
+  const jobs=engineJobs({platform:'linux',run:async()=>assert.fail('must not run'),access:()=>({
+    inspect:async()=>({blank:false,measuredBytes:1}),
+    credentials:async()=>assert.fail('must not request credentials'),
+  })});
+  await assert.rejects(jobs.start({owner:'a'.repeat(64),sourceRef:'s'.repeat(20),targetRef:'t'.repeat(20),
+    passphrase:'b'.repeat(43),maxBytes:1024,scope:{database:true,storage:false,auth:false,functions:false},
+    scopeSummary:{tables:0,totalTables:10,buckets:0,totalBuckets:10,estimatedTableBytes:0,estimatedStorageBytes:0}}),
+    /restore_target_not_blank/);
+});
+
 for(const selective of [false,true])test(`${selective?'selected-scope':'full'} no-vault capture and verified restore report times and delete temporary staging`, async () => {
   const sourceRef = 'abcdefghijklmnopqrst';
   const targetRef = 'bcdefghijklmnopqrstu';

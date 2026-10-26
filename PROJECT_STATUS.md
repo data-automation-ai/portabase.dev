@@ -4,6 +4,32 @@
 
 ### Verified continuation at 20:25 UTC (supersedes earlier pending entries)
 
+Release continuation at 20:36 UTC: build
+`d32dda35-9937-444b-9ea0-07b2026b9fd0` succeeded from `97d0596`.
+Application image
+`sha256:a991d6fbae67d199dc31f4404a372cd86096ffb8ad0dc3a32368905702904230`
+is live through controller revision `00015-l7t`. The local verifier pin matches;
+Google-signed TDX attestation passed and both saved grants reopened. This image
+includes the measured Dropbox byte counters, selected-scope admission/capture
+fixes and unsupported-vault rejection. The helper exposes explicit Dropbox or
+temporary-runner capsule handling. No real transfer or restore has run.
+
+Browser proof: the original selector's combined tally changed 11.340 -> 9.776
+GiB on Structure Only, returned to 11.340 GiB on Structure + Data, and Apply
+selection returned the real helper to 713 tables / 17 buckets without errors.
+A separately labeled synthetic animation fixture rendered a 50% jar and active
+downward pulse; no horizontal overflow at 953x695 and 390x844. This is visual
+fixture proof, not live delivery proof. The real helper also fit horizontally
+at 1472x751. The temporary fixture server/tab is not the customer workflow.
+
+Dropbox blocker found: the existing `portabase` App Folder application's
+permissions enable only basic account information. File metadata read and
+content read/write checkboxes are prepared in its Developer Console but NOT
+SAVED. The signed-in Dropbox display name differs from the supplied Supabase
+identities; account and file-access confirmation is pending. No Dropbox grant
+was accepted. Existing tokens are unaffected by these unsaved changes.
+The pending target-content disposition question also remains unanswered.
+
 - Separate OAuth grants now work concurrently. The source grant exposes 18
   source-account projects and retains `ekklokrukxmqlahtonnc`. The destination
   grant exposes exactly `wunfzvzguqlnxhtxipen` and `kiuwcdpjsdotkoojbkoi`.

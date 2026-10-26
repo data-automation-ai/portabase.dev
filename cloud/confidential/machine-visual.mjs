@@ -24,6 +24,7 @@ export function capsuleJar(status) {
 }
 export const machineCss=`
 .recovery-t{position:relative}.route{grid-template-columns:minmax(0,1fr) 38px minmax(0,1fr) 38px minmax(0,1fr);gap:0}
+.route details{margin-top:12px}.route summary{cursor:pointer}.project-ref{overflow-wrap:anywhere}.route section{padding:16px}.route p{margin:12px 0}.machine-progress{font-size:13px}.machine-selected{margin-bottom:4px!important}
 .data-pipe{position:relative;align-self:center;height:4px;background:#bbd5cd;overflow:hidden}
 .data-pipe:after{content:'›';position:absolute;right:0;top:-12px;font-size:22px;color:#007b63}
 .data-pipe i{display:none;position:absolute;width:10px;height:4px;background:#007b63;left:-10px}

@@ -25,7 +25,7 @@ test('GUI requires source and blank destination and offers explicit capsule hand
   assert.match(before,/Destination Supabase/);
   assert.match(before,/Authorizing as/);
   assert.match(before,/Load database objects/);
-  assert.match(before,/Choose the Source project and its database objects in the picker below/);
+  assert.match(before,/Choose database objects from the center machine/);
   assert.match(before,/Authorize a different target account/);
   assert.match(before,/Confirm separate Supabase accounts/);
   assert.match(before,/cannot independently verify these emails/);

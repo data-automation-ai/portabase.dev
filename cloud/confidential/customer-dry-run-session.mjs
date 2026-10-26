@@ -9,7 +9,7 @@ import {executeDryRun} from './execute-dry-run.mjs';
 import {parsePastedCallback,renderDryRunPage} from './dry-run-gui.mjs';
 import {needsOAuthOffer} from './oauth-offer.mjs';
 const CONTROLLER='https://portabase-confidential-controller-26ulj3ikia-uc.a.run.app';
-const DIGEST='sha256:cfb1c405c46eaa98fe3b4a0b704da7e1c40e269973780afad05aea7175fb594d';
+const DIGEST='sha256:a991d6fbae67d199dc31f4404a372cd86096ffb8ad0dc3a32368905702904230';
 const REF='eoiqvdmvgaurlecdzqkp',ID='6f454f7b-b490-4fe9-9c49-48ce5b6f4408';
 // Supabase's live authorize endpoint rejects HTTP loopback callbacks even
 // when registered. The test verifier receives the HTTPS callback by handoff.
