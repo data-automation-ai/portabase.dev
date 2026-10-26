@@ -89,12 +89,13 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
       const {profile,recoveryKey} = customer;
       let data;
       switch(operation) {
-        case 'session.open': data={ connected:{source:!!profile.connections.source,target:!!profile.connections.target,dropbox:!!profile.dropbox?.refreshToken},selection:profile.selection,keyAcknowledged:!!profile.keyAcknowledged }; break;
+        case 'session.open': data={ connected:{source:!!profile.connections.source,target:!!profile.connections.target,dropbox:!!profile.dropbox?.refreshToken},selection:profile.selection,keyAcknowledged:!!profile.keyAcknowledged,accountConfirmation:profile.accountConfirmation?{confirmed:true,method:profile.accountConfirmation.method}:null }; break;
         case 'key.acknowledge': profile.keyAcknowledged=true; data={acknowledged:true}; break;
         case 'oauth.begin': data=connections.begin(profile,input.slot,input.redirectUri); break;
         case 'oauth.finish': data=await connections.finish(profile,input); break;
         case 'oauth.disconnect': data=connections.disconnect(profile,input.slot); break;
         case 'oauth.identity': data={slot:input.slot,identity:await connections.identity(profile,input.slot)}; break;
+        case 'oauth.account.confirm': data=connections.confirm(profile,input); break;
         case 'vault.begin': if(!vault)fail('dropbox_app_not_configured');data=vault.begin(profile);break;
         case 'vault.finish': if(!vault)fail('dropbox_app_not_configured');data=await vault.finish(profile,input.code);break;
         case 'vault.check': if(!vault)fail('dropbox_app_not_configured');data={connected:!!profile.dropbox?.refreshToken};

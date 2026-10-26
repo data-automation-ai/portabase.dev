@@ -1,6 +1,7 @@
 import { generatePkcePair, generateOAuthState, buildSupabaseAuthorizeUrl, exchangeSupabaseOAuthCode,
   refreshSupabaseAccessToken, DEFAULT_SUPABASE_OAUTH_TOKEN_URL } from '../runner/supabase-oauth.mjs';
 import { supabaseAccess } from './supabase-access.mjs';
+import {randomUUID} from 'node:crypto';
 const SLOT = new Set(['source','target']);
 const CALLBACKS=new Set(['https://portabase.dev/confidential/callback','http://127.0.0.1:58441/confidential/callback']);
 const fail = code => { throw new Error(code); };
@@ -9,20 +10,28 @@ export function oauthConnections({ clientId, clientSecret, redirectUri, fetchImp
   const refreshes=new WeakMap();
   const secureFetch=(url,options)=>fetchImpl(url,{...options,redirect:'error',signal:AbortSignal.timeout(30000)});
   async function identity(profile,slot) {
+    if(profile.connections?.[slot]?.identity)return profile.connections[slot].identity;
     const {token}=await connections.access(profile,slot);
     const response=await secureFetch('https://api.supabase.com/v1/profile',{
-      headers:{Authorization:`Bearer ${token}`,Accept:'application/json'}});
-    if(!response.ok)fail('supabase_identity_unavailable');
-    const user=await response.json();
-    const id=typeof user.gotrue_id==='string'?user.gotrue_id.trim():'';
-    const email=typeof user.primary_email==='string'?user.primary_email.trim().toLowerCase():'';
-    if(!id||id.length>256||!email||email.length>320)fail('supabase_identity_unavailable');
-    return {id,email};
+      headers:{Authorization:`Bearer ${token}`,Accept:'application/json'}}).catch(()=>null);
+    if(!response?.ok)return profile.connections[slot].identity={verified:false};
+    const user=await response.json().catch(()=>null);
+    const id=typeof user?.gotrue_id==='string'?user.gotrue_id.trim():'';
+    const email=typeof user?.primary_email==='string'?user.primary_email.trim().toLowerCase():'';
+    if(!id||id.length>256||!email||email.length>320)return profile.connections[slot].identity={verified:false};
+    return profile.connections[slot].identity={id,email,verified:true};
   }
   async function assertDistinct(profile) {
     const [source,target]=await Promise.all(['source','target'].map(slot=>identity(profile,slot)));
-    if(source.id===target.id||source.email===target.email)fail('destination_account_must_differ');
-    return {source,target};
+    if(source.verified&&target.verified){
+      if(source.id===target.id||source.email===target.email)fail('destination_account_must_differ');
+      return {source,target,method:'provider'};
+    }
+    const confirmation=profile.accountConfirmation;
+    if(!confirmation||confirmation.sourceGrantId!==profile.connections.source.grantId||
+      confirmation.targetGrantId!==profile.connections.target.grantId)fail('account_confirmation_required');
+    if(confirmation.sourceEmail===confirmation.targetEmail)fail('destination_account_must_differ');
+    return {source,target,method:'manual'};
   }
   const connections={
     begin(profile, slot, callback=redirectUri) {
@@ -43,14 +52,16 @@ export function oauthConnections({ clientId, clientSecret, redirectUri, fetchImp
       const tokens = await exchangeSupabaseOAuthCode({ code, codeVerifier: pending.codeVerifier, redirectUri:pending.redirectUri||redirectUri,
         clientId, clientSecret, tokenUrl: DEFAULT_SUPABASE_OAUTH_TOKEN_URL, fetchImpl:secureFetch });
       const previous=profile.connections[slot];
-      profile.connections[slot] = tokens;
+      profile.connections[slot] = {...tokens,grantId:randomUUID()};
       try {
         const current=await identity(profile,slot);
         const other=slot==='source'?'target':'source';
         if(profile.connections[other]){
           const counterpart=await identity(profile,other);
-          if(current.id===counterpart.id||current.email===counterpart.email)fail('destination_account_must_differ');
+          if(current.verified&&counterpart.verified&&
+            (current.id===counterpart.id||current.email===counterpart.email))fail('destination_account_must_differ');
         }
+        delete profile.accountConfirmation;
         return { slot, connected: true, identity:current };
       }catch(error){
         if(previous)profile.connections[slot]=previous;else delete profile.connections[slot];
@@ -79,11 +90,26 @@ export function oauthConnections({ clientId, clientSecret, redirectUri, fetchImp
     },
     disconnect(profile,slot) {
       if (!SLOT.has(slot)) fail('invalid_connection_slot');
-      delete profile.connections[slot]; if (profile.pending) delete profile.pending[slot];
+      delete profile.connections[slot];delete profile.accountConfirmation;if (profile.pending) delete profile.pending[slot];
       return {slot,connected:false};
     },
     identity,
     assertDistinct,
+    confirm(profile,{sourceEmail,targetEmail}){
+      if(!profile.connections.source||!profile.connections.target)fail('supabase_connection_required');
+      const clean=value=>typeof value==='string'?value.trim().toLowerCase():'';
+      sourceEmail=clean(sourceEmail);targetEmail=clean(targetEmail);
+      if(!/^[^\s@]{1,64}@[^\s@]{1,254}$/.test(sourceEmail)||
+        !/^[^\s@]{1,64}@[^\s@]{1,254}$/.test(targetEmail))fail('invalid_account_email');
+      if(sourceEmail===targetEmail)fail('destination_account_must_differ');
+      if(profile.connections.source.identity?.verified&&profile.connections.source.identity.email!==sourceEmail)fail('account_email_mismatch');
+      if(profile.connections.target.identity?.verified&&profile.connections.target.identity.email!==targetEmail)fail('account_email_mismatch');
+      profile.connections.source.grantId ||= randomUUID();
+      profile.connections.target.grantId ||= randomUUID();
+      profile.accountConfirmation={sourceEmail,targetEmail,sourceGrantId:profile.connections.source.grantId,
+        targetGrantId:profile.connections.target.grantId,method:'manual'};
+      return {confirmed:true,method:'manual'};
+    },
   };
   return connections;
 }

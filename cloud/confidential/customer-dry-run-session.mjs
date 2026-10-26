@@ -58,7 +58,7 @@ async function main(){
  const opened=await command('session.open',{recoveryKey,...(sealedProfile?{sealedProfile}:{})});
  await command('key.acknowledge');
  Object.assign(status,{state:'awaiting_oauth',attestation:client.evidence(),connections:opened.connected,
-   selection:opened.selection||{}});
+   selection:opened.selection||{},accountConfirmation:opened.accountConfirmation});
  async function beginDropbox(){
   if(status.connections.dropbox)return;
   const offer=await command('vault.begin');links.dropbox=offer.url;offers.dropbox=Date.now();
@@ -91,11 +91,15 @@ async function main(){
   if(status.connections.source&&status.connections.target&&(!status.accounts.source||!status.accounts.target)){
    for(const slot of ['source','target'])await refreshIdentity(slot);
   }
-  if(status.accounts.source&&status.accounts.target&&
+  if(status.accounts.source?.verified&&status.accounts.target?.verified&&
     (status.accounts.source.id===status.accounts.target.id||status.accounts.source.email===status.accounts.target.email)){
    status.state='account_mismatch_required';status.error='destination_account_must_differ';await persist();return;
   }
   if(status.connections.source&&status.selection.source)await refreshSourceInventory();
+  if(status.connections.source&&status.connections.target&&!status.accountConfirmation&&
+    !(status.accounts.source?.verified&&status.accounts.target?.verified)){
+   status.state='account_confirmation_required';await persist();return;
+  }
   if(!status.connections.source||!status.connections.target||!status.connections.dropbox||!status.selection.source||!status.selection.target){
    status.state='select_projects';await persist();return;
   }
@@ -114,6 +118,7 @@ async function main(){
   catch(error){pending.delete(state);await begin(slot);throw error;}
   pending.delete(state);
   status.connections[slot]=true;delete links[slot];delete offers[slot];
+  status.accountConfirmation=null;
   await refreshIdentity(slot);
   await refreshProjects(slot);await preflight();await persist();
  }
@@ -128,7 +133,7 @@ async function main(){
   res.setHeader('content-security-policy',"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
   const url=new URL(req.url,'http://127.0.0.1:58441');
   try{
-   if(req.method==='POST'&&['/callback','/dropbox','/select','/scope','/execute','/reauthorize'].includes(url.pathname)){
+   if(req.method==='POST'&&['/callback','/dropbox','/select','/scope','/execute','/reauthorize','/confirm-accounts'].includes(url.pathname)){
     if(req.headers.origin&&req.headers.origin!=='http://127.0.0.1:58441'){res.writeHead(403);return res.end();}
     if(!req.headers['content-type']?.startsWith('application/x-www-form-urlencoded')){res.writeHead(415);return res.end();}
     let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>1024*1024)throw new Error('request_too_large');}
@@ -142,6 +147,13 @@ async function main(){
      if(status.executing)throw new Error('drill_already_running');
      const slot=form.get('slot');if(!['source','target'].includes(slot))throw new Error('invalid_connection_slot');
      await begin(slot);res.writeHead(303,{location:'/'});return res.end();
+    }
+    if(url.pathname==='/confirm-accounts'){
+     if(status.executing||!status.connections.source||!status.connections.target)throw new Error('supabase_connection_required');
+     if(form.get('acknowledge')!=='yes')throw new Error('account_confirmation_required');
+     status.accountConfirmation=await command('oauth.account.confirm',{
+       sourceEmail:form.get('sourceEmail'),targetEmail:form.get('targetEmail')});
+     await preflight();res.writeHead(303,{location:'/'});return res.end();
     }
     if(url.pathname==='/dropbox'){
      if(status.connections.dropbox)throw new Error('dropbox_already_connected');
