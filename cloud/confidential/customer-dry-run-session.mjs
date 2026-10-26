@@ -134,7 +134,10 @@ async function main(){
   const url=new URL(req.url,'http://127.0.0.1:58441');
   try{
    if(req.method==='POST'&&['/callback','/dropbox','/select','/scope','/execute','/reauthorize','/confirm-accounts'].includes(url.pathname)){
-    if(req.headers.origin&&req.headers.origin!=='http://127.0.0.1:58441'){res.writeHead(403);return res.end();}
+    // Some desktop browser bridges submit local forms with an opaque Origin.
+    // Every POST still requires the session nonce below, which another origin
+    // cannot read through the loopback page's same-origin boundary.
+    if(req.headers.origin&&!['http://127.0.0.1:58441','null'].includes(req.headers.origin)){res.writeHead(403);return res.end();}
     if(!req.headers['content-type']?.startsWith('application/x-www-form-urlencoded')){res.writeHead(415);return res.end();}
     let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>1024*1024)throw new Error('request_too_large');}
     const form=new URLSearchParams(raw);

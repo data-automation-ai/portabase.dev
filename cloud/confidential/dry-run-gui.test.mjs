@@ -23,7 +23,9 @@ test('GUI requires source, blank destination and connected Dropbox before run',(
   assert.match(before,/Authorize Dropbox/);
   assert.match(before,/Source Supabase/);
   assert.match(before,/Destination Supabase/);
-  assert.match(before,/private browser window/);
+  assert.match(before,/Authorizing as/);
+  assert.match(before,/Load database objects/);
+  assert.match(before,/Choose the Source project and its database objects in the picker below/);
   assert.match(before,/Authorize a different target account/);
   assert.match(before,/Confirm separate Supabase accounts/);
   assert.match(before,/cannot independently verify these emails/);
@@ -59,6 +61,10 @@ test('source picker makes schema inclusion and row-data scope explicit',()=>{
       buckets:[],authUsers:2,functions:0},scope:{tables:['public.users'],buckets:[],auth:true,functions:false}},
     projects:{source:[],target:[]},selection:{source:'a'.repeat(20),target:'b'.repeat(20)},links:{},nonce:'nonce'});
   assert.match(html,/Database schemas and table definitions are always captured/);
+  assert.match(html,/Select Buckets, Tables &amp; Objects/);
+  assert.match(html,/Database schema · public/);
+  assert.match(html,/PostgreSQL database · postgres/);
+  assert.match(html,/Group total:/);
   assert.match(html,/name="tableIndex" value="0" checked/);
   assert.match(html,/Auth users/);
   assert.match(html,/Edge Functions/);
