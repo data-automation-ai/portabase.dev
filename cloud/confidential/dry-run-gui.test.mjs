@@ -81,3 +81,14 @@ test('machine shows estimated capture progress and keeps restore separate',()=>{
   const complete=renderDryRunPage({...base,status:{...base.status,backup:{state:'complete',phase:'complete'}}});
   assert.match(complete,/Estimated capsule creation: <strong>100%/);
 });
+
+test('machine shows verified Google Cloud workload measurement',()=>{
+  const digest=`sha256:${'a'.repeat(64)}`;
+  const html=renderDryRunPage({status:{state:'select_projects',connections:{source:false,target:false,dropbox:false},
+    attestation:{imageDigest:digest,keyFingerprint:'fingerprint-123',projectNumber:'495102144848',verifiedAt:'2026-10-26T14:00:00Z'}},
+    projects:{source:[],target:[]},selection:{},links:{},nonce:'nonce'});
+  assert.match(html,/Google Cloud/);
+  assert.match(html,/Confidential Space · attestation verified/);
+  assert.match(html,new RegExp(digest));
+  assert.match(html,/fingerprint-123/);
+});
