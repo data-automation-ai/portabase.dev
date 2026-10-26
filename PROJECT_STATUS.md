@@ -1,5 +1,110 @@
 # Portabase — capability & evidence ledger
 
+## Destination investigation — 2026-10-26
+
+### Verified continuation at 20:25 UTC (supersedes earlier pending entries)
+
+- Separate OAuth grants now work concurrently. The source grant exposes 18
+  source-account projects and retains `ekklokrukxmqlahtonnc`. The destination
+  grant exposes exactly `wunfzvzguqlnxhtxipen` and `kiuwcdpjsdotkoojbkoi`.
+  Account emails were manually confirmed from the owner's supplied identities
+  and destination consent screen; Supabase profile identity remains unverified.
+- Diagnostic image `sha256:cfb1c405c46eaa98fe3b4a0b704da7e1c40e269973780afad05aea7175fb594d`
+  is deployed via controller revision `00014-rpw`, with live Google-signed TDX
+  attestation verified. Build `e8430ae9-70d4-42cb-8955-6f4208a1ce9a`, source
+  commit `62e5621`. Earlier exchange failures did not recur with fresh consent;
+  a single provider-side root cause has not been conclusively established.
+- Paid target live inspection: 1 application table, 1 Auth user, 0 Storage
+  objects, 0 functions. Free-labeled target: 686 tables, 106 Auth users,
+  17,384 Storage objects, 68 functions. BOTH ARE NONBLANK. No source capture,
+  destination restore, or deletion has run. Owner decision about preserving
+  existing contents is pending; do not overwrite either target.
+- The LOCAL helper mounts the preserved `DatabaseScopeSelector` from the center
+  Machine button. Browser inspection verified the real 713-table inventory,
+  schema expansion, mode switches, stacked totals and combined 11.340 GiB tally.
+  T layout and capsule jar render locally. Individual Storage objects and table
+  definition exclusion remain unwired; the adapter rejects unsupported scope.
+- Measured Dropbox byte telemetry, selective-capsule acceptance, selected-size
+  admission and explicit temporary-vs-Dropbox capsule handling are implemented
+  locally with focused tests; they are NOT YET in the attested runtime image.
+  Retained-capsule rebuild independent of the source is still incomplete.
+- A broader connector test found an existing fixture assumption: simulated
+  `upload-capsule` expects HTTP 200 without supplying a capsule directory, but
+  the unchanged handler returns 404 `capsule_not_found`. Focused uploader/hash
+  checks pass. Do not describe the whole connector test file as passing.
+
+| Capability | Source | Provisioned | Configured | Deployed | Live proof | Security proof | Status | Blocker |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Separate source/destination grants | `oauth-connections.mjs` | Existing OAuth app and named accounts | Distinct encrypted grant slots | Diagnostic runner + local helper | Correct disjoint project lists, preserved after helper reopen | Local same-account denial and secret-safe errors pass | VERIFIED for grant separation | Provider email identity remains manual |
+| Original selector on T-shaped machine | Original React selector + `scope-modal.jsx` | Local helper | Real source inventory adapter | Local only | Modal, source inventory and tally observed in browser | Unsupported scope rejected locally | PARTIAL | Individual Storage-object and definition-exclusion backend |
+| Byte-driven capsule animation | `machine-visual.mjs`, Dropbox uploader, job snapshots | Existing runner | Local telemetry implementation | UI local; telemetry image pending | Rendered idle jar, no live upload yet | No fake byte percentage; failed upload cannot claim verified delivery | INCOMPLETE | Deploy + authorized vault + blank target |
+| Paid/free restore drills | Existing named targets | Both targets present | Connections work | Existing runtime | Nonblank checks proved | Restore remains blocked | BLOCKED | Existing contents need owner disposition and safe restore plan |
+
+Current continuation: the owner approved destination OAuth consent. The VM hit
+its four-hour lifetime and was restarted; the helper reopened the encrypted
+profile and verified the pinned TDX image again. The local offer-renewal fix is
+now running. Source selection remains `ekklokrukxmqlahtonnc`. Destination consent
+shows the correct organization, but attempts encountered a Supabase browser
+network failure and an encrypted `operation_failed` response during exchange.
+Neither requested destination appears in the helper grant yet. No capture or
+restore has run. Earlier statements below about awaiting permission or not
+restarting the helper are superseded by this continuation.
+
+The token-exchange diagnostic patch in `oauth-connections.mjs` now preserves
+only fixed, allowlisted OAuth error codes instead of losing them to the generic
+channel error. Five focused tests pass, including preservation of existing
+source/target grants and suppression of raw provider descriptions. This patch
+is LOCAL ONLY: the pinned confidential image has not been rebuilt or deployed.
+Next runtime step requires an updated tested image and matching verifier pin;
+do not weaken attestation or retry more consent against the opaque old failure.
+
+Owner-required visualization (not yet implemented in the live helper): preserve
+the T shape: Supabase source at left, Portabase Machine in the center, Supabase
+destination at right, and customer capsule storage directly below the machine.
+The center button must open the preserved advanced object selector and display
+the cumulative selected size. Show left-to-right pulses only while the relevant
+transfer actually runs. Render the capsule as a jar filling with water using
+confirmed transferred bytes and a known total; otherwise show indeterminate
+activity. Pause/failure stops pulses and displays the reason. Existing coarse
+phase percentages are not byte telemetry. Dropbox is the current vault path;
+Google Drive is requested but must not be presented as connected or available
+until implemented and verified. Retained capsules and capsule-based rebuilds
+remain separate from a direct temporary-runner transfer.
+
+Follow-up: browser inspection showed the source and destination grants exposing
+the same 18 source-organization projects, with neither requested destination
+present. Do not substitute manual email confirmation for repairing that grant.
+The source selection has now been corrected to `ekklokrukxmqlahtonnc` through
+the helper, and read-only inventory returned 713 tables and 17 buckets
+(approximately 1.56 GiB table storage and 9.78 GiB Storage objects). No capture
+or restore ran. Replacement destination consent is prepared in the browser for
+the destination organization and awaits action-time access-grant confirmation.
+The original source grant remains connected. The observations immediately below
+describe the earlier state, before correcting the source selection.
+
+The running helper on port 58441 reports source and target connections present,
+both identities unverified, and state `account_confirmation_required`. Its selected
+source is `uloqvqdkeiwvnnnfdvrc`, not the owner's requested `ekklokrukxmqlahtonnc`
+(organization `ipxhidmxekjpzrwubhzo`). No capture or restore has executed in this
+session. This supersedes the older statement below that neither grant completed.
+
+Browser inspection confirmed both requested destinations in organization
+`wjspgqaefesfatohojbu`: `wunfzvzguqlnxhtxipen` and `kiuwcdpjsdotkoojbkoi`.
+Both dashboards report Healthy, Nano compute, and a Pro organization. These are
+dashboard observations, not recovery proof or confirmation of separate free/paid
+billing. The latter project shows existing public tables and views; it must not
+be treated as blank or overwritten. The former still needs a complete blank check.
+
+| Capability | Source | Provisioned | Configured | Deployed | Live proof | Security proof | Status | Blocker |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Expired account-switch offer renewal | `oauth-offer.mjs`, local helper | Existing OAuth application | Renewal now includes pending replacement grants | Local source only; running helper not restarted | Pending | Four focused offer/account-isolation tests passed | IMPLEMENTED, NOT LIVE VERIFIED | Reconcile current grants and preserve session before restart |
+| Separate destination account | Existing source/target grant slots | Both requested projects visible in named destination organization | Helper has two grants but unverified identities and wrong source selection | Existing helper | Dashboard access only | Same-account denial covered locally | INCOMPLETE | Establish grant identities, select intended source and target, verify refresh |
+| Original advanced selector on center machine | `src/console/database-scope-selector.jsx` preserved | Existing source | Not yet attached to trial machine | Not released | None | Not assessed | INCOMPLETE | Reuse original component; do not substitute limited trial picker or claim unsupported restore modes |
+
+No production changes, grant revocations, database writes, or restore runs were
+performed in this investigation. Reverting the helper import/renewal change and
+removing the two new offer files rolls back the local code patch.
+
 ## Confidential recovery source checkpoint — 2026-10-25
 
 **INCOMPLETE; isolated validation only.** This checkpoint supersedes older

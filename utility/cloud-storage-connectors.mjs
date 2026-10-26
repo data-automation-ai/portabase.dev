@@ -241,6 +241,15 @@ export async function uploadCapsuleToDropbox(capsuleDir, opts = {}) {
 
   const token = await resolveDropboxAccessToken(opts);
 
+  const totalBytes=files.reduce((sum,name)=>sum+fs.statSync(path.join(capsuleDir,name)).size,0);
+  let verifiedBytes=0;
+  const report=receivedInFile=>{
+    if(typeof opts.onProgress!=='function')return;
+    // Only acknowledged bytes; never include paths, tokens, or session IDs.
+    try{opts.onProgress({bytesReceived:verifiedBytes+receivedInFile,totalBytes,verifiedBytes});}catch{}
+  };
+  report(0);
+
   for (const name of files) {
     const filePath = path.join(capsuleDir, name);
     const fileSize = fs.statSync(filePath).size;
@@ -276,6 +285,7 @@ export async function uploadCapsuleToDropbox(capsuleDir, opts = {}) {
       }
 
       contentHashes[name] = resData.content_hash;
+      verifiedBytes+=fileSize;report(0);
       filesUploaded.push({
         name,
         path: resData.path_display || targetDropboxPath,
@@ -314,6 +324,7 @@ export async function uploadCapsuleToDropbox(capsuleDir, opts = {}) {
       }
       const { session_id } = await startRes.json();
       let offset = firstChunk.length;
+      report(offset);
 
       while (offset + CHUNK_SIZE < fileSize) {
         const chunk = await readChunk(offset);
@@ -334,6 +345,7 @@ export async function uploadCapsuleToDropbox(capsuleDir, opts = {}) {
           throw new Error(`Dropbox upload session append failed for ${name} (${appendRes.status}): ${errText}`);
         }
         offset += chunk.length;
+        report(offset);
       }
 
       const finalChunk = await readChunk(offset);
@@ -365,6 +377,7 @@ export async function uploadCapsuleToDropbox(capsuleDir, opts = {}) {
       }
 
       contentHashes[name] = finishData.content_hash;
+      verifiedBytes+=fileSize;report(0);
       filesUploaded.push({
         name,
         path: finishData.path_display || targetDropboxPath,

@@ -12,12 +12,12 @@ test('pasted OAuth callback accepts only one code and state on the registered HT
   ])assert.throws(()=>parsePastedCallback(url),/invalid_oauth_callback/);
 });
 
-test('GUI requires source, blank destination and connected Dropbox before run',()=>{
+test('GUI requires source and blank destination and offers explicit capsule handling',()=>{
   const base={status:{state:'select_projects',connections:{source:true,target:true,dropbox:false},selection:{}},
     projects:{source:[{name:'Owner <source>',ref:'a'.repeat(20)}],target:[{name:'New destination',ref:'b'.repeat(20)}]},
     selection:{},links:{},nonce:'nonce'};
   const before=renderDryRunPage(base);
-  assert.match(before,/Capsule destination · Dropbox/);
+  assert.match(before,/Capsule destination/);
   assert.match(before,/Portabase Machine/);
   assert.match(before,/class="route"/);
   assert.match(before,/Authorize Dropbox/);
@@ -50,6 +50,9 @@ test('GUI requires source, blank destination and connected Dropbox before run',(
   assert.match(withDropbox,/public/);
   assert.match(withDropbox,/avatars/);
   assert.match(withDropbox,/acknowledgeScope/);
+  assert.match(withDropbox,/name="vault" required/);
+  assert.match(withDropbox,/value="temporary_runner"/);
+  assert.match(withDropbox,/not a durable backup/);
   const occupied=renderDryRunPage({...base,status:{...base.status,state:'preflight_blocked',preflight:{target:{blank:false}}}});
   assert.doesNotMatch(occupied,/action="\/execute"/);
 });

@@ -1,5 +1,5 @@
 param([Parameter(Mandatory=$true)][string]$SourceRoot,[string]$BuildId='20261024a',
-  [string]$AdmissionEndpoint='')
+  [string]$AdmissionEndpoint='', [switch]$BuildOnly)
 $ErrorActionPreference='Stop'
 if($BuildId -notmatch '^[a-z0-9]{6,20}$'){throw 'Invalid build id'}
 if($AdmissionEndpoint -and $AdmissionEndpoint -notmatch '^https://[a-f0-9]{24}--portabase-dev\.netlify\.app/\.netlify/functions/cloud-confidential-admission$'){throw 'Invalid isolated admission endpoint'}
@@ -39,6 +39,7 @@ foreach($relative in ($paths | Sort-Object -Unique)){
   Copy-Item -LiteralPath $from -Destination $to
   $manifest+=@{path=$relative;sha256=(Get-FileHash -LiteralPath $to -Algorithm SHA256).Hash.ToLower()}
 }
+if(-not $BuildOnly){
 $repos=G @('artifacts','repositories','list',"--location=$buildRegion",'--format=value(name)')
 if($repos -notcontains $repository -and -not ($repos | Where-Object {$_ -match "/$repository$"})){
   G @('artifacts','repositories','create',$repository,'--repository-format=docker',"--location=$buildRegion",'--description=Portabase attested application images','--format=value(name)')
@@ -57,6 +58,7 @@ G @('secrets','add-iam-policy-binding','portabase-confidential-oauth',"--member=
 $buckets=G @('storage','buckets','list','--format=value(name)')
 if($buckets -notcontains $bucket){G @('storage','buckets','create',"gs://$bucket","--location=$buildRegion",'--uniform-bucket-level-access','--public-access-prevention')}
 G @('storage','buckets','add-iam-policy-binding',"gs://$bucket","--member=serviceAccount:$builder",'--role=roles/storage.objectViewer','--format=value(etag)')
+}
 $image="$buildRegion-docker.pkg.dev/$buildProject/$repository/application:$BuildId"
 $controllerImage="$buildRegion-docker.pkg.dev/$buildProject/$repository/controller:$BuildId"
 $config=@{steps=@(@{name='gcr.io/cloud-builders/docker';args=@('build','--build-arg',"VALIDATION_ADMISSION_ENDPOINT=$AdmissionEndpoint",'-f','cloud/confidential/Dockerfile.application','-t',$image,'.')},

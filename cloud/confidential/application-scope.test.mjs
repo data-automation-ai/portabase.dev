@@ -44,6 +44,9 @@ test('source inventory returns names and estimates, and selected scope reaches c
   assert.equal(started.scope.functions,false);
   assert.equal(started.scopeSummary.tables,1);
   assert.equal(started.scopeSummary.estimatedTableBytes,4096);
+  await assert.rejects(call('backup.start',{requestId:'request',vault:'google-drive',scope}),/unsupported_vault/);
+  await call('backup.start',{requestId:'request',vault:'temporary_runner',scope});
+  assert.equal(started.provider,undefined,'temporary mode does not silently become a remote vault');
 });
 
 test('backup start rejects stale objects instead of silently changing the chosen source scope', async () => {

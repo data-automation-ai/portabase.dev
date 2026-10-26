@@ -2,13 +2,14 @@
 // remain in memory; the code/token exchange occurs inside the attested VM.
 import {createServer} from 'node:http';
 import {createHash,randomUUID} from 'node:crypto';
-import {writeFile} from 'node:fs/promises';
+import {readFile,writeFile} from 'node:fs/promises';
 import {operatorGoogle} from './operator-google.mjs';
 import {confidentialClient} from './client.mjs';
 import {executeDryRun} from './execute-dry-run.mjs';
 import {parsePastedCallback,renderDryRunPage} from './dry-run-gui.mjs';
+import {needsOAuthOffer} from './oauth-offer.mjs';
 const CONTROLLER='https://portabase-confidential-controller-26ulj3ikia-uc.a.run.app';
-const DIGEST='sha256:67cce210194ed821da572ae11ddf1e0b0bb8acd8efeda7582e9066ba6c4b9426';
+const DIGEST='sha256:cfb1c405c46eaa98fe3b4a0b704da7e1c40e269973780afad05aea7175fb594d';
 const REF='eoiqvdmvgaurlecdzqkp',ID='6f454f7b-b490-4fe9-9c49-48ce5b6f4408';
 // Supabase's live authorize endpoint rejects HTTP loopback callbacks even
 // when registered. The test verifier receives the HTTPS callback by handoff.
@@ -42,7 +43,7 @@ async function main(){
  async function command(operation,input={}){
   const result=await client.command(operation,input);
   if(result.sealedProfile){sealedProfile=result.sealedProfile;delete result.sealedProfile;}
-  if(sealedProfile&&(['oauth.finish','vault.finish'].includes(operation)||Date.now()-lastProfileSave>30000)){
+  if(sealedProfile&&(['oauth.finish','vault.finish','project.select','oauth.account.confirm'].includes(operation)||Date.now()-lastProfileSave>30000)){
    if(!await google(profileSecret))await google('/v1/projects/portabase-dev/secrets?secretId=portabase-confidential-validation-profile',{method:'POST',body:{replication:{automatic:{}}}});
    await google(profileSecret+':addVersion',{method:'POST',body:{payload:{data:Buffer.from(JSON.stringify({sealedProfile})).toString('base64')}}});lastProfileSave=Date.now();
   }
@@ -65,6 +66,8 @@ async function main(){
  }
  async function begin(slot){
   for(const [state,oldSlot] of pending)if(oldSlot===slot)pending.delete(state);
+  // A failed renewal must not leave a link whose state was just invalidated.
+  delete links[slot];delete offers[slot];
   const offer=await command('oauth.begin',{slot,redirectUri:CALLBACK});
   pending.set(offer.state,slot);links[slot]=offer.url;offers[slot]=Date.now();
  }
@@ -100,12 +103,11 @@ async function main(){
     !(status.accounts.source?.verified&&status.accounts.target?.verified)){
    status.state='account_confirmation_required';await persist();return;
   }
-  if(!status.connections.source||!status.connections.target||!status.connections.dropbox||!status.selection.source||!status.selection.target){
+  if(!status.connections.source||!status.connections.target||!status.selection.source||!status.selection.target){
    status.state='select_projects';await persist();return;
   }
   for(const slot of ['source','target']){
    if(!projects[slot].some(p=>p.ref===status.selection[slot]))throw new Error('project_not_authorized');
-   await command('project.select',{slot,ref:status.selection[slot]});
   }
   const result=await command('preflight');
   status.preflight={ready:result.ready,source:result.source,target:result.target,dataFlow:result.dataFlow};
@@ -130,7 +132,7 @@ async function main(){
  const server=createServer(async(req,res)=>{
   if(req.headers.host!=='127.0.0.1:58441'){res.writeHead(400);return res.end();}
   res.setHeader('cache-control','no-store');res.setHeader('referrer-policy','no-referrer');res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('content-security-policy',"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
+  res.setHeader('content-security-policy',"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
   const url=new URL(req.url,'http://127.0.0.1:58441');
   try{
    if(req.method==='POST'&&['/callback','/dropbox','/select','/scope','/execute','/reauthorize','/confirm-accounts'].includes(url.pathname)){
@@ -168,7 +170,8 @@ async function main(){
      if(status.executing)throw new Error('drill_already_running');
      const slot=form.get('slot'),ref=form.get('ref');
      if(!['source','target'].includes(slot)||!status.connections[slot]||!projects[slot].some(p=>p.ref===ref))throw new Error('project_not_authorized');
-     await command('project.select',{slot,ref});
+     const inspected=await command('project.select',{slot,ref});
+     status.inspections||={};status.inspections[slot]=inspected;
      if(status.selection[slot]!==ref){delete status.preflight;if(slot==='source'){status.inventory=null;status.scope=null;}}
      status.selection[slot]=ref;
      await preflight();res.writeHead(303,{location:'/'});return res.end();
@@ -192,12 +195,18 @@ async function main(){
       ||form.get('acknowledgeBlankTarget')!=='yes'||form.get('acknowledgeScope')!=='yes')throw new Error('test_confirmation_required');
     if(status.state!=='preflight_passed'||status.preflight?.target?.blank!==true)throw new Error('preflight_required');
     if(status.executing)throw new Error('drill_already_running');
-    if(!status.connections.dropbox)throw new Error('dropbox_connection_required');
+    const vaultChoice=form.get('vault');
+    if(!['dropbox','temporary_runner'].includes(vaultChoice))throw new Error('capsule_choice_required');
+    if(vaultChoice==='dropbox'&&!status.connections.dropbox)throw new Error('dropbox_connection_required');
     if(!status.inventory||!status.scope)throw new Error('source_scope_required');
-    executeDryRun({command,status,persist,sourceRef:status.selection.source,targetRef:status.selection.target,vault:'dropbox',scope:status.scope}).catch(()=>{});
+    executeDryRun({command,status,persist,sourceRef:status.selection.source,targetRef:status.selection.target,vault:vaultChoice,scope:status.scope}).catch(()=>{});
     res.writeHead(303,{location:'/'});return res.end();
    }
    if(req.method!=='GET'){res.writeHead(405);return res.end();}
+   if(url.pathname==='/scope-ui.js'){
+    res.setHeader('content-type','text/javascript; charset=utf-8');
+    return res.end(await readFile(new URL('./evidence/ui/scope-ui.js',import.meta.url)));
+   }
    if(url.pathname==='/status'){res.setHeader('content-type','application/json');return res.end(JSON.stringify(status));}
    if(url.pathname==='/confidential/callback'){
     if(url.searchParams.has('error'))throw new Error('oauth_authorization_denied');
@@ -206,15 +215,17 @@ async function main(){
    }
    if(url.pathname!=='/'){res.writeHead(404);return res.end();}
    // Fresh offers when a reviewer resumes after consent expiry.
-   for(const slot of ['source','target'])if(!status.connections[slot]&&(!links[slot]||Date.now()-offers[slot]>8*60000))await begin(slot);
+   for(const slot of ['source','target'])if(needsOAuthOffer({connected:status.connections[slot],link:links[slot],offeredAt:offers[slot]}))await begin(slot);
    if(!status.connections.dropbox&&(!links.dropbox||Date.now()-offers.dropbox>8*60000))await beginDropbox();
    res.setHeader('content-type','text/html; charset=utf-8');
    res.end(renderDryRunPage({status,projects,selection:status.selection,links,nonce:runNonce}));
-  }catch(e){status.error=/^[a-z0-9_:.-]{3,120}$/i.test(e.message)?e.message:'validation_request_failed';await persist();
+  }catch(e){status.error=/^[a-z0-9_:.-]{3,120}$/i.test(e.message)?e.message:
+   ['TimeoutError','AbortError','TypeError','SyntaxError'].includes(e.name)?`request_${e.name.toLowerCase()}`:'validation_request_failed';await persist();
    res.writeHead(400,{'content-type':'text/plain'});res.end(status.error);}
  });
  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(58441,'127.0.0.1',resolve);});
  console.log(JSON.stringify({state:status.state,url:'http://127.0.0.1:58441',attestation:status.attestation}));
  setTimeout(()=>server.close(),230*60000).unref();
 }
-main().catch(e=>{console.error(/^[a-z0-9_:.-]{3,120}$/i.test(e.message)?e.message:'customer_session_failed');process.exitCode=1;});
+main().catch(e=>{console.error(/^[a-z0-9_:.-]{3,120}$/i.test(e.message)?e.message:
+ ['TimeoutError','AbortError','TypeError','SyntaxError'].includes(e.name)?`customer_session_${e.name.toLowerCase()}`:'customer_session_failed');process.exitCode=1;});

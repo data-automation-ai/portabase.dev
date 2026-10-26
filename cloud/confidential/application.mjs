@@ -125,6 +125,7 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
         }
         case 'backup.start':
         case 'restore.start': {
+          if(operation==='backup.start'&&input.vault!==undefined&&!['dropbox','temporary_runner'].includes(input.vault))fail('unsupported_vault');
           if(!profile.keyAcknowledged) fail('save_recovery_key_first');
           if(connections.assertDistinct)await connections.assertDistinct(profile);
           const source=await connections.access(profile,'source'), target=await connections.access(profile,'target');

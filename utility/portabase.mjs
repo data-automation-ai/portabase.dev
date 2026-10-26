@@ -1522,7 +1522,7 @@ async function sendAlert(config, state) {
   }
 }
 
-export async function transferCapsule(config, capsuleDir) {
+export async function transferCapsule(config, capsuleDir, onProgress = null) {
   await enforceJobCapsuleLimit(capsuleDir);
   if (config.provider.type === 'local') {
     const bytes = await directoryByteSize(capsuleDir);
@@ -1565,7 +1565,7 @@ export async function transferCapsule(config, capsuleDir) {
     };
   }
   if (config.provider.type === 'dropbox' && (config.provider.mode === 'api' || config.provider.accessToken || config.provider.refreshToken || process.env.DROPBOX_ACCESS_TOKEN || process.env.DROPBOX_REFRESH_TOKEN)) {
-    return await uploadCapsuleToDropbox(capsuleDir, { ...config.provider });
+    return await uploadCapsuleToDropbox(capsuleDir, { ...config.provider, onProgress });
   }
   if ((config.provider.type === 'google-drive' || config.provider.type === 'gdrive') && (config.provider.mode === 'api' || config.provider.accessToken || config.provider.refreshToken || process.env.GOOGLE_DRIVE_ACCESS_TOKEN || process.env.GOOGLE_DRIVE_REFRESH_TOKEN)) {
     return await uploadCapsuleToGoogleDrive(capsuleDir, { ...config.provider });
@@ -1918,7 +1918,7 @@ async function backup() {
     const manifestHash = await hashFile(join(capsuleDir, 'capsule.json'));
     const sizeBytes = await directoryByteSize(capsuleDir);
     progress({ phase: 'transfer', item: config.provider.type });
-    const transfer = await transferCapsule(config, capsuleDir);
+    const transfer = await transferCapsule(config, capsuleDir, delivery=>progress({phase:'transfer',...delivery}));
     const state = {
       state: manifest.status,
       capsule: id,

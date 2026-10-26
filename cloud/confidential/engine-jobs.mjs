@@ -49,7 +49,8 @@ function runEngine(args, env, root, maxBytes, progress, { spawnImpl = spawn, sig
         try {
           const event = JSON.parse(line.slice(11));
           if (['database-manifest','database','storage','functions','package','encrypt','transfer','done'].includes(event?.phase))
-            progress({ phase: event.phase, completed: event.completed, total: event.total });
+            progress({ phase: event.phase, completed: event.completed, total: event.total,
+              bytesReceived:event.bytesReceived,totalBytes:event.totalBytes,verifiedBytes:event.verifiedBytes });
         } catch { /* An untrusted or partial progress line is ignored. */ }
       }
     });
@@ -78,6 +79,7 @@ export function confidentialJobSnapshot(job) {
     startedAt: job.startedAt, finishedAt: job.finishedAt || null,
     estimatedPercent: job.operation === 'backup' ? (job.state === 'complete' ? 100 : job.estimatedPercent) : null,
     progressKind: job.operation === 'backup' ? 'estimate' : null,
+    delivery:job.delivery||null,
     durationMs: job.finishedAt ? Date.parse(job.finishedAt) - Date.parse(job.startedAt) : null,
     phaseTimings: job.phaseTimings.map(({ phase, startedAt, finishedAt }) => ({ phase, startedAt,
       durationMs: finishedAt ? Date.parse(finishedAt) - Date.parse(startedAt) : null })),
@@ -98,8 +100,14 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
       const source = access(sourceToken), target = access(targetToken);
       const [sourceStatus, targetStatus] = await Promise.all([source.inspect(sourceRef),target.inspect(targetRef)]);
       if (!targetStatus.blank) fail('restore_target_not_blank');
-      if (sourceStatus.measuredBytes > maxBytes) fail('plan_size_limit');
       const prior = operation === 'restore' ? jobs.get(capsuleId) : null;
+      const plannedScope=operation==='restore'?prior?.scopeSummary:scopeSummary;
+      const selectedBytes=plannedScope?.estimatedTableBytes+plannedScope?.estimatedStorageBytes;
+      const partialScope=plannedScope && (plannedScope.tables<plannedScope.totalTables || plannedScope.buckets<plannedScope.totalBuckets);
+      // Selected captures are bounded by their estimated contents here and by
+      // the actual encrypted artifact size below; full-source size is not the selection.
+      const admissionBytes=partialScope&&Number.isSafeInteger(selectedBytes)&&selectedBytes>=0?selectedBytes:sourceStatus.measuredBytes;
+      if (admissionBytes > maxBytes) fail('plan_size_limit');
       if (operation === 'restore' && (!prior || prior.owner !== owner || prior.state !== 'complete' || !prior.capsulePath || prior.sourceRef !== sourceRef)) fail('capsule_not_available');
       if (operation === 'backup' && (!scope || typeof scope.storage !== 'boolean' || typeof scope.auth !== 'boolean' || typeof scope.functions !== 'boolean')) fail('source_scope_required');
       // Charge a manual run only after destination, size and capsule validation.
@@ -154,15 +162,24 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
           await run(args,env,root,maxBytes,event => {
             const name = typeof event === 'string' ? event : event?.phase;
             if (operation === 'backup') job.estimatedPercent = estimateCapturePercent(job.estimatedPercent,event);
+            if(operation==='backup'&&name==='transfer'&&job.vaultRequested
+              &&Number.isSafeInteger(event?.bytesReceived)&&Number.isSafeInteger(event?.totalBytes)
+              &&Number.isSafeInteger(event?.verifiedBytes)&&event.totalBytes>0
+              &&event.verifiedBytes>=0&&event.bytesReceived>=event.verifiedBytes
+              &&event.bytesReceived<=event.totalBytes){
+              job.delivery={bytesReceived:event.bytesReceived,totalBytes:event.totalBytes,verifiedBytes:event.verifiedBytes};
+            }
             if (typeof name === 'string' && name !== 'done') phase(name);
           },{signal:abort.signal});
           if (operation === 'backup') {
             const status = JSON.parse(await readFile(join(root,'status/latest.json'),'utf8'));
-            if (status.state !== 'COMPLETE' || !/^[a-z0-9_.-]+$/i.test(status.capsule || '')) fail('capture_incomplete');
+            if (!['COMPLETE','SELECTIVE'].includes(status.state) || (status.errors?.length>0)
+              || !/^[a-z0-9_.-]+$/i.test(status.capsule || '')) fail('capture_incomplete');
             if (Number(status.sizeBytes) > maxBytes) fail('plan_size_limit');
             job.capsulePath = join(root,'capsules',status.capsule);
             job.result = { capsuleId: status.capsule, bytes: status.sizeBytes, ciphertextSha256: status.capsuleHash,
               captureComplete: true, vaultVerified: !!provider && status.destinationVerified === true, restoreVerified: false,
+              captureScope:status.state==='SELECTIVE'?'selected':'full',
               destinationKind: provider?.type || 'temporary_runner', temporaryCapsuleRetained: !provider,
               measuredSourceBytes: sourceStatus.measuredBytes };
           } else {
