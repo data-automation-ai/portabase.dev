@@ -13,7 +13,7 @@ const REF='eoiqvdmvgaurlecdzqkp',ID='6f454f7b-b490-4fe9-9c49-48ce5b6f4408';
 // Supabase's live authorize endpoint rejects HTTP loopback callbacks even
 // when registered. The test verifier receives the HTTPS callback by handoff.
 const CALLBACK='https://portabase.dev/confidential/callback';
-const status={state:'starting',connections:{source:false,target:false,dropbox:false},allocation:'customer-authenticated admission',
+const status={state:'starting',connections:{source:false,target:false,dropbox:false},accounts:{},allocation:'customer-authenticated admission',
  selection:{},backupExecuted:false,restoreExecuted:false};
 const pending=new Map(),links={},offers={},projects={source:[],target:[]},runNonce=randomUUID();
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -73,6 +73,10 @@ async function main(){
   projects[slot]=result.projects;
   if(status.selection[slot]&&!projects[slot].some(p=>p.ref===status.selection[slot]))delete status.selection[slot];
  }
+ async function refreshIdentity(slot){
+  if(!status.connections[slot]){delete status.accounts[slot];return;}
+  const result=await command('oauth.identity',{slot});status.accounts[slot]=result.identity;
+ }
  async function refreshSourceInventory(){
   const ref=status.selection.source;
   if(!status.connections.source||!ref){status.inventory=null;status.scope=null;return null;}
@@ -84,6 +88,13 @@ async function main(){
  }
  async function preflight(){
   delete status.preflight;delete status.error;
+  if(status.connections.source&&status.connections.target&&(!status.accounts.source||!status.accounts.target)){
+   for(const slot of ['source','target'])await refreshIdentity(slot);
+  }
+  if(status.accounts.source&&status.accounts.target&&
+    (status.accounts.source.id===status.accounts.target.id||status.accounts.source.email===status.accounts.target.email)){
+   status.state='account_mismatch_required';status.error='destination_account_must_differ';await persist();return;
+  }
   if(status.connections.source&&status.selection.source)await refreshSourceInventory();
   if(!status.connections.source||!status.connections.target||!status.connections.dropbox||!status.selection.source||!status.selection.target){
    status.state='select_projects';await persist();return;
@@ -99,14 +110,17 @@ async function main(){
  }
  async function finishCallback({state,code}){
   const slot=pending.get(state);if(!slot)throw new Error('oauth_state_mismatch');
-  await command('oauth.finish',{slot,state,code});pending.delete(state);
+  try{await command('oauth.finish',{slot,state,code});}
+  catch(error){pending.delete(state);await begin(slot);throw error;}
+  pending.delete(state);
   status.connections[slot]=true;delete links[slot];delete offers[slot];
+  await refreshIdentity(slot);
   await refreshProjects(slot);await preflight();await persist();
  }
  async function persist(){await writeFile(new URL('./evidence/customer-session-live.json',import.meta.url),JSON.stringify({...status,checkedAt:new Date().toISOString()},null,2)+'\n');}
  for(const slot of ['source','target'])if(!status.connections[slot])await begin(slot);
  if(!status.connections.dropbox)await beginDropbox();
- for(const slot of ['source','target'])if(status.connections[slot])await refreshProjects(slot);
+ for(const slot of ['source','target'])if(status.connections[slot]){await refreshIdentity(slot);await refreshProjects(slot);}
  await preflight();await persist();
  const server=createServer(async(req,res)=>{
   if(req.headers.host!=='127.0.0.1:58441'){res.writeHead(400);return res.end();}
@@ -114,7 +128,7 @@ async function main(){
   res.setHeader('content-security-policy',"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
   const url=new URL(req.url,'http://127.0.0.1:58441');
   try{
-   if(req.method==='POST'&&['/callback','/dropbox','/select','/scope','/execute'].includes(url.pathname)){
+   if(req.method==='POST'&&['/callback','/dropbox','/select','/scope','/execute','/reauthorize'].includes(url.pathname)){
     if(req.headers.origin&&req.headers.origin!=='http://127.0.0.1:58441'){res.writeHead(403);return res.end();}
     if(!req.headers['content-type']?.startsWith('application/x-www-form-urlencoded')){res.writeHead(415);return res.end();}
     let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>1024*1024)throw new Error('request_too_large');}
@@ -123,6 +137,11 @@ async function main(){
     if(url.pathname==='/callback'){
      await finishCallback(parsePastedCallback(form.get('callbackUrl')));
      res.writeHead(303,{location:'/'});return res.end();
+    }
+    if(url.pathname==='/reauthorize'){
+     if(status.executing)throw new Error('drill_already_running');
+     const slot=form.get('slot');if(!['source','target'].includes(slot))throw new Error('invalid_connection_slot');
+     await begin(slot);res.writeHead(303,{location:'/'});return res.end();
     }
     if(url.pathname==='/dropbox'){
      if(status.connections.dropbox)throw new Error('dropbox_already_connected');

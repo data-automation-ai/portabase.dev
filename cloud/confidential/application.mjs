@@ -94,6 +94,7 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
         case 'oauth.begin': data=connections.begin(profile,input.slot,input.redirectUri); break;
         case 'oauth.finish': data=await connections.finish(profile,input); break;
         case 'oauth.disconnect': data=connections.disconnect(profile,input.slot); break;
+        case 'oauth.identity': data={slot:input.slot,identity:await connections.identity(profile,input.slot)}; break;
         case 'vault.begin': if(!vault)fail('dropbox_app_not_configured');data=vault.begin(profile);break;
         case 'vault.finish': if(!vault)fail('dropbox_app_not_configured');data=await vault.finish(profile,input.code);break;
         case 'vault.check': if(!vault)fail('dropbox_app_not_configured');data={connected:!!profile.dropbox?.refreshToken};
@@ -113,6 +114,7 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
           data={inventory:await sourceInventory(source.api,projectRef(profile.selection.source))}; break;
         }
         case 'preflight': {
+          if(connections.assertDistinct)await connections.assertDistinct(profile);
           const source=await connections.access(profile,'source'), target=await connections.access(profile,'target');
           const [from,to]=await Promise.all([source.api.inspect(projectRef(profile.selection.source)),target.api.inspect(projectRef(profile.selection.target))]);
           if(from.ref===to.ref || to.ref==='eoiqvdmvgaurlecdzqkp') fail('unsafe_restore_target');
@@ -123,6 +125,7 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
         case 'backup.start':
         case 'restore.start': {
           if(!profile.keyAcknowledged) fail('save_recovery_key_first');
+          if(connections.assertDistinct)await connections.assertDistinct(profile);
           const source=await connections.access(profile,'source'), target=await connections.access(profile,'target');
           const sourceRef=projectRef(profile.selection.source), targetRef=projectRef(profile.selection.target);
           if(operation==='restore.start' && (input.confirmTarget!==targetRef || input.acknowledgeManualConfig!==true)) fail('restore_acknowledgement_required');

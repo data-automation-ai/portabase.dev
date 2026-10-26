@@ -23,6 +23,8 @@ test('GUI requires source, blank destination and connected Dropbox before run',(
   assert.match(before,/Authorize Dropbox/);
   assert.match(before,/Source Supabase/);
   assert.match(before,/Destination Supabase/);
+  assert.match(before,/private browser window/);
+  assert.match(before,/Authorize a different target account/);
   assert.doesNotMatch(before,/Estimated capsule creation:/);
   assert.doesNotMatch(before,/action="\/execute"/);
   assert.match(before,/Owner &lt;source&gt;/);
