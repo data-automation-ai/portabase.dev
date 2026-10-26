@@ -5,6 +5,15 @@ import {randomUUID} from 'node:crypto';
 const SLOT = new Set(['source','target']);
 const CALLBACKS=new Set(['https://portabase.dev/confidential/callback','http://127.0.0.1:58441/confidential/callback']);
 const fail = code => { throw new Error(code); };
+// Provider descriptions may contain private details. Preserve only fixed codes
+// so the encrypted channel can diagnose failures without forwarding raw text.
+const TOKEN_ERRORS = new Set(['invalid_grant','invalid_client','invalid_request',
+  'unauthorized_client','unsupported_grant_type','invalid_scope','access_denied',
+  'server_error','temporarily_unavailable','oauth_network_error','invalid_token_response']);
+async function tokenOperation(action) {
+  try { return await action(); }
+  catch(error) { fail(TOKEN_ERRORS.has(error?.code) ? error.code : 'oauth_token_request_failed'); }
+}
 export function oauthConnections({ clientId, clientSecret, redirectUri, fetchImpl = fetch, now = Date.now }) {
   if (!clientId || !clientSecret || redirectUri !== 'https://portabase.dev/confidential/callback') fail('oauth_configuration_invalid');
   const refreshes=new WeakMap();
@@ -49,8 +58,8 @@ export function oauthConnections({ clientId, clientSecret, redirectUri, fetchImp
       if (!pending || pending.state !== state || pending.expires <= now()) fail('oauth_state_mismatch');
       if(!CALLBACKS.has(pending.redirectUri||redirectUri))fail('invalid_oauth_callback');
       delete profile.pending[slot];
-      const tokens = await exchangeSupabaseOAuthCode({ code, codeVerifier: pending.codeVerifier, redirectUri:pending.redirectUri||redirectUri,
-        clientId, clientSecret, tokenUrl: DEFAULT_SUPABASE_OAUTH_TOKEN_URL, fetchImpl:secureFetch });
+      const tokens = await tokenOperation(()=>exchangeSupabaseOAuthCode({ code, codeVerifier: pending.codeVerifier, redirectUri:pending.redirectUri||redirectUri,
+        clientId, clientSecret, tokenUrl: DEFAULT_SUPABASE_OAUTH_TOKEN_URL, fetchImpl:secureFetch }));
       const previous=profile.connections[slot];
       profile.connections[slot] = {...tokens,grantId:randomUUID()};
       try {
@@ -76,8 +85,8 @@ export function oauthConnections({ clientId, clientSecret, redirectUri, fetchImp
         let slots=refreshes.get(profile);if(!slots){slots=new Map();refreshes.set(profile,slots);}
         if(!slots.has(slot))slots.set(slot,(async()=>{
           try {
-            const refreshed=await refreshSupabaseAccessToken({refreshToken:tokens.refreshToken,
-              clientId,clientSecret,tokenUrl:DEFAULT_SUPABASE_OAUTH_TOKEN_URL,fetchImpl:secureFetch});
+            const refreshed=await tokenOperation(()=>refreshSupabaseAccessToken({refreshToken:tokens.refreshToken,
+              clientId,clientSecret,tokenUrl:DEFAULT_SUPABASE_OAUTH_TOKEN_URL,fetchImpl:secureFetch}));
             // Disconnect or reauthorization must not resurrect an older grant.
             if(profile.connections[slot]!==tokens)fail('connection_changed');
             profile.connections[slot]={...tokens,...refreshed};

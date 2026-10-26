@@ -2,6 +2,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {oauthConnections} from './oauth-connections.mjs';
 
+test('failed token exchange preserves both grants and exposes only fixed diagnostic codes',async()=>{
+  for(const [code,expected] of [['invalid_grant','invalid_grant'],
+    ['private_token_material','oauth_token_request_failed']]) {
+    const connections=oauthConnections({clientId:'client',clientSecret:'secret',
+      redirectUri:'https://portabase.dev/confidential/callback',
+      fetchImpl:async()=>({ok:false,status:400,json:async()=>({error:code,
+        error_description:'private provider response with credential material'})})});
+    const source={accessToken:'source'},target={accessToken:'target'};
+    const profile={connections:{source,target}};
+    const offer=connections.begin(profile,'target');
+    await assert.rejects(connections.finish(profile,{slot:'target',state:offer.state,code:'fixture'}),
+      error=>error.message===expected);
+    assert.equal(profile.connections.source,source);
+    assert.equal(profile.connections.target,target);
+    assert.equal(profile.pending.target,undefined);
+  }
+});
+
 test('separate Supabase OAuth slots reject the same account and accept a different one',async()=>{
   let destination='source';
   const fetchImpl=async(url,options)=>{
