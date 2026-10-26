@@ -1,4 +1,7 @@
+import { discordEvidence } from './discord-evidence.js';
+
 export const nightmares = [
+  ...discordEvidence,
   {
     id: 'N01', kind: 'firsthand', tag: 'ACCOUNT BANNED',
     title: 'A paid Pro account was banned and the database went dark.',

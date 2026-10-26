@@ -29,8 +29,10 @@ export function sortIncidents(stories, order = 'recent') {
   return [...stories].sort((a, b) => {
     const ad = incidentDate(a);
     const bd = incidentDate(b);
-    const period = order === 'impact' ? 4 : 7;
-    return bd.slice(0, period).localeCompare(ad.slice(0, period))
+    if (order !== 'impact') {
+      return bd.localeCompare(ad) || incidentImpact(a) - incidentImpact(b) || a.id.localeCompare(b.id);
+    }
+    return bd.slice(0, 4).localeCompare(ad.slice(0, 4))
       || incidentImpact(a) - incidentImpact(b)
       || bd.localeCompare(ad)
       || a.id.localeCompare(b.id);

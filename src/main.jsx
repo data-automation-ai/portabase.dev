@@ -629,8 +629,8 @@ function Stories() {
         <p>Account lockouts, interrupted businesses, and difficult recoveries. Read the public reports and Supabase’s own incident records.</p>
       </div>
       <div className="story-controls">
-        <p>{order === 'recent' ? 'Newest month first; higher impact first within each month.' : 'Newest year first; higher impact first within each year.'} Dates refer to the original report or official incident.</p>
-        <label>Sort cases <select value={order} onChange={event => setOrder(event.target.value)}><option value="recent">Recency + impact</option><option value="impact">Impact within each year</option></select></label>
+        <p>{order === 'recent' ? 'Newest report first; higher impact breaks ties on the same date.' : 'Newest year first; higher impact first within each year.'} Dates refer to the original report or official incident.</p>
+        <label>Sort cases <select value={order} onChange={event => setOrder(event.target.value)}><option value="recent">Newest first</option><option value="impact">Impact within each year</option></select></label>
       </div>
       <div className="story-list" role="list">
         {homepageStories.map((story, index) => (
@@ -649,7 +649,7 @@ function Stories() {
           </article>
         ))}
       </div>
-      <p className="source-note">No policies, feature requests, hypotheticals or backup-market discussions are counted. Community reports document what the poster reported; official incidents document what Supabase confirmed. A report is not presented as independent proof of cause.</p>
+      <p className="source-note">No policies, feature requests, hypotheticals or backup-market discussions are counted. Community reports document what the poster reported; official incidents document what Supabase confirmed. A report is not presented as independent proof of cause. Discord links may require sign-in and access to the Supabase server.</p>
     </div>
   </section>;
 }
