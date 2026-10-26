@@ -1,5 +1,15 @@
 # Confidential recovery checkpoint — 2026-10-25
 
+## Live validation update — 2026-10-26
+
+- Controller revision `portabase-confidential-controller-00013-4t8` now pins application image `sha256:67cce210194ed821da572ae11ddf1e0b0bb8acd8efeda7582e9066ba6c4b9426` for the isolated validation identity. The earlier `sha256:f01cfb2cf2010983b07f705e4b88f8f3bc7c43bf618aaad39c90ca1cffc76a31` digest is the rollback value.
+- Local helper `http://127.0.0.1:58441/` returned HTTP 200 and displayed the saved Source grant, separate Destination OAuth link, Source object picker placeholder, Dropbox panel, and Google Cloud attestation image digest. Destination and Dropbox remain disconnected. No backup or restore ran.
+- Supabase Management OAuth did not disclose the signed-in account through `GET /v1/profile` for this grant. Source and Destination grants use separate PKCE exchanges; Destination instructions require a private browser session. A manual two-email confirmation is required before preflight when provider identity is unavailable. This confirmation is user supplied, not independently verified by Supabase.
+- The validation runner start counter was cleared by compare-and-set only after checking that the isolated identity had zero run reservations and no VM. A new VM was then started; no customer data job was triggered.
+- The displayed Google Cloud label and pinned workload digest are factual provider identification and attestation evidence. No Google Cloud logo or endorsement claim is present.
+
+**INCOMPLETE:** Destination OAuth, separate-account confirmation, Dropbox OAuth, selected source inventory, blank-target preflight, capture, restore, and data comparison still require live proof.
+
 ## Source-object picker update — 2026-10-25
 
 The local trial GUI now loads a source inventory from the attested workload and
