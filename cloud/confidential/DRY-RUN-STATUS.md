@@ -79,3 +79,26 @@ The independently distributed verifier, customer-controlled image approvals,
 long-running OAuth refresh, hosted GUI flow, durable customer capsule delivery
 and a full recovery drill remain release gates. A successful push changes none
 of those live-proof requirements.
+
+## 2026-10-26 local trial update
+
+The earlier connection and image details above are historical. The loopback
+helper currently reports both Supabase OAuth grants connected, but Supabase did
+not disclose both account identities. Separate account confirmation is still
+required; Destination may have reused the Source browser login. Dropbox is not
+connected. The isolated `portabase-confidential-source` project is selected;
+its inventory returned one application table and one Storage bucket. The
+picker's existing table and bucket selection form submitted successfully
+through the live loopback helper. No capsule capture or restore has started.
+
+Commit `6411a5e` moves Source project selection into the object picker and
+groups objects as project → default `postgres` database → schemas → tables,
+with Storage, Auth, and Edge Functions alongside. The source and destination
+OAuth grants remain separate. This code was pushed to the feature branch and
+copied to the helper snapshot, but the helper process was not restarted after
+this final layout edit, so the new hierarchy is not yet live-proven. The older
+grouped picker remains visible at `http://127.0.0.1:58441/`. The original
+multi-project picker in `cloud/runner/cloud-run-server.mjs` remains intact;
+its three-way object modes and sorting are not implemented in this confidential
+trial. The current capture and restore engine supports one Source project and
+one Destination project per job and only the Source project's default database.
