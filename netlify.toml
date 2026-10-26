@@ -6,6 +6,12 @@
   NODE_VERSION = "22"
 
 [[redirects]]
+  from = "/confidential/callback"
+  to = "http://127.0.0.1:58441/confidential/callback"
+  status = 302
+  force = true
+
+[[redirects]]
   from = "/api/square/checkout"
   to = "/.netlify/functions/create-square-checkout"
   status = 200
