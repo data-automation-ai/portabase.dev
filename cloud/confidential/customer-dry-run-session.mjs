@@ -148,10 +148,6 @@ async function main(){
   await refreshProjects(slot);await preflight();await persist();
  }
  async function persist(){await writeFile(new URL('./evidence/customer-session-live.json',import.meta.url),JSON.stringify({...status,checkedAt:new Date().toISOString()},null,2)+'\n');}
- for(const slot of ['source','target'])if(!status.connections[slot])await begin(slot);
- if(!status.connections.dropbox)await beginDropbox();
- for(const slot of ['source','target'])if(status.connections[slot]){await refreshIdentity(slot);await refreshProjects(slot);}
- await preflight();await persist();
  const server=createServer(async(req,res)=>{
   if(!['127.0.0.1:58441','localhost:58441'].includes(req.headers.host)){res.writeHead(400);return res.end();}
   res.setHeader('cache-control','no-store');res.setHeader('referrer-policy','no-referrer');res.setHeader('x-content-type-options','nosniff');
@@ -245,10 +241,12 @@ async function main(){
    }
    if(url.pathname!=='/'){res.writeHead(404);return res.end();}
    // Fresh offers when a reviewer resumes after consent expiry.
-   try{
-    for(const slot of ['source','target'])if(needsOAuthOffer({connected:status.connections[slot],link:links[slot],offeredAt:offers[slot]}))await begin(slot);
-    if(!status.connections.dropbox&&(!links.dropbox||Date.now()-offers.dropbox>8*60000))await beginDropbox();
-   }catch(err){status.error=err.message;}
+   if(status.state!=='starting'){
+    try{
+     for(const slot of ['source','target'])if(needsOAuthOffer({connected:status.connections[slot],link:links[slot],offeredAt:offers[slot]}))await begin(slot);
+     if(!status.connections.dropbox&&(!links.dropbox||Date.now()-offers.dropbox>8*60000))await beginDropbox();
+    }catch(err){status.error=err.message;}
+   }
    res.setHeader('content-type','text/html; charset=utf-8');
    res.end(renderDryRunPage({status,projects,selection:status.selection,links,nonce:runNonce}));
   }catch(e){status.error=/^[a-z0-9_:.-]{3,120}$/i.test(e.message)?e.message:
@@ -259,6 +257,11 @@ async function main(){
  const server6=createServer(server.listeners('request')[0]);
  server6.on('error',()=>{});
  server6.listen(58441,'::1');
+ await ensureRunnerSession();
+ for(const slot of ['source','target'])if(!status.connections[slot])await begin(slot);
+ if(!status.connections.dropbox)await beginDropbox();
+ for(const slot of ['source','target'])if(status.connections[slot]){await refreshIdentity(slot);await refreshProjects(slot);}
+ await preflight();await persist();
  console.log(JSON.stringify({state:status.state,url:'http://127.0.0.1:58441',attestation:status.attestation}));
  setTimeout(()=>{server.close();try{server6.close();}catch{}},230*60000).unref();
 }
