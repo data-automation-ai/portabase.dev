@@ -31,7 +31,8 @@ export function dataPipe(active, direction = 'right', opts = {}) {
   const dimClass = isDimmed ? 'pipe-dimmed' : '';
   const dirClass = direction === 'down' ? 'down' : direction;
 
-  return `<div aria-label="${active ? 'Transfer active' : 'Transfer idle'}" class="data-pipe ${dirClass} ${active ? 'active' : ''} ${flowClass} ${dimClass}"><span class="pipe-label">${esc(label)}</span><svg class="pipe-svg" preserveAspectRatio="none"><line x1="0" y1="50%" x2="100%" y2="50%" class="pipe-track"/><line x1="0" y1="50%" x2="100%" y2="50%" class="pipe-flow"/></svg><i></i><i></i><i></i></div>`;
+  const coords = direction === 'down' ? 'x1="50%" y1="0" x2="50%" y2="100%"' : 'x1="0" y1="50%" x2="100%" y2="50%"';
+  return `<div aria-label="${active ? 'Transfer active' : 'Transfer idle'}" class="data-pipe ${dirClass} ${active ? 'active' : ''} ${flowClass} ${dimClass}"><span class="pipe-label">${esc(label)}</span><svg class="pipe-svg" preserveAspectRatio="none"><line ${coords} class="pipe-track"/><line ${coords} class="pipe-flow"/></svg><i></i><i></i><i></i></div>`;
 }
 
 export function capsuleJar(status) {
