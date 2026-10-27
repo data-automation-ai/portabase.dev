@@ -6,7 +6,6 @@ import {createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
-import {build} from 'esbuild';
 import {operatorConfig,SITE_ID} from './operator-config.mjs';
 async function main(){
  const root=resolve('.'),git=promisify(execFile);
@@ -17,6 +16,7 @@ async function main(){
  const operatingMode=process.env.PORTABASE_OPERATING_MODE||'production';
  if(!['development','production'].includes(operatingMode))throw new Error('invalid_operating_mode');
  const cli=join(process.env.APPDATA,'npm/node_modules/netlify-cli');
+ const {build}=await import(pathToFileURL(join(cli,'node_modules/esbuild/lib/main.js')));
  const {zipFunction}=await import(pathToFileURL(join(cli,'node_modules/@netlify/zip-it-and-ship-it/dist/main.js')));
  const stage=await mkdtemp(join(tmpdir(),'portabase-admission-v2-'));
  const entry=operatingMode==='development'?'cloud/confidential/validation-functions/cloud-confidential-admission.mjs':'netlify/functions/cloud-confidential-admission.mjs';
