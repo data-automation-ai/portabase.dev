@@ -187,3 +187,43 @@ test('GUI supports all 4 operation modes including capsule_only and restore_only
   assert.match(restoreOnlyHtml,/name="dropboxCapsuleId"/);
   assert.match(restoreOnlyHtml,/ekklokrukxmqlahtonnc-2026-10-27T08-18-22\.962Z/);
 });
+
+test('dark-mode Intel TDX schematic GUI renders perimeter warning, enclave frame, and S3 vault controls', () => {
+  const base = {
+    status: {
+      state: 'preflight_passed',
+      connections: { source: true, target: true, dropbox: false, s3: true },
+      activeVault: 's3',
+      s3Summary: { bucket: 'my-portabase-vault', region: 'us-east-1', prefix: 'Portabase' },
+      selection: { source: 'a'.repeat(20), target: 'b'.repeat(20) },
+      preflight: { source: { name: 'Source DB', databaseBytes: 1024**3 }, target: { name: 'Dest DB', blank: true } },
+      inventory: { ref: 'a'.repeat(20), tables: [{ name: 'public.users', schema: 'public', table: 'users', bytes: 1024, estimatedRows: 1, selectable: true }], buckets: [], authUsers: 0, functions: 0 },
+      scope: { tables: ['public.users'], buckets: [], auth: false, functions: false },
+    },
+    projects: {
+      source: [{ name: 'Source DB', ref: 'a'.repeat(20) }],
+      target: [{ name: 'Dest DB', ref: 'b'.repeat(20) }],
+    },
+    selection: { source: 'a'.repeat(20), target: 'b'.repeat(20) },
+    links: {},
+    nonce: 'nonce123',
+  };
+
+  const html = renderDryRunPage(base);
+  assert.match(html, /UNTRUSTED CLOUD HOST \/ HYPERVISOR \("THE LANDLORD" — BLOCKED BY CPU SILICON\)/);
+  assert.match(html, /SECURE RUNNER \(INTEL TDX HARDWARE-ENCRYPTED ENCLAVE/);
+  assert.match(html, /Source OAuth Connection/);
+  assert.match(html, /Dest OAuth Connection/);
+  assert.match(html, /ENCLAVE CORE — AES-256-GCM \+ TDX RAM/);
+  assert.match(html, /Vault OAuth \/ S3 Connector/);
+  assert.match(html, /action="\/vault-provider"/);
+  assert.match(html, /action="\/s3"/);
+  assert.match(html, /my-portabase-vault/);
+  assert.match(html, /provider-badge aws-badge/);
+  assert.match(html, /provider-badge supabase-badge/);
+  assert.match(html, /Encrypted \.pbase Bus/);
+  assert.match(html, /Capsule Jar \+ Hash Verified/);
+  assert.match(html, /Existing Capsule Picker/);
+  assert.match(html, /Decrypt Guide/);
+  assert.match(html, /btn-execute/);
+});
