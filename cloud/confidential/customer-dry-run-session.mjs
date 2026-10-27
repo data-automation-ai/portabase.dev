@@ -359,7 +359,7 @@ async function main(){
  for(const slot of ['source','target'])if(status.connections[slot]){await refreshIdentity(slot);await refreshProjects(slot);}
  await preflight();await persist();
  console.log(JSON.stringify({state:status.state,url:'http://127.0.0.1:58441',attestation:status.attestation}));
- setTimeout(()=>{server.close();try{server6.close();}catch{}},230*60000).unref();
+ if(operatingMode!=='development')setTimeout(()=>{server.close();try{server6.close();}catch{}},230*60000).unref();
 }
 main().catch(e=>{console.error(/^[a-z0-9_:.-]{3,120}$/i.test(e.message)?e.message:
  ['TimeoutError','AbortError','TypeError','SyntaxError'].includes(e.name)?`customer_session_${e.name.toLowerCase()}`:'customer_session_failed');process.exitCode=1;});
