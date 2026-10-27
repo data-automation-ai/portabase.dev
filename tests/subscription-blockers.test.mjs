@@ -99,7 +99,7 @@ test('real session and logout clear persisted demo state', () => {
 
 test('production auth UI guards simulation and console rechecks demo after session restoration', async () => {
   const auth = await readFile(new URL('../src/auth-pages.jsx', import.meta.url), 'utf8');
-  assert.match(auth, /import.meta.env.DEV && .*\n\s*<SimulatedCustomerSection/);
+  assert.match(auth, /import\.meta\.env\.DEV && .*\r?\n\s*<SimulatedCustomerSection/);
   const consoleSource = await readFile(new URL('../src/console/ConsoleApp.jsx', import.meta.url), 'utf8');
   assert.match(consoleSource, /await ensureSessionForVersion\(version\);\s*if \(isRealSession\(session\)\)/);
 });

@@ -58,7 +58,7 @@ export function dropboxVault({ clientId, fetchImpl = fetch, now = Date.now } = {
         tokens = profile.dropbox = { ...tokens, ...refreshed };
       }
       await testDropboxConnection({ accessToken: tokens.accessToken, fetchImpl: secureFetch });
-      return { type: 'dropbox', mode: 'api', folderPath: '/Portabase', refreshToken: tokens.refreshToken, clientId, accessToken: tokens.accessToken };
+      return { type: 'dropbox', mode: 'api', folderPath: '/Portabase', refreshToken: tokens.refreshToken, clientId };
     },
     async capsules(profile) {
       let tokens = profile.dropbox;
