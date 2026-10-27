@@ -105,8 +105,8 @@ export function renderDryRunPage({status,projects,selection,links,nonce}) {
   const statusWithTargets = { ...status, targetProjects: projects.target };
 
   return `<!doctype html><html><head><meta charset="utf-8"><title>Portabase recovery validation</title><style>
-    body{font:14px system-ui,-apple-system,sans-serif;max-width:1240px;margin:12px auto;padding:0 14px;background:#ffffff;color:#0f172a}
-    h1{font-size:22px;margin:0 0 2px;color:#0f172a}h2{font-size:15px;margin-top:0}
+    body{font:14px system-ui,-apple-system,sans-serif;max-width:100%;width:100%;box-sizing:border-box;margin:4px 0;padding:0 16px;background:#ffffff;color:#0f172a}
+    h1{font-size:19px;margin:0 0 2px;color:#0f172a}h2{font-size:14px;margin-top:0}
     section{background:#111824;color:#e6edf3;border:1px solid #233044;padding:12px;margin:10px 0;border-radius:8px}
     a,button{display:inline-block;background:#0f766e;color:#fff;padding:8px 12px;border:0;border-radius:5px;text-decoration:none;cursor:pointer;font-weight:600}
     select,input[type=text],input[type=url],input[type=password]{box-sizing:border-box;width:100%;padding:8px;margin:5px 0;border:1px solid #3b4d66;border-radius:5px;font:inherit;background:#0d131f;color:#e6edf3}

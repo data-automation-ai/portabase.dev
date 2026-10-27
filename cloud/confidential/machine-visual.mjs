@@ -61,8 +61,8 @@ export function destinationWriteMeter(status = {}) {
 
 export const machineCss = `
 :root{--bg-deep:#0b0f17;--bg-card:#111824;--bg-elevated:#162032;--border-subtle:#233044;--border-bold:#3b4d66;--text-main:#e6edf3;--text-muted:#8b949e;--accent-green:#00dc82;--accent-cyan:#38bdf8;--accent-amber:#f59e0b;--accent-red:#f87171}
-body{background:#ffffff!important;color:#0f172a!important;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;margin:4px auto!important;max-width:1460px!important}
-.route{display:grid;grid-template-columns:minmax(210px,0.92fr) 52px minmax(490px,2.15fr) 52px minmax(210px,0.92fr);gap:0;align-items:start}
+body{background:#ffffff!important;color:#0f172a!important;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;margin:4px 0!important;padding:0 16px!important;max-width:100%!important;width:100%!important;box-sizing:border-box}
+.route{display:grid;width:100%;grid-template-columns:minmax(220px,1fr) 52px minmax(520px,2.2fr) 52px minmax(220px,1fr);gap:0;align-items:start}
 .route section{margin:0}
 .route>.connection{margin-top:8px}
 .route>.data-pipe.right{margin-top:68px;height:44px;align-self:start}
