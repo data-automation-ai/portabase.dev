@@ -35,6 +35,27 @@ export function computeDropboxContentHash(input) {
   return crypto.createHash('sha256').update(concatenated).digest('hex');
 }
 
+export async function computeDropboxFileContentHash(filePath) {
+  const outer = crypto.createHash('sha256');
+  const file = await fs.promises.open(filePath, 'r');
+  try {
+    const size = (await file.stat()).size;
+    for (let offset = 0; offset < size; offset += 4 * 1024 * 1024) {
+      const block = Buffer.allocUnsafe(Math.min(4 * 1024 * 1024, size - offset));
+      let filled = 0;
+      while (filled < block.length) {
+        const { bytesRead } = await file.read(block, filled, block.length - filled, offset + filled);
+        if (!bytesRead) throw new Error('Dropbox hash source changed during read');
+        filled += bytesRead;
+      }
+      outer.update(crypto.createHash('sha256').update(block).digest());
+    }
+  } finally {
+    await file.close();
+  }
+  return outer.digest('hex');
+}
+
 /**
  * Computes SHA-256 hex checksum for a buffer or file.
  */
@@ -198,7 +219,7 @@ export async function uploadCapsuleToDropbox(capsuleDir, opts = {}) {
   if (isSimulated) {
     for (const name of files) {
       const filePath = path.join(capsuleDir, name);
-      const hash = computeDropboxContentHash(filePath);
+      const hash = await computeDropboxFileContentHash(filePath);
       contentHashes[name] = hash;
       filesUploaded.push({
         name,
@@ -220,21 +241,31 @@ export async function uploadCapsuleToDropbox(capsuleDir, opts = {}) {
 
   const token = await resolveDropboxAccessToken(opts);
 
+  const totalBytes=files.reduce((sum,name)=>sum+fs.statSync(path.join(capsuleDir,name)).size,0);
+  let verifiedBytes=0;
+  const report=receivedInFile=>{
+    if(typeof opts.onProgress!=='function')return;
+    // Only acknowledged bytes; never include paths, tokens, or session IDs.
+    try{opts.onProgress({bytesReceived:verifiedBytes+receivedInFile,totalBytes,verifiedBytes});}catch{}
+  };
+  report(0);
+
   for (const name of files) {
     const filePath = path.join(capsuleDir, name);
-    const fileBuffer = fs.readFileSync(filePath);
-    const localHash = computeDropboxContentHash(fileBuffer);
+    const fileSize = fs.statSync(filePath).size;
+    const localHash = await computeDropboxFileContentHash(filePath);
     const targetDropboxPath = `${folderPath}/${capsuleId}/${name}`;
 
     // For files <= 100 MB, use simple upload
-    if (fileBuffer.length <= 100 * 1024 * 1024) {
+    if (fileSize <= 100 * 1024 * 1024) {
+      const fileBuffer = await fs.promises.readFile(filePath);
       const res = await fetchImpl('https://content.dropboxapi.com/2/files/upload', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
           'Dropbox-API-Arg': JSON.stringify({
             path: targetDropboxPath,
-            mode: 'overwrite',
+            mode: 'add',
             autorename: false,
             mute: true,
           }),
@@ -249,11 +280,12 @@ export async function uploadCapsuleToDropbox(capsuleDir, opts = {}) {
       }
 
       const resData = await res.json();
-      if (resData.content_hash && resData.content_hash !== localHash) {
+      if (!resData.content_hash || resData.content_hash !== localHash || resData.size !== fileSize) {
         throw new Error(`Dropbox content_hash mismatch on ${name}: expected ${localHash}, got ${resData.content_hash}`);
       }
 
-      contentHashes[name] = resData.content_hash || localHash;
+      contentHashes[name] = resData.content_hash;
+      verifiedBytes+=fileSize;report(0);
       filesUploaded.push({
         name,
         path: resData.path_display || targetDropboxPath,
@@ -264,7 +296,19 @@ export async function uploadCapsuleToDropbox(capsuleDir, opts = {}) {
     } else {
       // Chunked upload session for files > 100 MB
       const CHUNK_SIZE = 8 * 1024 * 1024; // 8 MB upload chunks
-      const firstChunk = fileBuffer.subarray(0, CHUNK_SIZE);
+      const file = await fs.promises.open(filePath, 'r');
+      try {
+      const readChunk = async offset => {
+        const buffer = Buffer.allocUnsafe(Math.min(CHUNK_SIZE, fileSize - offset));
+        let filled = 0;
+        while (filled < buffer.length) {
+          const { bytesRead } = await file.read(buffer, filled, buffer.length - filled, offset + filled);
+          if (!bytesRead) throw new Error('Dropbox upload source changed during transfer');
+          filled += bytesRead;
+        }
+        return buffer;
+      };
+      const firstChunk = await readChunk(0);
       const startRes = await fetchImpl('https://content.dropboxapi.com/2/files/upload_session/start', {
         method: 'POST',
         headers: {
@@ -280,9 +324,10 @@ export async function uploadCapsuleToDropbox(capsuleDir, opts = {}) {
       }
       const { session_id } = await startRes.json();
       let offset = firstChunk.length;
+      report(offset);
 
-      while (offset + CHUNK_SIZE < fileBuffer.length) {
-        const chunk = fileBuffer.subarray(offset, offset + CHUNK_SIZE);
+      while (offset + CHUNK_SIZE < fileSize) {
+        const chunk = await readChunk(offset);
         const appendRes = await fetchImpl('https://content.dropboxapi.com/2/files/upload_session/append_v2', {
           method: 'POST',
           headers: {
@@ -300,9 +345,10 @@ export async function uploadCapsuleToDropbox(capsuleDir, opts = {}) {
           throw new Error(`Dropbox upload session append failed for ${name} (${appendRes.status}): ${errText}`);
         }
         offset += chunk.length;
+        report(offset);
       }
 
-      const finalChunk = fileBuffer.subarray(offset);
+      const finalChunk = await readChunk(offset);
       const finishRes = await fetchImpl('https://content.dropboxapi.com/2/files/upload_session/finish', {
         method: 'POST',
         headers: {
@@ -311,7 +357,7 @@ export async function uploadCapsuleToDropbox(capsuleDir, opts = {}) {
             cursor: { session_id, offset },
             commit: {
               path: targetDropboxPath,
-              mode: 'overwrite',
+              mode: 'add',
               autorename: false,
               mute: true,
             },
@@ -326,18 +372,20 @@ export async function uploadCapsuleToDropbox(capsuleDir, opts = {}) {
       }
 
       const finishData = await finishRes.json();
-      if (finishData.content_hash && finishData.content_hash !== localHash) {
+      if (!finishData.content_hash || finishData.content_hash !== localHash || finishData.size !== fileSize) {
         throw new Error(`Dropbox content_hash mismatch on ${name}: expected ${localHash}, got ${finishData.content_hash}`);
       }
 
-      contentHashes[name] = finishData.content_hash || localHash;
+      contentHashes[name] = finishData.content_hash;
+      verifiedBytes+=fileSize;report(0);
       filesUploaded.push({
         name,
         path: finishData.path_display || targetDropboxPath,
-        size: finishData.size ?? fileBuffer.length,
+        size: finishData.size ?? fileSize,
         content_hash: contentHashes[name],
         verified: true,
       });
+      } finally { await file.close(); }
     }
   }
 
@@ -390,6 +438,121 @@ export async function verifyDropboxCapsule(capsuleId, opts = {}) {
     destination: `dropbox:${folderPath}/${capsuleId}`,
     metadata: data,
   };
+}
+
+export async function listDropboxCapsules(opts = {}) {
+  const fetchImpl = opts.fetchImpl || globalThis.fetch;
+  const rawFolder = opts.folderPath || opts.path || '/Portabase';
+  const folderPath = rawFolder.startsWith('/') ? rawFolder : `/${rawFolder}`;
+
+  if (opts.simulate === true) {
+    return [];
+  }
+
+  const token = await resolveDropboxAccessToken(opts);
+  const res = await fetchImpl('https://api.dropboxapi.com/2/files/list_folder', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      path: folderPath,
+      recursive: false,
+    }),
+  });
+
+  if (res.status === 409) {
+    return [];
+  }
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Dropbox list_folder failed (${res.status}): ${errText}`);
+  }
+
+  const data = await res.json();
+  const entries = Array.isArray(data.entries) ? data.entries : [];
+  return entries
+    .filter(entry => entry['.tag'] === 'folder' && /^[A-Za-z0-9_.:-]+$/.test(entry.name))
+    .map(entry => ({
+      id: entry.name,
+      name: entry.name,
+      path: entry.path_display || `${folderPath}/${entry.name}`,
+    }))
+    .sort((a, b) => b.name.localeCompare(a.name));
+}
+
+export async function downloadCapsuleFromDropbox(capsuleId, targetDir, opts = {}) {
+  if (!/^[A-Za-z0-9_.:-]+$/.test(capsuleId || '')) {
+    throw new Error(`Invalid Dropbox capsule ID: ${capsuleId}`);
+  }
+  const fetchImpl = opts.fetchImpl || globalThis.fetch;
+  const rawFolder = opts.folderPath || opts.path || '/Portabase';
+  const folderPath = rawFolder.startsWith('/') ? rawFolder : `/${rawFolder}`;
+  const remoteCapsulePath = `${folderPath}/${capsuleId}`;
+
+  await fs.promises.mkdir(targetDir, { recursive: true });
+
+  if (opts.simulate === true) {
+    return { capsuleDir: targetDir, filesDownloaded: [] };
+  }
+
+  const token = await resolveDropboxAccessToken(opts);
+  const listRes = await fetchImpl('https://api.dropboxapi.com/2/files/list_folder', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      path: remoteCapsulePath,
+      recursive: false,
+    }),
+  });
+
+  if (!listRes.ok) {
+    const errText = await listRes.text();
+    throw new Error(`Dropbox list capsule folder failed (${listRes.status}): ${errText}`);
+  }
+
+  const listData = await listRes.json();
+  const fileEntries = (listData.entries || []).filter(entry => entry['.tag'] === 'file');
+  const filesDownloaded = [];
+
+  for (const entry of fileEntries) {
+    const filePath = path.join(targetDir, entry.name);
+    const downloadRes = await fetchImpl('https://content.dropboxapi.com/2/files/download', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Dropbox-API-Arg': JSON.stringify({ path: `${remoteCapsulePath}/${entry.name}` }),
+      },
+    });
+
+    if (!downloadRes.ok) {
+      const errText = await downloadRes.text();
+      throw new Error(`Dropbox file download failed for ${entry.name} (${downloadRes.status}): ${errText}`);
+    }
+
+    const arrayBuffer = await downloadRes.arrayBuffer();
+    await fs.promises.writeFile(filePath, Buffer.from(arrayBuffer));
+
+    if (entry.content_hash) {
+      const computedHash = await computeDropboxFileContentHash(filePath);
+      if (computedHash !== entry.content_hash) {
+        throw new Error(`Dropbox content_hash mismatch on downloaded ${entry.name}: expected ${entry.content_hash}, got ${computedHash}`);
+      }
+    }
+
+    filesDownloaded.push({
+      name: entry.name,
+      size: entry.size,
+      content_hash: entry.content_hash,
+      path: filePath,
+    });
+  }
+
+  return { capsuleDir: targetDir, filesDownloaded };
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -684,3 +847,11 @@ export async function verifyGoogleDriveCapsule(capsuleId, opts = {}) {
     folderId: found ? data.files[0].id : null,
   };
 }
+
+export {
+  testS3Connection,
+  uploadCapsuleToS3,
+  verifyS3Capsule,
+  listS3Capsules,
+  downloadCapsuleFromS3,
+} from '../cloud/confidential/s3-vault.mjs';

@@ -1,0 +1,9 @@
+# Derive only from the exact previously built and attested application image.
+# This draft backend is baked into the measured image, not a launch override.
+FROM us-central1-docker.pkg.dev/portabase-dev/portabase-confidential/application@sha256:0fee97e319f1c55413b872029a6e81c9e2be04ae49e9c2cb9d86f11b8e02e0a4 AS application
+COPY cloud-config.mjs /app/cloud/confidential/cloud-config.mjs
+ENV PORTABASE_ADMISSION_ENDPOINT="https://6add6863c686c6ad8082017e--portabase-dev.netlify.app/.netlify/functions/cloud-confidential-admission"
+
+FROM us-central1-docker.pkg.dev/portabase-dev/portabase-confidential/controller@sha256:3a81e0a0e8f19e113679e980b525717dee9131416eed34513bb1494c474ef3fa AS controller
+COPY cloud-config.mjs /app/cloud/confidential/cloud-config.mjs
+ENV PORTABASE_ADMISSION_ENDPOINT="https://6add6863c686c6ad8082017e--portabase-dev.netlify.app/.netlify/functions/cloud-confidential-admission"

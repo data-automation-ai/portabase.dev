@@ -1,0 +1,7 @@
+FROM node:24-bookworm-slim
+WORKDIR /app/cloud/confidential
+COPY cloud/confidential/controller.mjs cloud/confidential/controller-main.mjs cloud/confidential/compute-control.mjs cloud/confidential/customer-identity.mjs cloud/confidential/cloud-config.mjs ./
+ENV NODE_ENV=production
+USER node
+EXPOSE 8080
+ENTRYPOINT ["node","controller-main.mjs"]

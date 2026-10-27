@@ -1,0 +1,8 @@
+# Operator observations are local; review and sanitize before any publication.
+evidence/*
+!evidence/.gitkeep
+!evidence/ui/
+evidence/ui/*
+!evidence/ui/gcp-logo.png
+!evidence/ui/intel-tdx-logo.png
+!evidence/ui/scope-ui.js
