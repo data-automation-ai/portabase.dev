@@ -178,7 +178,7 @@ async function main(){
  const server=createServer(async(req,res)=>{
   if(!['127.0.0.1:58441','localhost:58441'].includes(req.headers.host)){res.writeHead(400);return res.end();}
   res.setHeader('cache-control','no-store');res.setHeader('referrer-policy','no-referrer');res.setHeader('x-content-type-options','nosniff');
-  res.setHeader('content-security-policy',"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
+  res.setHeader('content-security-policy',"default-src 'none'; script-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
   const url=new URL(req.url,'http://127.0.0.1:58441');
   try{
    if(req.method==='POST'&&['/callback','/dropbox','/s3','/vault-provider','/select','/select-batch','/scope','/execute','/reauthorize','/confirm-accounts','/mode','/supabase-token'].includes(url.pathname)){
@@ -301,6 +301,10 @@ async function main(){
    if(url.pathname==='/scope-ui.js'){
     res.setHeader('content-type','text/javascript; charset=utf-8');
     return res.end(await readFile(new URL('./evidence/ui/scope-ui.js',import.meta.url)));
+   }
+   if(url.pathname==='/gcp-logo.png'||url.pathname==='/intel-tdx-logo.png'){
+    res.setHeader('content-type','image/png');
+    return res.end(await readFile(new URL(`./evidence/ui${url.pathname}`,import.meta.url)));
    }
    if(url.pathname==='/status'){res.setHeader('content-type','application/json');return res.end(JSON.stringify(status));}
    if(url.pathname==='/confidential/callback'){
