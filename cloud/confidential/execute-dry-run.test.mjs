@@ -104,3 +104,46 @@ test('Mode 4 (restore_only) skips capture and restores specified capsule into de
   assert.equal(restoreCall.input.capsuleId,chosenCapsuleId);
   assert.equal(restoreCall.input.confirmTarget,targetRef);
 });
+
+test('Multi-Project Batch: sequential capture and optional 1-to-1 restore across multiple source projects', async () => {
+  const calls = [], status = {};
+  const sourceRefs = ['proj-alpha-123', 'proj-beta-456'];
+  const targetMap = { 'proj-alpha-123': 'target-alpha', 'proj-beta-456': 'target-beta' };
+
+  const command = async (operation, input) => {
+    calls.push({ operation, input });
+    if (operation === 'preflight') return { ready: true, source: { ref: sourceRefs[0] }, target: { ref: 'target-alpha', blank: true } };
+    if (operation === 'project.select') return { ok: true, ref: input.ref };
+    if (operation === 'backup.start') return { id: 'capture-' + calls.filter(c => c.operation === 'backup.start').length };
+    if (operation === 'restore.start') return { id: 'restore-' + calls.filter(c => c.operation === 'restore.start').length };
+    if (operation === 'job.status') {
+      return { state: 'complete', result: { captureComplete: true, vaultVerified: true, restoreVerified: true, capsuleId: 'capsule-id' } };
+    }
+  };
+
+  await executeDryRun({
+    command, status, persist: async () => {},
+    sourceRef: sourceRefs[0], targetRef: 'target-alpha',
+    mode: 'dropbox',
+    sourceRefs, targetMap,
+  });
+
+  assert.equal(status.state, 'recovery_data_path_verified');
+  assert.equal(status.backupExecuted, true);
+  assert.equal(status.restoreExecuted, true);
+  assert.equal(status.batchProgress.total, 2);
+  assert.equal(status.batchProgress.completedCapsules.length, 2);
+
+  const selectSourceCalls = calls.filter(c => c.operation === 'project.select' && c.input.slot === 'source');
+  assert.equal(selectSourceCalls.length, 2);
+  assert.equal(selectSourceCalls[0].input.ref, 'proj-alpha-123');
+  assert.equal(selectSourceCalls[1].input.ref, 'proj-beta-456');
+
+  const backupCalls = calls.filter(c => c.operation === 'backup.start');
+  assert.equal(backupCalls.length, 2);
+
+  const restoreCalls = calls.filter(c => c.operation === 'restore.start');
+  assert.equal(restoreCalls.length, 2);
+  assert.equal(restoreCalls[0].input.confirmTarget, 'target-alpha');
+  assert.equal(restoreCalls[1].input.confirmTarget, 'target-beta');
+});

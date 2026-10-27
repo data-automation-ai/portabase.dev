@@ -226,4 +226,12 @@ test('dark-mode Intel TDX schematic GUI renders perimeter warning, enclave frame
   assert.match(html, /Existing Capsule Picker/);
   assert.match(html, /Decrypt Guide/);
   assert.match(html, /btn-execute/);
+  assert.match(html, /enclave-chassis-svg/);
+  assert.match(html, /INTEL TDX ENCLAVE · ANTI-LANDLORD SILICON/);
+  assert.match(html, /src-to-core/);
+  assert.match(html, /core-to-dst/);
+  assert.match(html, /core-to-vault/);
+  assert.match(html, /action="\/select-batch"/);
+  assert.match(html, /name="sourceRefs"/);
+  assert.match(html, /legacy-diagnostics/);
 });

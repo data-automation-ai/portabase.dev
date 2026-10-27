@@ -181,7 +181,7 @@ async function main(){
   res.setHeader('content-security-policy',"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
   const url=new URL(req.url,'http://127.0.0.1:58441');
   try{
-   if(req.method==='POST'&&['/callback','/dropbox','/s3','/vault-provider','/select','/scope','/execute','/reauthorize','/confirm-accounts','/mode'].includes(url.pathname)){
+   if(req.method==='POST'&&['/callback','/dropbox','/s3','/vault-provider','/select','/select-batch','/scope','/execute','/reauthorize','/confirm-accounts','/mode'].includes(url.pathname)){
     // Some desktop browser bridges submit local forms with an opaque Origin.
     // Every POST still requires the session nonce below, which another origin
     // cannot read through the loopback page's same-origin boundary.
@@ -211,6 +211,22 @@ async function main(){
      if(status.connections.dropbox)throw new Error('dropbox_already_connected');
      await command('vault.finish',{code:form.get('code')});
      status.connections.dropbox=true;delete links.dropbox;delete offers.dropbox;
+     await preflight();res.writeHead(303,{location:'/'});return res.end();
+    }
+    if(url.pathname==='/select-batch'){
+     if(status.executing)throw new Error('drill_already_running');
+     const refs=form.getAll('sourceRefs');
+     if(!refs.length||refs.some(r=>!projects.source.some(p=>p.ref===r)))throw new Error('project_not_authorized');
+     const targetMap={};
+     for(const r of refs){
+       const t=form.get('targetFor_'+r);
+       if(t&&projects.target.some(p=>p.ref===t))targetMap[r]=t;
+     }
+     status.selection.sources=refs;
+     status.selection.source=refs[0];
+     status.selection.targetMap=targetMap;
+     const inspected=await command('project.select',{slot:'source',ref:refs[0]});
+     status.inspections||={};status.inspections.source=inspected;
      await preflight();res.writeHead(303,{location:'/'});return res.end();
     }
     if(url.pathname==='/select'){
@@ -263,7 +279,7 @@ async function main(){
     if(status.executing)throw new Error('drill_already_running');
     if(['dropbox','capsule_only'].includes(vaultChoice)&&!status.connections.dropbox&&!status.connections.s3)throw new Error('dropbox_connection_required');
     const dropboxCapsuleId=form.get('dropboxCapsuleId')||undefined;
-    executeDryRun({command,status,persist,sourceRef:status.selection.source,targetRef:status.selection.target,vault:vaultChoice,mode:vaultChoice,scope:status.scope,allowOverwrite,dropboxCapsuleId,vaultProvider:status.activeVault}).catch(()=>{});
+    executeDryRun({command,status,persist,sourceRef:status.selection.source,targetRef:status.selection.target,vault:vaultChoice,mode:vaultChoice,scope:status.scope,allowOverwrite,dropboxCapsuleId,vaultProvider:status.activeVault,sourceRefs:status.selection?.sources,targetMap:status.selection?.targetMap}).catch(()=>{});
     res.writeHead(303,{location:'/'});return res.end();
    }
    if(req.method!=='GET'){res.writeHead(405);return res.end();}
