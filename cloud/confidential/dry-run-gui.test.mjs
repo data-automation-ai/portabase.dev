@@ -219,8 +219,11 @@ test('dark-mode Intel TDX schematic GUI renders perimeter warning, enclave frame
   assert.match(html, /action="\/vault-provider"/);
   assert.match(html, /action="\/s3"/);
   assert.match(html, /my-portabase-vault/);
-  assert.match(html, /provider-badge aws-badge/);
+  assert.doesNotMatch(html, /provider-badge aws-badge/);
+  assert.doesNotMatch(html, /provider-badge s3-badge/);
   assert.match(html, /provider-badge supabase-badge/);
+  assert.match(html, /data-meter="source-read"/);
+  assert.match(html, /data-meter="destination-write"/);
   assert.match(html, /Encrypted \.pbase Bus/);
   assert.match(html, /Capsule Jar \+ Hash Verified/);
   assert.match(html, /Existing Capsule Picker/);

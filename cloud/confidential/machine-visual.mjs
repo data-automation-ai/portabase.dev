@@ -31,6 +31,34 @@ export function capsuleJar(status) {
   return `<div class="capsule-display"><div class="capsule-jar ${view.vaultActive ? 'active' : ''}" role="img" aria-label="${esc(view.label)}${view.percent === null ? '' : ` · ${Math.floor(view.percent)} percent`}"><div class="capsule-water" style="height:${view.percent ?? 0}%"></div><strong>${view.percent === null ? '—' : `${Math.floor(view.percent)}%`}</strong></div><p class="capsule-label-text">${esc(view.label)}</p></div>`;
 }
 
+export function sourceReadMeter(status = {}) {
+  const backup = status.backup;
+  if (status.mode === 'restore_only') {
+    return `<div class="io-meter" data-meter="source-read"><div class="io-meter-head"><span>Source Read</span><strong>0%</strong></div><div class="io-meter-track"><div class="io-meter-fill" style="width:0%"></div></div><small class="io-meter-sub">Bypassed in Mode 4 (reading from capsule)</small></div>`;
+  }
+  const done = backup?.state === 'complete' || Boolean(status.backupExecuted) || ['package', 'encrypt', 'transfer', 'done'].includes(backup?.phase);
+  const raw = Number(backup?.estimatedPercent);
+  const phasePct = { preflight: 3, 'database-manifest': 10, database: 35, storage: 72, functions: 95 }[backup?.phase];
+  const percent = done ? 100 : (Number.isFinite(raw) && raw > 0 ? Math.min(99, Math.max(1, Math.round((raw / 85) * 100))) : (phasePct ?? (status.state === 'capturing' ? 2 : 0)));
+  const active = Boolean(status.executing) && backup?.state === 'running' && !done;
+  const sub = done ? 'Source read complete (100% read into enclave)' : backup?.state === 'failed' ? 'Source read interrupted' : active || backup?.phase ? `Reading ${backup?.phase || 'source'}…` : 'Ready · 0% read';
+  return `<div class="io-meter${active ? ' active' : ''}" data-meter="source-read"><div class="io-meter-head"><span>Source Read</span><strong>${percent}%</strong></div><div class="io-meter-track" role="progressbar" aria-label="Source Read percent" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><div class="io-meter-fill" style="width:${percent}%"></div></div><small class="io-meter-sub">${esc(sub)}</small></div>`;
+}
+
+export function destinationWriteMeter(status = {}) {
+  const restore = status.restore;
+  if (status.mode === 'capsule_only') {
+    return `<div class="io-meter" data-meter="destination-write"><div class="io-meter-head"><span>Destination Written</span><strong>0%</strong></div><div class="io-meter-track"><div class="io-meter-fill io-meter-fill-target" style="width:0%"></div></div><small class="io-meter-sub">Bypassed in Mode 3 (capsule only)</small></div>`;
+  }
+  const done = restore?.state === 'complete' || Boolean(status.restoreExecuted) || status.state === 'complete';
+  const raw = Number(restore?.estimatedPercent);
+  const phasePct = { transfer: 12, preflight: 22, 'database-manifest': 35, database: 58, schema: 45, data: 65, auth: 75, storage: 86, functions: 94, verify: 98, done: 99, complete: 100 }[restore?.phase];
+  const percent = done ? 100 : (Number.isFinite(raw) && raw > 0 ? Math.min(99, Math.round(raw)) : (phasePct ?? (restore?.state === 'running' || status.state === 'restoring' ? 25 : 0)));
+  const active = Boolean(status.executing) && (restore?.state === 'running' || status.state === 'restoring') && !done;
+  const sub = done ? 'Destination write & verification complete (100% written)' : restore?.state === 'failed' ? 'Destination write interrupted' : active || restore?.phase ? `Writing ${restore?.phase || 'destination'}…` : 'Ready · 0% written';
+  return `<div class="io-meter${active ? ' active' : ''}" data-meter="destination-write"><div class="io-meter-head"><span>Destination Written</span><strong>${percent}%</strong></div><div class="io-meter-track" role="progressbar" aria-label="Destination Written percent" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}"><div class="io-meter-fill io-meter-fill-target" style="width:${percent}%"></div></div><small class="io-meter-sub">${esc(sub)}</small></div>`;
+}
+
 export const machineCss = `
 :root{--bg-deep:#0b0f17;--bg-card:#111824;--bg-elevated:#162032;--border-subtle:#233044;--border-bold:#3b4d66;--text-main:#e6edf3;--text-muted:#8b949e;--accent-green:#00dc82;--accent-cyan:#38bdf8;--accent-amber:#f59e0b;--accent-red:#f87171}
 body{background:var(--bg-deep)!important;color:var(--text-main)!important;font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;margin:12px auto!important;max-width:1240px!important}
@@ -41,10 +69,17 @@ body{background:var(--bg-deep)!important;color:var(--text-main)!important;font-f
 .connection{background:var(--bg-card)!important;border:1px solid var(--border-subtle)!important;border-radius:8px;padding:12px 14px!important;display:flex;flex-direction:column;gap:8px}
 .connection h2{display:flex;align-items:center;gap:6px;font-size:15px;margin:0;color:var(--text-main)}
 .provider-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 5px;border-radius:4px;background:#1e293b;font-size:10px;font-weight:700;color:var(--text-main)}
-.provider-badge.aws-badge{border:1px solid #ff990033}
 .provider-badge.supabase-badge{border:1px solid #3ecf8e33}
 .provider-badge.dropbox-badge{border:1px solid #0061ff33}
-.provider-badge.s3-badge{border:1px solid #ff990033}
+.io-meter{background:#0b121e;border:1px solid #1e334d;border-radius:6px;padding:7px 9px;margin:2px 0}
+.io-meter.active{border-color:#00dc8288;box-shadow:0 0 10px rgba(0,220,130,0.18)}
+.io-meter-head{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:700;color:var(--text-main);margin-bottom:4px}
+.io-meter-head strong{color:var(--accent-green);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}
+.io-meter[data-meter="destination-write"] .io-meter-head strong{color:var(--accent-cyan)}
+.io-meter-track{height:8px;width:100%;background:#162234;border-radius:999px;overflow:hidden;border:1px solid #23354f}
+.io-meter-fill{height:100%;background:linear-gradient(90deg,#059669,#00dc82);border-radius:999px;transition:width .4s ease}
+.io-meter-fill-target{background:linear-gradient(90deg,#0284c7,#38bdf8)}
+.io-meter-sub{display:block;margin-top:4px;font-size:10px;color:var(--text-muted)}
 .machine{position:relative;background:#090d14!important;border:0!important;border-radius:12px;padding:26px 20px 18px!important;box-shadow:0 0 0 2px rgba(239,68,68,0.85),0 0 10px 2px rgba(239,68,68,0.45);animation:intrusionBoundaryIdle 1.8s ease-in-out infinite alternate;overflow:hidden}
 .machine.machine-executing{animation:intrusionBoundaryActive 1s ease-in-out infinite alternate}
 @keyframes intrusionBoundaryIdle{0%{box-shadow:0 0 0 2px rgba(239,68,68,0.8),0 0 8px 2px rgba(239,68,68,0.4)}100%{box-shadow:0 0 0 5px rgba(239,68,68,0.65),0 0 16px 5px rgba(239,68,68,0.3)}}
