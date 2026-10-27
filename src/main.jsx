@@ -231,10 +231,9 @@ function Header() {
           <a href="/docs">Docs</a>
           <a href="/security">Security</a>
           <a href="/cloud">Pricing</a>
-          <a href={user ? '/dashboard' : '/login'}>{user ? 'Dashboard' : 'Sign in'}</a>
         </nav>
-        <a className="button button-small desktop-cta" href={user ? '/dashboard' : '/login?next=/dashboard'}>
-          {user ? 'Open dashboard' : 'Start free trial'} <Arrow />
+        <a className="button button-small header-sign-in" style={{marginLeft:'auto',whiteSpace:'nowrap',flexShrink:0}} href={user ? '/dashboard' : '/login?next=/dashboard'}>
+          Sign in <Arrow />
         </a>
       </div>
     </header>
