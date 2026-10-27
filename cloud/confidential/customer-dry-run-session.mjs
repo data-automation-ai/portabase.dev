@@ -108,8 +108,11 @@ async function main(){
   if(!status.connections.source||!ref){status.inventory=null;status.scope=null;return null;}
   if(status.inventory?.ref===ref)return status.inventory;
   const result=await command('source.inventory');
+  for(const row of result.inventory?.tables||[]){
+   row.selectable=/^[A-Za-z_][A-Za-z0-9_$]*\.[A-Za-z0-9_$]+$/.test(row.name);
+  }
   status.inventory=result.inventory;
-  status.scope={tables:result.inventory.tables.map(row=>row.name),buckets:result.inventory.buckets.map(row=>row.id),auth:true,functions:true};
+  status.scope={tables:result.inventory.tables.map(row=>row.name),excludedTables:[],buckets:result.inventory.buckets.map(row=>row.id),auth:true,functions:true};
   return status.inventory;
  }
  async function preflight(){
@@ -202,12 +205,14 @@ async function main(){
       const index=Number(value);if(!Number.isSafeInteger(index)||index<0||index>=max)throw new Error('invalid_source_scope');return index;
      });
      const tableIndices=indices('tableIndex',status.inventory.tables.length);
+     const excludedTableIndices=indices('excludedTableIndex',status.inventory.tables.length);
      const bucketIndices=indices('bucketIndex',status.inventory.buckets.length);
      const tables=[...new Set(tableIndices)].map(index=>status.inventory.tables[index].name);
+     const excludedTables=[...new Set(excludedTableIndices)].map(index=>status.inventory.tables[index].name).filter(name=>!tables.includes(name));
      const buckets=[...new Set(bucketIndices)].map(index=>status.inventory.buckets[index].id);
      if(tables.length!==status.inventory.tables.length&&status.inventory.tables.some(row=>!row.selectable))throw new Error('selective_table_names_unsupported');
      if(buckets.length!==status.inventory.buckets.length&&buckets.some(id=>!status.inventory.buckets.find(row=>row.id===id)?.selectable))throw new Error('selective_bucket_names_unsupported');
-     status.scope={tables,buckets,auth:form.get('auth')==='yes',functions:form.get('functions')==='yes'};
+     status.scope={tables,excludedTables,buckets,auth:form.get('auth')==='yes',functions:form.get('functions')==='yes'};
      await preflight();res.writeHead(303,{location:'/'});return res.end();
     }
     if(form.get('confirmSource')!==status.selection.source||form.get('confirmTarget')!==status.selection.target

@@ -16,10 +16,18 @@ test('original selector receives real inventory and sends structure-only as excl
   dbs[0].tables[0].mode='structure_only';
   assert.equal(scopeForm(status,dbs,[],'fixture').has('tableIndex'),false);
 });
-test('unsupported definition exclusion or invented objects cannot silently become a different capture',()=>{
+test('skip mode records excludedTableIndex and round-trips through inventoryScope while rejecting invented objects',()=>{
   const dbs=inventoryScope(status);
   dbs[0].tables[0].mode='skip';
-  assert.throws(()=>scopeForm(status,dbs,[],'fixture'),/Excluding table definitions/);
+  const form=scopeForm(status,dbs,[],'fixture');
+  assert.deepEqual(form.getAll('tableIndex'),[]);
+  assert.deepEqual(form.getAll('excludedTableIndex'),['0']);
+  const reloaded=inventoryScope({...status,scope:{...status.scope,tables:[],excludedTables:['public.big']}});
+  assert.equal(reloaded[0].tables[0].mode,'skip');
+  assert.equal(reloaded[0].tables[1].mode,'structure_only');
+  dbs[0].tables[0].mode='invalid_mode';
+  assert.throws(()=>scopeForm(status,dbs,[],'fixture'),/table data selection/);
+  dbs[0].tables[0].mode='structure_only';
   dbs[0].tables[0].name='private.invented';
   assert.throws(()=>scopeForm(status,dbs,[],'fixture'),/Only objects returned/);
 });

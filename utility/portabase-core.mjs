@@ -452,7 +452,7 @@ export const DATA_TABLE_EXCLUDES = Object.freeze(['auth.schema_migrations', 'sto
  * Selection (Cloud $7): customer-chosen tables/buckets to skip. Table entries must be exactly
  * `schema.table` (quoted-safe identifiers only) so they can never inject extra pg_dump argv or SQL.
  */
-export const EXCLUDE_TABLE_DATA_PATTERN = /^[A-Za-z_][A-Za-z0-9_$]*\.[A-Za-z_][A-Za-z0-9_$]*$/;
+export const EXCLUDE_TABLE_DATA_PATTERN = /^[A-Za-z_][A-Za-z0-9_$]*\.[A-Za-z0-9_$]+$/;
 export const EXCLUDE_BUCKET_ID_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 
 /** Parses a CSV flag value (or passes through an array/config list) into trimmed, non-empty entries. */

@@ -31,26 +31,40 @@ function ScopeModal(){
   }
   const tableMb=computeDatabaseScopeSummary(databases).includedDatabaseMb||0;
   const bucketBytes=status?.inventory.buckets.filter(row=>buckets.includes(row.id)).reduce((n,row)=>n+row.bytes,0)||0;
+  function handleDatabasesChange(nextDbs){
+    setDatabases(nextDbs);
+    const nextDb=nextDbs?.[0];
+    if(nextDb&&Array.isArray(nextDb.binaries)){
+      if(nextDb.enabled===false)setBuckets([]);
+      else setBuckets(nextDb.binaries.filter(b=>b.mode!=='exclude'&&b.mode!=='skip').map(b=>b.bucket||b.schema));
+    }
+  }
+  function handleBucketToggle(bucketId,checked){
+    const nextBuckets=checked?[...new Set([...buckets,bucketId])]:buckets.filter(id=>id!==bucketId);
+    setBuckets(nextBuckets);
+    setDatabases(prev=>prev.map(db=>({...db,binaries:(db.binaries||[]).map(b=>(b.bucket||b.schema)===bucketId?{...b,mode:checked?'include':'exclude'}:b)})));
+  }
   return <>
     <button type="button" onClick={open}>Select database objects</button>
     {dialog && createPortalContent()}
   </>;
   function createPortalContent(){
     return createPortal(<div className="advanced-scope">
-      <header><h2>Database objects & capsule scope</h2><button onClick={()=>dialog.close()} disabled={busy}>Close</button></header>
+      <header><h2>Database objects & capsule scope</h2><div style={{display:'flex',gap:'8px'}}><button type="button" onClick={apply} disabled={busy}>Save &amp; Close</button><button type="button" onClick={()=>dialog.close()} disabled={busy} style={{background:'#526c5e'}}>Cancel</button></div></header>
       <p>Original Portabase object selector. Table sizes are estimates; definition sizes are not measured.</p>
       {busy&&<p role="status">Working…</p>}
       {error&&<p role="alert" className="scope-error">{error}</p>}
       {status&&<>
-        <DatabaseScopeSelector databases={databases} activeDbId={databases[0]?.id} onChange={setDatabases} readOnly={busy||status.executing===true}/>
+        <DatabaseScopeSelector databases={databases} activeDbId={databases[0]?.id} onChange={handleDatabasesChange} readOnly={busy||status.executing===true}/>
         <h3>Storage buckets</h3><p>Bucket selection is connected. Individual Storage-object selection is not wired yet.</p>
         <div className="bucket-options">{status.inventory.buckets.map(row=><label key={row.id}>
-          <input type="checkbox" checked={buckets.includes(row.id)} disabled={busy} onChange={e=>setBuckets(e.target.checked?[...buckets,row.id]:buckets.filter(id=>id!==row.id))}/>
+          <input type="checkbox" checked={buckets.includes(row.id)} disabled={busy} onChange={e=>handleBucketToggle(row.id,e.target.checked)}/>
           {row.id} · {(row.bytes/1024**2).toFixed(2)} MiB · {row.objects} objects
         </label>)}</div>
         <footer><strong>Selected table data + Storage: {((tableMb+bucketBytes/1024**2)/1024).toFixed(3)} GiB</strong>
           <small>Auth, functions, definitions and packaging overhead are additional.</small>
-          <button disabled={busy} onClick={apply}>Apply selection</button></footer>
+          {error&&<p role="alert" className="scope-error">{error}</p>}
+          <button type="button" disabled={busy} onClick={apply}>Save selection</button></footer>
       </>}
     </div>,dialog);
   }

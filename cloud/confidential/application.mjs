@@ -4,7 +4,7 @@ import { engineJobs } from './engine-jobs.mjs';
 import { projectRef } from './supabase-access.mjs';
 import { dropboxVault } from './dropbox-vault.mjs';
 const fail = code => { throw new Error(code); };
-const TABLE_SELECTION = /^[A-Za-z_][A-Za-z0-9_$]*\.[A-Za-z_][A-Za-z0-9_$]*$/;
+const TABLE_SELECTION = /^[A-Za-z_][A-Za-z0-9_$]*\.[A-Za-z0-9_$]+$/;
 const BUCKET_SELECTION = /^[A-Za-z0-9._-]{1,100}$/;
 async function sourceInventory(api, ref) {
   const [tableRows, bucketRows, project] = await Promise.all([
