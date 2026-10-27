@@ -29,6 +29,7 @@ import {
 } from './pages.jsx';
 import { StorageProvidersPage } from './storage-providers-page.jsx';
 import { OneTwoThreeDone } from './one-two-three-done.jsx';
+import { EnclaveDashboard } from './enclave-dashboard.jsx';
 import { TelemetryPage } from './telemetry-page.jsx';
 import { liveEventToHealthEvent } from '../lib/telemetry-view.js';
 import { ConnectSupabaseFlow } from './connect-supabase.jsx';
@@ -562,7 +563,7 @@ export function ConsoleApp() {
     case 'account': body = <AccountHubPage {...pageProps} tab={route.accountTab} />; break;
     case 'dashboard':
     default:
-      body = <OneTwoThreeDone {...pageProps} />;
+      body = <EnclaveDashboard {...pageProps} />;
       break;
   }
 
@@ -571,7 +572,7 @@ export function ConsoleApp() {
     : (TITLES[route.page] || 'Home');
 
   return (
-    <div className="pb-console pb-single-view">
+    <div className="pb-console pb-single-view" style={route.page === 'dashboard' ? { background: '#ffffff' } : undefined}>
       <header className="pb-top-clean">
         <div className="pb-top-clean-brand-nav">
           <a href="/" className="pb-top-clean-logo">
@@ -601,7 +602,7 @@ export function ConsoleApp() {
         </div>
       </header>
 
-      <div className="pb-body" style={{ flex: 1, width: '100%', maxWidth: '1024px', margin: '0 auto', padding: '24px 16px' }}>
+      <div className="pb-body" style={{ flex: 1, width: '100%', maxWidth: route.page === 'dashboard' ? '100%' : '1024px', margin: '0 auto', padding: route.page === 'dashboard' ? '8px 12px' : '24px 16px' }}>
           {checkout && !isDemoMode() && <CheckoutConfirmation checkout={checkout} onVerified={checkoutVerified} />}
           {dashboardLoading && !isDemoMode() && ['dashboard', 'home'].includes(route.page) && <div className="pb-callout" role="status"><div>
             <strong>Loading account activity</strong>
