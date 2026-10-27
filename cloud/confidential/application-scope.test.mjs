@@ -61,3 +61,31 @@ test('backup start rejects stale objects instead of silently changing the chosen
   await call('project.select',{slot:'source',ref:sourceRef});await call('project.select',{slot:'target',ref:targetRef});
   await assert.rejects(call('backup.start',{requestId:'request',scope:{tables:['public.missing'],buckets:[],auth:true,functions:true}}),/source_scope_stale/);
 });
+
+test('application forwards vault begin with redirectUri, finish with code and state, and disconnects', async () => {
+  const owner = 'c'.repeat(64), recoveryKey = randomBytes(32).toString('base64url');
+  let beginCalledWith = null, finishCalledWith = null;
+  const vault = {
+    begin(profile, redirectUri) {
+      beginCalledWith = redirectUri;
+      profile.dropboxPending = { state: 'test-state' };
+      return { url: 'https://dropbox.com/oauth', state: 'test-state', redirectUri };
+    },
+    async finish(profile, input) {
+      finishCalledWith = input;
+      profile.dropbox = { refreshToken: 'token-123' };
+      return { connected: true };
+    },
+  };
+  const app = confidentialApplication({ oauthConfig: {}, connections: {}, jobs: {}, vault, admit: async () => ({ maxBytes: 1024 }) });
+  const call = (operation, input = {}) => app({ owner, operation, input, authorization: 'Bearer synthetic' });
+  await call('session.open', { recoveryKey });
+  const begun = await call('vault.begin', { redirectUri: 'http://localhost:58441/oauth/dropbox/callback' });
+  assert.equal(beginCalledWith, 'http://localhost:58441/oauth/dropbox/callback');
+  assert.equal(begun.state, 'test-state');
+  const finished = await call('vault.finish', { code: 'code-123', state: 'test-state' });
+  assert.deepEqual(finishCalledWith, { code: 'code-123', state: 'test-state' });
+  assert.equal(finished.connected, true);
+  const disconnected = await call('vault.disconnect');
+  assert.equal(disconnected.connected, false);
+});

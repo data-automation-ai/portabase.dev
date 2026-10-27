@@ -27,3 +27,76 @@ test('refresh does not discard an edited authorization or selection form',()=>{
   p.timers.shift().fn();p.timers.shift().fn();
   assert.equal(p.reloads(),0);
 });
+
+test('oauth_complete notifies opener, closes popup window, and replaces history', () => {
+  let postedMessage = null, postedTarget = null, closed = false, replacedUrl = null;
+  const mockOpener = {
+    postMessage: (msg, target) => { postedMessage = msg; postedTarget = target; },
+  };
+  const window = {
+    location: { search: '?oauth_complete=dropbox', reload: () => {} },
+    opener: mockOpener,
+    close: () => { closed = true; },
+    history: { replaceState: (_state, _title, url) => { replacedUrl = url; } },
+    addEventListener: () => {},
+  };
+  const document = { body: { dataset: {} }, addEventListener: () => {} };
+  startSafeRefresh(document, window);
+  assert.deepEqual(postedMessage, { type: 'portabase_oauth_complete' });
+  assert.equal(postedTarget, '*');
+  assert.equal(closed, true);
+  assert.equal(replacedUrl, '/');
+});
+
+test('message event with portabase_oauth_complete reloads page', () => {
+  let reloads = 0;
+  const windowListeners = {};
+  const window = {
+    addEventListener: (type, fn) => { windowListeners[type] = fn; },
+    location: { reload: () => { reloads++; } },
+  };
+  const document = { body: { dataset: {} }, addEventListener: () => {} };
+  startSafeRefresh(document, window);
+  assert.ok(windowListeners.message);
+  windowListeners.message({ data: { type: 'other_message' } });
+  assert.equal(reloads, 0);
+  windowListeners.message({ data: { type: 'portabase_oauth_complete' } });
+  assert.equal(reloads, 1);
+});
+
+test('click on data-oauth-popup link opens popup and prevents default', () => {
+  let openedUrl = null, openedName = null, openedFeatures = null, defaultPrevented = false;
+  const docListeners = {};
+  const document = {
+    body: { dataset: {} },
+    addEventListener: (type, fn) => { docListeners[type] = fn; },
+  };
+  const window = {
+    open: (url, name, features) => {
+      openedUrl = url; openedName = name; openedFeatures = features;
+      return {};
+    },
+  };
+  startSafeRefresh(document, window);
+  assert.ok(docListeners.click);
+
+  const nonLinkEvent = {
+    target: { closest: () => null },
+    preventDefault: () => { defaultPrevented = true; },
+  };
+  docListeners.click(nonLinkEvent);
+  assert.equal(openedUrl, null);
+  assert.equal(defaultPrevented, false);
+
+  const linkEvent = {
+    target: {
+      closest: sel => sel === 'a[data-oauth-popup="true"]' ? { href: 'http://localhost:58441/oauth/dropbox/callback' } : null,
+    },
+    preventDefault: () => { defaultPrevented = true; },
+  };
+  docListeners.click(linkEvent);
+  assert.equal(openedUrl, 'http://localhost:58441/oauth/dropbox/callback');
+  assert.equal(openedName, 'portabase_oauth');
+  assert.equal(openedFeatures, 'popup,width=640,height=760');
+  assert.equal(defaultPrevented, true);
+});

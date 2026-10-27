@@ -14,6 +14,7 @@ const REF='eoiqvdmvgaurlecdzqkp',ID='6f454f7b-b490-4fe9-9c49-48ce5b6f4408';
 // Supabase's live authorize endpoint rejects HTTP loopback callbacks even
 // when registered. The test verifier receives the HTTPS callback by handoff.
 const CALLBACK='https://portabase.dev/confidential/callback';
+const DROPBOX_CALLBACK='http://localhost:58441/oauth/dropbox/callback';
 const status={state:'starting',connections:{source:false,target:false,dropbox:false},accounts:{},allocation:'customer-authenticated admission',
  selection:{},backupExecuted:false,restoreExecuted:false};
 const pending=new Map(),links={},offers={},projects={source:[],target:[]},runNonce=randomUUID();
@@ -40,8 +41,40 @@ async function main(){
  const storedProfile=await google(profileSecret+'/versions/latest:access');
  let sealedProfile=storedProfile?JSON.parse(Buffer.from(storedProfile.payload.data,'base64').toString()).sealedProfile:undefined;
  let lastProfileSave=0;
+ let openingSession=null;
+ async function ensureRunnerSession(forceNew=false){
+  if(openingSession&&!forceNew)return openingSession;
+  const doOpen=async()=>{
+   const requestId=randomUUID(),deadline=Date.now()+8*60000;
+   let ready;
+   do{ready=await client.session(requestId);if(ready.state==='ready')break;
+    if(Date.now()>deadline)throw new Error('runner_start_timeout');await sleep(6000);
+   }while(true);
+   // Reproducible key only for this synthetic fixture; never a customer-key policy.
+   const recoveryKey=createHash('sha256').update('portabase-isolated-validation:'+fixture.password).digest('base64url');
+   const opened=await client.command('session.open',{recoveryKey,...(sealedProfile?{sealedProfile}:{})});
+   if(opened.sealedProfile){sealedProfile=opened.sealedProfile;delete opened.sealedProfile;}
+   await client.command('key.acknowledge');
+   status.attestation=client.evidence();
+   status.connections=opened.connected;
+   status.selection=opened.selection||status.selection||{};
+   status.accountConfirmation=opened.accountConfirmation||status.accountConfirmation;
+   if(status.state==='starting')status.state='awaiting_oauth';
+   return opened;
+  };
+  openingSession=doOpen().finally(()=>{openingSession=null;});
+  return openingSession;
+ }
  async function command(operation,input={}){
-  const result=await client.command(operation,input);
+  let result;
+  try{
+   result=await client.command(operation,input);
+  }catch(err){
+   if(['runner_not_ready','session_open_required','confidential_service_unavailable'].includes(err.message)){
+    await ensureRunnerSession(true);
+    result=await client.command(operation,input);
+   }else throw err;
+  }
   if(result.sealedProfile){sealedProfile=result.sealedProfile;delete result.sealedProfile;}
   if(sealedProfile&&(['oauth.finish','vault.finish','project.select','oauth.account.confirm'].includes(operation)||Date.now()-lastProfileSave>30000)){
    if(!await google(profileSecret))await google('/v1/projects/portabase-dev/secrets?secretId=portabase-confidential-validation-profile',{method:'POST',body:{replication:{automatic:{}}}});
@@ -49,20 +82,10 @@ async function main(){
   }
   return result;
  }
- const requestId=randomUUID(),deadline=Date.now()+8*60000;
- let ready;
- do{ready=await client.session(requestId);if(ready.state==='ready')break;
-  if(Date.now()>deadline)throw new Error('runner_start_timeout');await sleep(6000);
- }while(true);
- // Reproducible key only for this synthetic fixture; never a customer-key policy.
- const recoveryKey=createHash('sha256').update('portabase-isolated-validation:'+fixture.password).digest('base64url');
- const opened=await command('session.open',{recoveryKey,...(sealedProfile?{sealedProfile}:{})});
- await command('key.acknowledge');
- Object.assign(status,{state:'awaiting_oauth',attestation:client.evidence(),connections:opened.connected,
-   selection:opened.selection||{},accountConfirmation:opened.accountConfirmation});
+ await ensureRunnerSession();
  async function beginDropbox(){
   if(status.connections.dropbox)return;
-  const offer=await command('vault.begin');links.dropbox=offer.url;offers.dropbox=Date.now();
+  const offer=await command('vault.begin',{redirectUri:DROPBOX_CALLBACK});links.dropbox=offer.url;offers.dropbox=Date.now();
  }
  async function begin(slot){
   for(const [state,oldSlot] of pending)if(oldSlot===slot)pending.delete(state);
@@ -130,7 +153,7 @@ async function main(){
  for(const slot of ['source','target'])if(status.connections[slot]){await refreshIdentity(slot);await refreshProjects(slot);}
  await preflight();await persist();
  const server=createServer(async(req,res)=>{
-  if(req.headers.host!=='127.0.0.1:58441'){res.writeHead(400);return res.end();}
+  if(!['127.0.0.1:58441','localhost:58441'].includes(req.headers.host)){res.writeHead(400);return res.end();}
   res.setHeader('cache-control','no-store');res.setHeader('referrer-policy','no-referrer');res.setHeader('x-content-type-options','nosniff');
   res.setHeader('content-security-policy',"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
   const url=new URL(req.url,'http://127.0.0.1:58441');
@@ -139,7 +162,7 @@ async function main(){
     // Some desktop browser bridges submit local forms with an opaque Origin.
     // Every POST still requires the session nonce below, which another origin
     // cannot read through the loopback page's same-origin boundary.
-    if(req.headers.origin&&!['http://127.0.0.1:58441','null'].includes(req.headers.origin)){res.writeHead(403);return res.end();}
+    if(req.headers.origin&&!['http://127.0.0.1:58441','http://localhost:58441','null'].includes(req.headers.origin)){res.writeHead(403);return res.end();}
     if(!req.headers['content-type']?.startsWith('application/x-www-form-urlencoded')){res.writeHead(415);return res.end();}
     let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>1024*1024)throw new Error('request_too_large');}
     const form=new URLSearchParams(raw);
@@ -211,12 +234,21 @@ async function main(){
    if(url.pathname==='/confidential/callback'){
     if(url.searchParams.has('error'))throw new Error('oauth_authorization_denied');
     await finishCallback({state:url.searchParams.get('state'),code:url.searchParams.get('code')});
-    res.writeHead(303,{location:'/'});return res.end();
+    res.writeHead(303,{location:'http://127.0.0.1:58441/?oauth_complete=supabase'});return res.end();
+   }
+   if(url.pathname==='/oauth/dropbox/callback'){
+    if(url.searchParams.has('error')||url.searchParams.has('error_name'))throw new Error(url.searchParams.get('error_name')||url.searchParams.get('error')||'dropbox_oauth_denied');
+    await command('vault.finish',{code:url.searchParams.get('code'),state:url.searchParams.get('state')});
+    status.connections.dropbox=true;delete links.dropbox;delete offers.dropbox;
+    await preflight();await persist();
+    res.writeHead(303,{location:'http://127.0.0.1:58441/?oauth_complete=dropbox'});return res.end();
    }
    if(url.pathname!=='/'){res.writeHead(404);return res.end();}
    // Fresh offers when a reviewer resumes after consent expiry.
-   for(const slot of ['source','target'])if(needsOAuthOffer({connected:status.connections[slot],link:links[slot],offeredAt:offers[slot]}))await begin(slot);
-   if(!status.connections.dropbox&&(!links.dropbox||Date.now()-offers.dropbox>8*60000))await beginDropbox();
+   try{
+    for(const slot of ['source','target'])if(needsOAuthOffer({connected:status.connections[slot],link:links[slot],offeredAt:offers[slot]}))await begin(slot);
+    if(!status.connections.dropbox&&(!links.dropbox||Date.now()-offers.dropbox>8*60000))await beginDropbox();
+   }catch(err){status.error=err.message;}
    res.setHeader('content-type','text/html; charset=utf-8');
    res.end(renderDryRunPage({status,projects,selection:status.selection,links,nonce:runNonce}));
   }catch(e){status.error=/^[a-z0-9_:.-]{3,120}$/i.test(e.message)?e.message:
@@ -224,8 +256,11 @@ async function main(){
    res.writeHead(400,{'content-type':'text/plain'});res.end(status.error);}
  });
  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(58441,'127.0.0.1',resolve);});
+ const server6=createServer(server.listeners('request')[0]);
+ server6.on('error',()=>{});
+ server6.listen(58441,'::1');
  console.log(JSON.stringify({state:status.state,url:'http://127.0.0.1:58441',attestation:status.attestation}));
- setTimeout(()=>server.close(),230*60000).unref();
+ setTimeout(()=>{server.close();try{server6.close();}catch{}},230*60000).unref();
 }
 main().catch(e=>{console.error(/^[a-z0-9_:.-]{3,120}$/i.test(e.message)?e.message:
  ['TimeoutError','AbortError','TypeError','SyntaxError'].includes(e.name)?`customer_session_${e.name.toLowerCase()}`:'customer_session_failed');process.exitCode=1;});

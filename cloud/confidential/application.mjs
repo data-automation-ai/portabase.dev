@@ -96,8 +96,9 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
         case 'oauth.disconnect': data=connections.disconnect(profile,input.slot); break;
         case 'oauth.identity': data={slot:input.slot,identity:await connections.identity(profile,input.slot)}; break;
         case 'oauth.account.confirm': data=connections.confirm(profile,input); break;
-        case 'vault.begin': if(!vault)fail('dropbox_app_not_configured');data=vault.begin(profile);break;
-        case 'vault.finish': if(!vault)fail('dropbox_app_not_configured');data=await vault.finish(profile,input.code);break;
+        case 'vault.begin': if(!vault)fail('dropbox_app_not_configured');data=vault.begin(profile,input.redirectUri);break;
+        case 'vault.finish': if(!vault)fail('dropbox_app_not_configured');data=await vault.finish(profile,input.state?{code:input.code,state:input.state}:input.code);break;
+        case 'vault.disconnect': delete profile.dropbox;delete profile.dropboxPending;data={connected:false};break;
         case 'vault.check': if(!vault)fail('dropbox_app_not_configured');data={connected:!!profile.dropbox?.refreshToken};
           if(data.connected)await vault.provider(profile);break;
         case 'projects.list': data={projects:await (await connections.access(profile,input.slot)).api.projects()}; break;
