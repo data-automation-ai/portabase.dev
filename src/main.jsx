@@ -1275,39 +1275,6 @@ function ClosureRisk({ variant = 'home' } = {}) {
         </div>
       </div>
 
-      <div className="closure-cases-block">
-        <div className="closure-block-head">
-          <span>SOURCED CASES · PERMANENT-ISH LINKS</span>
-          <h3>Real users. Real lockouts. Click through to the original post.</h3>
-        </div>
-        <div className="closure-case-grid">
-          {cases.map((c, index) => (
-            <a className="closure-case" href={c.href} target="_blank" rel="noreferrer" key={c.id}>
-              <div className="closure-case-top">
-                <span className="closure-case-index">{String(index + 1).padStart(2, '0')}</span>
-                <span className={`provider-pill provider-${c.provider.toLowerCase()}`}>{c.provider}</span>
-                <span className="closure-tag">{c.tag}</span>
-              </div>
-              <h4>{c.title}</h4>
-              <p>{c.body}</p>
-              <div className="closure-case-foot">
-                <span>
-                  <small>{c.platform}</small>
-                  <time dateTime={c.date}>{c.date}</time>
-                  <em>{c.source}</em>
-                </span>
-                <Arrow />
-              </div>
-              <code className="closure-url" title={c.href}>{c.href}</code>
-            </a>
-          ))}
-        </div>
-        <p className="closure-disclaimer">
-          <strong>Framing:</strong> We publish public accounts of lockout and closure risk so builders treat provider-held recovery as insufficient.
-          We do not assert that any named provider violated law or its own terms in a specific case.
-          Read the original thread; preserve the URL; decide for yourself.
-        </p>
-      </div>
     </div>
   </section>;
 }

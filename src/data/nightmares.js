@@ -423,5 +423,53 @@ export const nightmares = [
     source: 'GitHub Discussions · Mar 16, 2026',
     href: 'https://github.com/orgs/supabase/discussions/43795',
     verified: 'Firsthand report · recovered with no data lost · author update: news.ycombinator.com/item?id=47394240'
+  },
+  {
+    id: 'N67', kind: 'firsthand', date: '2026-08-12', tag: 'MFA LOCKOUT',
+    title: 'An unexpected MFA prompt blocked a production fix for six days.',
+    body: 'The poster said Supabase requested a TOTP code they had never enrolled, blocking a production fix for their education platform. They reported waiting six days after contacting support.',
+    source: 'GitHub Discussions · Aug 12, 2026',
+    href: 'https://github.com/orgs/supabase/discussions/48980',
+    verified: 'Firsthand public support discussion · unresolved in visible thread'
+  },
+  {
+    id: 'N68', kind: 'firsthand', date: '2026-07-25', tag: 'MFA LOCKOUT',
+    title: 'An unrecognized MFA prompt locked two production projects.',
+    body: 'The poster said a TOTP prompt appeared although they had never enrolled MFA. They reported being unable to use the support form and remaining locked out of two production projects for more than a week.',
+    source: 'GitHub Discussions · Jul 25, 2026',
+    href: 'https://github.com/orgs/supabase/discussions/48326',
+    verified: 'Firsthand public support discussion · unresolved in visible thread'
+  },
+  {
+    id: 'N69', kind: 'firsthand', date: '2026-07-15', tag: 'DASHBOARD ACCESS LOST',
+    title: 'The dashboard no longer showed four existing production projects.',
+    body: 'The poster said dashboard access disappeared for four projects after a service disruption, while their applications continued serving traffic through existing API keys without administrative visibility.',
+    source: 'GitHub Discussions · Jul 15, 2026',
+    href: 'https://github.com/orgs/supabase/discussions/47948',
+    verified: 'Firsthand public support discussion · dashboard visibility lost'
+  },
+  {
+    id: 'N70', kind: 'firsthand', date: '2025-11-10', tag: 'ACCOUNT BANNED',
+    title: 'A production app went offline after a sudden “user banned” login screen.',
+    body: 'The poster reported no prior warning email, inability to sign in, and a live production app depending on Supabase. A collaborator directed them to email support; others described similar recovery difficulty.',
+    source: 'GitHub Discussions · Nov 10, 2025',
+    href: 'https://github.com/orgs/supabase/discussions/40318',
+    verified: 'Firsthand public support discussion · routed to email support'
+  },
+  {
+    id: 'N71', kind: 'firsthand', date: '2025-10-28', tag: 'IDENTITY LOCKOUT',
+    title: 'A GitHub account suspension blocked Supabase login entirely.',
+    body: 'The account was linked to GitHub for authentication. When the GitHub account was suspended, the owner could not sign in to Supabase and asked for an alternate recovery path to reach their project.',
+    source: 'GitHub Discussions · Oct 28, 2025',
+    href: 'https://github.com/orgs/supabase/discussions/39920',
+    verified: 'Firsthand public support discussion · identity dependency'
+  },
+  {
+    id: 'N72', kind: 'firsthand', date: '2025-05-01', tag: 'ACCOUNT BANNED',
+    title: 'A “banned user” error blocked even updating the payment card.',
+    body: 'The poster needed to update a credit card on file but could not log in because the console showed a banned-user error, leaving billing recovery blocked behind the same authentication gate.',
+    source: 'GitHub Discussions · May 1, 2025',
+    href: 'https://github.com/orgs/supabase/discussions/34181',
+    verified: 'Firsthand public support discussion · billing gate blocked'
   }
 ];
