@@ -9,6 +9,7 @@ import {executeDryRun} from './execute-dry-run.mjs';
 import {parsePastedCallback,renderDryRunPage} from './dry-run-gui.mjs';
 import {renderAttestationCertificate} from './attestation-certificate.mjs';
 import {needsOAuthOffer} from './oauth-offer.mjs';
+import {handleVaultAction} from './helper-vault-actions.mjs';
 const CONTROLLER='https://portabase-confidential-controller-26ulj3ikia-uc.a.run.app';
 const DIGEST='sha256:14a54039672231b84464e70ae1623ffb07b4ef481deeebda504958f5ca45eb85';
 const REF='eoiqvdmvgaurlecdzqkp',ID='6f454f7b-b490-4fe9-9c49-48ce5b6f4408';
@@ -16,16 +17,19 @@ const REF='eoiqvdmvgaurlecdzqkp',ID='6f454f7b-b490-4fe9-9c49-48ce5b6f4408';
 // when registered. The test verifier receives the HTTPS callback by handoff.
 const CALLBACK='https://portabase.dev/confidential/callback';
 const DROPBOX_CALLBACK='http://localhost:58441/oauth/dropbox/callback';
+const operatingMode=process.env.PORTABASE_OPERATING_MODE||'development';
+if(!['development','production'].includes(operatingMode))throw new Error('invalid_operating_mode');
 const status={state:'starting',connections:{source:false,target:false,dropbox:false,s3:false},accounts:{},allocation:'customer-authenticated admission',
+ operatingMode,
  activeVault:'dropbox',s3Summary:null,
  selection:{},backupExecuted:false,restoreExecuted:false,mode:'temporary_runner',capsules:[]};
-async function refreshCapsules(){
+async function refreshCapsules(command){
  if(!status.connections.dropbox)return;
  try{
   const res=await command('vault.capsules');
   if(Array.isArray(res?.capsules))status.capsules=res.capsules.map(c=>typeof c==='string'?c:c.id||c.name);
  }catch{
-  status.capsules=(status.capsules&&status.capsules.length)?status.capsules:['ekklokrukxmqlahtonnc-2026-10-27T08-18-22.962Z'];
+  status.capsules=status.capsules||[];
  }
 }
 const pending=new Map(),links={},offers={},projects={source:[],target:[]},runNonce=randomUUID();
@@ -68,6 +72,8 @@ async function main(){
    await client.command('key.acknowledge');
    status.attestation=client.evidence();
    status.connections=opened.connected;
+   status.activeVault=opened.connected?.activeVault||status.activeVault;
+   status.s3Summary=opened.s3Summary||null;
    status.selection=opened.selection||status.selection||{};
    status.accountConfirmation=opened.accountConfirmation||status.accountConfirmation;
    if(status.state==='starting')status.state='awaiting_oauth';
@@ -87,7 +93,7 @@ async function main(){
    }else throw err;
   }
   if(result.sealedProfile){sealedProfile=result.sealedProfile;delete result.sealedProfile;}
-  if(sealedProfile&&(['oauth.finish','oauth.token','vault.finish','project.select','oauth.account.confirm'].includes(operation)||Date.now()-lastProfileSave>30000)){
+  if(sealedProfile&&(['oauth.finish','oauth.token','vault.finish','vault.select','vault.s3.connect','project.select','oauth.account.confirm'].includes(operation)||Date.now()-lastProfileSave>30000)){
    if(!await google(profileSecret))await google('/v1/projects/portabase-dev/secrets?secretId=portabase-confidential-validation-profile',{method:'POST',body:{replication:{automatic:{}}}});
    await google(profileSecret+':addVersion',{method:'POST',body:{payload:{data:Buffer.from(JSON.stringify({sealedProfile})).toString('base64')}}});lastProfileSave=Date.now();
   }
@@ -151,7 +157,7 @@ async function main(){
   for(const slot of ['source','target']){
    if(status.selection[slot]&&!projects[slot].some(p=>p.ref===status.selection[slot]))throw new Error('project_not_authorized');
   }
-  await refreshCapsules();
+  await refreshCapsules(command);
   const result=await command('preflight',{mode:status.mode,allowOverwrite:Boolean(status.allowOverwrite)});
   let ready=false;
   if(isCapsuleOnly){
@@ -191,6 +197,9 @@ async function main(){
     let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>1024*1024)throw new Error('request_too_large');}
     const form=new URLSearchParams(raw);
     if(form.get('nonce')!==runNonce)throw new Error('test_confirmation_required');
+    if(await handleVaultAction({pathname:url.pathname,form,status,command,beginDropbox,persist})){
+     res.writeHead(303,{location:'/'});return res.end();
+    }
     if(url.pathname==='/callback'){
      await finishCallback(parsePastedCallback(form.get('callbackUrl')));
      res.writeHead(303,{location:'/'});return res.end();
@@ -280,6 +289,7 @@ async function main(){
      status.scope={tables,excludedTables,buckets,auth:form.get('auth')==='yes',functions:form.get('functions')==='yes'};
      await preflight();res.writeHead(303,{location:'/'});return res.end();
     }
+    if(url.pathname!=='/execute')throw new Error('unsupported_action');
     const vaultChoice=form.get('vault')||status.mode||'temporary_runner';
     if(!['dropbox','temporary_runner','capsule_only','restore_only'].includes(vaultChoice))throw new Error('capsule_choice_required');
     const isRestoreOnly=vaultChoice==='restore_only';

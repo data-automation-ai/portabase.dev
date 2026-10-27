@@ -18,18 +18,14 @@ test('GUI requires source and blank destination and offers explicit capsule hand
     projects:{source:[{name:'Owner <source>',ref:'a'.repeat(20)}],target:[{name:'New destination',ref:'b'.repeat(20)}]},
     selection:{},links:{},nonce:'nonce'};
   const before=renderDryRunPage(base);
-  assert.match(before,/Capsule destination/);
   assert.match(before,/Portabase Machine/);
   assert.match(before,/class="route"/);
-  assert.match(before,/Authorize Dropbox/);
   assert.doesNotMatch(before,/http-equiv="refresh"/i);
   assert.match(before,/data-refresh-ms="30000"/);
   assert.match(before,/Source Supabase/);
   assert.match(before,/Destination Supabase/);
   assert.match(before,/Authorizing as/);
   assert.match(before,/Load database objects/);
-  assert.match(before,/Choose database objects from the center machine/);
-  assert.match(before,/Authorize a different target account/);
   assert.match(before,/Confirm separate Supabase accounts/);
   assert.match(before,/cannot independently verify these emails/);
   assert.doesNotMatch(before,/Estimated capsule creation:/);
@@ -56,9 +52,9 @@ test('GUI requires source and blank destination and offers explicit capsule hand
   assert.match(withDropbox,/public/);
   assert.match(withDropbox,/avatars/);
   assert.match(withDropbox,/acknowledgeScope/);
-  assert.match(withDropbox,/name="vault" required/);
+  assert.match(withDropbox,/type="hidden" name="vault" value="temporary_runner"/);
   assert.match(withDropbox,/value="temporary_runner"/);
-  assert.match(withDropbox,/not a durable backup/);
+  assert.match(withDropbox,/no backup is kept/);
   const occupied=renderDryRunPage({...base,status:{...base.status,state:'preflight_blocked',preflight:{target:{blank:false}}}});
   assert.doesNotMatch(occupied,/action="\/execute"/);
   const occupiedPassed=renderDryRunPage({...base,status:{...base.status,connections:{...base.status.connections,dropbox:true},
@@ -117,7 +113,6 @@ test('machine shows verified Google Cloud workload measurement',()=>{
     attestation:{imageDigest:digest,keyFingerprint:'fingerprint-123',projectNumber:'495102144848',verifiedAt:'2026-10-26T14:00:00Z'}},
     projects:{source:[],target:[]},selection:{},links:{},nonce:'nonce'});
   assert.match(html,/Google Cloud/);
-  assert.match(html,/Confidential Space · attestation verified/);
   assert.match(html,new RegExp(digest));
   assert.match(html,/fingerprint-123/);
   assert.match(html,/Intel TDX/);
@@ -189,12 +184,13 @@ test('GUI supports all 4 operation modes including capsule_only and restore_only
   assert.match(restoreOnlyHtml,/ekklokrukxmqlahtonnc-2026-10-27T08-18-22\.962Z/);
 });
 
-test('dark-mode Intel TDX schematic GUI renders perimeter warning, enclave frame, and S3 vault controls', () => {
+test('minimal panel retains S3 configuration, project selection and certificate access', () => {
   const base = {
     status: {
       state: 'preflight_passed',
       connections: { source: true, target: true, dropbox: false, s3: true },
       activeVault: 's3',
+      mode: 'dropbox',
       s3Summary: { bucket: 'my-portabase-vault', region: 'us-east-1', prefix: 'Portabase' },
       selection: { source: 'a'.repeat(20), target: 'b'.repeat(20) },
       preflight: { source: { name: 'Source DB', databaseBytes: 1024**3 }, target: { name: 'Dest DB', blank: true } },
@@ -214,28 +210,12 @@ test('dark-mode Intel TDX schematic GUI renders perimeter warning, enclave frame
   assert.doesNotMatch(html, /UNTRUSTED CLOUD HOST \/ HYPERVISOR/);
   assert.match(html, /background:#ffffff!important/);
   assert.match(html, /SECURE RUNNER \(INTEL TDX HARDWARE-ENCRYPTED ENCLAVE/);
-  assert.match(html, /Source OAuth Connection/);
-  assert.match(html, /Dest OAuth Connection/);
-  assert.match(html, /ENCLAVE CORE — AES-256-GCM \+ TDX RAM/);
-  assert.match(html, /Vault OAuth \/ S3 Connector/);
   assert.match(html, /action="\/vault-provider"/);
   assert.match(html, /action="\/s3"/);
   assert.match(html, /my-portabase-vault/);
   assert.doesNotMatch(html, /provider-badge aws-badge/);
   assert.doesNotMatch(html, /provider-badge s3-badge/);
-  assert.match(html, /provider-badge supabase-badge/);
-  assert.match(html, /data-meter="source-read"/);
-  assert.match(html, /data-meter="destination-write"/);
-  assert.match(html, /Encrypted \.pbase Bus/);
-  assert.match(html, /Capsule Jar \+ Hash Verified/);
-  assert.match(html, /Existing Capsule Picker/);
-  assert.match(html, /Decrypt Guide/);
   assert.match(html, /btn-execute/);
-  assert.match(html, /enclave-chassis-svg/);
-  assert.match(html, /INTEL TDX ENCLAVE · ANTI-LANDLORD SILICON/);
-  assert.match(html, /src-to-core/);
-  assert.match(html, /core-to-dst/);
-  assert.match(html, /core-to-vault/);
   assert.match(html, /action="\/select-batch"/);
   assert.match(html, /name="sourceRefs"/);
   assert.match(html, /href="\/attestation-certificate"/);
@@ -288,4 +268,44 @@ test('anti-sticky-cookie controls render incognito copy button, signout link, an
   assert.match(html, /name="token"/);
   assert.match(html, /Connect source token/);
   assert.match(html, /Connect target token/);
+});
+
+test('one mode and one execution form submit the selected operation with only relevant controls',()=>{
+  for(const mode of ['temporary_runner','dropbox','capsule_only','restore_only']){
+    const html=renderDryRunPage({status:{mode,state:'preflight_passed',connections:{source:true,target:true,dropbox:true},
+      accounts:{source:{verified:true,email:'source@example.test'},target:{verified:true,email:'target@example.test'}},
+      preflight:{target:{blank:true}},inventory:{tables:[],buckets:[]},scope:{tables:[],buckets:[]}},
+      projects:{source:[],target:[]},selection:{source:'source',target:'target'},links:{},nonce:'fixture'});
+    assert.equal((html.match(/<select name="mode"/g)||[]).length,1);
+    assert.equal((html.match(/action="\/execute"/g)||[]).length,1);
+    assert.match(html,new RegExp('type="hidden" name="vault" value="'+mode+'"'));
+    assert.doesNotMatch(html,/<select name="vault"/);
+    assert.equal(html.includes('name="dropboxCapsuleId"'),mode==='restore_only');
+    assert.match(html,/aria-label="Choose the source project to capture"/);
+    assert.match(html,/aria-label="Choose the destination project to restore into"/);
+    assert.ok(html.includes('action="/vault-provider"'));
+    assert.ok(html.includes('name="acknowledgeScope"'));
+    assert.match(html,/enclave-chassis-svg/);
+    assert.match(html,/data-meter="source-read"/);
+    assert.match(html,/data-meter="destination-write"/);
+  }
+});
+
+test('connection settings stay sparse but reveal a pending account switch',()=>{
+  const base={status:{state:'select_projects',connections:{source:true,target:true,dropbox:true},accountConfirmation:{confirmed:true}},
+    projects:{source:[],target:[]},selection:{},links:{},nonce:'fixture'};
+  const idle=renderDryRunPage(base);
+  assert.equal((idle.match(/class="connection-settings" open/g)||[]).length,0);
+  const pending=renderDryRunPage({...base,links:{source:'https://example.test/source',target:'https://example.test/target'}});
+  assert.equal((pending.match(/class="connection-settings" open/g)||[]).length,2);
+  for(const action of ['/reauthorize','/supabase-token','/select-batch','/select'])assert.ok(pending.includes(`action="${action}"`));
+});
+
+test('required account confirmation is visible outside collapsed diagnostics',()=>{
+  const html=renderDryRunPage({status:{state:'account_confirmation_required',connections:{source:true,target:true,dropbox:true}},
+    projects:{source:[],target:[]},selection:{},links:{},nonce:'fixture'});
+  const confirmation=html.indexOf('action="/confirm-accounts"');
+  assert.ok(confirmation>0);
+  assert.ok(confirmation<html.indexOf('<div class="route">'));
+  assert.ok(confirmation<html.indexOf('<details class="legacy-diagnostics">'));
 });
