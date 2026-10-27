@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parsePastedCallback,renderDryRunPage} from './dry-run-gui.mjs';
+import {renderAttestationCertificate} from './attestation-certificate.mjs';
 
 test('pasted OAuth callback accepts only one code and state on the registered HTTPS route',()=>{
   assert.deepEqual(parsePastedCallback('https://portabase.dev/confidential/callback?code=abc&state=def'),{code:'abc',state:'def'});
@@ -237,7 +238,29 @@ test('dark-mode Intel TDX schematic GUI renders perimeter warning, enclave frame
   assert.match(html, /core-to-vault/);
   assert.match(html, /action="\/select-batch"/);
   assert.match(html, /name="sourceRefs"/);
+  assert.match(html, /href="\/attestation-certificate"/);
+  assert.match(html, /Download Certificate/);
   assert.match(html, /legacy-diagnostics/);
+});
+
+test('renderAttestationCertificate includes hashes, IP topology, boot mechanism, sealed border, and egress prevention', () => {
+  const cert = renderAttestationCertificate({
+    attestation: {
+      imageDigest: 'sha256:' + 'b'.repeat(64),
+      keyFingerprint: 'fp-xyz-987',
+      projectNumber: '495102144848',
+      verifiedAt: '2026-10-27T16:00:00Z',
+    },
+    selection: { source: 'ekklokrukxmqlahtonnc', target: 'wunfzvzguqlnxhtxipen' },
+  });
+  assert.match(cert, /Portabase Enclave Hardware Attestation Certificate/);
+  assert.match(cert, /sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/);
+  assert.match(cert, /fp-xyz-987/);
+  assert.match(cert, /35\.238\.181\.201/);
+  assert.match(cert, /127\.0\.0\.1:58441/);
+  assert.match(cert, /Measured Boot &amp; Root of Trust/);
+  assert.match(cert, /Sealed Intrusion Protection Border/);
+  assert.match(cert, /Egress Prevention &amp; Zero Retention/);
 });
 
 test('anti-sticky-cookie controls render incognito copy button, signout link, and PAT bypass form', () => {

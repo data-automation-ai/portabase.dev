@@ -7,6 +7,7 @@ import {operatorGoogle} from './operator-google.mjs';
 import {confidentialClient} from './client.mjs';
 import {executeDryRun} from './execute-dry-run.mjs';
 import {parsePastedCallback,renderDryRunPage} from './dry-run-gui.mjs';
+import {renderAttestationCertificate} from './attestation-certificate.mjs';
 import {needsOAuthOffer} from './oauth-offer.mjs';
 const CONTROLLER='https://portabase-confidential-controller-26ulj3ikia-uc.a.run.app';
 const DIGEST='sha256:14a54039672231b84464e70ae1623ffb07b4ef481deeebda504958f5ca45eb85';
@@ -305,6 +306,11 @@ async function main(){
    if(url.pathname==='/gcp-logo.png'||url.pathname==='/intel-tdx-logo.png'){
     res.setHeader('content-type','image/png');
     return res.end(await readFile(new URL(`./evidence/ui${url.pathname}`,import.meta.url)));
+   }
+   if(url.pathname==='/attestation-certificate'){
+    res.setHeader('content-type','text/html; charset=utf-8');
+    res.setHeader('content-disposition','attachment; filename="portabase-tdx-attestation-certificate.html"');
+    return res.end(renderAttestationCertificate(status));
    }
    if(url.pathname==='/status'){res.setHeader('content-type','application/json');return res.end(JSON.stringify(status));}
    if(url.pathname==='/confidential/callback'){
