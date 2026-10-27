@@ -126,7 +126,7 @@ export function renderDryRunPage({status,projects,selection,links,nonce}) {
   <div class="route">
     ${connection('source',status.connections.source,projects.source,selection.source,links.source,nonce,status.accounts?.source,status.allowOverwrite,statusWithTargets)}
     ${dataPipe(transfer.sourceActive,'right',{slot:'source',mode:activeMode,label:'TLS / API'})}
-    <section class="machine">
+    <section class="machine${status.executing||transfer.sourceActive||transfer.targetActive||transfer.vaultActive?' machine-executing':''}">
       ${enclaveChassisSvg()}
       <div class="enclave-header-banner" style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap">${gcpSvg}${intelTdxSvg}<span>🔒 SECURE RUNNER (INTEL TDX HARDWARE-ENCRYPTED ENCLAVE — ALL OAUTH, STAGING &amp; AES-256-GCM INSIDE TDX RAM)</span></div>
       <div class="enclave-internal-modules">
