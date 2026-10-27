@@ -45,7 +45,8 @@ body{background:var(--bg-deep)!important;color:var(--text-main)!important;font-f
 .provider-badge.supabase-badge{border:1px solid #3ecf8e33}
 .provider-badge.dropbox-badge{border:1px solid #0061ff33}
 .provider-badge.s3-badge{border:1px solid #ff990033}
-.machine{position:relative;background:#090d14!important;border:0!important;border-radius:12px;padding:26px 20px 18px!important;box-shadow:0 0 35px rgba(0,220,130,0.08);overflow:hidden}
+.machine{position:relative;background:#090d14!important;border:0!important;border-radius:12px;padding:26px 20px 18px!important;box-shadow:0 0 0 2px #ef4444,0 0 10px 2px rgba(239,68,68,0.6);animation:intrusionBoundaryPulse 1s ease-in-out infinite alternate;overflow:hidden}
+@keyframes intrusionBoundaryPulse{0%{box-shadow:0 0 0 2px #ef4444,0 0 8px 2px rgba(239,68,68,0.55)}100%{box-shadow:0 0 0 11px rgba(239,68,68,0.85),0 0 24px 11px rgba(239,68,68,0.45)}}
 .enclave-chassis-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0}
 .enclave-header-banner{position:relative;z-index:1;background:#0d1829;border:1px solid #1e3a5f;border-radius:6px;padding:5px 8px;margin-bottom:10px;font-size:10px;font-weight:800;color:#38bdf8;letter-spacing:0.5px;text-align:center;text-transform:uppercase}
 .enclave-internal-modules{position:relative;z-index:1;display:grid;grid-template-columns:1fr 1fr;gap:10px}
