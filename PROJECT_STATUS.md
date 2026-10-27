@@ -1,5 +1,14 @@
 # Portabase — capability & evidence ledger
 
+## Weekly external incident research — 2026-10-27
+
+| Capability | Source | Provisioned | Configured | Deployed | Live proof | Security proof | Status | Blocker |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Weekly public-source collection and AI suitability review | `research/weekly`, `.github/workflows/weekly-incident-research.yml` | Repository-specific encrypted Actions secret configured | Monday 13:17 UTC; seven days; optional 30-day backfill | Pending first push | First 30-day run in progress | Seven focused tests pass; no production access; drafts only | INCOMPLETE | Verify cloud invocation and reports |
+| Recent-case publication | Existing `src/data/nightmares.js` archive | Existing | Original dates and editorial review required | No new cases published | No | Manual original-source verification required | INCOMPLETE | Review report before publication |
+
+Operational details and disable instructions: `research/weekly/README.md`.
+
 ## Vertical customer flow checkpoint — 2026-10-05
 
 The authenticated customer path is now connected locally from existing Square

@@ -1,0 +1,56 @@
+name: Weekly incident research
+on:
+  schedule:
+    - cron: '17 13 * * 1'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: Lookback days (7 weekly; 30 for initial backfill)
+        type: choice
+        options: ['7', '30']
+        default: '7'
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: weekly-incident-research
+  cancel-in-progress: false
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate research safety gates
+        run: node --test tests/weekly-research.test.mjs
+      - name: Restore prior recommendation ledger
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          prior=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=incident-research&per_page=100" --jq '[.artifacts[] | select(.expired == false)] | sort_by(.created_at) | reverse | .[0].workflow_run.id // empty')
+          if [ -n "$prior" ]; then
+            gh run download "$prior" --name incident-research --dir previous
+            test -s previous/ledger.json
+            echo "RESEARCH_PREVIOUS=previous/ledger.json" >> "$GITHUB_ENV"
+          fi
+      - name: Collect and review public cases
+        env:
+          OPENAI_API_KEY: ${{ secrets.PORTABASE_RESEARCH_OPENAI_API_KEY }}
+          RESEARCH_MODEL: ${{ vars.PORTABASE_RESEARCH_MODEL || 'gpt-5.5' }}
+          RESEARCH_DAYS: ${{ inputs.days || '7' }}
+        run: node research/weekly/run.mjs
+      - name: Preserve review and deduplication ledger
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: incident-research
+          path: research-output/
+          retention-days: 90
+          if-no-files-found: error
