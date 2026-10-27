@@ -193,6 +193,7 @@ async function main(){
      if(status.executing)throw new Error('drill_already_running');
      const slot=form.get('slot'),ref=form.get('ref');
      if(!['source','target'].includes(slot)||!status.connections[slot]||!projects[slot].some(p=>p.ref===ref))throw new Error('project_not_authorized');
+     if(slot==='target')status.allowOverwrite=form.get('allowOverwrite')==='yes';
      const inspected=await command('project.select',{slot,ref});
      status.inspections||={};status.inspections[slot]=inspected;
      if(status.selection[slot]!==ref){delete status.preflight;if(slot==='source'){status.inventory=null;status.scope=null;}}
@@ -217,7 +218,8 @@ async function main(){
      await preflight();res.writeHead(303,{location:'/'});return res.end();
     }
     if(form.get('confirmSource')!==status.selection.source||form.get('acknowledgeScope')!=='yes')throw new Error('test_confirmation_required');
-    const allowOverwrite=form.get('allowOverwrite')==='yes';
+    const allowOverwrite=form.get('allowOverwrite')==='yes'||status.allowOverwrite===true;
+    status.allowOverwrite=allowOverwrite;
     if(status.state!=='preflight_passed'||!(status.preflight?.target?.blank===true||allowOverwrite))throw new Error('preflight_required');
     if(status.executing)throw new Error('drill_already_running');
     const vaultChoice=form.get('vault');
