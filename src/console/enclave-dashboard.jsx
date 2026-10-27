@@ -84,6 +84,7 @@ export function EnclaveDashboard(props) {
   const htmlDoc = useMemo(() => {
     return renderDryRunPage({
       status: { ...enclaveState, targetProjects },
+      selection: enclaveState.selection || {},
       links: {
         source: '/api/cloud/oauth?provider=supabase&action=authorize&slot=source',
         target: '/api/cloud/oauth?provider=supabase&action=authorize&slot=target',
