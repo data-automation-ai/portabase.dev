@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { supabaseAccess, projectRef } from './supabase-access.mjs';
 import { downloadCapsuleFromDropbox } from '../../utility/cloud-storage-connectors.mjs';
+import { verifyS3Capsule, downloadCapsuleFromS3 } from './s3-vault.mjs';
 const ENGINE = fileURLToPath(new URL('../../utility/portabase.mjs', import.meta.url));
 const PROTECTED_REF = 'eoiqvdmvgaurlecdzqkp';
 const fail = code => { throw new Error(code); };
@@ -108,7 +109,7 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
       ]);
       if (targetRef && !targetStatus.blank && !allowOverwrite) fail('restore_target_not_blank');
       const prior = (operation === 'restore' && capsuleId) ? jobs.get(capsuleId) : null;
-      const remoteCapsuleId = !prior && provider?.type === 'dropbox' && /^[A-Za-z0-9_.:-]+$/.test(dropboxCapsuleId || capsuleId || '') ? (dropboxCapsuleId || capsuleId) : null;
+      const remoteCapsuleId = !prior && ['dropbox', 's3'].includes(provider?.type) && /^[A-Za-z0-9_.:-]+$/.test(dropboxCapsuleId || capsuleId || '') ? (dropboxCapsuleId || capsuleId) : null;
       if (operation === 'restore' && (!prior && !remoteCapsuleId)) fail('capsule_not_available');
       if (operation === 'restore' && prior && (prior.owner !== owner || prior.state !== 'complete' || !prior.capsulePath || (sourceRef && prior.sourceRef !== sourceRef))) fail('capsule_not_available');
       const plannedScope=operation==='restore'?prior?.scopeSummary:scopeSummary;
@@ -155,7 +156,7 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
           },60000);
           const config = { projectRef: sourceRef, backupDirectory: join(root,'capsules'), statusDirectory: join(root,'status'),
             ...(operation === 'backup' ? { capture: scope } : {}),
-            encryption: { passphraseEnv: 'PORTABASE_ENCRYPTION_PASSPHRASE' }, provider: provider || { type: 'local', maxBytes, allowLargeLocal: true } };
+            encryption: { passphraseEnv: 'PORTABASE_ENCRYPTION_PASSPHRASE' }, provider: provider || { type: 'local', maxBytes, allowLargeLocal: true }, ...(provider?.type === 's3' ? { storageProviders: { s3: provider } } : {}) };
           const env = { PORTABASE_RUNTIME_CONFIG: JSON.stringify(config), PORTABASE_ENCRYPTION_PASSPHRASE: passphrase,
             PORTABASE_JOB_MAX_CAPSULE_BYTES: String(maxBytes), PORTABASE_EVIDENCE_DIRECTORY: join(root,'evidence'),
             PORTABASE_DB_REFRESH_FILE:refreshFile, PORTABASE_CONFIDENTIAL_RUNNER:'1',

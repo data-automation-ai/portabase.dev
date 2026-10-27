@@ -15,7 +15,8 @@ const REF='eoiqvdmvgaurlecdzqkp',ID='6f454f7b-b490-4fe9-9c49-48ce5b6f4408';
 // when registered. The test verifier receives the HTTPS callback by handoff.
 const CALLBACK='https://portabase.dev/confidential/callback';
 const DROPBOX_CALLBACK='http://localhost:58441/oauth/dropbox/callback';
-const status={state:'starting',connections:{source:false,target:false,dropbox:false},accounts:{},allocation:'customer-authenticated admission',
+const status={state:'starting',connections:{source:false,target:false,dropbox:false,s3:false},accounts:{},allocation:'customer-authenticated admission',
+ activeVault:'dropbox',s3Summary:null,
  selection:{},backupExecuted:false,restoreExecuted:false,mode:'temporary_runner',capsules:[]};
 async function refreshCapsules(){
  if(!status.connections.dropbox)return;
@@ -180,7 +181,7 @@ async function main(){
   res.setHeader('content-security-policy',"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
   const url=new URL(req.url,'http://127.0.0.1:58441');
   try{
-   if(req.method==='POST'&&['/callback','/dropbox','/select','/scope','/execute','/reauthorize','/confirm-accounts','/mode'].includes(url.pathname)){
+   if(req.method==='POST'&&['/callback','/dropbox','/s3','/vault-provider','/select','/scope','/execute','/reauthorize','/confirm-accounts','/mode'].includes(url.pathname)){
     // Some desktop browser bridges submit local forms with an opaque Origin.
     // Every POST still requires the session nonce below, which another origin
     // cannot read through the loopback page's same-origin boundary.
@@ -195,7 +196,8 @@ async function main(){
     }
     if(url.pathname==='/reauthorize'){
      if(status.executing)throw new Error('drill_already_running');
-     const slot=form.get('slot');if(!['source','target'].includes(slot))throw new Error('invalid_connection_slot');
+     const slot=form.get('slot');if(slot==='dropbox'){await beginDropbox();res.writeHead(303,{location:'/'});return res.end();}
+     if(!['source','target'].includes(slot))throw new Error('invalid_connection_slot');
      await begin(slot);res.writeHead(303,{location:'/'});return res.end();
     }
     if(url.pathname==='/confirm-accounts'){
@@ -259,9 +261,9 @@ async function main(){
     if(status.state!=='preflight_passed')throw new Error('preflight_required');
     if(!isCapsuleOnly&&!(status.preflight?.target?.blank===true||allowOverwrite))throw new Error('preflight_required');
     if(status.executing)throw new Error('drill_already_running');
-    if(['dropbox','capsule_only'].includes(vaultChoice)&&!status.connections.dropbox)throw new Error('dropbox_connection_required');
+    if(['dropbox','capsule_only'].includes(vaultChoice)&&!status.connections.dropbox&&!status.connections.s3)throw new Error('dropbox_connection_required');
     const dropboxCapsuleId=form.get('dropboxCapsuleId')||undefined;
-    executeDryRun({command,status,persist,sourceRef:status.selection.source,targetRef:status.selection.target,vault:vaultChoice,mode:vaultChoice,scope:status.scope,allowOverwrite,dropboxCapsuleId}).catch(()=>{});
+    executeDryRun({command,status,persist,sourceRef:status.selection.source,targetRef:status.selection.target,vault:vaultChoice,mode:vaultChoice,scope:status.scope,allowOverwrite,dropboxCapsuleId,vaultProvider:status.activeVault}).catch(()=>{});
     res.writeHead(303,{location:'/'});return res.end();
    }
    if(req.method!=='GET'){res.writeHead(405);return res.end();}

@@ -109,6 +109,11 @@ import {
   uploadCapsuleToGoogleDrive,
   testDropboxConnection,
   testGoogleDriveConnection,
+  uploadCapsuleToS3,
+  testS3Connection,
+  verifyS3Capsule,
+  listS3Capsules,
+  downloadCapsuleFromS3,
 } from './cloud-storage-connectors.mjs';
 
 export {
@@ -116,6 +121,11 @@ export {
   uploadCapsuleToGoogleDrive,
   testDropboxConnection,
   testGoogleDriveConnection,
+  uploadCapsuleToS3,
+  testS3Connection,
+  verifyS3Capsule,
+  listS3Capsules,
+  downloadCapsuleFromS3,
 } from './cloud-storage-connectors.mjs';
 
 export {
@@ -1569,6 +1579,9 @@ export async function transferCapsule(config, capsuleDir, onProgress = null) {
   }
   if ((config.provider.type === 'google-drive' || config.provider.type === 'gdrive') && (config.provider.mode === 'api' || config.provider.accessToken || config.provider.refreshToken || process.env.GOOGLE_DRIVE_ACCESS_TOKEN || process.env.GOOGLE_DRIVE_REFRESH_TOKEN)) {
     return await uploadCapsuleToGoogleDrive(capsuleDir, { ...config.provider });
+  }
+  if ((config.provider.type === 's3' || config.provider.type === 'aws') && (config.provider.mode === 'api' || config.provider.accessKeyId)) {
+    return await uploadCapsuleToS3(capsuleDir, { ...config.provider, onProgress });
   }
   const upload = providerCommand(config, capsuleDir);
   if (!resolveTool(upload[0])) throw new Error(`${upload[0]} CLI is not installed.`);

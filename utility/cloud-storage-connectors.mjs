@@ -847,3 +847,11 @@ export async function verifyGoogleDriveCapsule(capsuleId, opts = {}) {
     folderId: found ? data.files[0].id : null,
   };
 }
+
+export {
+  testS3Connection,
+  uploadCapsuleToS3,
+  verifyS3Capsule,
+  listS3Capsules,
+  downloadCapsuleFromS3,
+} from '../cloud/confidential/s3-vault.mjs';
