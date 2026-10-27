@@ -1,12 +1,12 @@
 // A live drill writes only the explicitly named, blank synthetic target.
 import {randomUUID} from 'node:crypto';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-export async function executeDryRun({command,status,persist,sourceRef,targetRef,vault,scope}) {
+export async function executeDryRun({command,status,persist,sourceRef,targetRef,vault,scope,allowOverwrite=false}) {
  if(status.executing)throw new Error('drill_already_running');
  status.executing=true;status.state='checking_target';await persist();
  try {
   const check=await command('preflight');
-  if(!check.ready||check.source.ref!==sourceRef||check.target.ref!==targetRef||!check.target.blank)throw new Error('unsafe_test_selection');
+  if(check.source?.ref!==sourceRef||check.target?.ref!==targetRef||(!check.target?.blank&&!allowOverwrite)||(!check.ready&&!allowOverwrite))throw new Error('unsafe_test_selection');
   async function wait(job,kind){
    const deadline=Date.now()+90*60000;
    do {
@@ -19,13 +19,13 @@ export async function executeDryRun({command,status,persist,sourceRef,targetRef,
    }while(true);
   }
   status.state='capturing';
-  const backup=await command('backup.start',{requestId:randomUUID(),vault,scope});
+  const backup=await command('backup.start',{requestId:randomUUID(),vault,scope,allowOverwrite:Boolean(allowOverwrite)});
   status.backupExecuted=true;
   const captured=await wait(backup,'backup');
   if(!captured.result?.captureComplete)throw new Error('capture_not_complete');
   if(vault==='dropbox' && (captured.result?.destinationKind!=='dropbox'||captured.result?.vaultVerified!==true))throw new Error('dropbox_delivery_unverified');
   status.state='restoring';await persist();
-  const restore=await command('restore.start',{requestId:randomUUID(),capsuleId:backup.id,confirmTarget:targetRef,acknowledgeManualConfig:true});
+  const restore=await command('restore.start',{requestId:randomUUID(),capsuleId:backup.id,confirmTarget:targetRef,acknowledgeManualConfig:true,allowOverwrite:Boolean(allowOverwrite)});
   status.restoreExecuted=true;
   const restored=await wait(restore,'restore');
   if(!restored.result?.restoreVerified)throw new Error('restore_not_verified');

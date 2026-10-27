@@ -37,3 +37,22 @@ test('Dropbox trial stops before restore if remote capsule is not verified',asyn
   assert.equal(calls.some(call=>call.operation==='restore.start'),false);
   assert.equal(status.state,'drill_failed');
 });
+
+test('allowOverwrite allows occupied target and passes flag to engine',async()=>{
+  const calls=[],status={};
+  const command=async(operation,input)=>{
+    calls.push({operation,input});
+    if(operation==='preflight')return {ready:false,source:{ref:sourceRef},target:{ref:targetRef,blank:false}};
+    if(operation==='backup.start')return {id:'capture'};
+    if(operation==='restore.start')return {id:'restore'};
+    if(operation==='job.status')return input.id==='capture'
+      ? {state:'complete',result:{captureComplete:true}}
+      : {state:'complete',result:{restoreVerified:true}};
+  };
+  await executeDryRun({command,status,persist:async()=>{},sourceRef,targetRef,allowOverwrite:true});
+  assert.equal(status.state,'recovery_data_path_verified');
+  const backupStart=calls.find(call=>call.operation==='backup.start');
+  assert.equal(backupStart.input.allowOverwrite,true);
+  const restoreStart=calls.find(call=>call.operation==='restore.start');
+  assert.equal(restoreStart.input.allowOverwrite,true);
+});

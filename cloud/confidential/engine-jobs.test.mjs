@@ -62,3 +62,44 @@ for(const selective of [false,true])test(`${selective?'selected-scope':'full'} n
   await assert.rejects(stat(seen[0].root), { code: 'ENOENT' });
   await assert.rejects(stat(seen[1].root), { code: 'ENOENT' });
 });
+
+test('allowOverwrite allows occupied target and appends --allow-occupied-target to replay args', async () => {
+  const sourceRef = 'abcdefghijklmnopqrst';
+  const targetRef = 'bcdefghijklmnopqrstu';
+  const owner = 'a'.repeat(64);
+  const passphrase = 'b'.repeat(43);
+  const seen = [];
+  const access = () => ({
+    inspect: async () => ({ blank: false, measuredBytes: 1024 }),
+    credentials: async ref => ({ ref, readOnly: false, managementToken: 'test-token', databaseUrl: 'test-db', serviceKey: 'test-key' }),
+  });
+  const run = async (args, env, root, _maxBytes, progress) => {
+    seen.push({ args, root });
+    if (args[0] === 'backup') {
+      progress('database');
+      await mkdir(join(root, 'capsules', 'test-capsule'), { recursive: true });
+      await mkdir(join(root, 'status'), { recursive: true });
+      await writeFile(join(root, 'capsules', 'test-capsule', 'payload'), 'encrypted-test-bytes');
+      await writeFile(join(root, 'status', 'latest.json'), JSON.stringify({
+        state: 'COMPLETE', capsule: 'test-capsule', sizeBytes: 20, capsuleHash: 'test-hash', errors: [],
+      }));
+    } else {
+      progress('database');
+      await mkdir(join(root, 'evidence'), { recursive: true });
+      await writeFile(join(root, 'evidence', 'restore.json'), JSON.stringify({ status: 'SELECTIVE_RESTORE_VERIFIED' }));
+    }
+  };
+  const jobs = engineJobs({ run, access, platform: 'linux' });
+  const base = { owner, sourceRef, targetRef, sourceToken: 'source-test-token', targetToken: 'target-test-token',
+    passphrase, maxBytes: 20 * 1024 ** 3, scope: { database: true, storage: true, auth: true, functions: true },
+    allowOverwrite: true };
+  const capture = await jobs.start({ ...base, operation: 'backup' });
+  const captured = await jobs.wait(owner, capture.id);
+  assert.equal(captured.state, 'complete');
+  const restore = await jobs.start({ ...base, operation: 'restore', capsuleId: capture.id });
+  const restored = await jobs.wait(owner, restore.id);
+  assert.equal(restored.state, 'complete');
+  assert.equal(restored.result.restoreVerified, true);
+  const restoreCall = seen.find(s => s.args[0] === 'replay');
+  assert.ok(restoreCall.args.includes('--allow-occupied-target'));
+});

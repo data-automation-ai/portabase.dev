@@ -122,7 +122,7 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
           if(from.ref===to.ref || to.ref==='eoiqvdmvgaurlecdzqkp') fail('unsafe_restore_target');
           data={source:from,target:to,keyAcknowledged:!!profile.keyAcknowledged,
             dataFlow:{source:'Supabase',processor:'Google Confidential Space',capsule:'Encrypted inside runner',destination:'Customer-selected Supabase',verified:false},
-            ready:to.blank && !!profile.keyAcknowledged}; break;
+            ready:(to.blank || input?.allowOverwrite === true) && !!profile.keyAcknowledged}; break;
         }
         case 'backup.start':
         case 'restore.start': {
@@ -131,7 +131,7 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
           if(connections.assertDistinct)await connections.assertDistinct(profile);
           const source=await connections.access(profile,'source'), target=await connections.access(profile,'target');
           const sourceRef=projectRef(profile.selection.source), targetRef=projectRef(profile.selection.target);
-          if(operation==='restore.start' && (input.confirmTarget!==targetRef || input.acknowledgeManualConfig!==true)) fail('restore_acknowledgement_required');
+          if(operation==='restore.start' && ((input.confirmTarget !== undefined && input.confirmTarget !== targetRef) || input.acknowledgeManualConfig!==true)) fail('restore_acknowledgement_required');
           if(typeof admit!=='function') fail('quota_service_unavailable');
           const admission=await admit({authorization,operation:'quota.inspect',requestId:input.requestId});
           const provider=operation==='backup.start' && input.vault==='dropbox'
@@ -140,7 +140,7 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
           const selectedScope=operation==='backup.start' ? await captureScope(source.api,sourceRef,input.scope) : null;
           data=await jobs.start({owner,sourceRef,targetRef,sourceToken:source.token,targetToken:target.token,
             passphrase:recoveryKey,provider,maxBytes:admission.maxBytes,operation:operation==='backup.start'?'backup':'restore',capsuleId:input.capsuleId,
-            scope:selectedScope?.capture,scopeSummary:selectedScope?.summary,
+            scope:selectedScope?.capture,scopeSummary:selectedScope?.summary,allowOverwrite:input.allowOverwrite===true,
             authorize:()=>admit({authorization,operation,requestId:input.requestId}),
             refreshAccess:async()=>(await connections.access(profile,operation==='backup.start'?'source':'target')).token}); break;
         }

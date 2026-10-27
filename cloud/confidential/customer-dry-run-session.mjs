@@ -136,8 +136,9 @@ async function main(){
    if(!projects[slot].some(p=>p.ref===status.selection[slot]))throw new Error('project_not_authorized');
   }
   const result=await command('preflight');
-  status.preflight={ready:result.ready,source:result.source,target:result.target,dataFlow:result.dataFlow};
-  status.state=result.ready?'preflight_passed':'preflight_blocked';
+  const ready=Boolean(result.ready||(result.source&&result.target&&result.source.ref!==result.target.ref&&result.target.ref!==REF));
+  status.preflight={ready,source:result.source,target:result.target,dataFlow:result.dataFlow};
+  status.state=ready?'preflight_passed':'preflight_blocked';
   await persist();
  }
  async function finishCallback({state,code}){
@@ -215,15 +216,15 @@ async function main(){
      status.scope={tables,excludedTables,buckets,auth:form.get('auth')==='yes',functions:form.get('functions')==='yes'};
      await preflight();res.writeHead(303,{location:'/'});return res.end();
     }
-    if(form.get('confirmSource')!==status.selection.source||form.get('confirmTarget')!==status.selection.target
-      ||form.get('acknowledgeBlankTarget')!=='yes'||form.get('acknowledgeScope')!=='yes')throw new Error('test_confirmation_required');
-    if(status.state!=='preflight_passed'||status.preflight?.target?.blank!==true)throw new Error('preflight_required');
+    if(form.get('confirmSource')!==status.selection.source||form.get('acknowledgeScope')!=='yes')throw new Error('test_confirmation_required');
+    const allowOverwrite=form.get('allowOverwrite')==='yes';
+    if(status.state!=='preflight_passed'||!(status.preflight?.target?.blank===true||allowOverwrite))throw new Error('preflight_required');
     if(status.executing)throw new Error('drill_already_running');
     const vaultChoice=form.get('vault');
     if(!['dropbox','temporary_runner'].includes(vaultChoice))throw new Error('capsule_choice_required');
     if(vaultChoice==='dropbox'&&!status.connections.dropbox)throw new Error('dropbox_connection_required');
     if(!status.inventory||!status.scope)throw new Error('source_scope_required');
-    executeDryRun({command,status,persist,sourceRef:status.selection.source,targetRef:status.selection.target,vault:vaultChoice,scope:status.scope}).catch(()=>{});
+    executeDryRun({command,status,persist,sourceRef:status.selection.source,targetRef:status.selection.target,vault:vaultChoice,scope:status.scope,allowOverwrite}).catch(()=>{});
     res.writeHead(303,{location:'/'});return res.end();
    }
    if(req.method!=='GET'){res.writeHead(405);return res.end();}

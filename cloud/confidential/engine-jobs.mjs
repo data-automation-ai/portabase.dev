@@ -89,7 +89,7 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
   const jobs = new Map();
   const snapshot = confidentialJobSnapshot;
   return {
-    async start({ owner, sourceRef, targetRef, sourceToken, targetToken, passphrase, provider, maxBytes, operation = 'backup', capsuleId, scope, scopeSummary, authorize, refreshAccess }) {
+    async start({ owner, sourceRef, targetRef, sourceToken, targetToken, passphrase, provider, maxBytes, operation = 'backup', capsuleId, scope, scopeSummary, authorize, refreshAccess, allowOverwrite = false }) {
       if (platform !== 'linux') fail('cloud_runner_required');
       if (!/^[a-f0-9]{64}$/.test(owner || '') || !/^[A-Za-z0-9_-]{43}$/.test(passphrase || '')) fail('invalid_job');
       if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 100 * 1024 ** 3) fail('invalid_job_limit');
@@ -99,7 +99,7 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
       if (!['backup','restore'].includes(operation)) fail('unsupported_operation');
       const source = access(sourceToken), target = access(targetToken);
       const [sourceStatus, targetStatus] = await Promise.all([source.inspect(sourceRef),target.inspect(targetRef)]);
-      if (!targetStatus.blank) fail('restore_target_not_blank');
+      if (!targetStatus.blank && !allowOverwrite) fail('restore_target_not_blank');
       const prior = operation === 'restore' ? jobs.get(capsuleId) : null;
       const plannedScope=operation==='restore'?prior?.scopeSummary:scopeSummary;
       const selectedBytes=plannedScope?.estimatedTableBytes+plannedScope?.estimatedStorageBytes;
@@ -114,6 +114,7 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
       if(authorize)await authorize();
       const root = await mkdtemp('/tmp/portabase-job-');
       const job = { id: randomUUID(), owner, sourceRef, targetRef, operation, root, vaultRequested: !!provider, scopeSummary: scopeSummary || null,
+        allowOverwrite: Boolean(allowOverwrite),
         state: 'running', phase: 'preflight',
         startedAt: new Date().toISOString(), phaseTimings: [], estimatedPercent: operation === 'backup' ? 0 : null };
       const phase = name => {
@@ -157,7 +158,7 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
           } else {
             Object.assign(env, { PORTABASE_TARGET_PROJECT_REF: targetRef, PORTABASE_TARGET_SUPABASE_URL: `https://${targetRef}.supabase.co`,
               PORTABASE_TARGET_DB_URL: credential.databaseUrl, PORTABASE_TARGET_SERVICE_ROLE_KEY: credential.serviceKey });
-            args = ['replay', '--capsule', prior.capsulePath, '--confirm-target', targetRef];
+            args = ['replay', '--capsule', prior.capsulePath, '--confirm-target', targetRef, ...((allowOverwrite || prior.allowOverwrite) ? ['--allow-occupied-target'] : [])];
           }
           await run(args,env,root,maxBytes,event => {
             const name = typeof event === 'string' ? event : event?.phase;
@@ -187,7 +188,7 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
             const name = files.filter(n => n.endsWith('.json')).sort().at(-1);
             if (!name) fail('restore_evidence_missing');
             const evidence = JSON.parse(await readFile(join(root,'evidence',name),'utf8'));
-            job.result = { captureComplete: true, restoreVerified: evidence.status === 'RECOVERY_DATA_PATH_VERIFIED',
+            job.result = { captureComplete: true, restoreVerified: ['RECOVERY_DATA_PATH_VERIFIED', 'SELECTIVE_RESTORE_VERIFIED'].includes(evidence.status),
               verificationScope: 'database_inventory_and_row_counts;storage_object_hashes;function_status',
               databaseContentIdentityVerified: false, applicationBehaviorVerified: false, evidence };
             if (!job.result.restoreVerified) fail('restore_verification_incomplete');

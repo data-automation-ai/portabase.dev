@@ -47,7 +47,10 @@ test('GUI requires source and blank destination and offers explicit capsule hand
     selection:{source:'a'.repeat(20),target:'b'.repeat(20)}});
   assert.match(withDropbox,/action="\/execute"/);
   assert.match(ready,/12\.00 GiB/);
-  assert.match(withDropbox,/Type destination project ref/);
+  assert.doesNotMatch(withDropbox,/Type destination project ref/);
+  assert.doesNotMatch(withDropbox,/confirmTarget/);
+  assert.match(withDropbox,/allowOverwrite/);
+  assert.match(withDropbox,/Allow overwrite of existing destination objects/);
   assert.match(withDropbox,/Source object picker/);
   assert.match(withDropbox,/public/);
   assert.match(withDropbox,/avatars/);
@@ -57,6 +60,17 @@ test('GUI requires source and blank destination and offers explicit capsule hand
   assert.match(withDropbox,/not a durable backup/);
   const occupied=renderDryRunPage({...base,status:{...base.status,state:'preflight_blocked',preflight:{target:{blank:false}}}});
   assert.doesNotMatch(occupied,/action="\/execute"/);
+  const occupiedPassed=renderDryRunPage({...base,status:{...base.status,connections:{...base.status.connections,dropbox:true},
+    state:'preflight_passed',preflight:{source:{databaseBytes:12*1024**3},target:{name:'Occupied target',blank:false}},
+    selection:{source:'a'.repeat(20),target:'b'.repeat(20)},
+    inventory:{ref:'a'.repeat(20),tables:[{name:'public.orders',schema:'public',table:'orders',bytes:1024**2,estimatedRows:30,selectable:true}],
+      buckets:[{id:'avatars',bytes:1024,objects:2,selectable:true}],authUsers:4,functions:1},
+    scope:{tables:['public.orders'],buckets:['avatars'],auth:true,functions:true}},
+    selection:{source:'a'.repeat(20),target:'b'.repeat(20)}});
+  assert.match(occupiedPassed,/action="\/execute"/);
+  assert.match(occupiedPassed,/existing objects detected \(overwrite allowed below\)/);
+  assert.match(occupiedPassed,/name="allowOverwrite" value="yes" checked/);
+  assert.doesNotMatch(occupiedPassed,/Type destination project ref/);
 });
 
 test('source picker makes schema inclusion and row-data scope explicit',()=>{

@@ -2371,6 +2371,47 @@ async function prepareOverwrite(capture, restorePlan, targetRef, identity) {
   }
 }
 
+export function prepareOccupiedReset() {
+  const targetDb = process.env.PORTABASE_TARGET_DB_URL;
+  const query = sql => JSON.parse(psqlValue(targetDb, sql));
+  const schemas = query("SELECT COALESCE(json_agg(nspname),'[]')::text FROM pg_namespace;").filter(applicationSchema);
+  const authTables = query("SELECT COALESCE(json_agg(tablename),'[]')::text FROM pg_tables WHERE schemaname='auth' AND tablename <> 'schema_migrations';");
+  const extensionSchemas = query("SELECT COALESCE(json_agg(n.nspname),'[]')::text FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace;");
+  const existingRoles = query("SELECT COALESCE(json_agg(rolname),'[]')::text FROM pg_roles;");
+  const nonExtensionSchemas = schemas.filter(s => !extensionSchemas.includes(s));
+  const extensionBearingSchemas = schemas.filter(s => extensionSchemas.includes(s));
+  const sqlLines = ["SET LOCAL lock_timeout = '10s';"];
+  for (const schema of nonExtensionSchemas) {
+    sqlLines.push(`DROP SCHEMA ${quoteIdentifier(schema)} CASCADE;`);
+  }
+  if (nonExtensionSchemas.includes('public')) {
+    sqlLines.push(
+      'CREATE SCHEMA "public";',
+      'GRANT ALL ON SCHEMA "public" TO postgres;',
+      'GRANT ALL ON SCHEMA "public" TO public;',
+      'GRANT USAGE ON SCHEMA "public" TO anon, authenticated, service_role;',
+      'GRANT ALL ON SCHEMA "public" TO anon, authenticated, service_role;'
+    );
+  }
+  if (extensionBearingSchemas.length) {
+    const escaped = extensionBearingSchemas.map(s => `'${s.replaceAll("'", "''")}'`).join(', ');
+    const extObjects = query(`SELECT COALESCE(json_agg(json_build_object('schema', n.nspname, 'name', c.relname, 'kind', c.relkind)), '[]')::text FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname IN (${escaped}) AND c.relkind IN ('r','p','v','m','S') AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid AND d.deptype = 'e');`);
+    const kindOrder = { v: 1, m: 2, r: 3, p: 4, S: 5 };
+    extObjects.sort((a, b) => (kindOrder[a.kind] || 99) - (kindOrder[b.kind] || 99));
+    for (const obj of extObjects) {
+      const qName = `${quoteIdentifier(obj.schema)}.${quoteIdentifier(obj.name)}`;
+      if (obj.kind === 'v') sqlLines.push(`DROP VIEW IF EXISTS ${qName} CASCADE;`);
+      else if (obj.kind === 'm') sqlLines.push(`DROP MATERIALIZED VIEW IF EXISTS ${qName} CASCADE;`);
+      else if (obj.kind === 'S') sqlLines.push(`DROP SEQUENCE IF EXISTS ${qName} CASCADE;`);
+      else sqlLines.push(`DROP TABLE IF EXISTS ${qName} CASCADE;`);
+    }
+  }
+  if (authTables.length) {
+    sqlLines.push(`TRUNCATE TABLE ${authTables.map(t => `"auth".${quoteIdentifier(t)}`).join(', ')} RESTART IDENTITY CASCADE;`);
+  }
+  return { sql: sqlLines.join('\n') + '\n', existingRoles };
+}
+
 function targetFetch(path, options = {}) {
   const url = projectBaseUrl(process.env.PORTABASE_TARGET_SUPABASE_URL);
   const key = process.env.PORTABASE_TARGET_SERVICE_ROLE_KEY || process.env.PORTABASE_TARGET_SECRET_KEY;
@@ -3106,6 +3147,7 @@ async function restore() {
     validateBlankRestoreInventory(hasFlag('overwrite-target') ? { storageBuckets: s3Destination ? 0 : inventory.storageBuckets, edgeFunctions: inventory.edgeFunctions } : inventory, { allowOccupied });
     let overwrite = null;
     if (hasFlag('overwrite-target')) overwrite = await prepareOverwrite(manifest, restorePlan, targetRef, targetIdentity);
+    else if (allowOccupied) overwrite = prepareOccupiedReset();
     if (s3Destination) evidence.s3Preflight = await preflightStorageS3(s3Destination);
     await verifyStoragePayloads(extracted, await readStorageManifest(extracted));
     evidence.preflight = { verified: true, inventory, allowOccupied, allowSourceTarget };
