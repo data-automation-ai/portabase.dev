@@ -6,6 +6,7 @@ import {createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
+import {build} from 'esbuild';
 import {operatorConfig,SITE_ID} from './operator-config.mjs';
 async function main(){
  const root=resolve('.'),git=promisify(execFile);
@@ -19,8 +20,11 @@ async function main(){
  const {zipFunction}=await import(pathToFileURL(join(cli,'node_modules/@netlify/zip-it-and-ship-it/dist/main.js')));
  const stage=await mkdtemp(join(tmpdir(),'portabase-admission-v2-'));
  const entry=operatingMode==='development'?'cloud/confidential/validation-functions/cloud-confidential-admission.mjs':'netlify/functions/cloud-confidential-admission.mjs';
- const bundle=await zipFunction(join(root,entry),stage,
-  {basePath:root,repositoryRoot:root,config:{'*':{nodeBundler:'esbuild',nodeVersion:'24'}}});
+ const compiled=join(stage,'entry/cloud-confidential-admission.mjs');
+ await build({entryPoints:[join(root,entry)],outfile:compiled,bundle:true,platform:'node',target:'node24',format:'esm',
+  banner:{js:"import {createRequire as bundleCreateRequire} from 'node:module'; const require=bundleCreateRequire(import.meta.url);"},logLevel:'silent'});
+ const bundle=await zipFunction(compiled,stage,
+  {basePath:stage,repositoryRoot:stage,config:{'*':{nodeBundler:'esbuild',nodeVersion:'24'}}});
  if(bundle.runtimeAPIVersion!==2)throw new Error('native_function_runtime_required');
  const zip=await readFile(bundle.path),digest=createHash('sha256').update(zip).digest('hex');
  const html=Buffer.from('<!doctype html><title>Portabase validation</title><p>Isolated admission test. Not the production website.</p>');
