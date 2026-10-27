@@ -20,15 +20,21 @@ export function startSafeRefresh(document, window) {
   });
 
   const delay=Number(document.body?.dataset?.refreshMs);
+  document.addEventListener?.('change',event=>{
+    const target=event.target;
+    if(target?.name==='ref'&&target?.value&&target?.form?.getAttribute?.('action')==='/select'&&delay!==5000){
+      target.form.submit?.();
+    }
+  });
   if(!Number.isFinite(delay)||delay<=0)return;
   let edited=false;
   const rememberEdit=event=>{
-    if(event.target?.matches?.('input, select, textarea'))edited=true;
+    if(delay!==5000&&event.target?.matches?.('input, select, textarea'))edited=true;
   };
   document.addEventListener?.('input',rememberEdit);
   document.addEventListener?.('change',rememberEdit);
   const refresh=()=>{
-    if(edited||document.querySelector?.('dialog[open]')||document.activeElement?.matches?.('input, select, textarea')){
+    if(document.querySelector?.('dialog[open]')||(delay!==5000&&(edited||document.activeElement?.matches?.('input, select, textarea')))){
       window.setTimeout(refresh,1000);
       return;
     }

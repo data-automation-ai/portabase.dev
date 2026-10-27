@@ -56,7 +56,11 @@ export function supabaseAccess(accessToken, fetchImpl = fetch) {
     if (!/^cli_login_[a-z0-9_]+$/i.test(login?.role || '') || !login.password || !(login.ttl_seconds > 0)) throw new Error('temporary_login_unavailable');
     const pool = Array.isArray(poolers) && poolers.find(p => /^[a-z0-9.-]+\.pooler\.supabase\.com$/.test(p.db_host || ''));
     if (!pool) throw new Error('session_pooler_unavailable');
-    const key = Array.isArray(keys) && keys.find(k => k.name === 'service_role');
+    const key = Array.isArray(keys) && (
+      keys.find(k => k.type === 'secret' && k.name === 'portabase' && k.api_key)
+      || keys.find(k => (k.type === 'secret' || String(k.api_key || '').startsWith('sb_secret_')) && k.api_key)
+      || keys.find(k => k.name === 'service_role' && k.api_key)
+    );
     if (!key?.api_key) throw new Error('storage_auth_key_unavailable');
     const uri = new URL(`postgresql://${pool.db_host}:5432/postgres`);
     uri.username = `${login.role}.${ref}`; uri.password = login.password;
