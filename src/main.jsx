@@ -288,6 +288,31 @@ function Hero() {
               <p>Every capsule delivered to your Dropbox or S3 is standard <code>scrypt</code> + <code>AES-256-GCM</code> (<code>capsule.pbase</code> + <code>capsule.json</code>). You can decrypt and untar your raw <code>schema.sql</code>, <code>data.sql</code>, Storage files, and Edge Functions offline at any time with <code>npx portabase</code> or 15 lines of standard <code>node:crypto</code> — even if <code>portabase.dev</code> disappeared tomorrow.</p>
             </div>
           </div>
+          <div className="hero-tdx-modes-cta">
+            <div className="hero-tdx-modes-header">
+              <span className="hero-tdx-modes-badge">3 MODES OF OPERATION</span>
+              <span className="hero-tdx-modes-sub">All modes execute inside an attested Intel TDX enclave</span>
+            </div>
+            <div className="hero-tdx-modes">
+              <div className="hero-tdx-mode">
+                <strong>1. Source → Capsule → Destination</strong>
+                <span>Encrypted vault capsule + restore into separate account</span>
+              </div>
+              <div className="hero-tdx-mode">
+                <strong>2. Source → Destination</strong>
+                <span>Direct enclave migration — no retained capsule</span>
+              </div>
+              <div className="hero-tdx-mode">
+                <strong>3. Source → Capsule Only / Capsule → Destination</strong>
+                <span>Capture standalone capsule only, or restore existing capsule</span>
+              </div>
+            </div>
+            <div className="hero-tdx-actions">
+              <a className="button button-primary" href="/login?mode=signup&next=/dashboard">Start Free Cloud Recovery (40 GB Free) <Arrow /></a>
+              <a className="button button-ghost" href="/cloud#subscribe">Start 7-Day Automated Trial ($7/mo) <Arrow /></a>
+              <a className="button button-ghost" href="#install-cli">Decrypt / Verify Offline (Free CLI) <Arrow /></a>
+            </div>
+          </div>
         </div>
         <ul className="hero-checklist" aria-label="Portabase core guarantees">
           {heroChecklist.map(([title, desc]) => (
@@ -301,7 +326,8 @@ function Hero() {
           ))}
         </ul>
         <div className="recovery-actions">
-          <a className="button button-primary" href="#escape">See how recovery works <Arrow /></a>
+          <a className="button button-primary" href="/login?mode=signup&next=/dashboard">Start Free Cloud Recovery <Arrow /></a>
+          <a className="button button-ghost" href="/cloud#subscribe">See Plans ($0 Free · $7/mo) <Arrow /></a>
           <a className="button button-ghost" href="https://www.npmjs.com/package/portabase" target="_blank" rel="noreferrer">View on npm <Arrow /></a>
           <a className="recovery-evidence-link" href="#stories">Read the real cases <span aria-hidden="true">↓</span></a>
         </div>
@@ -2224,9 +2250,27 @@ function UseCases() {
   </section>;
 }
 
+function ClosingCta() {
+  return <section className="section closing-cta" id="closing-cta" aria-labelledby="closing-cta-title">
+    <div className="shell closing-cta-card">
+      <div className="section-kicker green">GET FIRE INSURANCE BEFORE THE FIRE · 3 MODES OF OPERATION</div>
+      <h2 id="closing-cta-title">Don’t wait for a lockout to test your escape.</h2>
+      <p className="closing-cta-lead">
+        Whether you run <strong>1. Source → Capsule → Destination</strong> (vault backup + restore into a contingency account), <strong>2. Source → Destination</strong> (direct enclave migration with zero retained files), or <strong>3. Source → Capsule Only / Capsule → Destination</strong> (standalone capsule snapshot or emergency replay), your recovery runs inside an attested <strong>Google Confidential Space (Intel TDX)</strong> hardware enclave that locks out the cloud “Landlord” from the boot sequence up. Every capsule uses open standard <code>scrypt</code> + <code>AES-256-GCM</code> and can be decrypted 100% independently offline at any time.
+      </p>
+      <div className="closing-cta-actions">
+        <a className="button button-primary" href="/login?mode=signup&next=/dashboard">Start Free Cloud Recovery (Up to 40 GB Free) <Arrow /></a>
+        <a className="button button-ghost" href="/cloud#subscribe">Start 7-Day Automated Trial ($7/mo) <Arrow /></a>
+        <a className="button button-ghost" href="https://www.npmjs.com/package/portabase" target="_blank" rel="noreferrer">Run Open-Source CLI (npx portabase) <Arrow /></a>
+      </div>
+      <p className="closing-cta-note">Zero risk to test · No credit card required for free runs · Open-source MIT engine</p>
+    </div>
+  </section>;
+}
+
 function HomePage() {
   useEffect(() => { document.title = 'Portabase — Your Supabase Escape'; }, []);
-  return <><Header /><main><Hero /><RecoveryOverviewImage /><Stories /><WhyNow /><Reality /><ClosureRisk /><TwoScenarios /><MidPageCta /><WhatIsThis /><NeverHoldKeys /><CliVsCloud /><HeroConcept /><RunnerArchitectureDiagram /><Escape /><InstallCta Arrow={Arrow} /><Faq /><Audit /><Cutover /><PublicDeal /><CloudTeaser /><UseCases /></main><Footer /></>;
+  return <><Header /><main><Hero /><RecoveryOverviewImage /><Stories /><WhyNow /><Reality /><ClosureRisk /><TwoScenarios /><MidPageCta /><WhatIsThis /><NeverHoldKeys /><CliVsCloud /><HeroConcept /><RunnerArchitectureDiagram /><Escape /><InstallCta Arrow={Arrow} /><Faq /><Audit /><Cutover /><PublicDeal /><CloudTeaser /><UseCases /><ClosingCta /></main><Footer /></>;
 }
 
 /** Mid-page conversion point placed at the emotional peak, after Stories + TwoScenarios. */
