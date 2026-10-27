@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { canonical, gateCases, windowFor } from '../research/weekly/policy.mjs';
 import { response } from '../research/weekly/openai.mjs';
+import { collectGithub } from '../research/weekly/github.mjs';
 const window = windowFor('2026-10-27T13:17:00Z');
 const url = 'https://www.reddit.com/r/Supabase/comments/abc123/case/?utm_source=test';
 const good = { url, title: 'Production restore stuck', reportedDate: '2026-10-23', decision: 'recommend', severity: 'critical',
@@ -28,6 +29,7 @@ test('requires observed original URL and substantive replies', () => {
 });
 test('old and future reports cannot masquerade as timely cases', () => {
   for (const reportedDate of ['2026-09-01', '2026-10-28', '', '2026-02-30']) assert.equal(gate({ reportedDate }).decision, 'hold');
+  assert.equal(gate({ decision: 'exclude', reportedDate: '' }).decision, 'exclude');
 });
 test('deduplicates published, prior-reviewed, and cross-posted events', () => {
   assert.equal(gate({}, [url], new Set([canonical(url)])).decision, 'exclude');
@@ -58,4 +60,16 @@ test('API rejects incomplete responses and does not expose provider error bodies
     if (previous === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = previous;
   }
+});
+
+test('direct collector retains original dates and flags inaccessible replies', async () => {
+  const result = await collectGithub(window, async url => url.includes('/search/issues')
+    ? { ok: true, json: async () => ({ total_count: 1, items: [{ html_url: 'https://github.com/supabase/supabase/issues/123',
+      title: 'Production recovery stuck', body: 'Restore failed', created_at: '2026-10-23T12:00:00Z', state: 'open', comments: 1 }] }) }
+    : { ok: false, status: 403 });
+  const data = JSON.parse(result.text);
+  assert.equal(data.coverage, 'limited');
+  assert.equal(data.notes[0].date, '2026-10-23T12:00:00Z');
+  assert.equal(data.notes[0].repliesAccessible, false);
+  await assert.rejects(collectGithub(window, async () => ({ ok: false, status: 429 })), /github_http_429/);
 });

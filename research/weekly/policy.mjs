@@ -32,6 +32,7 @@ Distinguish failed experimental restore drills from actual inability to recover 
 Read original posts AND replies, including maintainer explanations, corrections and resolutions.
 Distinguish provider-caused, customer-caused and unknown causes. Preserve resolutions prominently.
 Report date means original post date, never crawl date or newest reply. Unknown date => hold.
+Return reportedDate as ISO YYYY-MM-DD, or empty string when unknown. Preserve exact API created_at date when supplied.
 Publication window is provided explicitly. Older threads with recent comments are not new cases.
 Identify cross-posts describing the SAME underlying event; link duplicateOf to the original URL.
 Do not equate several user reports with several independent outages. No claims of exhaustive coverage.
@@ -59,7 +60,7 @@ export function gateCases(cases, sources, window, known = new Set()) {
   const seen = new Set();
   return cases.map(item => {
     const c = { ...item };
-    const hold = reason => { c.decision = 'hold'; c.reason = `${reason}; ${c.reason}`; };
+    const hold = reason => { if (c.decision !== 'exclude') c.decision = 'hold'; c.reason = `${reason}; ${c.reason}`; };
     try { c.url = canonical(c.url); } catch { hold('Invalid or unapproved original URL'); return c; }
     if (!observed.has(c.url)) hold('URL absent from retrieved search sources');
     if (known.has(c.url) || seen.has(c.url) || c.duplicateOf) { c.decision = 'exclude'; c.reason = 'Previously seen or duplicate underlying case'; }

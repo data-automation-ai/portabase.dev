@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { nightmares } from '../../src/data/nightmares.js';
 import { SOURCES, canonical, gateCases, windowFor } from './policy.mjs';
 import { discover, review } from './openai.mjs';
+import { collectGithub } from './github.mjs';
 
 const output = resolve(process.env.RESEARCH_OUTPUT || 'research-output');
 if (/^f:/i.test(output)) throw new Error('forbidden_output_drive');
@@ -21,6 +22,16 @@ try {
     knownCases.push(...previous);
   }
   const discoveries = [];
+  try {
+    console.log('Collecting GitHub issues through the API');
+    const result = await collectGithub(window);
+    const access = JSON.parse(result.text);
+    discoveries.push(result);
+    report.coverage.push({ source: result.source, status: access.coverage, limitations: access.limitations, urls: result.sources });
+  } catch {
+    report.coverage.push({ source: 'github_api', status: 'failed' });
+    report.errors.push({ stage: 'github_api', code: 'github_collection_failed' });
+  }
   for (const source of SOURCES) {
     console.log(`Researching ${source.id}`);
     try {
@@ -46,7 +57,9 @@ try {
     report.model = result.model;
     report.usage = [ ...discoveries.map(d => d.usage), result.usage ];
     // Evidence notes are drafts; the site does not import this directory.
-    await writeFile(resolve(output, 'discovery.json'), JSON.stringify(discoveries, null, 2));
+    // Do not publish raw GitHub bodies/comments, which may contain personal identifiers.
+    await writeFile(resolve(output, 'discovery.json'), JSON.stringify(discoveries.map(d => d.source === 'github_api'
+      ? { source: d.source, sources: d.sources, note: 'Raw public thread content used transiently for review; omitted from artifact.' } : d), null, 2));
   }
   report.status = report.errors.length ? 'partial' : 'reviewed';
 } catch {

@@ -6,10 +6,13 @@ The default lookback is seven days. Run manually with `days=30` to seed a rollin
 Date-only posts use inclusive UTC dates at both boundaries to avoid missing boundary
 cases; canonical URL and prior-ledger deduplication handle overlap.
 
-The cloud workflow searches Reddit, Supabase GitHub discussions/issues, and public
+The cloud workflow paginates GitHub's issues API, then searches Reddit, Supabase GitHub discussions/issues, and public
 support threads separately. AnswerOverflow is explicitly a Discord archive, not a
 fourth independent source. Private Discord content is not accessible to this job.
 Search indexing and source access limit coverage; this does not harvest every case.
+The direct GitHub collector scans up to the API's 1,000-result limit and inspects
+up to 40 keyword-matched cases plus replies. It reports limits explicitly; GitHub
+discussions are searched separately. Raw GitHub bodies are not retained in artifacts.
 
 Collection uses OpenAI Responses web search, then a separate structured AI review
 checks operational severity, original evidence, dates, replies, causes, resolutions,

@@ -42,6 +42,7 @@ jobs:
           fi
       - name: Collect and review public cases
         env:
+          GH_TOKEN: ${{ github.token }}
           OPENAI_API_KEY: ${{ secrets.PORTABASE_RESEARCH_OPENAI_API_KEY }}
           RESEARCH_MODEL: ${{ vars.PORTABASE_RESEARCH_MODEL || 'gpt-5.5' }}
           RESEARCH_DAYS: ${{ inputs.days || '7' }}
