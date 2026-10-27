@@ -1,6 +1,12 @@
 import { discordEvidence } from './discord-evidence.js';
+import { researchOfficial2026 } from './research-official-2026.js';
+import { researchCommunity2026 } from './research-community-2026.js';
+import { publishedOctober2026 } from './published-october-2026.js';
 
 export const nightmares = [
+  ...publishedOctober2026,
+  ...researchOfficial2026,
+  ...researchCommunity2026,
   ...discordEvidence,
   {
     id: 'N01', kind: 'firsthand', tag: 'ACCOUNT BANNED',
@@ -411,11 +417,11 @@ export const nightmares = [
     verified: 'Firsthand production incident · ticket SU-366857 · confirmed irrecoverable deletion'
   },
   {
-    id: 'N52', kind: 'firsthand', tag: 'DATA LOSS',
-    title: 'A Postgres upgrade shrunk disk capacity, and a routine REINDEX wiped the database when PITR failed.',
-    body: 'The customer reported an unexpected disk downgrade from 100GB following a Postgres update. Running REINDEX DATABASE postgres exhausted the remaining storage and wiped the active database. Automated Point-in-Time Recovery failed, prompting a public plea on Hacker News before support manually intervened.',
+    id: 'N52', kind: 'firsthand', tag: 'RECOVERY OUTAGE',
+    title: 'A disk-full outage and failed PITR required support recovery.',
+    body: 'The customer reported reduced disk capacity after a Postgres upgrade, followed by disk exhaustion during REINDEX and failed PITR. The author later confirmed on Hacker News that support recovered the database, the site returned, and no data was lost. The reported disk-change cause was not independently established.',
     source: 'GitHub Discussions · Mar 16, 2026',
     href: 'https://github.com/orgs/supabase/discussions/43795',
-    verified: 'Firsthand production outage · ticket SU-342355 · failed automated PITR'
+    verified: 'Firsthand report · recovered with no data lost · author update: news.ycombinator.com/item?id=47394240'
   }
 ];

@@ -10,7 +10,7 @@ test('every nightmare has a unique id and source URL', () => {
   assert.equal(new Set(nightmares.map(item => item.id)).size, nightmares.length);
   assert.equal(new Set(nightmares.map(item => item.href)).size, nightmares.length);
   for (const item of nightmares) {
-    assert.match(item.id, /^N\d{2}$/);
+    assert.match(item.id, /^[NDE]\d{2}$/);
     assert.match(item.href, /^https:\/\//);
     assert.ok(item.title.length >= 20);
     assert.ok(item.body.length >= 80);
