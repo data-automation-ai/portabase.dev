@@ -69,7 +69,7 @@ function attestationPanel(evidence){
   if(!evidence)return '<p>Attestation pending.</p>';
   const digest=String(evidence.imageDigest||'');
   const fingerprint=String(evidence.keyFingerprint||'');
-  return `<div class="attestation"><div class="attestation-title" style="display:flex;align-items:center;gap:6px">${gcpSvg} <span><strong>Google Cloud</strong> · Confidential Space · attestation verified</span></div><p class="attestation-row"><strong>Hardware:</strong> Intel TDX (Anti-Landlord memory encryption · boot-measured · SSH/debug disabled)</p><p class="attestation-row"><strong>VM Image SHA-256:</strong> <code>${esc(digest)}</code></p><p class="attestation-row"><strong>Secure Enclave Key ID:</strong> <code>${esc(fingerprint)}</code></p><small>Google Cloud project number: ${esc(evidence.projectNumber)} · Verified: ${esc(evidence.verifiedAt)}</small></div>`;
+  return `<div class="attestation"><div class="attestation-title" style="display:flex;align-items:center;gap:6px"><span><strong>Google Cloud</strong> · Confidential Space · attestation verified</span></div><p class="attestation-row"><strong>Hardware:</strong> Intel TDX (Anti-Landlord memory encryption · boot-measured · SSH/debug disabled)</p><p class="attestation-row"><strong>VM Image SHA-256:</strong> <code>${esc(digest)}</code></p><p class="attestation-row"><strong>Secure Enclave Key ID:</strong> <code>${esc(fingerprint)}</code></p><small>Google Cloud project number: ${esc(evidence.projectNumber)} · Verified: ${esc(evidence.verifiedAt)}</small></div>`;
 }
 
 function independentDecryptGuide(){
@@ -105,9 +105,9 @@ export function renderDryRunPage({status,projects,selection,links,nonce}) {
   const statusWithTargets = { ...status, targetProjects: projects.target };
 
   return `<!doctype html><html><head><meta charset="utf-8"><title>Portabase recovery validation</title><style>
-    body{font:14px system-ui,-apple-system,sans-serif;max-width:1240px;margin:12px auto;padding:0 14px;background:#0b0f17;color:#e6edf3}
-    h1{font-size:22px;margin:0 0 2px}h2{font-size:15px;margin-top:0}
-    section{background:#111824;border:1px solid #233044;padding:12px;margin:10px 0;border-radius:8px}
+    body{font:14px system-ui,-apple-system,sans-serif;max-width:1240px;margin:12px auto;padding:0 14px;background:#ffffff;color:#0f172a}
+    h1{font-size:22px;margin:0 0 2px;color:#0f172a}h2{font-size:15px;margin-top:0}
+    section{background:#111824;color:#e6edf3;border:1px solid #233044;padding:12px;margin:10px 0;border-radius:8px}
     a,button{display:inline-block;background:#0f766e;color:#fff;padding:8px 12px;border:0;border-radius:5px;text-decoration:none;cursor:pointer;font-weight:600}
     select,input[type=text],input[type=url],input[type=password]{box-sizing:border-box;width:100%;padding:8px;margin:5px 0;border:1px solid #3b4d66;border-radius:5px;font:inherit;background:#0d131f;color:#e6edf3}
     small{display:block;margin-top:4px;color:#8b949e}.warn{border-color:#b45309!important;background:#181005!important;color:#fde68a}.good{border-color:#059669!important;background:#061e16!important}
@@ -119,8 +119,7 @@ export function renderDryRunPage({status,projects,selection,links,nonce}) {
     .independent-decrypt code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
     ${pickerCss}${machineCss}
   </style></head><body data-refresh-ms="${refreshMs}">
-  <div class="landlord-perimeter-bar"><span class="hazard-stripes"></span><span>UNTRUSTED CLOUD HOST / HYPERVISOR ("THE LANDLORD" — BLOCKED BY CPU SILICON)</span><span class="hazard-stripes"></span></div>
-  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px"><h1>Recovery connection check</h1><p style="margin:0;color:#8b949e;font-size:12px">OAuth grants organization-wide access. Choose source and destination projects below.</p></div>
+  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px"><h1>Recovery connection check</h1><p style="margin:0;color:#475569;font-size:12px">OAuth grants organization-wide access. Choose source and destination projects below.</p></div>
   ${status.error?`<section class="warn"><strong>${esc(status.error==='destination_account_must_differ'?'Destination authorized the Source Supabase account. On the Supabase authorization screen, sign out from the Source account under Authorizing as, then sign in with the separate Destination account.':status.error)}</strong></section>`:''}
   <div class="route">
     ${connection('source',status.connections.source,projects.source,selection.source,links.source,nonce,status.accounts?.source,status.allowOverwrite,statusWithTargets)}

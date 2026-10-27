@@ -210,7 +210,8 @@ test('dark-mode Intel TDX schematic GUI renders perimeter warning, enclave frame
   };
 
   const html = renderDryRunPage(base);
-  assert.match(html, /UNTRUSTED CLOUD HOST \/ HYPERVISOR \("THE LANDLORD" — BLOCKED BY CPU SILICON\)/);
+  assert.doesNotMatch(html, /UNTRUSTED CLOUD HOST \/ HYPERVISOR/);
+  assert.match(html, /background:#ffffff!important/);
   assert.match(html, /SECURE RUNNER \(INTEL TDX HARDWARE-ENCRYPTED ENCLAVE/);
   assert.match(html, /Source OAuth Connection/);
   assert.match(html, /Dest OAuth Connection/);
