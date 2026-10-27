@@ -14,9 +14,22 @@ export function startSafeRefresh(document, window) {
 
   document.addEventListener?.('click', e => {
     const link = e.target?.closest?.('a[data-oauth-popup="true"]');
-    if (!link || !window.open) return;
-    const popup = window.open(link.href, 'portabase_oauth', 'popup,width=640,height=760');
-    if (popup) e.preventDefault();
+    if (link && window.open) {
+      const popup = window.open(link.href, 'portabase_oauth', 'popup,width=640,height=760');
+      if (popup) e.preventDefault();
+      return;
+    }
+    const copyBtn = e.target?.closest?.('[data-copy-url]');
+    if (!copyBtn) return;
+    const url = copyBtn.getAttribute?.('data-copy-url');
+    if (!url) return;
+    if (window.navigator?.clipboard?.writeText) {
+      window.navigator.clipboard.writeText(url).then(() => {
+        const orig = copyBtn.textContent;
+        copyBtn.textContent = '✓ Copied for Incognito!';
+        window.setTimeout?.(() => { copyBtn.textContent = orig; }, 2000);
+      }).catch(() => {});
+    }
   });
 
   const delay=Number(document.body?.dataset?.refreshMs);

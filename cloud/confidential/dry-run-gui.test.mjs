@@ -235,3 +235,30 @@ test('dark-mode Intel TDX schematic GUI renders perimeter warning, enclave frame
   assert.match(html, /name="sourceRefs"/);
   assert.match(html, /legacy-diagnostics/);
 });
+
+test('anti-sticky-cookie controls render incognito copy button, signout link, and PAT bypass form', () => {
+  const html = renderDryRunPage({
+    status: {
+      state: 'starting',
+      connections: { source: false, target: false, dropbox: false },
+      selection: {},
+    },
+    projects: { source: [], target: [] },
+    selection: {},
+    links: {
+      source: 'https://api.supabase.com/v1/oauth/authorize?client_id=src',
+      target: 'https://api.supabase.com/v1/oauth/authorize?client_id=tgt&prompt=login',
+    },
+    nonce: 'test-nonce-123',
+  });
+  assert.match(html, /class="btn-copy-incognito"/);
+  assert.match(html, /data-copy-url="https:\/\/api\.supabase\.com\/v1\/oauth\/authorize\?client_id=tgt&amp;prompt=login"/);
+  assert.match(html, /📋 Copy Link for Incognito Window/);
+  assert.match(html, /1\. Sign out of Supabase\.com first ↗/);
+  assert.match(html, /<details class="pat-connect"/);
+  assert.match(html, /🔑 Use Access Token \(sbp_… · Bypass Browser Cookie\)/);
+  assert.match(html, /action="\/supabase-token"/);
+  assert.match(html, /name="token"/);
+  assert.match(html, /Connect source token/);
+  assert.match(html, /Connect target token/);
+});

@@ -49,8 +49,10 @@ export function oauthConnections({ clientId, clientSecret, redirectUri, fetchImp
       const pkce = generatePkcePair(), state = generateOAuthState();
       profile.pending ||= {};
       profile.pending[slot] = { state, codeVerifier: pkce.codeVerifier, redirectUri:callback, expires: now() + 10 * 60 * 1000 };
-      return { slot, state, url: buildSupabaseAuthorizeUrl({ clientId, redirectUri:callback, codeChallenge: pkce.codeChallenge,
-        state, scope: '', authorizeUrl: 'https://api.supabase.com/v1/oauth/authorize' }) };
+      const authorizeUrl = buildSupabaseAuthorizeUrl({ clientId, redirectUri:callback, codeChallenge: pkce.codeChallenge,
+        state, scope: '', authorizeUrl: 'https://api.supabase.com/v1/oauth/authorize' });
+      const url = slot === 'target' ? `${authorizeUrl}&prompt=login` : authorizeUrl;
+      return { slot, state, url };
     },
     async finish(profile, {slot,code,state}) {
       if (!SLOT.has(slot) || typeof code !== 'string' || code.length > 4096 || !code.length) fail('invalid_oauth_callback');
@@ -77,10 +79,49 @@ export function oauthConnections({ clientId, clientSecret, redirectUri, fetchImp
         throw error;
       }
     },
+    async connectToken(profile, { slot, token } = {}) {
+      if (!SLOT.has(slot)) fail('invalid_connection_slot');
+      const cleanToken = typeof token === 'string' ? token.trim() : '';
+      if (!cleanToken || !/^(?:sbp_[a-f0-9]{30,80}|[A-Za-z0-9_.-]{20,512})$/.test(cleanToken)) {
+        fail('invalid_access_token');
+      }
+      try {
+        await supabaseAccess(cleanToken, fetchImpl).projects();
+      } catch {
+        fail('invalid_access_token');
+      }
+      profile.connections ||= {};
+      const previous = profile.connections[slot];
+      profile.connections[slot] = {
+        accessToken: cleanToken,
+        tokenType: 'pat',
+        grantId: randomUUID(),
+      };
+      try {
+        const current = await identity(profile, slot);
+        const other = slot === 'source' ? 'target' : 'source';
+        if (profile.connections[other]) {
+          const counterpart = await identity(profile, other);
+          if (current.verified && counterpart.verified &&
+            (current.id === counterpart.id || current.email === counterpart.email)) {
+            fail('destination_account_must_differ');
+          }
+        }
+        delete profile.accountConfirmation;
+        return { slot, connected: true, method: 'token', identity: current };
+      } catch (error) {
+        if (previous) profile.connections[slot] = previous; else delete profile.connections[slot];
+        throw error;
+      }
+    },
     async access(profile, slot) {
       if (!SLOT.has(slot)) fail('invalid_connection_slot');
       let tokens = profile.connections?.[slot];
-      if (!tokens?.accessToken || !tokens.refreshToken) fail('supabase_connection_required');
+      if (!tokens?.accessToken) fail('supabase_connection_required');
+      if (tokens.tokenType === 'pat') {
+        return { token: tokens.accessToken, api: supabaseAccess(tokens.accessToken, fetchImpl) };
+      }
+      if (!tokens.refreshToken) fail('supabase_connection_required');
       if (!tokens.expiresAt || tokens.expiresAt <= now() + 90000) {
         let slots=refreshes.get(profile);if(!slots){slots=new Map();refreshes.set(profile,slots);}
         if(!slots.has(slot))slots.set(slot,(async()=>{

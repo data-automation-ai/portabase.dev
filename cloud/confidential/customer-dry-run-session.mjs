@@ -86,7 +86,7 @@ async function main(){
    }else throw err;
   }
   if(result.sealedProfile){sealedProfile=result.sealedProfile;delete result.sealedProfile;}
-  if(sealedProfile&&(['oauth.finish','vault.finish','project.select','oauth.account.confirm'].includes(operation)||Date.now()-lastProfileSave>30000)){
+  if(sealedProfile&&(['oauth.finish','oauth.token','vault.finish','project.select','oauth.account.confirm'].includes(operation)||Date.now()-lastProfileSave>30000)){
    if(!await google(profileSecret))await google('/v1/projects/portabase-dev/secrets?secretId=portabase-confidential-validation-profile',{method:'POST',body:{replication:{automatic:{}}}});
    await google(profileSecret+':addVersion',{method:'POST',body:{payload:{data:Buffer.from(JSON.stringify({sealedProfile})).toString('base64')}}});lastProfileSave=Date.now();
   }
@@ -181,7 +181,7 @@ async function main(){
   res.setHeader('content-security-policy',"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
   const url=new URL(req.url,'http://127.0.0.1:58441');
   try{
-   if(req.method==='POST'&&['/callback','/dropbox','/s3','/vault-provider','/select','/select-batch','/scope','/execute','/reauthorize','/confirm-accounts','/mode'].includes(url.pathname)){
+   if(req.method==='POST'&&['/callback','/dropbox','/s3','/vault-provider','/select','/select-batch','/scope','/execute','/reauthorize','/confirm-accounts','/mode','/supabase-token'].includes(url.pathname)){
     // Some desktop browser bridges submit local forms with an opaque Origin.
     // Every POST still requires the session nonce below, which another origin
     // cannot read through the loopback page's same-origin boundary.
@@ -199,6 +199,21 @@ async function main(){
      const slot=form.get('slot');if(slot==='dropbox'){await beginDropbox();res.writeHead(303,{location:'/'});return res.end();}
      if(!['source','target'].includes(slot))throw new Error('invalid_connection_slot');
      await begin(slot);res.writeHead(303,{location:'/'});return res.end();
+    }
+    if(url.pathname==='/supabase-token'){
+     if(status.executing)throw new Error('drill_already_running');
+     const slot=form.get('slot');
+     const token=form.get('token');
+     if(!['source','target'].includes(slot))throw new Error('invalid_connection_slot');
+     if(!token)throw new Error('invalid_access_token');
+     await command('oauth.token',{slot,token});
+     status.connections[slot]=true;delete links[slot];delete offers[slot];
+     status.accountConfirmation=null;
+     await refreshIdentity(slot);
+     await refreshProjects(slot);
+     await preflight();
+     await persist();
+     res.writeHead(303,{location:'/'});return res.end();
     }
     if(url.pathname==='/confirm-accounts'){
      if(status.executing||!status.connections.source||!status.connections.target)throw new Error('supabase_connection_required');

@@ -94,6 +94,7 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
         case 'key.acknowledge': profile.keyAcknowledged=true; data={acknowledged:true}; break;
         case 'oauth.begin': data=connections.begin(profile,input.slot,input.redirectUri); break;
         case 'oauth.finish': data=await connections.finish(profile,input); break;
+        case 'oauth.token': data=await connections.connectToken(profile,input); break;
         case 'oauth.disconnect': data=connections.disconnect(profile,input.slot); break;
         case 'oauth.identity': data={slot:input.slot,identity:await connections.identity(profile,input.slot)}; break;
         case 'oauth.account.confirm': data=connections.confirm(profile,input); break;

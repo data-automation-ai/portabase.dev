@@ -100,3 +100,43 @@ test('click on data-oauth-popup link opens popup and prevents default', () => {
   assert.equal(openedFeatures, 'popup,width=640,height=760');
   assert.equal(defaultPrevented, true);
 });
+
+test('click on [data-copy-url] copies URL to clipboard and changes text for 2 seconds', async () => {
+  let copiedText = null;
+  const docListeners = {};
+  const timers = [];
+  const document = {
+    body: { dataset: {} },
+    addEventListener: (type, fn) => { docListeners[type] = fn; },
+  };
+  const window = {
+    navigator: {
+      clipboard: {
+        writeText: async text => { copiedText = text; },
+      },
+    },
+    setTimeout: (fn, delay) => { timers.push({ fn, delay }); },
+  };
+  startSafeRefresh(document, window);
+  assert.ok(docListeners.click);
+
+  let textContent = '📋 Copy Link for Incognito Window';
+  const mockBtn = {
+    get textContent() { return textContent; },
+    set textContent(val) { textContent = val; },
+    getAttribute: attr => attr === 'data-copy-url' ? 'https://api.supabase.com/v1/oauth/authorize?prompt=login' : null,
+  };
+  const event = {
+    target: {
+      closest: sel => sel === '[data-copy-url]' ? mockBtn : null,
+    },
+  };
+  docListeners.click(event);
+  await new Promise(r => setTimeout(r, 10));
+  assert.equal(copiedText, 'https://api.supabase.com/v1/oauth/authorize?prompt=login');
+  assert.equal(mockBtn.textContent, '✓ Copied for Incognito!');
+  assert.equal(timers.length, 1);
+  assert.equal(timers[0].delay, 2000);
+  timers[0].fn();
+  assert.equal(mockBtn.textContent, '📋 Copy Link for Incognito Window');
+});
