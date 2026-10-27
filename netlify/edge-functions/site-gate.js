@@ -5,6 +5,7 @@ export default async function siteGate(request, context) {
   const url = new URL(request.url);
   if (
     url.pathname === '/auth/callback' ||
+    url.pathname === '/confidential/callback' ||
     url.pathname.includes('/api/') ||
     url.pathname.includes('/oauth/') ||
     url.pathname.includes('/.netlify/') ||

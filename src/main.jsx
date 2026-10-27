@@ -2290,9 +2290,34 @@ function MidPageCta() {
   </section>;
 }
 
+function ConfidentialCallbackPage() {
+  const search = typeof window !== 'undefined' ? window.location.search : '';
+  const fullUrl = typeof window !== 'undefined' ? window.location.href : '';
+  const localCallback = `http://127.0.0.1:58441/confidential/callback${search}`;
+  useEffect(() => {
+    if (search.includes('code=') && search.includes('state=')) {
+      window.location.replace(localCallback);
+    }
+  }, [search, localCallback]);
+  return <main className="shell" style={{ padding: '80px 24px', maxWidth: 680, margin: '0 auto', color: '#e6edf3' }}>
+    <div style={{ background: '#111824', border: '1px solid #233044', borderRadius: 10, padding: 28 }}>
+      <div className="section-kicker green">INTEL TDX ENCLAVE OAUTH HANDOFF</div>
+      <h1 style={{ fontSize: 24, margin: '8px 0 12px' }}>Completing Enclave OAuth Connection…</h1>
+      <p style={{ color: '#94a3b8', lineHeight: 1.6 }}>
+        Redirecting your single-use authorization code to your local Confidential Space helper (<code>127.0.0.1:58441</code>) so the Intel TDX enclave can exchange it directly. Works from both standard and Incognito/Private windows.
+      </p>
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 18 }}>
+        <a className="button button-primary" href={localCallback}>Continue to Local Enclave Helper (127.0.0.1:58441) →</a>
+        <button type="button" className="button button-ghost" onClick={() => navigator.clipboard?.writeText(fullUrl)}>Copy Callback URL</button>
+      </div>
+    </div>
+  </main>;
+}
+
 function App() {
   const path = window.location.pathname.replace(/\/$/, '') || '/';
   const loc = `${window.location.pathname}${window.location.search}`;
+  if (path === '/confidential/callback') return <ConfidentialCallbackPage />;
   if (path === '/thanks' || path === '/buy') return <LegacyPurchaseNotice />;
   if (path === '/login' || path === '/signup') return <Lazy><LoginPage /></Lazy>;
   if (path === '/auth/callback') return <Lazy><AuthCallbackPage /></Lazy>;
