@@ -261,6 +261,34 @@ function Hero() {
         <p className="recovery-question">What if you lost your Supabase account for good?</p>
         <p className="recovery-lead">Your side project has real customers now. A locked account could put their data, your app, and the backups you need out of reach.</p>
         <p className="recovery-answer">Portabase keeps an encrypted recovery copy outside Supabase, in storage you control — free forever via the open-source CLI, or automated with scheduling and alerts from $7/month.</p>
+        <div className="hero-tdx-callout">
+          <div className="hero-tdx-header">
+            <span className="hero-tdx-badge">BUILT ON GOOGLE CONFIDENTIAL SPACE + INTEL TDX · NOT AN EVERYDAY VM</span>
+            <h2 className="hero-tdx-title">Engineered from the boot sequence up to lock out the “Landlord.”</h2>
+          </div>
+          <div className="hero-tdx-grid">
+            <div className="hero-tdx-card">
+              <div className="hero-tdx-label">01 · THE VM TRUST PROBLEM</div>
+              <h3>Why ordinary cloud VMs fail the trust test</h3>
+              <p>On a normal everyday VM, the “Landlord” (the cloud operator, hypervisor, or host root admin) can read plaintext RAM, inspect disks, attach a debugger, or SSH into the machine while your database and keys are in flight.</p>
+            </div>
+            <div className="hero-tdx-card">
+              <div className="hero-tdx-label">02 · HARDWARE MEASUREMENT</div>
+              <h3>Hardware-locked from the boot sequence up</h3>
+              <p>Portabase’s managed runner boots inside an <strong>Intel TDX (Trust Domain Extensions)</strong> Confidential VM running Google Confidential Space. From the very first boot instruction, hardware root-of-trust and vTPM measure the firmware, OS, and exact container SHA-256 hash.</p>
+            </div>
+            <div className="hero-tdx-card">
+              <div className="hero-tdx-label">03 · SILICON-LEVEL SHIELD</div>
+              <h3>CPU-encrypted RAM &amp; zero operator shell</h3>
+              <p>Intel TDX encrypts the VM’s memory inside the CPU silicon using keys the host hypervisor (“the Landlord”) cannot access. SSH and debug ports are permanently disabled in the boot image, and your browser verifies Google’s cryptographic attestation (VM image SHA-256 + enclave key ID) before a single credential is sent.</p>
+            </div>
+            <div className="hero-tdx-card">
+              <div className="hero-tdx-label">04 · ZERO LOCK-IN GUARANTEE</div>
+              <h3>100% Independent Capsule Decryption (Zero Lock-In to portabase.dev)</h3>
+              <p>Every capsule delivered to your Dropbox or S3 is standard <code>scrypt</code> + <code>AES-256-GCM</code> (<code>capsule.pbase</code> + <code>capsule.json</code>). You can decrypt and untar your raw <code>schema.sql</code>, <code>data.sql</code>, Storage files, and Edge Functions offline at any time with <code>npx portabase</code> or 15 lines of standard <code>node:crypto</code> — even if <code>portabase.dev</code> disappeared tomorrow.</p>
+            </div>
+          </div>
+        </div>
         <ul className="hero-checklist" aria-label="Portabase core guarantees">
           {heroChecklist.map(([title, desc]) => (
             <li key={title} className="hero-checklist-item">

@@ -119,4 +119,18 @@ test('machine shows verified Google Cloud workload measurement',()=>{
   assert.match(html,/Confidential Space · attestation verified/);
   assert.match(html,new RegExp(digest));
   assert.match(html,/fingerprint-123/);
+  assert.match(html,/Intel TDX/);
+  assert.match(html,/Anti-Landlord memory encryption · boot-measured · SSH\/debug disabled/);
+  assert.match(html,/VM Image SHA-256:/);
+  assert.match(html,/Secure Enclave Key ID:/);
+  assert.match(html,/495102144848/);
+  assert.match(html,/2026-10-26T14:00:00Z/);
+  assert.match(html,/How to decrypt &amp; open your capsule independently of portabase\.dev/);
+  assert.match(html,/scrypt \+ AES-256-GCM/);
+  assert.match(html,/portabase-aes256gcm-v1/);
+  assert.match(html,/PORTABASE_ENCRYPTION_PASSPHRASE/);
+  assert.match(html,/npx portabase verify --capsule/);
+  assert.match(html,/scryptSync/);
+  assert.match(html,/capsule\.pbase/);
+  assert.match(html,/capsule\.tar\.gz/);
 });
