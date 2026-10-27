@@ -12,11 +12,14 @@ async function main(){
  if((await git('git',['-C',root,'status','--porcelain'])).stdout.trim())throw new Error('release_source_not_clean');
  const commit=(await git('git',['-C',root,'rev-parse','HEAD'])).stdout.trim();
  const branch=(await git('git',['-C',root,'branch','--show-current'])).stdout.trim();
- if(branch!=='codex/12gb-timing-20261025')throw new Error('wrong_validation_branch');
+ if(branch!==''&&branch!=='codex/12gb-timing-20261025')throw new Error('wrong_validation_branch');
+ const operatingMode=process.env.PORTABASE_OPERATING_MODE||'production';
+ if(!['development','production'].includes(operatingMode))throw new Error('invalid_operating_mode');
  const cli=join(process.env.APPDATA,'npm/node_modules/netlify-cli');
  const {zipFunction}=await import(pathToFileURL(join(cli,'node_modules/@netlify/zip-it-and-ship-it/dist/main.js')));
  const stage=await mkdtemp(join(tmpdir(),'portabase-admission-v2-'));
- const bundle=await zipFunction(join(root,'netlify/functions/cloud-confidential-admission.mjs'),stage,
+ const entry=operatingMode==='development'?'cloud/confidential/validation-functions/cloud-confidential-admission.mjs':'netlify/functions/cloud-confidential-admission.mjs';
+ const bundle=await zipFunction(join(root,entry),stage,
   {basePath:root,repositoryRoot:root,config:{'*':{nodeBundler:'esbuild',nodeVersion:'24'}}});
  if(bundle.runtimeAPIVersion!==2)throw new Error('native_function_runtime_required');
  const zip=await readFile(bundle.path),digest=createHash('sha256').update(zip).digest('hex');
@@ -26,7 +29,7 @@ async function main(){
  const draft=await op.netlify(`/sites/${SITE_ID}/deploys?title=Native%20confidential%20admission%20validation`,{method:'POST',body:JSON.stringify({
   draft:true,branch,files:{'index.html':sha},functions:{'cloud-confidential-admission':digest},
   functions_config:{'cloud-confidential-admission':{build_data:{runtimeAPIVersion:2,bootstrapVersion:bundle.bootstrapVersion},memory:1024}}})});
- const record={id:draft.id,url:`https://${draft.id}--portabase-dev.netlify.app`,sourceCommit:commit,functionDigest:digest,
+ const record={id:draft.id,url:`https://${draft.id}--portabase-dev.netlify.app`,sourceCommit:commit,operatingMode,functionDigest:digest,
   runtimeAPIVersion:2,bootstrapVersion:bundle.bootstrapVersion,invocationMode:bundle.invocationMode,stage,originalProduction:previous,productionPublished:false,createdAt:new Date().toISOString()};
  await writeFile(new URL('./evidence/admission-isolated-native-draft.json',import.meta.url),JSON.stringify(record,null,2)+'\n');
  if(draft.required?.includes(sha))await op.netlify(`/deploys/${draft.id}/files/index.html`,{method:'PUT',headers:{'content-type':'application/octet-stream'},body:html});
