@@ -1,6 +1,6 @@
 import { generatePkcePair, generateOAuthState } from '../runner/supabase-oauth.mjs';
 import { exchangeDropboxOAuthCode, refreshDropboxOAuthToken } from '../runner/storage-oauth.mjs';
-import { testDropboxConnection } from '../../utility/cloud-storage-connectors.mjs';
+import { testDropboxConnection, listDropboxCapsules } from '../../utility/cloud-storage-connectors.mjs';
 
 const DROPBOX_CALLBACKS = new Set([
   'http://localhost:58441/oauth/dropbox/callback',
@@ -58,7 +58,16 @@ export function dropboxVault({ clientId, fetchImpl = fetch, now = Date.now } = {
         tokens = profile.dropbox = { ...tokens, ...refreshed };
       }
       await testDropboxConnection({ accessToken: tokens.accessToken, fetchImpl: secureFetch });
-      return { type: 'dropbox', mode: 'api', folderPath: '/Portabase', refreshToken: tokens.refreshToken, clientId };
+      return { type: 'dropbox', mode: 'api', folderPath: '/Portabase', refreshToken: tokens.refreshToken, clientId, accessToken: tokens.accessToken };
+    },
+    async capsules(profile) {
+      let tokens = profile.dropbox;
+      if (!tokens?.refreshToken) fail('dropbox_connection_required');
+      if (!tokens.accessToken || !tokens.expiresAt || tokens.expiresAt <= now() + 90000) {
+        const refreshed = await refreshDropboxOAuthToken({ refreshToken: tokens.refreshToken, clientId, fetchImpl: secureFetch });
+        tokens = profile.dropbox = { ...tokens, ...refreshed };
+      }
+      return await listDropboxCapsules({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, clientId, fetchImpl: secureFetch });
     },
   };
 }

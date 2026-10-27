@@ -115,34 +115,99 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
           const source=await connections.access(profile,'source');
           data={inventory:await sourceInventory(source.api,projectRef(profile.selection.source))}; break;
         }
+        case 'vault.capsules': {
+          data={ capsules: vault && profile.dropbox?.refreshToken ? await vault.capsules(profile) : [] }; break;
+        }
         case 'preflight': {
-          if(connections.assertDistinct)await connections.assertDistinct(profile);
-          const source=await connections.access(profile,'source'), target=await connections.access(profile,'target');
-          const [from,to]=await Promise.all([source.api.inspect(projectRef(profile.selection.source)),target.api.inspect(projectRef(profile.selection.target))]);
-          if(from.ref===to.ref || to.ref==='eoiqvdmvgaurlecdzqkp') fail('unsafe_restore_target');
-          data={source:from,target:to,keyAcknowledged:!!profile.keyAcknowledged,
-            dataFlow:{source:'Supabase',processor:'Google Confidential Space',capsule:'Encrypted inside runner',destination:'Customer-selected Supabase',verified:false},
-            ready:(to.blank || input?.allowOverwrite === true) && !!profile.keyAcknowledged}; break;
+          if (input?.mode === 'capsule_only') {
+            const source = await connections.access(profile, 'source');
+            const from = await source.api.inspect(projectRef(profile.selection.source));
+            let to = null;
+            if (profile.connections?.target && profile.selection?.target) {
+              const target = await connections.access(profile, 'target');
+              to = await target.api.inspect(projectRef(profile.selection.target));
+              if (from.ref === to.ref || to.ref === 'eoiqvdmvgaurlecdzqkp') fail('unsafe_restore_target');
+            }
+            data = { source: from, target: to, keyAcknowledged: !!profile.keyAcknowledged,
+              dataFlow: { source: 'Supabase', processor: 'Google Confidential Space', capsule: 'Encrypted in Dropbox', destination: 'None (capsule only)', verified: false },
+              ready: !!profile.keyAcknowledged }; break;
+          }
+          if (input?.mode === 'restore_only') {
+            const target = await connections.access(profile, 'target');
+            const to = await target.api.inspect(projectRef(profile.selection.target));
+            if (to.ref === 'eoiqvdmvgaurlecdzqkp') fail('unsafe_restore_target');
+            let from = null;
+            if (profile.connections?.source && profile.selection?.source) {
+              const source = await connections.access(profile, 'source');
+              from = await source.api.inspect(projectRef(profile.selection.source));
+              if (from.ref === to.ref) fail('unsafe_restore_target');
+            }
+            data = { source: from, target: to, keyAcknowledged: !!profile.keyAcknowledged,
+              dataFlow: { source: 'Existing capsule', processor: 'Google Confidential Space', capsule: 'Dropbox / Runner', destination: 'Customer-selected Supabase', verified: false },
+              ready: (to.blank || input?.allowOverwrite === true) && !!profile.keyAcknowledged }; break;
+          }
+          if (connections.assertDistinct) await connections.assertDistinct(profile);
+          const source = await connections.access(profile, 'source'), target = await connections.access(profile, 'target');
+          const [from, to] = await Promise.all([source.api.inspect(projectRef(profile.selection.source)), target.api.inspect(projectRef(profile.selection.target))]);
+          if (from.ref === to.ref || to.ref === 'eoiqvdmvgaurlecdzqkp') fail('unsafe_restore_target');
+          data = { source: from, target: to, keyAcknowledged: !!profile.keyAcknowledged,
+            dataFlow: { source: 'Supabase', processor: 'Google Confidential Space', capsule: 'Encrypted inside runner', destination: 'Customer-selected Supabase', verified: false },
+            ready: (to.blank || input?.allowOverwrite === true) && !!profile.keyAcknowledged }; break;
         }
         case 'backup.start':
         case 'restore.start': {
-          if(operation==='backup.start'&&input.vault!==undefined&&!['dropbox','temporary_runner'].includes(input.vault))fail('unsupported_vault');
-          if(!profile.keyAcknowledged) fail('save_recovery_key_first');
-          if(connections.assertDistinct)await connections.assertDistinct(profile);
-          const source=await connections.access(profile,'source'), target=await connections.access(profile,'target');
-          const sourceRef=projectRef(profile.selection.source), targetRef=projectRef(profile.selection.target);
-          if(operation==='restore.start' && ((input.confirmTarget !== undefined && input.confirmTarget !== targetRef) || input.acknowledgeManualConfig!==true)) fail('restore_acknowledgement_required');
-          if(typeof admit!=='function') fail('quota_service_unavailable');
-          const admission=await admit({authorization,operation:'quota.inspect',requestId:input.requestId});
-          const provider=operation==='backup.start' && input.vault==='dropbox'
-            ? await vault?.provider(profile) : undefined;
-          if(operation==='backup.start' && input.vault==='dropbox' && !provider)fail('dropbox_connection_required');
-          const selectedScope=operation==='backup.start' ? await captureScope(source.api,sourceRef,input.scope) : null;
-          data=await jobs.start({owner,sourceRef,targetRef,sourceToken:source.token,targetToken:target.token,
-            passphrase:recoveryKey,provider,maxBytes:admission.maxBytes,operation:operation==='backup.start'?'backup':'restore',capsuleId:input.capsuleId,
-            scope:selectedScope?.capture,scopeSummary:selectedScope?.summary,allowOverwrite:input.allowOverwrite===true,
-            authorize:()=>admit({authorization,operation,requestId:input.requestId}),
-            refreshAccess:async()=>(await connections.access(profile,operation==='backup.start'?'source':'target')).token}); break;
+          if (operation === 'backup.start' && input.vault !== undefined && !['dropbox', 'temporary_runner', 'capsule_only', 'restore_only'].includes(input.vault)) fail('unsupported_vault');
+          if (!profile.keyAcknowledged) fail('save_recovery_key_first');
+          const isCapsuleOnly = operation === 'backup.start' && input.vault === 'capsule_only';
+          const isRestoreOnly = operation === 'restore.start' && (input.vault === 'restore_only' || !!input.dropboxCapsuleId);
+          if (connections.assertDistinct && !isCapsuleOnly && !isRestoreOnly) await connections.assertDistinct(profile);
+
+          let source = null, sourceRef = null;
+          if (profile.selection?.source && profile.connections?.source) {
+            source = await connections.access(profile, 'source');
+            sourceRef = projectRef(profile.selection.source);
+          } else if (operation === 'backup.start') {
+            source = await connections.access(profile, 'source');
+            sourceRef = projectRef(profile.selection.source);
+          } else if (input.dropboxCapsuleId) {
+            sourceRef = String(input.dropboxCapsuleId).split('-')[0];
+          }
+
+          let target = null, targetRef = null;
+          if (profile.selection?.target && profile.connections?.target) {
+            target = await connections.access(profile, 'target');
+            targetRef = projectRef(profile.selection.target);
+          } else if (operation === 'restore.start') {
+            target = await connections.access(profile, 'target');
+            targetRef = projectRef(profile.selection.target);
+          }
+
+          if (operation === 'restore.start' && ((input.confirmTarget !== undefined && input.confirmTarget !== targetRef) || input.acknowledgeManualConfig !== true)) fail('restore_acknowledgement_required');
+          if (typeof admit !== 'function') fail('quota_service_unavailable');
+          const admission = await admit({ authorization, operation: 'quota.inspect', requestId: input.requestId });
+
+          const useDropbox = operation === 'backup.start' && ['dropbox', 'capsule_only'].includes(input.vault);
+          const provider = useDropbox
+            ? await vault?.provider(profile)
+            : (operation === 'restore.start' && profile.dropbox?.refreshToken ? await vault?.provider(profile) : undefined);
+          if (useDropbox && !provider) fail('dropbox_connection_required');
+
+          const selectedScope = operation === 'backup.start' && source ? await captureScope(source.api, sourceRef, input.scope) : null;
+          data = await jobs.start({
+            owner, sourceRef, targetRef,
+            sourceToken: source?.token, targetToken: target?.token,
+            passphrase: recoveryKey, provider, maxBytes: admission.maxBytes,
+            operation: operation === 'backup.start' ? 'backup' : 'restore',
+            capsuleId: input.capsuleId, dropboxCapsuleId: input.dropboxCapsuleId,
+            scope: selectedScope?.capture, scopeSummary: selectedScope?.summary,
+            allowOverwrite: input.allowOverwrite === true,
+            authorize: () => admit({ authorization, operation, requestId: input.requestId }),
+            refreshAccess: async () => {
+              if (operation === 'backup.start' && source) return (await connections.access(profile, 'source')).token;
+              if (operation === 'restore.start' && target) return (await connections.access(profile, 'target')).token;
+              return null;
+            },
+          }); break;
         }
         case 'jobs.list': data={jobs:jobs.list(owner)}; break;
         case 'job.status': data=jobs.status(owner,input.id); break;

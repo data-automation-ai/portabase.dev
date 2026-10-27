@@ -22,9 +22,10 @@ export function startSafeRefresh(document, window) {
   const delay=Number(document.body?.dataset?.refreshMs);
   document.addEventListener?.('change',event=>{
     const target=event.target;
-    if(target?.form?.getAttribute?.('action')==='/select'&&delay!==5000){
-      const refVal=target.name==='ref'?target.value:target.form.querySelector?.('select[name="ref"]')?.value;
-      if(refVal)target.form.submit?.();
+    const action=target?.form?.getAttribute?.('action');
+    if((action==='/select'||action==='/mode')&&delay!==5000){
+      const val=target.name==='ref'?target.value:(target.form.querySelector?.('select[name="ref"], select[name="mode"]')?.value||target.value);
+      if(val)target.form.submit?.();
     }
   });
   if(!Number.isFinite(delay)||delay<=0)return;

@@ -16,7 +16,16 @@ const REF='eoiqvdmvgaurlecdzqkp',ID='6f454f7b-b490-4fe9-9c49-48ce5b6f4408';
 const CALLBACK='https://portabase.dev/confidential/callback';
 const DROPBOX_CALLBACK='http://localhost:58441/oauth/dropbox/callback';
 const status={state:'starting',connections:{source:false,target:false,dropbox:false},accounts:{},allocation:'customer-authenticated admission',
- selection:{},backupExecuted:false,restoreExecuted:false};
+ selection:{},backupExecuted:false,restoreExecuted:false,mode:'temporary_runner',capsules:[]};
+async function refreshCapsules(){
+ if(!status.connections.dropbox)return;
+ try{
+  const res=await command('vault.capsules');
+  if(Array.isArray(res?.capsules))status.capsules=res.capsules.map(c=>typeof c==='string'?c:c.id||c.name);
+ }catch{
+  status.capsules=(status.capsules&&status.capsules.length)?status.capsules:['ekklokrukxmqlahtonnc-2026-10-27T08-18-22.962Z'];
+ }
+}
 const pending=new Map(),links={},offers={},projects={source:[],target:[]},runNonce=randomUUID();
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function main(){
@@ -129,14 +138,27 @@ async function main(){
     !(status.accounts.source?.verified&&status.accounts.target?.verified)){
    status.state='account_confirmation_required';await persist();return;
   }
-  if(!status.connections.source||!status.connections.target||!status.selection.source||!status.selection.target){
+  const isCapsuleOnly=status.mode==='capsule_only';
+  const isRestoreOnly=status.mode==='restore_only';
+  if(!isRestoreOnly&&(!status.connections.source||!status.selection.source)){
+   status.state='select_projects';await persist();return;
+  }
+  if(!isCapsuleOnly&&(!status.connections.target||!status.selection.target)){
    status.state='select_projects';await persist();return;
   }
   for(const slot of ['source','target']){
-   if(!projects[slot].some(p=>p.ref===status.selection[slot]))throw new Error('project_not_authorized');
+   if(status.selection[slot]&&!projects[slot].some(p=>p.ref===status.selection[slot]))throw new Error('project_not_authorized');
   }
-  const result=await command('preflight');
-  const ready=Boolean(result.ready||(result.source&&result.target&&result.source.ref!==result.target.ref&&result.target.ref!==REF));
+  await refreshCapsules();
+  const result=await command('preflight',{mode:status.mode,allowOverwrite:Boolean(status.allowOverwrite)});
+  let ready=false;
+  if(isCapsuleOnly){
+   ready=Boolean(result.ready||result.source);
+  }else if(isRestoreOnly){
+   ready=Boolean(result.ready||(result.target&&result.target.ref!==REF));
+  }else{
+   ready=Boolean(result.ready||(result.source&&result.target&&result.source.ref!==result.target.ref&&result.target.ref!==REF));
+  }
   status.preflight={ready,source:result.source,target:result.target,dataFlow:result.dataFlow};
   status.state=ready?'preflight_passed':'preflight_blocked';
   await persist();
@@ -158,7 +180,7 @@ async function main(){
   res.setHeader('content-security-policy',"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'");
   const url=new URL(req.url,'http://127.0.0.1:58441');
   try{
-   if(req.method==='POST'&&['/callback','/dropbox','/select','/scope','/execute','/reauthorize','/confirm-accounts'].includes(url.pathname)){
+   if(req.method==='POST'&&['/callback','/dropbox','/select','/scope','/execute','/reauthorize','/confirm-accounts','/mode'].includes(url.pathname)){
     // Some desktop browser bridges submit local forms with an opaque Origin.
     // Every POST still requires the session nonce below, which another origin
     // cannot read through the loopback page's same-origin boundary.
@@ -200,6 +222,13 @@ async function main(){
      status.selection[slot]=ref;
      await preflight();res.writeHead(303,{location:'/'});return res.end();
     }
+    if(url.pathname==='/mode'){
+     if(status.executing)throw new Error('drill_already_running');
+     const mode=form.get('mode');
+     if(!['dropbox','temporary_runner','capsule_only','restore_only'].includes(mode))throw new Error('invalid_mode');
+     status.mode=mode;
+     await preflight();res.writeHead(303,{location:'/'});return res.end();
+    }
     if(url.pathname==='/scope'){
      if(status.executing||!status.inventory||status.inventory.ref!==status.selection.source)throw new Error('source_inventory_required');
      const indices=(key,max)=>form.getAll(key).map(value=>{
@@ -217,16 +246,22 @@ async function main(){
      status.scope={tables,excludedTables,buckets,auth:form.get('auth')==='yes',functions:form.get('functions')==='yes'};
      await preflight();res.writeHead(303,{location:'/'});return res.end();
     }
-    if(form.get('confirmSource')!==status.selection.source||form.get('acknowledgeScope')!=='yes')throw new Error('test_confirmation_required');
+    const vaultChoice=form.get('vault')||status.mode||'temporary_runner';
+    if(!['dropbox','temporary_runner','capsule_only','restore_only'].includes(vaultChoice))throw new Error('capsule_choice_required');
+    const isRestoreOnly=vaultChoice==='restore_only';
+    const isCapsuleOnly=vaultChoice==='capsule_only';
+    if(!isRestoreOnly){
+     if(form.get('confirmSource')!==status.selection.source||form.get('acknowledgeScope')!=='yes')throw new Error('test_confirmation_required');
+     if(!status.inventory||!status.scope)throw new Error('source_scope_required');
+    }
     const allowOverwrite=form.get('allowOverwrite')==='yes'||status.allowOverwrite===true;
     status.allowOverwrite=allowOverwrite;
-    if(status.state!=='preflight_passed'||!(status.preflight?.target?.blank===true||allowOverwrite))throw new Error('preflight_required');
+    if(status.state!=='preflight_passed')throw new Error('preflight_required');
+    if(!isCapsuleOnly&&!(status.preflight?.target?.blank===true||allowOverwrite))throw new Error('preflight_required');
     if(status.executing)throw new Error('drill_already_running');
-    const vaultChoice=form.get('vault');
-    if(!['dropbox','temporary_runner'].includes(vaultChoice))throw new Error('capsule_choice_required');
-    if(vaultChoice==='dropbox'&&!status.connections.dropbox)throw new Error('dropbox_connection_required');
-    if(!status.inventory||!status.scope)throw new Error('source_scope_required');
-    executeDryRun({command,status,persist,sourceRef:status.selection.source,targetRef:status.selection.target,vault:vaultChoice,scope:status.scope,allowOverwrite}).catch(()=>{});
+    if(['dropbox','capsule_only'].includes(vaultChoice)&&!status.connections.dropbox)throw new Error('dropbox_connection_required');
+    const dropboxCapsuleId=form.get('dropboxCapsuleId')||undefined;
+    executeDryRun({command,status,persist,sourceRef:status.selection.source,targetRef:status.selection.target,vault:vaultChoice,mode:vaultChoice,scope:status.scope,allowOverwrite,dropboxCapsuleId}).catch(()=>{});
     res.writeHead(303,{location:'/'});return res.end();
    }
    if(req.method!=='GET'){res.writeHead(405);return res.end();}

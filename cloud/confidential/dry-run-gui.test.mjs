@@ -134,3 +134,56 @@ test('machine shows verified Google Cloud workload measurement',()=>{
   assert.match(html,/capsule\.pbase/);
   assert.match(html,/capsule\.tar\.gz/);
 });
+
+test('GUI supports all 4 operation modes including capsule_only and restore_only',()=>{
+  const base={
+    status:{
+      state:'select_projects',
+      connections:{source:true,target:true,dropbox:true},
+      selection:{},
+      mode:'temporary_runner',
+      capsules:['ekklokrukxmqlahtonnc-2026-10-27T08-18-22.962Z'],
+    },
+    projects:{
+      source:[{name:'Owner source',ref:'a'.repeat(20)}],
+      target:[{name:'New destination',ref:'b'.repeat(20)}],
+    },
+    selection:{},
+    links:{},
+    nonce:'nonce',
+  };
+  const html=renderDryRunPage(base);
+  assert.match(html,/action="\/mode"/);
+  assert.match(html,/value="dropbox"/);
+  assert.match(html,/value="temporary_runner"/);
+  assert.match(html,/value="capsule_only"/);
+  assert.match(html,/value="restore_only"/);
+
+  const capsuleOnlyHtml=renderDryRunPage({
+    ...base,
+    status:{
+      ...base.status,
+      state:'preflight_passed',
+      mode:'capsule_only',
+      preflight:{source:{databaseBytes:1024**3}},
+      inventory:{ref:'a'.repeat(20),tables:[{name:'public.users',schema:'public',table:'users',bytes:1024,estimatedRows:1,selectable:true}],buckets:[],authUsers:0,functions:0},
+      scope:{tables:['public.users'],buckets:[],auth:false,functions:false},
+    },
+    selection:{source:'a'.repeat(20)},
+  });
+  assert.match(capsuleOnlyHtml,/action="\/execute"/);
+
+  const restoreOnlyHtml=renderDryRunPage({
+    ...base,
+    status:{
+      ...base.status,
+      state:'preflight_passed',
+      mode:'restore_only',
+      preflight:{target:{name:'Target',blank:true}},
+    },
+    selection:{target:'b'.repeat(20)},
+  });
+  assert.match(restoreOnlyHtml,/action="\/execute"/);
+  assert.match(restoreOnlyHtml,/name="dropboxCapsuleId"/);
+  assert.match(restoreOnlyHtml,/ekklokrukxmqlahtonnc-2026-10-27T08-18-22\.962Z/);
+});

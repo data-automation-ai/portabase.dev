@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { supabaseAccess, projectRef } from './supabase-access.mjs';
+import { downloadCapsuleFromDropbox } from '../../utility/cloud-storage-connectors.mjs';
 const ENGINE = fileURLToPath(new URL('../../utility/portabase.mjs', import.meta.url));
 const PROTECTED_REF = 'eoiqvdmvgaurlecdzqkp';
 const fail = code => { throw new Error(code); };
@@ -89,26 +90,34 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
   const jobs = new Map();
   const snapshot = confidentialJobSnapshot;
   return {
-    async start({ owner, sourceRef, targetRef, sourceToken, targetToken, passphrase, provider, maxBytes, operation = 'backup', capsuleId, scope, scopeSummary, authorize, refreshAccess, allowOverwrite = false }) {
+    async start({ owner, sourceRef, targetRef, sourceToken, targetToken, passphrase, provider, maxBytes, operation = 'backup', capsuleId, dropboxCapsuleId, scope, scopeSummary, authorize, refreshAccess, allowOverwrite = false }) {
       if (platform !== 'linux') fail('cloud_runner_required');
       if (!/^[a-f0-9]{64}$/.test(owner || '') || !/^[A-Za-z0-9_-]{43}$/.test(passphrase || '')) fail('invalid_job');
       if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 100 * 1024 ** 3) fail('invalid_job_limit');
       if ([...jobs.values()].some(j => j.owner === owner && j.state === 'running')) fail('job_already_running');
-      projectRef(sourceRef); projectRef(targetRef);
-      if (sourceRef === targetRef || targetRef === PROTECTED_REF) fail('unsafe_restore_target');
+      if (sourceRef) projectRef(sourceRef);
+      if (targetRef) projectRef(targetRef);
+      if (sourceRef && targetRef && (sourceRef === targetRef || targetRef === PROTECTED_REF)) fail('unsafe_restore_target');
+      if (operation === 'restore' && targetRef === PROTECTED_REF) fail('unsafe_restore_target');
       if (!['backup','restore'].includes(operation)) fail('unsupported_operation');
-      const source = access(sourceToken), target = access(targetToken);
-      const [sourceStatus, targetStatus] = await Promise.all([source.inspect(sourceRef),target.inspect(targetRef)]);
-      if (!targetStatus.blank && !allowOverwrite) fail('restore_target_not_blank');
-      const prior = operation === 'restore' ? jobs.get(capsuleId) : null;
+      const source = sourceRef ? access(sourceToken) : null;
+      const target = targetRef ? access(targetToken) : null;
+      const [sourceStatus, targetStatus] = await Promise.all([
+        source ? source.inspect(sourceRef) : { measuredBytes: 0 },
+        target ? target.inspect(targetRef) : { blank: true },
+      ]);
+      if (targetRef && !targetStatus.blank && !allowOverwrite) fail('restore_target_not_blank');
+      const prior = (operation === 'restore' && capsuleId) ? jobs.get(capsuleId) : null;
+      const remoteCapsuleId = !prior && provider?.type === 'dropbox' && /^[A-Za-z0-9_.:-]+$/.test(dropboxCapsuleId || capsuleId || '') ? (dropboxCapsuleId || capsuleId) : null;
+      if (operation === 'restore' && (!prior && !remoteCapsuleId)) fail('capsule_not_available');
+      if (operation === 'restore' && prior && (prior.owner !== owner || prior.state !== 'complete' || !prior.capsulePath || (sourceRef && prior.sourceRef !== sourceRef))) fail('capsule_not_available');
       const plannedScope=operation==='restore'?prior?.scopeSummary:scopeSummary;
       const selectedBytes=plannedScope?.estimatedTableBytes+plannedScope?.estimatedStorageBytes;
       const partialScope=plannedScope && (plannedScope.tables<plannedScope.totalTables || plannedScope.buckets<plannedScope.totalBuckets);
       // Selected captures are bounded by their estimated contents here and by
       // the actual encrypted artifact size below; full-source size is not the selection.
-      const admissionBytes=partialScope&&Number.isSafeInteger(selectedBytes)&&selectedBytes>=0?selectedBytes:sourceStatus.measuredBytes;
+      const admissionBytes=partialScope&&Number.isSafeInteger(selectedBytes)&&selectedBytes>=0?selectedBytes:(sourceStatus?.measuredBytes || 0);
       if (admissionBytes > maxBytes) fail('plan_size_limit');
-      if (operation === 'restore' && (!prior || prior.owner !== owner || prior.state !== 'complete' || !prior.capsulePath || prior.sourceRef !== sourceRef)) fail('capsule_not_available');
       if (operation === 'backup' && (!scope || typeof scope.storage !== 'boolean' || typeof scope.auth !== 'boolean' || typeof scope.functions !== 'boolean')) fail('source_scope_required');
       // Charge a manual run only after destination, size and capsule validation.
       if(authorize)await authorize();
@@ -158,7 +167,14 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
           } else {
             Object.assign(env, { PORTABASE_TARGET_PROJECT_REF: targetRef, PORTABASE_TARGET_SUPABASE_URL: `https://${targetRef}.supabase.co`,
               PORTABASE_TARGET_DB_URL: credential.databaseUrl, PORTABASE_TARGET_SERVICE_ROLE_KEY: credential.serviceKey });
-            args = ['replay', '--capsule', prior.capsulePath, '--confirm-target', targetRef, ...((allowOverwrite || prior.allowOverwrite) ? ['--allow-occupied-target'] : [])];
+            let capsulePath = prior?.capsulePath;
+            if (remoteCapsuleId) {
+              phase('transfer');
+              const targetCapsuleDir = join(root, 'capsules', remoteCapsuleId);
+              await downloadCapsuleFromDropbox(remoteCapsuleId, targetCapsuleDir, provider);
+              capsulePath = targetCapsuleDir;
+            }
+            args = ['replay', '--capsule', capsulePath, '--confirm-target', targetRef, ...((allowOverwrite || prior?.allowOverwrite) ? ['--allow-occupied-target'] : [])];
           }
           await run(args,env,root,maxBytes,event => {
             const name = typeof event === 'string' ? event : event?.phase;
@@ -192,9 +208,11 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
               verificationScope: 'database_inventory_and_row_counts;storage_object_hashes;function_status',
               databaseContentIdentityVerified: false, applicationBehaviorVerified: false, evidence };
             if (!job.result.restoreVerified) fail('restore_verification_incomplete');
-            await rm(prior.root,{recursive:true,force:true});
-            prior.capsulePath = null;
-            prior.result.temporaryCapsuleRetained = false;
+            if (prior) {
+              await rm(prior.root,{recursive:true,force:true});
+              prior.capsulePath = null;
+              prior.result.temporaryCapsuleRetained = false;
+            }
           }
           job.state = 'complete'; phase('complete');
         } catch (error) { job.state = 'failed'; job.error = /^[a-z0-9_]{3,80}$/.test(error.message) ? error.message : 'job_failed'; }

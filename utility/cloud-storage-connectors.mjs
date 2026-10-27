@@ -440,6 +440,121 @@ export async function verifyDropboxCapsule(capsuleId, opts = {}) {
   };
 }
 
+export async function listDropboxCapsules(opts = {}) {
+  const fetchImpl = opts.fetchImpl || globalThis.fetch;
+  const rawFolder = opts.folderPath || opts.path || '/Portabase';
+  const folderPath = rawFolder.startsWith('/') ? rawFolder : `/${rawFolder}`;
+
+  if (opts.simulate === true) {
+    return [];
+  }
+
+  const token = await resolveDropboxAccessToken(opts);
+  const res = await fetchImpl('https://api.dropboxapi.com/2/files/list_folder', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      path: folderPath,
+      recursive: false,
+    }),
+  });
+
+  if (res.status === 409) {
+    return [];
+  }
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Dropbox list_folder failed (${res.status}): ${errText}`);
+  }
+
+  const data = await res.json();
+  const entries = Array.isArray(data.entries) ? data.entries : [];
+  return entries
+    .filter(entry => entry['.tag'] === 'folder' && /^[A-Za-z0-9_.:-]+$/.test(entry.name))
+    .map(entry => ({
+      id: entry.name,
+      name: entry.name,
+      path: entry.path_display || `${folderPath}/${entry.name}`,
+    }))
+    .sort((a, b) => b.name.localeCompare(a.name));
+}
+
+export async function downloadCapsuleFromDropbox(capsuleId, targetDir, opts = {}) {
+  if (!/^[A-Za-z0-9_.:-]+$/.test(capsuleId || '')) {
+    throw new Error(`Invalid Dropbox capsule ID: ${capsuleId}`);
+  }
+  const fetchImpl = opts.fetchImpl || globalThis.fetch;
+  const rawFolder = opts.folderPath || opts.path || '/Portabase';
+  const folderPath = rawFolder.startsWith('/') ? rawFolder : `/${rawFolder}`;
+  const remoteCapsulePath = `${folderPath}/${capsuleId}`;
+
+  await fs.promises.mkdir(targetDir, { recursive: true });
+
+  if (opts.simulate === true) {
+    return { capsuleDir: targetDir, filesDownloaded: [] };
+  }
+
+  const token = await resolveDropboxAccessToken(opts);
+  const listRes = await fetchImpl('https://api.dropboxapi.com/2/files/list_folder', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      path: remoteCapsulePath,
+      recursive: false,
+    }),
+  });
+
+  if (!listRes.ok) {
+    const errText = await listRes.text();
+    throw new Error(`Dropbox list capsule folder failed (${listRes.status}): ${errText}`);
+  }
+
+  const listData = await listRes.json();
+  const fileEntries = (listData.entries || []).filter(entry => entry['.tag'] === 'file');
+  const filesDownloaded = [];
+
+  for (const entry of fileEntries) {
+    const filePath = path.join(targetDir, entry.name);
+    const downloadRes = await fetchImpl('https://content.dropboxapi.com/2/files/download', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Dropbox-API-Arg': JSON.stringify({ path: `${remoteCapsulePath}/${entry.name}` }),
+      },
+    });
+
+    if (!downloadRes.ok) {
+      const errText = await downloadRes.text();
+      throw new Error(`Dropbox file download failed for ${entry.name} (${downloadRes.status}): ${errText}`);
+    }
+
+    const arrayBuffer = await downloadRes.arrayBuffer();
+    await fs.promises.writeFile(filePath, Buffer.from(arrayBuffer));
+
+    if (entry.content_hash) {
+      const computedHash = await computeDropboxFileContentHash(filePath);
+      if (computedHash !== entry.content_hash) {
+        throw new Error(`Dropbox content_hash mismatch on downloaded ${entry.name}: expected ${entry.content_hash}, got ${computedHash}`);
+      }
+    }
+
+    filesDownloaded.push({
+      name: entry.name,
+      size: entry.size,
+      content_hash: entry.content_hash,
+      path: filePath,
+    });
+  }
+
+  return { capsuleDir: targetDir, filesDownloaded };
+}
+
 /* ─────────────────────────────────────────────────────────────
    GOOGLE DRIVE CONNECTOR
 ───────────────────────────────────────────────────────────── */
