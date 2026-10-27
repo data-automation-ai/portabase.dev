@@ -4,7 +4,7 @@
 
 | Capability | Source | Provisioned | Configured | Deployed | Live proof | Security proof | Status | Blocker |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Weekly public-source collection and AI suitability review | `research/weekly`, `.github/workflows/weekly-incident-research.yml` | Repository-specific encrypted Actions secret configured | Monday 13:17 UTC; seven days; optional 30-day backfill | Pending first push | First 30-day run in progress | Seven focused tests pass; no production access; drafts only | INCOMPLETE | Verify cloud invocation and reports |
+| Weekly public-source collection and AI suitability review | `research/weekly`, `.github/workflows/weekly-incident-research.yml` | Repository-specific encrypted Actions secret configured | Active Monday 13:17 UTC; seven days; optional 30-day backfill | GitHub default branch | Cloud run `40514455252` passed; 52 reviewed, 7 recommended, 15 held, 30 excluded; artifact downloaded and inspected | Eight focused tests pass; read-only GitHub token; no production access; drafts only | VERIFIED MANUAL CLOUD RUN; SCHEDULE ACTIVE | First natural Monday trigger not yet observed; source access and collection limits documented |
 | Recent-case publication | Existing `src/data/nightmares.js` archive | Existing | Original dates and editorial review required | No new cases published | No | Manual original-source verification required | INCOMPLETE | Review report before publication |
 
 Operational details and disable instructions: `research/weekly/README.md`.

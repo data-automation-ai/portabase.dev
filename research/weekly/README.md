@@ -1,5 +1,7 @@
 # Weekly critical-incident research
 
+Initial source-checked cases: [October 27 review](../evidence/REVIEW-2026-10-27.md).
+
 Schedule: Mondays at 13:17 UTC (9:17 a.m. Eastern daylight time; 8:17 a.m. standard time).
 The default lookback is seven days. Run manually with `days=30` to seed a rolling
 30-day editorial queue. Reports retain original report dates, not crawl/reply dates.
@@ -58,5 +60,11 @@ Implementation references:
 
 | Capability | Source | Provisioned | Configured | Deployed | Live proof | Security proof | Status | Blocker |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Weekly collection and AI review | `research/weekly`, workflow | Pending validation | Monday 13:17 UTC, seven days | No | Pending | URL/date/severity/deduplication gate tests pass | INCOMPLETE | Activate schedule and verify first cloud run |
+| Weekly collection and AI review | `research/weekly`, workflow | Actions secret configured | Active Monday 13:17 UTC, seven days | GitHub main | Run `40514455252`: success; report downloaded and inspected | Eight focused tests pass | MANUAL CLOUD RUN VERIFIED; SCHEDULE ACTIVE | First natural Monday trigger not yet observed; documented coverage limits |
 | Recent public site cases | Existing curated archive | Existing | Editorial review required | No new cases published | Pending | Human source verification required | INCOMPLETE | Review initial 30-day report |
+
+Verified 30-day backfill: [run 40514455252](https://github.com/data-automation-ai/portabase.dev/actions/runs/40514455252),
+52 candidates reviewed: 7 recommend, 15 hold, 30 exclude. GitHub API scanned 465 issues,
+found 260 keyword matches and inspected 40; the web searches also covered GitHub
+discussions and Reddit. Public support retrieval was limited. These are draft
+research recommendations, not seven independently confirmed provider failures.

@@ -62,9 +62,10 @@ try {
       ? { source: d.source, sources: d.sources, note: 'Raw public thread content used transiently for review; omitted from artifact.' } : d), null, 2));
   }
   report.status = report.errors.length ? 'partial' : 'reviewed';
-} catch {
+} catch (error) {
   report.status = 'failed';
-  report.errors.push({ stage: 'review', code: 'review_or_history_failed' });
+  report.errors.push({ stage: 'review', code: /^openai_(http_\d{3}|response_incomplete|empty_response)$/.test(error.message)
+    ? error.message : 'review_or_history_failed' });
 } finally {
   const ledger = new Map(previous.map(c => [key(c.url), c]));
   for (const c of report.cases) {
