@@ -195,3 +195,16 @@ test('authorized runner-slot replacement starts at one without reviving the old 
   assert.equal(state.jobs[0].status, 'running'); assert.equal(state.jobs[0].runnerId, runnerId);
   assert.equal((await f.request(first)).status, 403);
 });
+
+
+test('Starter retains terminal claim recovery but cannot resume or claim legacy execution', async () => {
+  const f = await setup([job('job_second'), job()]), first = durable();
+  await f.request(first);
+  f.subscription = { plan: 'cloud-9', status: 'active', verifiedBy: 'square_api', squareVerifiedAt: new Date(instant).toISOString(), squareSubscriptionId: 'synthetic-starter', currentPeriodEnd: '2026-11-01T00:00:00Z' };
+  assert.equal((await f.request(first)).error, 'use_confidential_runner');
+  await f.finish('job_first');
+  const reads = f.subscriptionReads;
+  assert.equal((await f.request(first)).job.status, 'succeeded');
+  assert.equal(f.subscriptionReads, reads);
+  assert.equal((await f.request(durable(2))).error, 'use_confidential_runner');
+});

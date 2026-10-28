@@ -28,8 +28,8 @@ test('second checkout preserves first order and plan for server-side confirmatio
     save: async next => (record = next), credentials: async () => ({ locationId: 'LOC' }),
     ensurePlan: async plan => 'variation-' + plan,
     request: async () => ({ payment_link: { id: 'link-' + ++count, order_id: 'order-' + count, url: 'https://square.example/' + count } }),
-    authConfig: async () => ({}) });
-  const first = JSON.parse((await subscribe(event({ planId: 'cloud-7' }))).body);
+    configuration:async()=>({managedStarterEnabled:true,starterVariationId:'approved',usageImageDigest:'sha256:'+'a'.repeat(64)}),authConfig: async () => ({}) });
+  const first = JSON.parse((await subscribe(event({ planId: 'cloud-9' }))).body);
   const second = JSON.parse((await subscribe(event({ planId: 'cloud-17' }))).body);
   assert.notEqual(first.attempt, second.attempt);
   let verified;
@@ -37,8 +37,8 @@ test('second checkout preserves first order and plan for server-side confirmatio
   assert.equal((await confirm(event({ attempt: first.attempt }))).statusCode, 200);
   assert.equal(verified.squareOrderId, 'order-1');
   assert.equal(verified.squarePaymentLinkId, 'link-1');
-  assert.equal(verified.plan, 'cloud-7');
-  assert.equal(verified.squarePlanVariationId, 'variation-cloud-7');
+  assert.equal(verified.plan, 'cloud-9');
+  assert.equal(verified.squarePlanVariationId, 'variation-cloud-9');
   assert.equal((await confirm(event({ attempt: 'foreign-attempt' }))).statusCode, 409);
 });
 
@@ -99,7 +99,7 @@ test('real session and logout clear persisted demo state', () => {
 
 test('production auth UI guards simulation and console rechecks demo after session restoration', async () => {
   const auth = await readFile(new URL('../src/auth-pages.jsx', import.meta.url), 'utf8');
-  assert.match(auth, /import.meta.env.DEV && .*\n\s*<SimulatedCustomerSection/);
+  assert.match(auth, /import.meta.env.DEV && .*\r?\n\s*<SimulatedCustomerSection/);
   const consoleSource = await readFile(new URL('../src/console/ConsoleApp.jsx', import.meta.url), 'utf8');
   assert.match(consoleSource, /await ensureSessionForVersion\(version\);\s*if \(isRealSession\(session\)\)/);
 });
@@ -111,4 +111,10 @@ test('preview gate preserves path/query and bypasses auth callbacks', async () =
     assert.equal(response.status, 303); assert.equal(response.headers.get('location'), '/login?next=%2Fdashboard');
     assert.equal(await siteGate(new Request('https://portabase.dev/auth/callback?code=provider-code'), { next: () => 'passed' }), 'passed');
   } finally { delete globalThis.Netlify; }
+});
+
+
+test('new Starter checkout is blocked until reviewed managed release is enabled; legacy plans remain available',async()=>{
+ let calls=0;const run=createSubscribeHandler({authenticate:async()=>user,get:async()=>null,configuration:async()=>({starterVariationId:'approved',usageImageDigest:'sha256:'+'a'.repeat(64)}),credentials:async()=>{calls++;return {locationId:'loc'};},authConfig:async()=>({})});
+ const result=await run(event({planId:'cloud-9'}));assert.equal(result.statusCode,503);assert.equal(JSON.parse(result.body).error,'managed_starter_not_ready');assert.equal(calls,0);
 });

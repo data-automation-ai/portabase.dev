@@ -4,6 +4,7 @@ import { getSubscriptionForUser } from '../shared/subscription-store.mjs';
 import { runnerAdmission } from '../shared/runner-admission.mjs';
 import { planTransfersPer24h } from '../shared/product.mjs';
 import { createHash } from 'node:crypto';
+import { usageDatabase,usageKey,usageSummary,MAX_USAGE_LEASE_MS } from '../shared/confidential-usage.mjs';
 // An explicitly configured, single-account validation allowance can exceed
 // the public free cap. It is disabled when either setting is absent or invalid.
 export function validationCap(user, ownerId, rawBytes) {
@@ -11,7 +12,7 @@ export function validationCap(user, ownerId, rawBytes) {
   return ownerId && user.id===ownerId && Number.isSafeInteger(bytes)
     && bytes>10*1024**3 && bytes<=25*1024**3 ? bytes : null;
 }
-export function confidentialAdmission({authenticate=verifyCloudUser,subscription=getSubscriptionForUser,database,clock=Date.now,
+export function confidentialAdmission({authenticate=verifyCloudUser,subscription=getSubscriptionForUser,database,usageStore=usageDatabase,clock=Date.now,
   validationOwnerId=process.env.PORTABASE_CONFIDENTIAL_VALIDATION_OWNER_ID,
   validationMaxBytes=process.env.PORTABASE_CONFIDENTIAL_VALIDATION_MAX_BYTES}={}) {
   return async event=>{
@@ -27,7 +28,17 @@ export function confidentialAdmission({authenticate=verifyCloudUser,subscription
       const admission=runnerAdmission(await subscription(user),clock());
       const maxBytes=validationCap(user,validationOwnerId,validationMaxBytes) ?? admission.plan.storageCapBytes;
       const dailyLimit=admission.paid?planTransfersPer24h(admission.plan.id,{extraTransfersAddon:admission.extraTransfersAddon}):1;
-      if(['restore.start','quota.inspect'].includes(body.operation)) return jsonResponse(200,{maxBytes,plan:admission.plan.id});
+      let usage;
+      if(admission.plan.id==='cloud-9') {
+        const saved=await usageStore().getWithMetadata(usageKey(user),{type:'json'});
+        usage=usageSummary(saved?.data,{now:clock(),allowanceBytes:admission.plan.transferAllowanceBytes});
+        if(['backup.start','restore.start'].includes(body.operation)) {
+          const reservation=saved?.data?.jobs?.[body.requestId];
+          if(!reservation || reservation.status!=='running' || clock()-reservation.startedAt>=MAX_USAGE_LEASE_MS || reservation.kind!==body.operation.split('.')[0])
+            return jsonResponse(409,{error:'trusted_transfer_reservation_required'});
+        }
+      }
+      if(['restore.start','quota.inspect'].includes(body.operation)) return jsonResponse(200,{maxBytes,plan:admission.plan.id,...(usage?{usage}:{})});
       const counter=body.operation==='runner.start'?'starts':'runs';
       const startLimit=counter==='starts' && validationCap(user,validationOwnerId,validationMaxBytes)?3:dailyLimit;
       // No disk or in-memory fallback: quotas must survive instance restarts.

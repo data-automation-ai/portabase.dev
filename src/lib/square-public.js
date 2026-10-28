@@ -14,6 +14,7 @@ export const SQUARE_WEBHOOK_VAR_NAMES = Object.freeze([
 ]);
 
 export const SQUARE_CATALOG_PIN_VAR_NAMES = Object.freeze([
+  'SQUARE_CLOUD_PLAN_VARIATION_ID_9',
   'SQUARE_CLOUD_PLAN_VARIATION_ID_7',
   'SQUARE_CLOUD_PLAN_VARIATION_ID',
   'SQUARE_CLOUD_PLAN_VARIATION_ID_17',
@@ -94,6 +95,7 @@ export function squareBillingView({ live = null, demoMode = false } = {}) {
 
   const view = {
     ready,
+    starterReady:ready&&live.starterReady===true,
     failClosed: !ready,
     reason: ready ? 'ready' : (live.reason || 'missing_square_env'),
     mode,
@@ -125,6 +127,7 @@ export function publicSquareStatus(inspect = {}) {
   return squareBillingView({
     live: {
       ready: inspect.ready === true,
+      starterReady:inspect.starterReady===true,
       mode: inspect.mode,
       missing: inspect.missing,
       missingWebhook: inspect.missingWebhook,

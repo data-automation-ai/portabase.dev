@@ -57,7 +57,7 @@ function sanitizeObject(obj) {
   return out;
 }
 
-async function lambdaHandler(event) {
+export async function lambdaHandler(event,{authenticate=verifyCloudUser,getSubscription=getSubscriptionForUser}={}) {
   if (event.httpMethod === 'OPTIONS') {
     return jsonResponse(204, {}, {
       'Access-Control-Allow-Origin': '*',
@@ -68,13 +68,13 @@ async function lambdaHandler(event) {
 
   let user;
   try {
-    user = await verifyCloudUser(event);
+    user = await authenticate(event);
   } catch {
     return jsonResponse(401, { error: 'unauthorized', message: 'Sign in to access unattended restore.' });
   }
 
   const storeKey = `${user.cloudVersion}:${user.id}`;
-  const subscription = await getSubscriptionForUser(user).catch(() => null);
+  const subscription = await getSubscription(user).catch(() => null);
   const access = deriveAccess(subscription);
 
   if (!access.hasAccess) {
@@ -118,6 +118,7 @@ async function lambdaHandler(event) {
   }
 
   if (event.httpMethod !== 'POST') return jsonResponse(405, { error: 'method_not_allowed' });
+  if(subscription?.plan==='cloud-9')return jsonResponse(403,{error:'use_confidential_runner'});
 
   let body = {};
   try {

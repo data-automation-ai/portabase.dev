@@ -1,4 +1,5 @@
-import { withBlobs } from '../shared/subscription-store.mjs';
+import { withBlobs, getSubscriptionForUser } from '../shared/subscription-store.mjs';
+import {runnerAdmission} from '../shared/runner-admission.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
@@ -26,7 +27,7 @@ function clearCookie(name) {
   return `${name}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 }
 
-async function lambdaHandler(event) {
+export async function lambdaHandler(event,{authenticate=verifyCloudUser,subscription=getSubscriptionForUser}={}) {
   if (event.httpMethod === 'OPTIONS') {
     return jsonResponse(204, {}, {
       'Access-Control-Allow-Origin': '*',
@@ -193,6 +194,9 @@ async function lambdaHandler(event) {
   }
 
   if (action === 'upload-capsule') {
+    let user;try{user=await authenticate(event);}catch{return jsonResponse(401,{error:'unauthorized'});}
+    try{if(runnerAdmission(await subscription(user)).plan.id==='cloud-9')return jsonResponse(403,{error:'use_confidential_runner'});}
+    catch{return jsonResponse(503,{error:'subscription_service_unavailable'});}
     let capsuleDir = null;
     const capsulesDir = path.resolve(process.cwd(), 'portabase-capsules');
     if (body.capsuleId) {

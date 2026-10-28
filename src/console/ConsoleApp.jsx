@@ -29,6 +29,7 @@ import {
 } from './pages.jsx';
 import { StorageProvidersPage } from './storage-providers-page.jsx';
 import { EnclaveDashboard } from './enclave-dashboard.jsx';
+import { UsageOverview } from './usage-overview.jsx';
 import { TelemetryPage } from './telemetry-page.jsx';
 import { liveEventToHealthEvent } from '../lib/telemetry-view.js';
 import { ConnectSupabaseFlow } from './connect-supabase.jsx';
@@ -154,6 +155,8 @@ export function ConsoleApp() {
   const [liveDashboard, setLiveDashboard] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardUnavailable, setDashboardUnavailable] = useState(false);
+  const [usageSnapshot, setUsageSnapshot] = useState(null);
+  const [usageRefreshing, setUsageRefreshing] = useState(false);
   const [square, setSquare] = useState(null);
   const [telemetryStatus, setTelemetryStatus] = useState('loading');
   const [telemetryRefresh, setTelemetryRefresh] = useState(0);
@@ -209,6 +212,7 @@ export function ConsoleApp() {
     let demoMode = isDemoMode();
     setDashboardLoading(!demoMode);
     setDashboardUnavailable(false);
+    setUsageSnapshot(null);
     (async () => {
       try {
         let session = await ensureSessionForVersion(version);
@@ -275,6 +279,7 @@ export function ConsoleApp() {
             setDashboardUnavailable(false);
             setLiveJobs(Array.isArray(dash.jobs) ? dash.jobs : []);
             setLiveDashboard(Boolean(dash.live));
+            setUsageSnapshot({ usage: dash.usage, runnerUsage: dash.runnerUsage, beaconUsage: dash.beaconUsage });
             let discoveredProjects = null;
             try {
               const discRes = await fetch(`/api/cloud/oauth?provider=supabase&action=discover`);
@@ -315,6 +320,7 @@ export function ConsoleApp() {
         } catch {
           if (!cancelled) {
             setDashboardUnavailable(true);
+            setUsageSnapshot(null);
             setLiveJobs([]);
             setLiveDashboard(false);
           }
@@ -327,6 +333,23 @@ export function ConsoleApp() {
     })();
     return () => { cancelled = true; };
   }, [version]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const refreshUsage = useCallback(async () => {
+    setUsageRefreshing(true);
+    try {
+      const dash = await fetchDashboard(version);
+      setUsageSnapshot({ usage: dash.usage, runnerUsage: dash.runnerUsage, beaconUsage: dash.beaconUsage });
+    } catch {
+      // Do not leave stale successful receipts presented as current after an outage.
+      setUsageSnapshot(null);
+    } finally { setUsageRefreshing(false); }
+  }, [version]);
+
+  useEffect(() => {
+    const update = () => { if (!isDemoMode()) refreshUsage(); };
+    window.addEventListener('portabase-runner-usage-changed', update);
+    return () => window.removeEventListener('portabase-runner-usage-changed', update);
+  }, [refreshUsage]);
 
   useEffect(() => {
     if (!ready || isDemoMode()) return;
@@ -562,7 +585,7 @@ export function ConsoleApp() {
     case 'account': body = <AccountHubPage {...pageProps} tab={route.accountTab} />; break;
     case 'dashboard':
     default:
-      body = <EnclaveDashboard {...pageProps} />;
+      body = <><UsageOverview snapshot={usageSnapshot} loading={dashboardLoading} refreshing={usageRefreshing} onRefresh={refreshUsage} demoMode={isDemoMode()} /><EnclaveDashboard {...pageProps} /></>;
       break;
   }
 

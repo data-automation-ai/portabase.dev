@@ -1584,3 +1584,32 @@ footer .logo{color:#fff}
 .ack-dot.amber{background:#b45309}
 .ack-dot.red{background:#b91c1c}
 .ack-hint{font-size:12px;color:#b45309;margin:8px 0 0}
+
+/* Recovery choices share the existing homepage type and colors. */
+.recovery-use-cases h2{max-width:760px;margin-bottom:30px}
+.recovery-use-case-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:30px}
+.recovery-use-case-grid article{border-top:3px solid var(--green,#15803d);padding-top:20px;min-width:0}
+.recovery-use-case-label{font:11px var(--mono,monospace);letter-spacing:.1em;color:var(--ink-muted,#64748b)}
+.recovery-use-case-grid h3{font-size:23px;line-height:1.2;margin:12px 0 16px}
+.recovery-use-case-grid p{line-height:1.65;font-size:15px;color:var(--ink-muted,#475569)}
+.recovery-use-case-grid .recovery-use-case-note{font-size:13px;border-top:1px solid var(--line,#dbe3df);padding-top:14px}
+.recovery-use-case-grid a{font-weight:650}.recovery-use-case-grid a svg{width:16px;vertical-align:middle}
+@media(max-width:900px){.recovery-use-case-grid{grid-template-columns:1fr}.recovery-use-case-grid article{max-width:760px}}
+
+.recovery-positioning{margin:18px 0 26px;padding:18px 22px;border-left:4px solid var(--green,#15803d);background:#eff7f1;border-radius:0 8px 8px 0}.recovery-positioning h2{font-size:clamp(20px,2.5vw,28px);line-height:1.2;margin:0 0 10px}.recovery-positioning p{font-size:15px;line-height:1.6;margin:0;color:#33453b}
+
+.secure-enclave-recovery{background:var(--paper)}
+.enclave-capability-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-top:28px}
+.enclave-capability-grid article{padding:28px;border:1px solid var(--paper-line-strong);border-top:3px solid #16a06a;border-radius:10px;background:var(--paper-raised)}
+.enclave-capability-grid article>span{font-size:11px;font-weight:800;letter-spacing:.09em;color:#14865b}
+.enclave-capability-grid h3{font-size:23px;line-height:1.25;margin:17px 0 14px;color:var(--ink)}
+.enclave-capability-grid p,.enclave-trust-note{font-size:14px;line-height:1.7;color:var(--ink-muted)}
+.enclave-spec-strip{display:flex;flex-wrap:wrap;gap:12px 30px;padding:20px 0;border-bottom:1px solid var(--paper-line-strong);font-size:12px;color:var(--ink-muted)}
+.enclave-spec-strip b{display:block;color:var(--ink);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.enclave-trust-note{max-width:1000px;margin-top:18px}
+@media(max-width:850px){.enclave-capability-grid{grid-template-columns:1fr}.enclave-capability-grid article{padding:23px}.enclave-capability-grid h3{font-size:22px}}
+
+.security-page .security-lead{color:#435b56}
+
+.security-page .security-lead strong{color:#173c35}
+.legal-page .security-honest-grid article p{color:#bdcdc8}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAddonPaymentLinkRequest, buildSubscriptionPaymentLinkRequest, PRICE_MONTHLY_CENTS, STORAGE_POLICY, TRIAL_DAYS } from '../netlify/shared/square-cloud.mjs';
+import { assertStarterVariation, VARIATION_NAMES, buildAddonPaymentLinkRequest, buildSubscriptionPaymentLinkRequest, PRICE_MONTHLY_CENTS, STORAGE_POLICY, TRIAL_DAYS } from '../netlify/shared/square-cloud.mjs';
 import { ADDON_TRANSFERS_PER_24H, BASE_TRANSFERS_PER_24H, CLOUD_MAX_AGENTS, CLOUD_PAYMENT_GATEWAY, CLOUD_PRICE_MONTHLY_CENTS, CLOUD_PLANS, EXTRA_TRANSFERS_ADDON_ID, getCloudPlan } from '../netlify/shared/product.mjs';
 import { deriveAccess, trialEndsAtFrom } from '../netlify/shared/subscription-store.mjs';
 
@@ -21,9 +21,9 @@ test('subscription payment link is $0 trial with plan variation id', () => {
   assert.equal(PRICE_MONTHLY_CENTS, 1700);
   assert.equal(CLOUD_PRICE_MONTHLY_CENTS, 1700);
   assert.equal(CLOUD_PAYMENT_GATEWAY, 'square');
-  assert.match(body.description, /\$7\/mo|7\/mo/i);
+  assert.match(body.description, /\$9\/mo|9\/mo/i);
   assert.match(body.payment_note, /byo_storage=true/);
-  assert.match(body.payment_note, /500 MB/);
+  assert.match(body.payment_note, /10 GB/);
   assert.match(body.quick_pay.name, /BYO storage|12 agents/i);
   assert.equal(STORAGE_POLICY.includedInCloud, false);
   assert.equal(STORAGE_POLICY.owner, 'customer');
@@ -35,8 +35,8 @@ test('Scale Escape plan is hidden legacy $37 with 100 GB cap', () => {
   assert.equal(plan.priceMonthlyCents, 3700);
   assert.equal(plan.storageCapGb, 100);
   assert.equal(plan.customerFacing, false);
-  assert.equal(CLOUD_PLANS['cloud-7'].storageCapLabel, '500 MB');
-  assert.equal(CLOUD_PLANS['cloud-17'].storageCapGb, 10);
+  assert.equal(CLOUD_PLANS['cloud-7'].storageCapLabel, '10 GB');
+  assert.equal(CLOUD_PLANS['cloud-17'].storageCapGb, 25);
   assert.match(plan.cadenceLabel, /legacy hidden/i);
   const body = buildSubscriptionPaymentLinkRequest({
     locationId: 'LOC',
@@ -83,4 +83,16 @@ test('deriveAccess rejects unverified trial and active status strings', () => {
   assert.equal(deriveAccess({ status: 'active' }).hasAccess, false);
   assert.equal(deriveAccess({ status: 'checkout_pending' }).hasAccess, false);
   assert.equal(deriveAccess(null).status, 'none');
+});
+
+
+test('new Starter checkout never accepts the old $7 variation or a changed monthly price',()=>{
+ const object={id:'starter9',type:'SUBSCRIPTION_PLAN_VARIATION',subscription_plan_variation_data:{name:VARIATION_NAMES['cloud-9'],phases:[
+  {ordinal:0,cadence:'DAILY',periods:7,pricing:{price:{amount:0,currency:'USD'}}},
+  {ordinal:1,cadence:'MONTHLY',pricing:{price:{amount:900,currency:'USD'}}},
+ ]}};
+ assert.equal(assertStarterVariation(object),'starter9');
+ const old=structuredClone(object);old.subscription_plan_variation_data.name=VARIATION_NAMES['cloud-7'];
+ assert.throws(()=>assertStarterVariation(old),/starter_catalog_price_mismatch/);
+ for(const amount of [700,1700]){const wrong=structuredClone(object);wrong.subscription_plan_variation_data.phases[1].pricing.price.amount=amount;assert.throws(()=>assertStarterVariation(wrong),/starter_catalog_price_mismatch/);}
 });

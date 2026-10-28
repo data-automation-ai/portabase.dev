@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {applyUsage} from '../netlify/shared/confidential-usage.mjs';
+import {CLOUD_PLANS} from '../netlify/shared/product.mjs';
 import {confidentialAdmission} from '../netlify/functions/cloud-confidential-admission.mjs';
 const user={id:'confirmed-customer',cloudVersion:'supabase',emailVerified:true};
 const event=(operation='backup.start',requestId=randomUUID())=>({httpMethod:'POST',body:JSON.stringify({operation,requestId})});
@@ -70,4 +72,18 @@ test('isolated validation owner may restart a failed runner without changing pub
   const other=fixture({validationOwnerId:'other',validationMaxBytes:String(25*1024**3)});
   assert.equal((await other.run(event('runner.start'))).statusCode,200);
   assert.equal((await other.run(event('runner.start'))).statusCode,429);
+});
+
+
+test('Starter requires trusted matching reservation and exposes finite decimal allowance',async()=>{
+ let saved=null;const usageStore=()=>({getWithMetadata:async()=>saved,setJSON:async(_k,data)=>{saved={data,etag:'1'};return {modified:true};}});
+ const at=Date.now(),paid={plan:'cloud-9',status:'active',verifiedBy:'square_api',squareSubscriptionId:'paid',squareVerifiedAt:new Date(at-1000).toISOString(),currentPeriodEnd:new Date(at+86400000).toISOString()};
+ const {run}=fixture({subscription:async()=>paid,usageStore});
+ const inspected=JSON.parse((await run(event('quota.inspect'))).body);
+ assert.equal(inspected.usage.allowanceBytes,10_000_000_000);
+ const requestId=randomUUID();assert.equal((await run(event('backup.start',requestId))).statusCode,409);
+ await applyUsage(usageStore(),'owner',{operation:'reserve',requestId,projectRef:'a'.repeat(20),kind:'backup',binaryMode:'baseline',databaseBytes:0,binaryBytes:0,otherBytes:0},{now:at,plan:CLOUD_PLANS['cloud-9']});
+ assert.equal((await run(event('restore.start',requestId))).statusCode,409);
+ assert.equal((await run(event('backup.start',requestId))).statusCode,200);
+ assert.equal((await run(event('backup.start',requestId))).statusCode,409);
 });

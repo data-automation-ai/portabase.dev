@@ -118,7 +118,7 @@ test('uploadCapsuleToDropbox: verifies content_hash and rejects mismatch', async
           name: 'manifest.json',
           path_display: '/Portabase/test-capsule/manifest.json',
           content_hash: expectedHash,
-          size: 100,
+          size: fs.statSync(testFile).size,
         }),
       };
     }
@@ -142,7 +142,7 @@ test('uploadCapsuleToDropbox: verifies content_hash and rejects mismatch', async
           name: 'manifest.json',
           path_display: '/Portabase/test-capsule/manifest.json',
           content_hash: '0000000000000000000000000000000000000000000000000000000000000000',
-          size: 100,
+          size: fs.statSync(testFile).size,
         }),
       };
     }
@@ -154,6 +154,8 @@ test('uploadCapsuleToDropbox: verifies content_hash and rejects mismatch', async
     /Dropbox content_hash mismatch/
   );
 
+  // Correct content hash cannot hide a mismatched remote byte count.
+  await assert.rejects(uploadCapsuleToDropbox(tmpDir,{accessToken:'valid-token',fetchImpl:async()=>({ok:true,status:200,json:async()=>({content_hash:expectedHash,size:fs.statSync(testFile).size+1})})}),/Dropbox content_hash mismatch/);
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -346,7 +348,7 @@ test('cloud-storage-connectors netlify function handler', async () => {
   assert.equal(testGDriveData.provider, 'google-drive');
   assert.ok(testGDriveData.verifiedHash);
 
-  // 5. POST action=upload-capsule (simulated)
+  // 5. An unauthenticated upload cannot fabricate successful delivery.
   const postUpload = await storageConnectorsHandler({
     httpMethod: 'POST',
     body: JSON.stringify({
@@ -355,11 +357,10 @@ test('cloud-storage-connectors netlify function handler', async () => {
       simulate: true,
     }),
   });
-  assert.equal(postUpload.statusCode, 200);
+  assert.equal(postUpload.statusCode, 401);
   const uploadData = JSON.parse(postUpload.body);
-  assert.equal(uploadData.ok, true);
-  assert.equal(uploadData.verified, true);
-  assert.ok(uploadData.destination.startsWith('dropbox:'));
+  assert.equal(uploadData.error, 'unauthorized');
+  assert.equal(uploadData.verified, undefined);
 
   // 6. Unknown action returns 400
   const badActionRes = await storageConnectorsHandler({

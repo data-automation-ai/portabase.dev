@@ -8,7 +8,7 @@ export function DocsPage({ Logo, Arrow }) {
 
 export function LegalPage({ Logo, Arrow, Footer }) {
   useEffect(() => {
-    document.title = 'Portabase — Legal · disclaimer';
+    document.title = 'Portabase — Legal and Terms of Use';
     window.scrollTo(0, 0);
   }, []);
 
@@ -29,8 +29,8 @@ export function LegalPage({ Logo, Arrow, Footer }) {
       <main>
         <section className="security-hero" id="disclaimer">
           <div className="shell">
-            <div className="section-kicker red">LEGAL · DISCLAIMER</div>
-            <h1>Not affiliated with Supabase, Inc.</h1>
+            <div className="section-kicker red">LEGAL AND TERMS OF USE</div>
+            <h1>Legal and Terms of Use</h1><p><strong>Not affiliated with Supabase, Inc.</strong></p>
             <p className="security-lead">
               Portabase is an independent product of DataAutomation.ai, LLC.
               <strong> We are not affiliated with, endorsed by, or sponsored by Supabase, Inc.</strong>
@@ -44,15 +44,15 @@ export function LegalPage({ Logo, Arrow, Footer }) {
               <article>
                 <b>Customer owns destinations and keys</b>
                 <p>
-                  You choose S3, Dropbox, Drive, rclone, NAS, or Local Starter.
+                  You choose a supported customer-controlled vault; the standalone CLI supports additional destinations.
                   Encryption passphrases and wrap keys are yours.
-                  Portabase Cloud is <strong>designed to be blind</strong> to those secrets and does not host capsule plaintext or ciphertext as the vault of record.
+                  Managed jobs process plaintext and keys inside an attested Secure Enclave in Portabase-operated Google Cloud infrastructure. Portabase is not your recovery vault.
                 </p>
               </article>
               <article>
                 <b>No hosted-vault promise</b>
                 <p>
-                  Paying for Cloud buys GUI, configuration, telemetry, and alerts — not object storage for recovery bytes.
+                  The managed subscription covers its stated runner and transfer allowance. Customer vault storage remains separate.
                   If you only have this website, you cannot restore a project.
                 </p>
               </article>
@@ -66,7 +66,7 @@ export function LegalPage({ Logo, Arrow, Footer }) {
             </div>
             <p className="security-prose">
               Contact: <a href="mailto:escape@portabase.dev">escape@portabase.dev</a>.
-              Privacy: no analytics on the public site. Telemetry to Cloud is opt-in health metadata only.
+              The account service processes identity, billing, provider-connection and usage metadata. See the security page for the managed workload and credential boundaries.
             </p>
           </div>
         </section>

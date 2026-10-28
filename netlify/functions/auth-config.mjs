@@ -1,3 +1,4 @@
+import {runtimePolicy,managedStarterReady} from '../shared/runtime-policy.mjs';
 import { publicAuthConfigBoth, jsonResponse } from '../shared/verify-user.mjs';
 
 export async function handler(event) {
@@ -12,7 +13,8 @@ export async function handler(event) {
 
   try {
     const auth = await publicAuthConfigBoth();
-    return jsonResponse(200, { ok: true, auth });
+    let managedStarterEnabled=false;try{managedStarterEnabled=managedStarterReady(await runtimePolicy());}catch{}
+    return jsonResponse(200, { ok: true, auth, commerce:{managedStarterEnabled} });
   } catch (error) {
     console.error(`auth_config_error=${String(error.message || 'error').replace(/[^a-zA-Z0-9_-]/g, '_')}`);
     return jsonResponse(503, { ok: false, error: 'unavailable' });

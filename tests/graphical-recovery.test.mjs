@@ -36,7 +36,10 @@ test('destination reports MB used/free separately from Storage and preserves unk
 });
 test('dashboard route retains the complete graphical screen rather than replacing it with a picker page',async()=>{
   const route=await readFile(new URL('../src/console/ConsoleApp.jsx',import.meta.url),'utf8');
-  assert.match(route,/case 'dashboard':[\s\S]*?body = <EnclaveDashboard/);
+  const dashboardRoute=route.match(/case 'dashboard':([\s\S]*?)break;/)?.[1];
+  assert.ok(dashboardRoute,'dashboard route exists');
+  assert.match(dashboardRoute,/<UsageOverview\b/);
+  assert.match(dashboardRoute,/<EnclaveDashboard\b[^>]*\{\.\.\.pageProps\}/);
   assert.doesNotMatch(route,/body = <OneTwoThreeDone/);
 });
 test('older partial saved choices cannot blank the recovery screen on reload',()=>{

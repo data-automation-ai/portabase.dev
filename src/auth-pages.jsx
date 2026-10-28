@@ -87,7 +87,7 @@ function AuthShell({ children, title, lead, version, cardLabel, isWide = false }
               </div>
               <ul className="auth-bullets">
                 <li><span aria-hidden="true">1</span> Sign in with email or Google</li>
-                <li><span aria-hidden="true">2</span> 7-day trial · card required · then $7/mo (upgrade capacity or cadence anytime in-app)</li>
+                <li><span aria-hidden="true">2</span> 7-day trial · card required · then $9/mo (one project, 10 GB outbound per 30 days)</li>
                 <li><span aria-hidden="true">3</span> You own the capsule vault. Keys are never posted to Portabase servers.</li>
               </ul>
               <div className="auth-keys-note">
@@ -387,7 +387,7 @@ export function LoginPage() {
       version={version}
       isWide={mode === 'signup' && !awaitingConfirm}
       title={mode === 'signup' ? 'Create your Cloud account' : mode === 'forgot' ? 'Reset password' : mode === 'update-password' ? 'Choose a new password' : 'Sign in to Cloud'}
-      lead="Email, magic link, or Google. Cloud Free 40 GB, or $7/mo via Square — upgrade cadence or capacity anytime in-app. You bring capsule storage. Keys are never posted to Portabase servers."
+      lead="Email, magic link, or Google. Cloud Free allows manual captures up to 10 GB. Starter is $9/mo via Square: one project and 10 GB outbound per 30 days. You provide capsule storage; managed jobs process keys inside an attested Secure Enclave."
       cardLabel={mode === 'signup' ? 'Create account' : mode === 'forgot' || mode === 'update-password' ? 'Reset password' : 'Sign in'}
     >
       <VersionPicker version={version} onChange={selectVersion} />
@@ -654,8 +654,8 @@ export function LoginPage() {
       {error && <p className="auth-error" id="auth-error" role="alert">{error}</p>}
       <p className="auth-legal">
         Launch scope: <strong>Supabase projects only</strong> (database, Auth, Storage, Edge Functions).
-        Identity: hosted Supabase Auth (email, magic link, Google). Trial requires a card and becomes $7/mo after {productConfig.trialDays} days unless canceled, with an optional +$10/mo in-app upgrade for unlimited projects, incremental capsules up to 10 GB, and 3 capsules / day cadence.
-        Keys are never posted to Portabase servers. Telemetry is status and hashes only — designed and tested in this repo, not a third-party audit.
+        Identity: hosted Supabase Auth (email, magic link, Google). Trial requires a card and becomes $9/mo after {productConfig.trialDays} days unless canceled: one project, one backup per 24 hours and 10 GB outbound per 30 days. Portabase covers the initial binary snapshot; later binary transfers are incremental and selected database content is captured in full.
+        Managed recovery processes plaintext and keys inside an attested Secure Enclave in Portabase-operated Google Cloud infrastructure. Verification evidence is not a third-party audit.
         {AWS_CLOUD_VERSION_ENABLED ? '' : ' AWS Cognito Cloud is not offered yet.'}
       </p>
     </AuthShell>

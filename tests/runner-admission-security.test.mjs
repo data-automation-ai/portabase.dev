@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {lambdaHandler as unattendedRestore} from '../netlify/functions/cloud-unattended-restore.mjs';
+import {lambdaHandler as storageUpload} from '../netlify/functions/cloud-storage-connectors.mjs';
+import {enqueuePrivateJob} from '../netlify/shared/job-enqueue.mjs';
 import { createJobsHandler } from '../netlify/functions/cloud-jobs.mjs';
 import { createRunnersHandler } from '../netlify/functions/cloud-runners.mjs';
 import { runnerAdmission } from '../netlify/shared/runner-admission.mjs';
@@ -156,7 +159,7 @@ test('Cloud Free keeps one manual backup; concurrent requests cannot exceed it o
   assert.ok(lookups.every(key => key === 'supabase:a'));
   const jobs = await db.get('jobs:supabase:a');
   assert.equal(jobs.length, 1);
-  assert.deepEqual(jobs[0].admission, { paid: false, planId: 'cloud-free', maxBytes: 40 * 1024 * 1024 * 1024, manual: true });
+  assert.deepEqual(jobs[0].admission, { paid: false, planId: 'cloud-free', maxBytes: 10 * 1024 * 1024 * 1024, manual: true });
 });
 
 test('paid Starter gets three transfers only with a verified unexpired add-on', async () => {
@@ -233,4 +236,28 @@ test('queued job claims are atomic and preserve quota evidence when many other j
   const rows = await db.get('jobs:supabase:a');
   await db.setJSON('jobs:supabase:a', [...Array.from({ length: 60 }, (_, i) => ({ id: `job_${i}`, status: 'succeeded', type: 'heartbeat', createdAt: new Date(now).toISOString() })), ...rows]);
   assert.equal((await handler(post(backup))).statusCode, 429);
+});
+
+
+test('new Starter cannot bypass attested transfer accounting through legacy queues or runner intents',async()=>{
+ const starter={...paid,plan:'cloud-9'};
+ const jobs=fixture(createJobsHandler,starter);
+ assert.equal((await jobs.handler(post(backup))).statusCode,403);
+ assert.equal(JSON.parse((await jobs.handler(post(backup))).body).error,'use_confidential_runner');
+ await jobs.db.setJSON('jobs:supabase:a',[{id:'job_queued',version:2,runnerId,type:'backup',status:'queued',payload:configReference(backup),admission:{paid:true,planId:'cloud-9',maxBytes:10*1024**3}}]);
+ assert.equal((await jobs.handler(post({version:2,type:'claim',runnerId}))).statusCode,403);
+ const runners=fixture(createRunnersHandler,starter);
+ await runners.db.setJSON('runners:supabase:a',[{runnerId:'existing',status:'running'}]);
+ for(const action of ['provision','wake'])assert.equal((await runners.handler(post({action,runnerId:'existing'}))).statusCode,403);
+ assert.equal((await runners.handler(post({action:'sleep',runnerId:'existing'}))).statusCode,202);
+});
+
+
+test('Starter cannot use legacy standalone transfer or scheduled enqueue as a quota bypass',async()=>{
+ const starter={...paid,plan:'cloud-9',currentPeriodEnd:'2099-01-01T00:00:00Z'};
+ const options={authenticate,subscription:async()=>starter,getSubscription:async()=>starter};
+ assert.equal((await storageUpload(post({action:'upload-capsule'}),options)).statusCode,403);
+ assert.equal((await unattendedRestore(post({action:'run'}),options)).statusCode,403);
+ const result=enqueuePrivateJob({jobs:[],claimSlots:[]},{access:runnerAdmission(starter,now),parsed:{type:'backup'},occurrence:{id:'scheduled'},now});
+ assert.equal(result.error,'use_confidential_runner');assert.equal(result.status,403);
 });

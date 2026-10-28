@@ -5,6 +5,7 @@ import { manualBackupBlocked } from '../../cloud/runner/job-intent.mjs';
 /** Pure shared reservation policy. The caller must commit these rows with its
  * schedule occurrence/high-water in the SAME account queue CAS. */
 export function enqueuePrivateJob(queue, { user, runner, parsed, access, now, occurrence = null }) {
+  if(access.plan.id==='cloud-9')return {status:403,error:'use_confidential_runner'};
   if (occurrence && (!access.paid || access.plan.scheduled !== true)) return { status: 402, error: 'subscription_required' };
   if (parsed.type === 'backup') {
     const used = countTransfersLast24h(queue.jobs.filter(row => row.type === 'backup'), { now });
@@ -26,6 +27,7 @@ export function enqueuePrivateJob(queue, { user, runner, parsed, access, now, oc
 }
 
 export function scheduledClaimAllowed(job, queue, access) {
+  if(access.plan.id==='cloud-9')return false;
   if (!job.schedule) return true;
   const schedule = (queue.schedules || []).find(row => row.id === job.schedule.id);
   return access.paid && access.plan.scheduled === true && schedule?.enabled === true

@@ -1,4 +1,5 @@
 import { resolveServerSecret } from './secrets.mjs';
+import { runtimePolicy } from './runtime-policy.mjs';
 import {
   CLOUD_DEFAULT_PLAN_ID,
   CLOUD_PLANS,
@@ -19,6 +20,7 @@ import {
 export const SQUARE_API_VERSION = '2026-05-20';
 export const PLAN_NAME = 'Portabase Cloud';
 export const VARIATION_NAMES = Object.freeze({
+  'cloud-9': 'Portabase Cloud · Starter Escape · 7-day trial → $9/mo (1 project · 10 GB outbound/30 days · incremental binaries)',
   'cloud-7': 'Portabase Cloud · Starter Escape · 7-day trial → $7/mo (1 project · up to 500 MB · 1 capsule/24h · BYO storage)',
   'cloud-17': 'Portabase Cloud · Daily Escape · 7-day trial → $17/mo (unlimited projects · up to 10 GB · 3 capsules/day · BYO storage)',
   'cloud-37': 'Portabase Cloud · Scale Escape · legacy hidden · $37/mo (up to 100 GB · BYO storage)',
@@ -123,7 +125,13 @@ export function catalogVariationIdFromUpsert(batch, variationClientId) {
  */
 export async function ensureCloudPlanVariationId(planId = CLOUD_DEFAULT_PLAN_ID) {
   const plan = getCloudPlan(planId);
-  const configured = variationEnv(plan.id);
+  const configured = variationEnv(plan.id) || (plan.id === 'cloud-9' ? (await runtimePolicy()).starterVariationId : null);
+  if (plan.id === 'cloud-9') {
+    if (!configured) throw new Error('starter_checkout_not_configured');
+    const found = await squareFetch('/v2/catalog/object/' + encodeURIComponent(configured));
+    assertStarterVariation(found.object);
+    return configured;
+  }
   if (configured) return configured;
 
   const variationName = VARIATION_NAMES[plan.id] || VARIATION_NAMES[CLOUD_DEFAULT_PLAN_ID];
@@ -185,6 +193,18 @@ export async function ensureCloudPlanVariationId(planId = CLOUD_DEFAULT_PLAN_ID)
   const createdId = catalogVariationIdFromUpsert(batch, variationId);
   if (!createdId) throw new Error('plan_variation_create_failed');
   return createdId;
+}
+
+export function assertStarterVariation(object) {
+  const data = object?.subscription_plan_variation_data, phases = data?.phases || [];
+  const trial = phases.find(p=>p.ordinal===0), monthly = phases.find(p=>p.ordinal===1);
+  if (object?.type !== 'SUBSCRIPTION_PLAN_VARIATION' || object.is_deleted || data?.name !== VARIATION_NAMES['cloud-9']
+    || phases.length !== 2 || trial?.cadence !== 'DAILY' || trial.periods !== CLOUD_TRIAL_DAYS
+    || Number(trial.pricing?.price?.amount) !== 0 || trial.pricing?.price?.currency !== 'USD'
+    || monthly?.cadence !== 'MONTHLY' || monthly.periods != null
+    || Number(monthly.pricing?.price?.amount) !== 900 || monthly.pricing?.price?.currency !== 'USD')
+    throw new Error('starter_catalog_price_mismatch');
+  return object.id;
 }
 
 /** Square catalog ID for Extra transfers add-on. Louis pins SQUARE_EXTRA_TRANSFERS_ADDON_VARIATION_ID[_7|_17|_37]. */

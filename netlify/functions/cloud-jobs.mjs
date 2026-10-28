@@ -63,8 +63,10 @@ export function createJobsHandler({ authenticate = verifyCloudUser, getSubscript
         if (access !== undefined) return access;
         return access = runnerAdmission(await (getSubscription ? getSubscription(account) : getSubscriptionForUser(user)), clock());
       }
+      if(parsed.action==='queue'&&(await currentAccess()).plan.id==='cloud-9')return jsonResponse(403,{error:'use_confidential_runner'});
       async function admissionError(job, queue) {
         const current = await currentAccess();
+        if(current.plan.id==='cloud-9')return 'use_confidential_runner';
         if (!job.admission || (!current.paid && job.admission.paid)) return 'subscription_required';
         if (job.admission.maxBytes > current.plan.storageCapBytes) return 'job_exceeds_plan';
         if (!scheduledClaimAllowed(job, queue, current)) return 'schedule_no_longer_active';
@@ -122,7 +124,7 @@ export function createJobsHandler({ authenticate = verifyCloudUser, getSubscript
               if (parsed.claimSequence === previous.sequence) {
                 if (parsed.claimRequestId !== previous.requestId) return jsonResponse(409, { error: 'claim_reference_conflict' });
                 const denied = priorJob?.status === 'running' ? await admissionError(priorJob, queue) : null;
-                if (denied) return jsonResponse(denied === 'schedule_no_longer_active' ? 409 : 402, { error: denied });
+                if (denied) return jsonResponse(denied === 'use_confidential_runner' ? 403 : denied === 'schedule_no_longer_active' ? 409 : 402, { error: denied });
                 return jsonResponse(200, { ok: true, job: publicJob(priorJob), claim: publicClaimDecision(previous), execution: 'intent_queue_only', deduplicated: true });
               }
               if (parsed.claimSequence !== previous.sequence + 1 || parsed.claimRequestId === previous.requestId) return jsonResponse(409, { error: 'claim_sequence_conflict' });
@@ -138,6 +140,7 @@ export function createJobsHandler({ authenticate = verifyCloudUser, getSubscript
             return jsonResponse(409, { error: 'durable_claim_required' });
           }
           await currentAccess();
+          if(access.plan.id==='cloud-9')return jsonResponse(403,{error:'use_confidential_runner'});
           jobs = jobs.map(row => row.status === 'queued' && row.schedule && !scheduledClaimAllowed(row, queue, access)
             ? { ...row, status: 'cancelled', finishedAt: new Date(now).toISOString(), safeError: null } : row);
           const eligible = jobs.filter(row => privateJob
@@ -147,7 +150,7 @@ export function createJobsHandler({ authenticate = verifyCloudUser, getSubscript
           job = claimed.job;
           if (!job && parsed.claimProtocol !== 1) return jsonResponse(200, { ok: true, job: null });
           const denied = job ? await admissionError(job, queue) : null;
-          if (denied) return jsonResponse(denied === 'schedule_no_longer_active' ? 409 : 402, { error: denied });
+          if (denied) return jsonResponse(denied === 'use_confidential_runner' ? 403 : denied === 'schedule_no_longer_active' ? 409 : 402, { error: denied });
           next = job ? jobs.map(row => row.id === job.id ? job : row) : jobs;
           if (parsed.claimProtocol === 1) {
             claimSlot = { slot: runner.slot, runnerId: runner.id, sequence: parsed.claimSequence,

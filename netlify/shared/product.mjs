@@ -13,6 +13,21 @@ const GB = 1024 * 1024 * 1024;
 const MB = 1024 * 1024;
 
 export const CLOUD_PLANS = Object.freeze({
+  'cloud-9': Object.freeze({
+    id: 'cloud-9', priceMonthlyUsd: 9, priceMonthlyCents: 900,
+    storageCapMb: 10 * 1024, storageCapGb: 10, storageCapBytes: 10 * GB,
+    storageCapLabel: '10 GB per capture',
+    projects: 1, databases: 1, databasesUnlimited: false, databasesLabel: '1 project',
+    transfersPer24h: 1, escapesPerDay: 1, cyclesPerDay: 1,
+    transferAllowanceBytes: 10 * 1000 * 1000 * 1000, transferPeriodDays: 30,
+    transferDirection: 'outbound', binaryTransferMode: 'incremental', initialBinarySnapshotIncluded: true,
+    keepAliveIntervalHours: 72, keepAliveIncluded: true,
+    scheduled: false, customerFacing: true, title: 'Starter Escape',
+    cadenceLabel: '1 project · 1 backup / 24h · 10 GB outbound / 30 days',
+    shortLabel: '$9/mo · 1 project · 10 GB transfer / 30 days',
+    squareEnvKey: 'SQUARE_CLOUD_PLAN_VARIATION_ID_9', smsOptional: false,
+  }),
+
   'cloud-7': Object.freeze({
     id: 'cloud-7',
     priceMonthlyUsd: 7,
@@ -29,7 +44,7 @@ export const CLOUD_PLANS = Object.freeze({
     escapesPerDay: 1,
     cyclesPerDay: 1,
     scheduled: true,
-    customerFacing: true,
+    customerFacing: false,
     title: 'Starter Escape',
     cadenceLabel: '1 project · up to 10 GB · 1 capsule / 24h',
     shortLabel: '$7/mo · 1 project · 10 GB',
@@ -102,7 +117,7 @@ export function publicCloudPlans() {
   return Object.values(CLOUD_PLANS).filter((plan) => plan.customerFacing !== false);
 }
 
-export const CLOUD_DEFAULT_PLAN_ID = 'cloud-7';
+export const CLOUD_DEFAULT_PLAN_ID = 'cloud-9';
 export const CLOUD_PLAN_ID = CLOUD_DEFAULT_PLAN_ID;
 export const LEGACY_PLAN_ALIASES = Object.freeze({
   'cloud-27': 'cloud-17',
@@ -133,7 +148,7 @@ function extraTransfersAddonUsdOverride() {
 
 export function extraTransfersAddonForPlan(planId = CLOUD_DEFAULT_PLAN_ID) {
   const plan = getCloudPlan(planId);
-  return EXTRA_TRANSFERS_ADDON_BY_PLAN[plan.id] || EXTRA_TRANSFERS_ADDON_BY_PLAN[CLOUD_DEFAULT_PLAN_ID];
+  return EXTRA_TRANSFERS_ADDON_BY_PLAN[plan.id] || EXTRA_TRANSFERS_ADDON_BY_PLAN['cloud-7'];
 }
 
 export function extraTransfersAddonMonthlyUsd(planId = CLOUD_DEFAULT_PLAN_ID) {
@@ -251,7 +266,7 @@ export function publicPlanCards() {
 export function planTransfersPer24h(planId = CLOUD_DEFAULT_PLAN_ID, { extraTransfersAddon } = {}) {
   const plan = getCloudPlan(planId);
   const included = Math.max(0, Number(plan.transfersPer24h || plan.escapesPerDay || BASE_TRANSFERS_PER_24H) || 0);
-  if (extraTransfersAddon) return Math.max(included, ADDON_TRANSFERS_PER_24H);
+  if (extraTransfersAddon && plan.id !== 'cloud-9') return Math.max(included, ADDON_TRANSFERS_PER_24H);
   return included;
 }
 
@@ -274,6 +289,11 @@ export function cyclesPerDay(extraCycles = 0, extraTransfersAddon = false) {
     extraTransfersAddon: addon,
     planId: plan.id,
     priceMonthlyCents: plan.priceMonthlyCents,
+    transferAllowanceBytes: plan.transferAllowanceBytes ?? null,
+    transferPeriodDays: plan.transferPeriodDays ?? null,
+    binaryTransferMode: plan.binaryTransferMode ?? null,
+    initialBinarySnapshotIncluded: plan.initialBinarySnapshotIncluded === true,
+    keepAliveIntervalHours: plan.keepAliveIntervalHours ?? null,
     storageCapGb: plan.storageCapGb,
   };
 }
@@ -287,13 +307,18 @@ export function monthlyTotalCents(extraCyclesOrPlan = 0) {
 
 export function subscriptionDescription(planId = CLOUD_DEFAULT_PLAN_ID) {
   const plan = getCloudPlan(planId);
-  return `Portabase Cloud for Supabase — ${CLOUD_TRIAL_DAYS}-day trial then $${plan.priceMonthlyUsd}/mo (Square). ${plan.cadenceLabel}. Customer provides capsule storage. Portabase has zero knowledge of encryption keys.`;
+  return `Portabase Cloud for Supabase — ${CLOUD_TRIAL_DAYS}-day trial then $${plan.priceMonthlyUsd}/mo (Square). ${plan.cadenceLabel}. Customer provides capsule storage. Managed jobs process encryption keys inside an attested secure enclave.`;
 }
 
 export function publicPlansPayload() {
   return Object.fromEntries(Object.values(CLOUD_PLANS).map((plan) => [plan.id, {
     id: plan.id,
     priceMonthlyCents: plan.priceMonthlyCents,
+    transferAllowanceBytes: plan.transferAllowanceBytes ?? null,
+    transferPeriodDays: plan.transferPeriodDays ?? null,
+    binaryTransferMode: plan.binaryTransferMode ?? null,
+    initialBinarySnapshotIncluded: plan.initialBinarySnapshotIncluded === true,
+    keepAliveIntervalHours: plan.keepAliveIntervalHours ?? null,
     storageCapGb: plan.storageCapGb,
     storageCapLabel: plan.storageCapLabel,
     escapesPerDay: plan.escapesPerDay,

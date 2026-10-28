@@ -3,6 +3,7 @@
  * Prefer LIVE (production). TEST = sandbox.
  */
 
+import {runtimePolicy,managedStarterReady} from './runtime-policy.mjs';
 import { resolvePortabaseSquareSecret } from './square-cloud.mjs';
 
 export const SQUARE_REQUIRED_VARS = Object.freeze([
@@ -15,6 +16,7 @@ export const SQUARE_WEBHOOK_VARS = Object.freeze([
 ]);
 
 export const SQUARE_CATALOG_PIN_VARS = Object.freeze([
+  'SQUARE_CLOUD_PLAN_VARIATION_ID_9',
   'SQUARE_CLOUD_PLAN_VARIATION_ID_7',
   'SQUARE_CLOUD_PLAN_VARIATION_ID',
   'SQUARE_CLOUD_PLAN_VARIATION_ID_17',
@@ -68,12 +70,13 @@ export function squareBlockedPayload(inspect = inspectSquareCheckoutReady()) {
 }
 
 // Use the same AWS-first, product-scoped resolution as actual checkout.
-export async function resolveSquareCheckoutReady({ env = process.env, resolve = resolvePortabaseSquareSecret } = {}) {
+export async function resolveSquareCheckoutReady({ env = process.env, resolve = resolvePortabaseSquareSecret, configuration=runtimePolicy } = {}) {
   const inspection = inspectSquareCheckoutReady(env);
   const results = await Promise.allSettled(SQUARE_REQUIRED_VARS.map(name =>
     resolve(name, name === 'SQUARE_ACCESS_TOKEN' ? 'access_token' : 'location_id', { env })));
   inspection.missing = SQUARE_REQUIRED_VARS.filter((name, i) =>
     results[i].status !== 'fulfilled' || !String(results[i].value || '').trim());
   inspection.ready = inspection.missing.length === 0;
+  try{inspection.starterReady=inspection.ready&&managedStarterReady(await configuration());}catch{inspection.starterReady=false;}
   return inspection;
 }

@@ -1,4 +1,3 @@
-import { withBlobs } from '../shared/subscription-store.mjs';
 /**
  * GET /api/cloud/dashboard — customer telemetry for the signed-in user.
  * Reads the jobs blob store + subscription. Never returns keys or capsule bytes.
@@ -12,12 +11,14 @@ import { publicSquareStatus } from '../../src/lib/square-public.js';
 import { runnerAdmission } from '../shared/runner-admission.mjs';
 import { publicDashboardJob } from '../shared/public-records.mjs';
 import { normalizeJobQueue } from '../shared/job-queue-envelope.mjs';
+import { usageDatabase, usageKey, usageSummary } from '../shared/confidential-usage.mjs';
+import { confidentialRuntimeView, confidentialBeaconView } from '../shared/confidential-runtime-view.mjs';
 
 function jobsStore() {
   return store('portabase-cloud-jobs');
 }
 
-export function createDashboardHandler({ authenticate = verifyCloudUser, jobsDatabase = jobsStore, subscription = getSubscriptionForUser, squareStatus = async () => publicSquareStatus(await resolveSquareCheckoutReady()) } = {}) {
+export function createDashboardHandler({ authenticate = verifyCloudUser, jobsDatabase = jobsStore, usageStore = usageDatabase, runtime = confidentialRuntimeView, beacon = confidentialBeaconView, clock = Date.now, subscription = getSubscriptionForUser, squareStatus = async () => publicSquareStatus(await resolveSquareCheckoutReady()) } = {}) {
 return async function handler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return jsonResponse(204, {}, {
@@ -56,6 +57,15 @@ return async function handler(event) {
   catch { return jsonResponse(503, { error: 'dashboard_subscription_unavailable' }); }
   const access = deriveAccess(record);
   const admission = runnerAdmission(record);
+  let usage;
+  try {
+    const snapshot = await usageStore().getWithMetadata(usageKey(user), { type: 'json' });
+    usage = usageSummary(snapshot?.data, { now: clock(), allowanceBytes: admission.plan.transferAllowanceBytes ?? null });
+  } catch { usage = { available: false, error: 'usage_service_unavailable' }; }
+  const [runnerUsage,beaconUsage] = await Promise.all([
+    runtime(event,{windowStart:usage.periodStart}).catch(()=>({available:false,status:'runner_usage_unavailable'})),
+    beacon(event).catch(()=>({available:false,status:'beacon_status_unavailable'})),
+  ]);
   const square = await squareStatus();
   const model = buildDashboardModel({
     jobs: safeJobs,
@@ -81,6 +91,9 @@ return async function handler(event) {
     demo: false,
     empty: model.empty,
     jobs: safeJobs,
+    usage,
+    runnerUsage,
+    beaconUsage,
     model,
     proof: model.proof,
     access,
@@ -97,4 +110,8 @@ return async function handler(event) {
   });
 }
 }
-export const handler = withBlobs(createDashboardHandler());
+const dashboardHandler=createDashboardHandler();
+export default async function handler(request) {
+  const result=await dashboardHandler({httpMethod:request.method,headers:Object.fromEntries(request.headers)});
+  return new Response(result.statusCode===204?null:result.body,{status:result.statusCode,headers:result.headers});
+}

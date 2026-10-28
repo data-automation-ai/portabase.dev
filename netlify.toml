@@ -1,3 +1,23 @@
+[[redirects]]
+  from = "/api/cases/submit"
+  to = "/.netlify/functions/cases-submit"
+  status = 200
+
+[[redirects]]
+  from = "/api/cases/manage"
+  to = "/.netlify/functions/cases-manage"
+  status = 200
+
+[[redirects]]
+  from = "/api/cases"
+  to = "/.netlify/functions/cases"
+  status = 200
+
+[[redirects]]
+  from = "/api/cloud/confidential-session"
+  to = "/.netlify/functions/cloud-confidential-session"
+  status = 200
+
 [build]
   command = "npm run build"
   publish = "dist"
@@ -178,6 +198,11 @@
 [[redirects]]
   from = "/api/cloud/oauth"
   to = "/.netlify/functions/cloud-oauth"
+  status = 200
+
+[[redirects]]
+  from = "/api/cloud/confidential-usage"
+  to = "/.netlify/functions/cloud-confidential-usage"
   status = 200
 
 [[redirects]]

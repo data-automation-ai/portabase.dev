@@ -1,0 +1,311 @@
+[
+  {
+    "worktree": "C:/Users/ryanh/git/portabase.dev",
+    "HEAD": "563c8a7a572926325bfe777781ff2f834b2bd887",
+    "branch": "refs/heads/main",
+    "exists": true,
+    "changes": [
+      " M .dockerignore",
+      " M CHANGELOG.md",
+      " M LICENSE",
+      " M PROJECT.md",
+      " M PROJECT_STATUS.md",
+      " M README.md",
+      " M cloud/runner/cloud-run-server.mjs",
+      " M docs/BILLING.md",
+      " M docs/CLOUD.md",
+      " M docs/CLOUD_INFRASTRUCTURE.md",
+      " M docs/KEY-PROTECTION.md",
+      " M docs/LAUNCH-SCOPE.md",
+      " M docs/LICENSING_ARCHITECTURE.md",
+      " M docs/OPEN_CORE.md",
+      " M docs/PRODUCT_SPEC.md",
+      " M docs/SECURITY-TRUST.md",
+      " M docs/SITE-SHIP.md",
+      " M docs/SQUARE_SETUP.md",
+      " M docs/ZERO-KNOWLEDGE.md",
+      " M netlify.toml",
+      " M netlify/functions/cloud-oauth.mjs",
+      " M netlify/functions/cloud-storage-connectors.mjs",
+      " M netlify/shared/product.mjs",
+      " M package-lock.json",
+      " M package.json",
+      " M src/auth-pages.jsx",
+      " M src/backend-page.jsx",
+      " M src/components/keys-flow.jsx",
+      " M src/console/ConsoleApp.jsx",
+      " M src/console/connect-supabase.jsx",
+      " M src/console/one-two-three-done.jsx",
+      " M src/console/pages.jsx",
+      " M src/console/storage-providers-page.jsx",
+      " M src/console/supabase-source-card.jsx",
+      " M src/console/table-sizer.jsx",
+      " M src/console/walkthrough.jsx",
+      " M src/data/backend.js",
+      " M src/data/diagrams.js",
+      " M src/data/docs.js",
+      " M src/data/faq.js",
+      " M src/data/never-hold-keys.js",
+      " M src/data/nightmares.js",
+      " M src/data/recovery-acknowledgments.js",
+      " M src/docs/DocsApp.jsx",
+      " M src/lib/cloud-api.js",
+      " M src/lib/incident-order.js",
+      " M src/lib/product.js",
+      " M src/lib/table-sizer.js",
+      " M src/main.jsx",
+      " M src/recovery-ack.jsx",
+      " M src/recovery-home.css",
+      " M src/site-pages.jsx",
+      " M src/styles.css",
+      " M tests/cloud-storage-connectors.test.mjs",
+      " M tests/docs-site.test.mjs",
+      " M tests/homepage-faq.test.mjs",
+      " M tests/incident-order.test.mjs",
+      " M tests/product-plans.test.mjs",
+      " M tests/recovery-ack.test.mjs",
+      " M tests/recovery-options.test.mjs",
+      " M tests/runner-admission-security.test.mjs",
+      " M tests/table-sizer.test.mjs",
+      " M utility/aws/index.mjs",
+      " M utility/capsule-crypto.mjs",
+      " M utility/portabase.mjs",
+      "?? AGENTS.mdx",
+      "?? HANDOFF-2026-10-28.md",
+      "?? \"PortaBase Cloud Runner Dashboard.png\"",
+      "?? cloud/aws-assessment/",
+      "?? cloud/confidential/",
+      "?? cloud/runner/oauth-session-cookie.mjs",
+      "?? deno.lock",
+      "?? docs/AGENT-HANDOFF-2026-10-26.md",
+      "?? docs/AWS-ASSESSMENT-PILOT.md",
+      "?? docs/CODE-REVIEW-2026-10-15.md",
+      "?? docs/CUSTOMER-ATTESTATION.md",
+      "?? docs/CUSTOMER-RUN-PROOF.md",
+      "?? docs/DISCORD-EVIDENCE-REVIEW-2026-10-26.md",
+      "?? netlify/functions/cloud-confidential-admission.mjs",
+      "?? netlify/functions/recent-incidents.mjs",
+      "?? netlify/shared/recent-incidents.mjs",
+      "?? public/aws-tools/",
+      "?? public/icons/dropbox-icon-128.png",
+      "?? public/icons/dropbox-icon-256.png",
+      "?? public/icons/dropbox-icon-64.png",
+      "?? scripts/check-aws-assessment.mjs",
+      "?? src/aws/",
+      "?? src/console/preflight-visual.css",
+      "?? src/console/preflight-visual.jsx",
+      "?? src/console/recovery-flow.css",
+      "?? src/console/recovery-flow.jsx",
+      "?? src/console/vault-setup-guide.css",
+      "?? src/console/vault-setup-guide.jsx",
+      "?? src/data/discord-evidence.js",
+      "?? tests/confidential-admission.test.mjs",
+      "?? tests/hosted-supabase-oauth.test.mjs",
+      "?? tests/recent-incidents.test.mjs"
+    ]
+  },
+  {
+    "worktree": "C:/Users/ryanh/AppData/Local/Temp/claude/C--Users-ryanh-git-portabase-dev/5075c12e-ad7a-485e-93dd-6cbd3d9eb449/scratchpad/deploy-wt",
+    "HEAD": "cb2cdaa7d119a148a1e47fb894a20de87ad0b367",
+    "prunable": "gitdir file points to non-existent location",
+    "exists": false
+  },
+  {
+    "worktree": "C:/Users/ryanh/git/portabase-fill-missing",
+    "HEAD": "7e2a7e3cb3de384d177a3b60280bf3d44c554d3e",
+    "branch": "refs/heads/pr-17-fill-missing",
+    "exists": true,
+    "changes": [
+      " D AGENTS.md",
+      "?? AGENTS.mdx",
+      "?? fill-missing-writers5.log.err",
+      "?? portabase-evidence/"
+    ]
+  },
+  {
+    "worktree": "C:/Users/ryanh/git/portabase-prod-google-deploy",
+    "HEAD": "b4fb4ded6e479daaf48ce0a0a251e7f37eed2d9e",
+    "exists": true,
+    "changes": [
+      " D AGENTS.md",
+      " M netlify.toml",
+      " M src/console/ConsoleApp.jsx",
+      " M src/console/data/store.js",
+      " M src/console/pages.jsx",
+      " M src/lib/google-gis-auth.js",
+      " M src/lib/supabase-auth.js",
+      " M src/main.jsx",
+      "?? AGENTS.mdx",
+      "?? public/images/portabase-vt1b.png",
+      "?? src/lib/sha256-hex.js"
+    ]
+  },
+  {
+    "worktree": "C:/Users/ryanh/git/portabase-review-implement",
+    "HEAD": "fc601e13c10b641819f1adcf8faf5109b62e50ae",
+    "branch": "refs/heads/agent/review-implement",
+    "exists": true,
+    "changes": [
+      " D AGENTS.md",
+      "?? AGENTS.mdx"
+    ]
+  },
+  {
+    "worktree": "C:/Users/ryanh/git/portabase-win-arm64",
+    "HEAD": "084aadaec5c1f6464f7b0cc92230a605a424c6b3",
+    "exists": true,
+    "changes": [
+      " D AGENTS.md",
+      " M package-lock.json",
+      " M package.json",
+      "?? AGENTS.mdx"
+    ]
+  },
+  {
+    "worktree": "C:/Users/ryanh/git/portabase-wt-proofwall",
+    "HEAD": "a4251da7a9cf5a93c064274e3441f06ff6a256ff",
+    "exists": true,
+    "changes": [
+      " D AGENTS.md",
+      " M netlify.toml",
+      "?? AGENTS.mdx"
+    ]
+  },
+  {
+    "worktree": "C:/Users/ryanh/git/portabase.dev/.worktrees/aws-assessment-release-20261027",
+    "HEAD": "2030fefed9a618b231532a5e2e2374631345f688",
+    "exists": true,
+    "changes": [
+      " D AGENTS.md",
+      "?? AGENTS.mdx"
+    ]
+  },
+  {
+    "worktree": "C:/Users/ryanh/git/portabase.dev/.worktrees/confidential-12gb-20261025",
+    "HEAD": "f44f838cc54e96d707eb834c4f8e7e3ef5a22c44",
+    "branch": "refs/heads/codex/12gb-timing-20261025",
+    "exists": true,
+    "changes": [
+      "?? AGENTS.mdx"
+    ]
+  },
+  {
+    "worktree": "C:/Users/ryanh/git/portabase.dev/.worktrees/confidential-app-20261024",
+    "HEAD": "58f32b40742b80f57492556635462f437a792ec4",
+    "exists": true,
+    "changes": [
+      " D AGENTS.md",
+      "?? AGENTS.mdx"
+    ]
+  },
+  {
+    "worktree": "C:/Users/ryanh/git/portabase.dev/.worktrees/deploy-order",
+    "HEAD": "2096f6f38f25eb8b7f50ba1620501bca2df34f7a",
+    "exists": true,
+    "changes": [
+      " D AGENTS.md",
+      "?? AGENTS.mdx"
+    ]
+  },
+  {
+    "worktree": "C:/Users/ryanh/git/portabase.dev/.worktrees/discord-evidence-20261026",
+    "HEAD": "b64f8f112baba6baaebe21f6412519d19d009b32",
+    "exists": true,
+    "changes": [
+      " D AGENTS.md",
+      "?? AGENTS.mdx"
+    ]
+  },
+  {
+    "worktree": "C:/Users/ryanh/git/portabase.dev/.worktrees/enclave-home-20261025",
+    "HEAD": "0504bced9949ba7cb7374a0248278f4316c67cb5",
+    "branch": "refs/heads/codex/enclave-copy-only-20261025",
+    "exists": true,
+    "changes": [
+      "?? AGENTS.mdx"
+    ]
+  },
+  {
+    "worktree": "C:/Users/ryanh/git/portabase.dev/.worktrees/homepage-evidence-20261025",
+    "HEAD": "61781e7b26a26d989287de6210fc8f6087a8cb2a",
+    "branch": "refs/heads/codex/homepage-evidence-20261025",
+    "exists": true,
+    "changes": [
+      " D AGENTS.md",
+      "?? AGENTS.mdx"
+    ]
+  },
+  {
+    "worktree": "C:/Users/ryanh/git/portabase.dev/.worktrees/mobile-sales",
+    "HEAD": "2e158ad756c12ea6eae034dc37a30aae517928e2",
+    "branch": "refs/heads/review/mobile-sales-20261004",
+    "exists": true,
+    "changes": [
+      " D AGENTS.md",
+      " M docs/MOBILE-SALES-REVIEW.md",
+      " M scripts/check-mobile-sales.mjs",
+      " M src/data/closure-cases.js",
+      " M src/main.jsx",
+      " M src/mobile-sales.css",
+      " M src/mobile-sales.jsx",
+      " M src/styles.css",
+      "?? AGENTS.mdx",
+      "?? public/images/mobile-hero-2-portabasse.png",
+      "?? review-evidence/"
+    ]
+  },
+  {
+    "worktree": "C:/Users/ryanh/git/portabase.dev/.worktrees/oauth-diagnostic-20261026",
+    "HEAD": "97d05969f4a069642f97dbe8da272646f3b62005",
+    "exists": true,
+    "changes": [
+      " D AGENTS.md",
+      "?? AGENTS.mdx"
+    ]
+  },
+  {
+    "worktree": "C:/Users/ryanh/git/portabase.dev/.worktrees/panel-development-release",
+    "HEAD": "cbd8304e5231bc9fd5eedbe9d0a9211bc2520876",
+    "exists": true,
+    "changes": []
+  },
+  {
+    "worktree": "C:/Users/ryanh/git/portabase.dev/.worktrees/weekly-research-20261027",
+    "HEAD": "95141cbced30ac0802686e9c2f1f26231a6c82ea",
+    "branch": "refs/heads/codex/weekly-research-20261027",
+    "exists": true,
+    "changes": [
+      " D AGENTS.md",
+      "?? AGENTS.mdx"
+    ]
+  },
+  {
+    "worktree": "C:/Users/ryanh/git/portabase.dev-signup-release",
+    "HEAD": "deab157756e5431c8b5df339788d8b95e61b7bdb",
+    "exists": true,
+    "changes": [
+      " D AGENTS.md",
+      "?? AGENTS.mdx"
+    ]
+  },
+  {
+    "worktree": "C:/Users/ryanh/git/PortabaseCli",
+    "HEAD": "084aadaec5c1f6464f7b0cc92230a605a424c6b3",
+    "exists": true,
+    "changes": [
+      " D AGENTS.md",
+      " M package-lock.json",
+      " M package.json",
+      "?? AGENTS.mdx"
+    ]
+  },
+  {
+    "worktree": "C:/Users/ryanh/Portabase/src",
+    "HEAD": "084aadaec5c1f6464f7b0cc92230a605a424c6b3",
+    "exists": true,
+    "changes": [
+      " D AGENTS.md",
+      "?? AGENTS.mdx"
+    ]
+  }
+]

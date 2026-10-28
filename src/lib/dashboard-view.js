@@ -402,7 +402,7 @@ export function buildBillingStrip({
     extraTransfersAddon: Boolean(billing.extraTransfersAddon),
     status: billing.status || 'none',
     square: squareView,
-    checkoutDisabled: squareView.failClosed,
+    checkoutDisabled: squareView.failClosed || plan.id==='cloud-9'&&squareView.starterReady!==true,
     upgradeAvailable: Boolean(next),
     nextPlan: next,
   };

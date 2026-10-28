@@ -7,6 +7,7 @@ import {authHeaders,loadSession} from '../lib/session.js';
 import {ensureSessionForVersion,fetchStorageConnectors} from '../lib/cloud-api.js';
 import {emptyRecoveryState,restoreRecoveryState,applyDiscovery,recoveryScene,recoveryCache,RECOVERY_SCREEN_VERSION} from './graphical-recovery-state.mjs';
 import {validateVaultLocation} from './vault-location.mjs';
+import {ManagedRunnerPanel} from './managed-runner-panel.jsx';
 import consoleCss from './console.css?inline';
 
 const oauthLink=slot=>`/oauth/supabase/start?slot=${slot}`;
@@ -71,6 +72,11 @@ export function EnclaveDashboard({me,toast,fixtureApi}) {
   const [loaded,setLoaded]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const [pickerOpen,setPickerOpen]=useState(false),[draft,setDraft]=useState([]),[saveState,setSaveState]=useState('');
   const [vaultEditor,setVaultEditor]=useState(null);
+  const [runnerState,setRunnerState]=useState({});
+  const managedRef=useRef(null),runnerStateRef=useRef({});
+  runnerStateRef.current=runnerState;
+  const recoverySelectionSignature=JSON.stringify({selection:workspace.selection,databases:workspace.databases,mode:workspace.mode,activeVault:workspace.activeVault,vaultLocations:workspace.vaultLocations});
+  useEffect(()=>{setRunnerState(current=>current.state==='preflight_passed'?{...current,state:'select_projects',preflight:{ready:false}}:current);},[recoverySelectionSignature]);
   const hostRef=useRef(null),shadowRef=useRef(null),sceneRef=useRef(null),dialogRef=useRef(null);
   const [mount,setMount]=useState(null),alive=useRef(true),refreshing=useRef(false);
 
@@ -98,6 +104,7 @@ export function EnclaveDashboard({me,toast,fixtureApi}) {
     if(refreshing.current)return;refreshing.current=true;setBusy(true);setError('');
     const failures=[];
     try{
+      if(runnerStateRef.current.unlocked){await managedRef.current?.refreshConnections();return;}
       await Promise.all(['source','target'].map(async slot=>{
         try{
           const data=await request('discover',slot,stateRef.current.selection[slot]);
@@ -137,7 +144,7 @@ export function EnclaveDashboard({me,toast,fixtureApi}) {
 
   useEffect(()=>{
     if(!sceneRef.current)return;
-    const sceneStatus=recoveryScene(workspace);
+    const sceneStatus={...recoveryScene(workspace),...runnerState};
     const html=renderDryRunPage({status:sceneStatus,selection:workspace.selection,projects:workspace.projects,
       links:{source:oauthLink('source'),target:oauthLink('target'),dropbox:'/oauth/dropbox/start'},nonce:'hosted-ui'});
     const css=html.match(/<style>([\s\S]*?)<\/style>/i)?.[1]||'';
@@ -162,7 +169,12 @@ export function EnclaveDashboard({me,toast,fixtureApi}) {
     scene.querySelector('.recovery-mapping')?.remove();
     scene.querySelector('form[action="/mode"] input[type="hidden"][name="mode"]')?.form.closest('[role="status"]')?.remove();
     const cert=scene.querySelector('a[href="/attestation-certificate"]');
-    if(cert){cert.removeAttribute('href');cert.removeAttribute('download');cert.textContent='Attestation pending';cert.setAttribute('aria-disabled','true');}
+    if(cert){cert.removeAttribute('href');cert.removeAttribute('download');cert.setAttribute('role','button');cert.tabIndex=0;cert.setAttribute('data-attestation-report','true');cert.textContent=runnerState.attestation?'Download verified Google attestation':'Attestation pending';cert.setAttribute('aria-disabled',String(!runnerState.attestation));}
+    // The panel carries explicit scope and restore consent. Do not let a legacy
+    // diagram form bypass those checks or imply that browser inventory is proof.
+    const executeForm=scene.querySelector('form[action="/execute"]');
+    if(executeForm)executeForm.innerHTML='<button type="button" data-managed-controls>Review and run selected recovery</button>';
+    if(runnerState.busy)scene.querySelectorAll('input,select,button').forEach(control=>{control.disabled=true;});
     scene.querySelectorAll('form[action="/select-batch"] select').forEach(select=>{
       const source=select.name.replace(/^targetFor_/,'');select.value=workspace.selection.targetMap?.[source]||'';
     });
@@ -170,7 +182,7 @@ export function EnclaveDashboard({me,toast,fixtureApi}) {
     const selected=scene.querySelector('.machine-selected');
     const summary=computeDatabaseScopeSummary(workspace.databases.filter(db=>workspace.selection.sources.includes(db.projectRef)||db.projectRef===workspace.selection.source));
     if(selected)selected.textContent=`${(summary.includedDatabaseMb+summary.includedBinaryMb).toFixed(2)} MB`;
-  },[workspace,mount,loaded,vaultEditor]);
+  },[workspace,mount,loaded,vaultEditor,runnerState]);
 
   function openPicker(){flushSync(()=>{setDraft(structuredClone(stateRef.current.databases));setPickerOpen(true);});dialogRef.current?.showModal();}
   async function savePicker(){
@@ -187,6 +199,7 @@ export function EnclaveDashboard({me,toast,fixtureApi}) {
       inspections:{...s.inspections,[slot]:undefined}}));
     setBusy(true);setError('');
     try{
+      if(runnerStateRef.current.unlocked){await managedRef.current?.selectProject(slot,ref);return;}
       if(slot==='source'){
         const discovered=await request('discover',slot,ref);if(discovered.connected!==false)setWorkspace(s=>applyDiscovery(s,slot,discovered));
       }
@@ -199,6 +212,8 @@ export function EnclaveDashboard({me,toast,fixtureApi}) {
   useEffect(()=>{
     const root=shadowRef.current;if(!root)return;
     const click=event=>{
+      if(event.target.closest?.('[data-managed-controls]')){managedRef.current?.open();return;}
+      if(event.target.closest?.('[data-attestation-report]')){if(runnerStateRef.current.attestation)managedRef.current?.certificate();return;}
       const button=event.target.closest?.('[data-open-scope]');if(button){openPicker();return;}
       const off=event.target.closest?.('[data-vault-off]');if(off){setWorkspace(s=>({...s,mode:'temporary_runner'}));return;}
       const settings=event.target.closest?.('[data-vault-settings]');if(settings){setVaultEditor(settings.dataset.vaultSettings);return;}
@@ -239,16 +254,32 @@ export function EnclaveDashboard({me,toast,fixtureApi}) {
       }else if(action==='/dropbox')window.open('/oauth/dropbox/start','portabase_dropbox','popup,width=700,height=800');
       else if(action==='/s3')setError('Open Connections & Vaults to configure your S3 vault. Your object selection is saved.');
     };
-    root.addEventListener('click',click);root.addEventListener('change',change);root.addEventListener('submit',submit);
-    return()=>{root.removeEventListener('click',click);root.removeEventListener('change',change);root.removeEventListener('submit',submit);};
+    const keydown=event=>{if(['Enter',' '].includes(event.key)&&event.target.closest?.('[data-attestation-report]')){event.preventDefault();click(event);}};
+    root.addEventListener('click',click);root.addEventListener('change',change);root.addEventListener('submit',submit);root.addEventListener('keydown',keydown);
+    return()=>{root.removeEventListener('click',click);root.removeEventListener('change',change);root.removeEventListener('submit',submit);root.removeEventListener('keydown',keydown);};
   },[mount,workspace.databases]);
 
   const draftSummary=computeDatabaseScopeSummary(draft),total=draftSummary.includedDatabaseMb+draftSummary.includedBinaryMb;
+  function managedWorkspace(update){
+    setWorkspace(current=>{
+      const next={...current,connections:{...current.connections,...update.connections},projects:{...current.projects,...update.projects},inspections:{...current.inspections,...update.inspections}};
+      if(update.inventory){
+        const inventory=update.inventory,old=current.databases.find(db=>db.projectRef===inventory.ref);
+        const modes=new Map((old?.tables||[]).map(row=>[row.name,row.mode]));
+        const db={...old,id:old?.id||inventory.ref,projectRef:inventory.ref,name:old?.name||inventory.ref,databaseName:'postgres',enabled:true,mode:old?.mode||'structure_and_data',
+          tables:inventory.tables.map(row=>({...row,objectType:'TABLE',objectName:row.table,sizeMb:row.bytes/1024**2,mode:modes.get(row.name)||'structure_and_data'})),
+          binaries:old?.binaries?.length?old.binaries:inventory.buckets.map(row=>({name:row.id,bucket:row.id,schema:row.id,objectType:'BINARY',sizeMb:row.bytes/1024**2,mode:'include'}))};
+        next.databases=[...current.databases.filter(row=>row.projectRef!==inventory.ref),db];
+      }
+      return next;
+    });
+  }
   return <div data-recovery-screen={RECOVERY_SCREEN_VERSION} style={{width:'100%',minWidth:0,background:'#fff',borderRadius:8}}>
     <div style={{display:'flex',padding:'10px 16px',gap:12,alignItems:'center',flexWrap:'wrap',color:'#334155',fontSize:12}}>
-      <button className="pb-btn pb-btn-primary" type="button" onClick={refresh} disabled={busy||!loaded}>{busy?'Refreshing connections…':'Refresh connections'}</button>
+      <button className="pb-btn pb-btn-primary" type="button" onClick={refresh} disabled={busy||!loaded||runnerState.busy}>{busy?'Refreshing connections…':'Refresh connections'}</button>
       <span role="status">{saveState||'Loading saved workspace…'}</span><span>Source → Secure runner → Destination</span>
     </div>
+    <ManagedRunnerPanel ref={managedRef} workspace={workspace} onWorkspace={managedWorkspace} onStatus={value=>setRunnerState(current=>({...current,...value}))} disabled={Boolean(fixtureApi)}/>
     {error&&<div role="alert" style={{margin:'4px 16px',padding:12,background:'#fff7ed',border:'1px solid #b45309',borderRadius:6,color:'#7c2d12'}}>{error} <button type="button" onClick={refresh}>Retry connection</button></div>}
     <div ref={hostRef}/>
     {mount&&createPortal(<dialog className="recovery-scope-dialog" ref={dialogRef} aria-label="Database objects and Storage scope" onCancel={()=>setPickerOpen(false)}>

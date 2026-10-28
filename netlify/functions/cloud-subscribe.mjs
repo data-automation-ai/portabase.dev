@@ -1,3 +1,4 @@
+import {runtimePolicy,managedStarterReady} from '../shared/runtime-policy.mjs';
 import { rememberCheckout } from '../shared/checkout-attempts.mjs';
 import { withBlobs } from '../shared/subscription-store.mjs';
 import { publicAuthConfigBoth, jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
@@ -28,7 +29,7 @@ import { testPromoEndsAt } from '../shared/test-promo.mjs';
 
 export function createSubscribeHandler({ authenticate = verifyCloudUser, get = getSubscriptionForUser,
   save = saveSubscription, credentials = squareCredentials, ensurePlan = ensureCloudPlanVariationId,
-  request = squareFetch, authConfig = publicAuthConfigBoth, readiness = resolveSquareCheckoutReady } = {}) {
+  request = squareFetch, authConfig = publicAuthConfigBoth, readiness = resolveSquareCheckoutReady, configuration=runtimePolicy } = {}) {
 return async function lambdaHandler(event) {
   if (event.httpMethod === 'OPTIONS') {
     return jsonResponse(204, {}, {
@@ -60,6 +61,15 @@ return async function lambdaHandler(event) {
   try {
     const existing = (await get(user));
     const access = deriveAccess(existing);
+    if (!addonRequested && plan.customerFacing === false && (existing?.planId || existing?.plan) !== plan.id)
+      return jsonResponse(400, { error: 'legacy_plan_not_available' });
+    if (addonRequested && (existing?.planId || existing?.plan) === 'cloud-9')
+      return jsonResponse(400, { error: 'starter_addon_not_available' });
+
+    if(!addonRequested&&plan.id==='cloud-9'&&!(access.hasAccess&&existing?.plan==='cloud-9')) {
+      let config;try{config=await configuration();}catch{}
+      if(!managedStarterReady(config))return jsonResponse(503,{error:'managed_starter_not_ready',message:'Starter checkout is not open yet. The managed runner is completing release validation.'});
+    }
 
     // Handle Promo Code if supplied
     const rawPromo = body.promoCode || body.code || '';

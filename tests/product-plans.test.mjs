@@ -26,42 +26,42 @@ import {
   transferWindow as serverWindow,
 } from '../netlify/shared/product.mjs';
 
-test('Cloud Free is 40 GB, not a Square plan, and has no scheduled service', () => {
+test('Cloud Free is 10 GB, not a Square plan, and has no scheduled service', () => {
   assert.equal(CLOUD_FREE.priceMonthlyCents, 0);
   assert.equal(CLOUD_FREE.projects, 1);
-  assert.equal(CLOUD_FREE.storageCapMb, 40 * 1024);
-  assert.equal(CLOUD_FREE.storageCapLabel, '40 GB');
-  assert.equal(CLOUD_FREE.storageCapBytes, 40 * 1024 * 1024 * 1024);
+  assert.equal(CLOUD_FREE.storageCapMb, 10 * 1024);
+  assert.equal(CLOUD_FREE.storageCapLabel, '10 GB');
+  assert.equal(CLOUD_FREE.storageCapBytes, 10 * 1024 * 1024 * 1024);
   assert.equal(CLOUD_FREE.scheduled, false);
   assert.equal(Object.prototype.hasOwnProperty.call(CLOUD_PLANS, 'cloud-free'), false);
   assert.equal(getCloudPlan('cloud-free').id, 'cloud-free');
-  assert.equal(serverFree.storageCapMb, 40 * 1024);
+  assert.equal(serverFree.storageCapMb, 10 * 1024);
   assert.equal(serverGet('cloud-free').scheduled, false);
 });
 
-test('public Square plans are $7 / 500 MB / 1 per 24h and $17 / 10 GB / 3 per day', () => {
+test('new $9 plan preserves legacy $7 while offering $17 / 25 GB', () => {
   assert.equal(CLOUD_PLANS['cloud-7'].priceMonthlyCents, 700);
-  assert.equal(CLOUD_PLANS['cloud-7'].storageCapLabel, '500 MB');
+  assert.equal(CLOUD_PLANS['cloud-7'].storageCapLabel, '10 GB');
   assert.equal(CLOUD_PLANS['cloud-7'].projects, 1);
   assert.equal(CLOUD_PLANS['cloud-7'].databases, 1);
   assert.equal(CLOUD_PLANS['cloud-7'].databasesLabel, '1 project');
   assert.equal(CLOUD_PLANS['cloud-7'].transfersPer24h, 1);
   assert.equal(CLOUD_PLANS['cloud-17'].priceMonthlyCents, 1700);
-  assert.equal(CLOUD_PLANS['cloud-17'].storageCapGb, 10);
-  assert.equal(CLOUD_PLANS['cloud-17'].storageCapLabel, '10 GB');
+  assert.equal(CLOUD_PLANS['cloud-17'].storageCapGb, 25);
+  assert.equal(CLOUD_PLANS['cloud-17'].storageCapLabel, '25 GB');
   assert.equal(CLOUD_PLANS['cloud-17'].databasesUnlimited, true);
   assert.equal(CLOUD_PLANS['cloud-17'].transfersPer24h, 3);
   assert.equal(CLOUD_PLANS['cloud-7'].smsOptional, false);
   assert.equal(CLOUD_PLANS['cloud-17'].smsOptional, true);
-  assert.equal(CLOUD_DEFAULT_PLAN_ID, 'cloud-7');
-  assert.equal(planPriceRangeLabel(), '$7 / $17');
-  assert.deepEqual(publicCloudPlans().map((p) => p.id), ['cloud-7', 'cloud-17']);
+  assert.equal(CLOUD_DEFAULT_PLAN_ID, 'cloud-9');
+  assert.equal(planPriceRangeLabel(), '$9 / $17');
+  assert.deepEqual(publicCloudPlans().map((p) => p.id), ['cloud-9', 'cloud-17']);
   assert.equal(CLOUD_PLANS['cloud-37'].customerFacing, false);
   assert.equal(getCloudPlan('cloud-27').id, 'cloud-17');
   assert.equal(resolvePlan({ extraCycles: 2 }).id, 'cloud-17');
-  assert.match(planAllowanceCopy('cloud-free'), /40 GB/);
-  assert.match(planAllowanceCopy('cloud-7'), /500 MB/);
-  assert.match(planAllowanceCopy('cloud-17'), /10 GB/);
+  assert.match(planAllowanceCopy('cloud-free'), /10 GB/);
+  assert.match(planAllowanceCopy('cloud-7'), /10 GB/);
+  assert.match(planAllowanceCopy('cloud-17'), /25 GB/);
 });
 
 test('browser and server plan tables stay in sync', () => {
@@ -71,8 +71,8 @@ test('browser and server plan tables stay in sync', () => {
     assert.equal(serverGet(id).id, id);
   }
   const payload = publicPlansPayload();
-  assert.equal(payload['cloud-7'].storageCapLabel, '500 MB');
-  assert.equal(payload['cloud-17'].storageCapLabel, '10 GB');
+  assert.equal(payload['cloud-7'].storageCapLabel, '10 GB');
+  assert.equal(payload['cloud-17'].storageCapLabel, '25 GB');
   assert.equal(payload['cloud-17'].transfersPer24h, 3);
   assert.equal(payload['cloud-37'].customerFacing, false);
 });
@@ -110,10 +110,14 @@ test('countTransfersLast24h uses a rolling window', () => {
 test('storageUsage meters against the plan cap', () => {
   const oneGb = 1024 * 1024 * 1024;
   const usage = storageUsage(oneGb * 8, 'cloud-17');
-  assert.equal(usage.capGb, 10);
-  assert.equal(usage.percent, 80);
+  assert.equal(usage.capGb, 25);
+  assert.equal(usage.percent, 32);
   assert.equal(usage.overCap, false);
-  assert.equal(storageUsage(600 * 1024 * 1024, 'cloud-7').overCap, true);
+  assert.equal(storageUsage(11 * oneGb, 'cloud-7').overCap, true);
   assert.equal(storageUsage(50 * 1024 * 1024, 'cloud-free').overCap, false);
   assert.equal(storageUsage(41 * oneGb, 'cloud-free').overCap, true);
+});
+
+test('$9 transfer allowance is decimal GB and independent of capture limits',()=>{
+  const p=CLOUD_PLANS['cloud-9'];assert.equal(p.priceMonthlyCents,900);assert.equal(p.transferAllowanceBytes,10_000_000_000);assert.equal(p.transferPeriodDays,30);assert.equal(p.binaryTransferMode,'incremental');assert.equal(p.initialBinarySnapshotIncluded,true);assert.equal(p.keepAliveIntervalHours,72);assert.equal(p.squareEnvKey,'SQUARE_CLOUD_PLAN_VARIATION_ID_9');assert.equal(p.projects,1);assert.equal(p.scheduled,false);assert.deepEqual(p,serverPlans['cloud-9']);assert.equal(CLOUD_PLANS['cloud-7'].customerFacing,false);
 });

@@ -17,25 +17,24 @@ test('shared privacy copy discloses unfinished hosting and legacy credential pat
   assert.doesNotMatch(blob, /\bOSS\b/);
 });
 
-test('homepage, login, dashboard, and seal UI use the shared keys copy', () => {
+test('homepage uses enclave trust boundaries while legacy setup keeps honest capability copy', () => {
   const home = readFileSync(new URL('../src/main.jsx', import.meta.url), 'utf8');
   const flow = readFileSync(new URL('../src/components/keys-flow.jsx', import.meta.url), 'utf8');
   const auth = readFileSync(new URL('../src/auth-pages.jsx', import.meta.url), 'utf8');
   const dash = readFileSync(new URL('../src/console/customer-dashboard.jsx', import.meta.url), 'utf8');
   const seal = readFileSync(new URL('../src/console/seal-keys.jsx', import.meta.url), 'utf8');
   const agents = readFileSync(new URL('../src/console/pages.jsx', import.meta.url), 'utf8');
-  assert.match(home, /KEYS_COPY/);
-  assert.match(home, /id="never-hold-keys"/);
-  assert.match(home, /id="keys"/);
-  assert.match(home, /KeysPathCards/);
-  assert.match(home, /KeysFlow/);
+  assert.match(home, /function SecureEnclaveRecovery/);
+  assert.match(home, /id="secure-enclave"/);
+  assert.match(home, /Plaintext and keys are processed inside that enclave/);
+  assert.doesNotMatch(home, /function NeverHoldKeys|id="never-hold-keys"/);
   assert.doesNotMatch(home, /never-hold-keys-diagram\.png/);
   assert.match(flow, /keys-flow/);
   assert.match(flow, /is-blind/);
   assert.match(auth, /KEYS_COPY/);
   assert.match(auth, /auth-keys-note/);
   assert.match(auth, /auth-keys-steps/);
-  assert.match(auth, /never posted to Portabase servers/);
+  assert.match(auth, /managed jobs process keys inside an attested Secure Enclave/);
   assert.doesNotMatch(auth, /provably zero-knowledge/i);
   assert.match(dash, /pb-keys-strip/);
   assert.match(dash, /KEYS_COPY/);

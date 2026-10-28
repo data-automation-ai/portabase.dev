@@ -40,7 +40,11 @@ export function createRunnersHandler({ authenticate = verifyCloudUser, getSubscr
       const now = clock();
       // An expired customer can request sleep; it cannot create or wake paid
       // compute. Read access and stopping work remain available.
-      if (action !== 'sleep' && !runnerAdmission(await (getSubscription ? getSubscription(account) : getSubscriptionForUser(user)), now).paid) return jsonResponse(402, { error: 'subscription_required' });
+      if(action!=='sleep'){
+        const access=runnerAdmission(await (getSubscription?getSubscription(account):getSubscriptionForUser(user)),now);
+        if(!access.paid)return jsonResponse(402,{error:'subscription_required'});
+        if(access.plan.id==='cloud-9')return jsonResponse(403,{error:'use_confidential_runner'});
+      }
       for (let attempt = 0; attempt < 4; attempt++) {
         const snapshot = await db.getWithMetadata(key, { type: 'json' });
         const runners = snapshot?.data || [];

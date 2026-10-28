@@ -38,6 +38,7 @@ export function createManagedSchedules({ database = () => blobStore('portabase-c
   }
   function status(row, auth) {
     if (!row.enabled) return 'disabled';
+    if(auth.access.plan.id==='cloud-9')return 'use_confidential_runner';
     if (!auth.runners.some(runner => runner.id === row.runnerId)) return 'runner_unavailable';
     if (!auth.access.paid || auth.access.plan.scheduled !== true) return 'subscription_required';
     if (row.everyHours < minScheduleHours({ planId: auth.access.plan.id, extraTransfersAddon: auth.access.extraTransfersAddon })) return 'cadence_not_allowed';
@@ -75,6 +76,7 @@ export function createManagedSchedules({ database = () => blobStore('portabase-c
       if (Date.parse(body.startAt) > now + 366 * 86400000 || Date.parse(body.startAt) < Date.UTC(2020, 0, 1)) fail('invalid_schedule', 400);
       const auth = await authority(user, now);
       if (!auth.runners.some(runner => runner.id === body.runnerId)) fail('runner_not_authorized', 403);
+      if(body.enabled&&auth.access.plan.id==='cloud-9')fail('use_confidential_runner',403);
       if (body.enabled && (!auth.access.paid || auth.access.plan.scheduled !== true)) fail('subscription_required', 402);
       if (body.enabled && body.everyHours < minScheduleHours({ planId: auth.access.plan.id, extraTransfersAddon: auth.access.extraTransfersAddon })) fail('cadence_not_allowed', 422);
       const row = { ...body, revision: body.revision + 1, nextDueAt: scheduleAnchor(body.startAt, body.everyHours, now),

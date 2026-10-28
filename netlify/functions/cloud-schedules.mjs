@@ -16,7 +16,7 @@ export function createSchedulesHandler({ authenticate = verifyCloudUser, service
       const method = { GET: 'read', PUT: 'save', PATCH: 'disable', DELETE: 'remove' }[event.httpMethod];
       return jsonResponse(200, await service[method](user, body));
     } catch (error) {
-      const codes = ['unauthorized', 'invalid_schedule', 'schedule_changed', 'schedule_limit', 'runner_schedule_exists', 'runner_not_authorized', 'subscription_required', 'cadence_not_allowed'];
+      const codes = ['use_confidential_runner', 'unauthorized', 'invalid_schedule', 'schedule_changed', 'schedule_limit', 'runner_schedule_exists', 'runner_not_authorized', 'subscription_required', 'cadence_not_allowed'];
       return jsonResponse(codes.includes(error.code) ? error.status : 503, { error: codes.includes(error.code) ? error.code : 'schedule_service_unavailable' });
     }
   };
