@@ -17,6 +17,7 @@ import {
 import { discoverSupabaseProjectsAndDatabases } from '../../cloud/runner/supabase-discovery.mjs';
 import { openSupabaseSession, sealSupabaseSession } from '../../cloud/runner/oauth-session-cookie.mjs';
 import { supabaseAccess } from '../../cloud/confidential/supabase-access.mjs';
+import { initializeHostedOAuth } from '../shared/hosted-oauth-config.mjs';
 import {
   computeDatabaseScopeSummary,
   buildExportManifest,
@@ -62,6 +63,8 @@ export async function handler(event, { authenticate = verifyCloudUser } = {}) {
       'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Portabase-Cloud-Version',
     });
   }
+  try { await initializeHostedOAuth(); }
+  catch { return jsonResponse(503, {error:'oauth_configuration_unavailable'}); }
 
   const rawUrl = event.rawUrl || `https://${event.headers.host || 'portabase.dev'}${event.path || ''}`;
   const parsed = new URL(rawUrl);

@@ -9,6 +9,8 @@ import {build} from 'vite';
 import {rolldown} from 'rolldown';
 import {operatorConfig,SITE_ID} from '../cloud/confidential/operator-config.mjs';
 import {operatorGoogle} from '../cloud/confidential/operator-google.mjs';
+import {getStore} from '@netlify/blobs';
+import {sealOAuthConfig,openOAuthConfig} from '../netlify/shared/hosted-oauth-config.mjs';
 const action=process.argv[2]||'prepare',stage=resolve('.portabase/graphical-release');
 const hash=(value,kind='sha1')=>createHash(kind).update(value).digest('hex');
 const op=await operatorConfig();await mkdir(stage,{recursive:true});
@@ -57,12 +59,17 @@ if(action==='prepare'){
   const app=JSON.parse(Buffer.from(secret.payload.data,'base64').toString());
   if(!/^[a-f0-9-]{36}$/i.test(app.clientId||'')||typeof app.clientSecret!=='string'||app.clientSecret.length<16||app.redirectUri!=='https://portabase.dev/confidential/callback')throw Error('registered_oauth_identity_mismatch');
   const values={SUPABASE_OAUTH_CLIENT_ID:app.clientId,SUPABASE_OAUTH_CLIENT_SECRET:app.clientSecret,SUPABASE_OAUTH_REDIRECT_URI:app.redirectUri};
+  const token=op.value('NETLIFY_BLOBS_TOKEN');
+  const store=getStore({name:'portabase-hosted-oauth',siteID:SITE_ID,token,consistency:'strong'});
+  await store.setJSON('config',sealOAuthConfig(app,token));
+  const restored=openOAuthConfig(await store.get('config',{type:'json'}),token);
+  if(restored.clientId!==app.clientId||restored.clientSecret!==app.clientSecret)throw Error('private_configuration_verification_failed');
   for(const [key,value] of Object.entries(values)){
-    if(op.value(key)===value)continue;
-    if(op.rows.some(r=>r.key===key))throw Error('existing_oauth_configuration_requires_review');
-    await op.netlify('/accounts/'+op.site.account_id+'/env?site_id='+SITE_ID,{method:'POST',body:JSON.stringify([{key,scopes:['functions'],values:[{context:'all',value}]}])});
+    if(!op.rows.some(r=>r.key===key))continue;
+    if(op.value(key)!==value)throw Error('existing_oauth_configuration_requires_review');
+    await op.netlify('/accounts/'+op.site.account_id+'/env/'+key+'?site_id='+SITE_ID,{method:'DELETE'});
   }
-  console.log(JSON.stringify({configured:Object.keys(values),secretValuesPrinted:false}));
+  console.log(JSON.stringify({privateConfigurationVerified:true,unrelatedFunctionEnvironmentPreserved:true,secretValuesPrinted:false}));
 }else{
   const saved=JSON.parse(await readFile(evidence,'utf8'));
   if(action==='draft'){
@@ -74,7 +81,7 @@ if(action==='prepare'){
     const draft=await op.netlify('/deploys/'+saved.draft);
     if(action==='upload'){
       if(draft.required_edge_functions?.length)throw Error('edge_reuse_failed');
-      if(draft.required_functions?.some(name=>name!=='cloud-oauth'))throw Error('unrelated_function_requested');
+      if(draft.required_functions?.some(digest=>digest!==saved.functions['cloud-oauth']))throw Error('unrelated_function_requested');
       for(const sha of draft.required||[]){const file=saved.uploads.find(f=>f.sha===sha);if(!file)throw Error('unrelated_asset_requested');
         await op.netlify('/deploys/'+draft.id+'/files'+file.path,{method:'PUT',headers:{'content-type':'application/octet-stream'},body:await readFile(join(stage,sha))});}
       if(draft.required_functions?.length)await op.netlify('/deploys/'+draft.id+'/functions/cloud-oauth?runtime=nodejs24.x',{method:'PUT',headers:{'content-type':'application/zip'},body:await readFile(join(stage,'cloud-oauth.zip'))});

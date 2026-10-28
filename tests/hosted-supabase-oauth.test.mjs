@@ -2,9 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sealSupabaseSession, openSupabaseSession } from '../cloud/runner/oauth-session-cookie.mjs';
 import { handler, supabaseTokenCookieName } from '../netlify/functions/cloud-oauth.mjs';
+import {sealOAuthConfig,openOAuthConfig} from '../netlify/shared/hosted-oauth-config.mjs';
 
 
 const cookieSecret = 'test-only-oauth-cookie-secret-32-bytes';
+
+test('private OAuth configuration is encrypted, authenticated and bound to the site storage key',()=>{
+  const config={clientId:'registered-client',clientSecret:'private-client-secret',redirectUri:'https://portabase.dev/confidential/callback'};
+  const envelope=sealOAuthConfig(config,'fixture-storage-key');
+  assert.deepEqual(openOAuthConfig(envelope,'fixture-storage-key'),config);
+  assert.doesNotMatch(JSON.stringify(envelope),/private-client-secret/);
+  assert.throws(()=>openOAuthConfig(envelope,'wrong-storage-key'));
+});
 
 test('Supabase OAuth session cookie is authenticated and hides tokens', () => {
   const session = { accessToken: 'access-test', refreshToken: 'refresh-test', expiresAt: Date.now() + 300_000 };
