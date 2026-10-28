@@ -12,7 +12,20 @@ import {
   listS3Capsules,
   downloadCapsuleFromS3,
   s3Vault,
+  resolveS3Credentials,
 } from './s3-vault.mjs';
+
+test('attested S3 role resolves short-lived credentials without customer keys', async()=>{
+  const roleArn='arn:aws:iam::123456789012:role/test-capsule-vault';
+  const calls=[];
+  const result=await resolveS3Credentials({roleArn,
+    attestationFetch:async(url,request)=>{calls.push([url,JSON.parse(request.body)]);return {ok:true,text:async()=> 'signed-attestation-token'};},
+    stsFetch:async(url,request)=>{calls.push([url,new URLSearchParams(request.body).get('RoleArn')]);return {ok:true,text:async()=>`<Credentials><AccessKeyId>temporary-id</AccessKeyId><SecretAccessKey>temporary-secret</SecretAccessKey><SessionToken>temporary-session</SessionToken><Expiration>2099-01-01T00:00:00Z</Expiration></Credentials>`};}});
+  assert.equal(result.accessKeyId,'temporary-id');
+  assert.equal(result.sessionToken,'temporary-session');
+  assert.deepEqual(calls[0],["http://localhost/v1/token",{audience:'https://portabase.dev',token_type:'AWS_PRINCIPALTAGS'}]);
+  assert.deepEqual(calls[1],['https://sts.amazonaws.com/',roleArn]);
+});
 
 test('signS3Request generates valid AWS SigV4 authorization header', () => {
   const headers = signS3Request({

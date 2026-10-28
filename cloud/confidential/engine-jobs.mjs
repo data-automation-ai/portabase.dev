@@ -109,7 +109,7 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
       ]);
       if (targetRef && !targetStatus.blank && !allowOverwrite) fail('restore_target_not_blank');
       const prior = (operation === 'restore' && capsuleId) ? jobs.get(capsuleId) : null;
-      const remoteCapsuleId = !prior && ['dropbox', 's3'].includes(provider?.type) && /^[A-Za-z0-9_.:-]+$/.test(dropboxCapsuleId || capsuleId || '') ? (dropboxCapsuleId || capsuleId) : null;
+      const remoteCapsuleId = !prior && ['dropbox', 's3','r2'].includes(provider?.type) && /^[A-Za-z0-9_.:-]+$/.test(dropboxCapsuleId || capsuleId || '') ? (dropboxCapsuleId || capsuleId) : null;
       if (operation === 'restore' && (!prior && !remoteCapsuleId)) fail('capsule_not_available');
       if (operation === 'restore' && prior && (prior.owner !== owner || prior.state !== 'complete' || !prior.capsulePath || (sourceRef && prior.sourceRef !== sourceRef))) fail('capsule_not_available');
       const plannedScope=operation==='restore'?prior?.scopeSummary:scopeSummary;
@@ -172,7 +172,8 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
             if (remoteCapsuleId) {
               phase('transfer');
               const targetCapsuleDir = join(root, 'capsules', remoteCapsuleId);
-              await downloadCapsuleFromDropbox(remoteCapsuleId, targetCapsuleDir, provider);
+              if(provider.type==='dropbox')await downloadCapsuleFromDropbox(remoteCapsuleId, targetCapsuleDir, provider);
+              else await downloadCapsuleFromS3(remoteCapsuleId, targetCapsuleDir, provider);
               capsulePath = targetCapsuleDir;
             }
             args = ['replay', '--capsule', capsulePath, '--confirm-target', targetRef, ...((allowOverwrite || prior?.allowOverwrite) ? ['--allow-occupied-target'] : [])];

@@ -4,6 +4,7 @@ import { engineJobs } from './engine-jobs.mjs';
 import { projectRef } from './supabase-access.mjs';
 import { dropboxVault } from './dropbox-vault.mjs';
 import { s3Vault } from './s3-vault.mjs';
+import { r2Vault } from './r2-vault.mjs';
 const fail = code => { throw new Error(code); };
 const TABLE_SELECTION = /^[A-Za-z_][A-Za-z0-9_$]*\.[A-Za-z0-9_$]+$/;
 const BUCKET_SELECTION = /^[A-Za-z0-9._-]{1,100}$/;
@@ -68,7 +69,7 @@ async function captureScope(api, ref, requested) {
   };
 }
 export function confidentialApplication({ oauthConfig, jobs = engineJobs(), connections = oauthConnections(oauthConfig),
-  vault = oauthConfig?.dropboxClientId ? dropboxVault({clientId:oauthConfig.dropboxClientId}) : null, s3 = s3Vault(), admit, now = Date.now }) {
+  vault = oauthConfig?.dropboxClientId ? dropboxVault({clientId:oauthConfig.dropboxClientId}) : null, s3 = s3Vault(),r2=r2Vault(), admit, now = Date.now }) {
   const customers = new Map(), locks = new Set();
   return async ({owner,operation,input,authorization}) => {
     if (locks.has(owner)) fail('request_in_progress');
@@ -90,7 +91,7 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
       const {profile,recoveryKey} = customer;
       let data;
       switch(operation) {
-        case 'session.open': data={ connected:{source:!!profile.connections.source,target:!!profile.connections.target,dropbox:!!profile.dropbox?.refreshToken,s3:!!profile.s3?.bucket,activeVault:profile.activeVault||(profile.s3?.bucket?'s3':'dropbox')},s3Summary:profile.s3?{bucket:profile.s3.bucket,region:profile.s3.region,prefix:profile.s3.prefix||'Portabase'}:null,selection:profile.selection,keyAcknowledged:!!profile.keyAcknowledged,accountConfirmation:profile.accountConfirmation?{confirmed:true,method:profile.accountConfirmation.method}:null }; break;
+        case 'session.open': data={ connected:{source:!!profile.connections.source,target:!!profile.connections.target,dropbox:!!profile.dropbox?.refreshToken,s3:!!profile.s3?.bucket,r2:!!profile.r2?.bucket,activeVault:profile.activeVault||(profile.s3?.bucket?'s3':'dropbox')},s3Summary:profile.s3?{bucket:profile.s3.bucket,region:profile.s3.region,prefix:profile.s3.prefix||'Portabase'}:null,r2Summary:profile.r2?{bucket:profile.r2.bucket,prefix:profile.r2.prefix}:null,selection:profile.selection,keyAcknowledged:!!profile.keyAcknowledged,accountConfirmation:profile.accountConfirmation?{confirmed:true,method:profile.accountConfirmation.method}:null }; break;
         case 'key.acknowledge': profile.keyAcknowledged=true; data={acknowledged:true}; break;
         case 'oauth.begin': data=connections.begin(profile,input.slot,input.redirectUri); break;
         case 'oauth.finish': data=await connections.finish(profile,input); break;
@@ -102,7 +103,9 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
         case 'vault.finish': if(!vault)fail('dropbox_app_not_configured');profile.activeVault='dropbox';data=await vault.finish(profile,input.state?{code:input.code,state:input.state}:input.code);break;
         case 'vault.s3.connect': data=await s3.connect(profile,input);break;
         case 'vault.s3.disconnect': delete profile.s3;if(profile.activeVault==='s3')profile.activeVault='dropbox';data={connected:false};break;
-        case 'vault.select': profile.activeVault=input.provider==='s3'?'s3':'dropbox';data={activeVault:profile.activeVault};break;
+        case 'vault.r2.connect': data=await r2.connect(profile,input);break;
+        case 'vault.r2.disconnect': delete profile.r2;if(profile.activeVault==='r2')profile.activeVault='dropbox';data={connected:false};break;
+        case 'vault.select': profile.activeVault=['s3','r2'].includes(input.provider)?input.provider:'dropbox';data={activeVault:profile.activeVault};break;
         case 'vault.disconnect': delete profile.dropbox;delete profile.dropboxPending;data={connected:false};break;
         case 'vault.check': if(!vault)fail('dropbox_app_not_configured');data={connected:!!profile.dropbox?.refreshToken};
           if(data.connected)await vault.provider(profile);break;
@@ -191,11 +194,15 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
           if (typeof admit !== 'function') fail('quota_service_unavailable');
           const admission = await admit({ authorization, operation: 'quota.inspect', requestId: input.requestId });
 
-          const useDropbox = operation === 'backup.start' && ['dropbox', 'capsule_only'].includes(input.vault);
-          const provider = useDropbox
-            ? await vault?.provider(profile)
+          const wantsVault = operation === 'backup.start' && ['dropbox', 'capsule_only'].includes(input.vault);
+          const selectedVault=input.vaultProvider||profile.activeVault;
+          const useS3=(wantsVault||operation==='restore.start')&&selectedVault==='s3';
+          const useR2=(wantsVault||operation==='restore.start')&&selectedVault==='r2';
+          const provider = useS3 ? await s3?.provider(profile)
+            : useR2 ? await r2?.provider(profile)
+            : wantsVault ? await vault?.provider(profile)
             : (operation === 'restore.start' && profile.dropbox?.refreshToken ? await vault?.provider(profile) : undefined);
-          if (useDropbox && !provider) fail('dropbox_connection_required');
+          if (wantsVault && !provider) fail(useS3?'s3_connection_required':useR2?'r2_connection_required':'dropbox_connection_required');
 
           const selectedScope = operation === 'backup.start' && source ? await captureScope(source.api, sourceRef, input.scope) : null;
           data = await jobs.start({

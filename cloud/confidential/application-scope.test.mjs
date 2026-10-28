@@ -24,7 +24,12 @@ test('source inventory returns names and estimates, and selected scope reaches c
   let started;
   const jobs={async start(options){started=options;await options.authorize();return {id:'job',state:'running'};}};
   const app=confidentialApplication({oauthConfig:{},connections,jobs,
-    vault:{async provider(){return {type:'dropbox'};}},admit:async()=>({maxBytes:100*1024**2})});
+    vault:{async provider(){return {type:'dropbox'};}},
+    s3:{async connect(profile){profile.s3={bucket:'test-vault'};profile.activeVault='s3';return {connected:true};},
+      async provider(){return {type:'s3',bucket:'test-vault'};}},
+    r2:{async connect(profile){profile.r2={bucket:'test-r2'};profile.activeVault='r2';return {connected:true};},
+      async provider(){return {type:'r2',bucket:'test-r2'};}},
+    admit:async()=>({maxBytes:100*1024**2})});
   const call=(operation,input={})=>app({owner,operation,input,authorization:'Bearer synthetic'});
   await call('session.open',{recoveryKey});
   await call('key.acknowledge');
@@ -47,6 +52,12 @@ test('source inventory returns names and estimates, and selected scope reaches c
   await assert.rejects(call('backup.start',{requestId:'request',vault:'google-drive',scope}),/unsupported_vault/);
   await call('backup.start',{requestId:'request',vault:'temporary_runner',scope});
   assert.equal(started.provider,undefined,'temporary mode does not silently become a remote vault');
+  await call('vault.s3.connect',{bucket:'test-vault'});
+  await call('backup.start',{requestId:'request',vault:'dropbox',vaultProvider:'s3',scope});
+  assert.equal(started.provider.type,'s3','selected S3 provider reaches the capture job');
+  await call('vault.r2.connect',{bucket:'test-r2'});
+  await call('backup.start',{requestId:'request',vault:'dropbox',vaultProvider:'r2',scope});
+  assert.equal(started.provider.type,'r2','selected R2 provider reaches the capture job');
 });
 
 test('backup start rejects stale objects instead of silently changing the chosen source scope', async () => {
