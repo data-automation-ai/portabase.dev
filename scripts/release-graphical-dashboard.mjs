@@ -34,7 +34,10 @@ if(action==='prepare'){
   const base=op.site.published_deploy.id,deploy=await op.netlify('/deploys/'+base),entries=await op.netlify('/deploys/'+base+'/files');
   if(deploy.edge_functions_present||entries.some(e=>e.path.includes('edge-functions')))throw Error('edge_review_required');
   const files=Object.fromEntries(entries.map(e=>[e.path,e.sha]));
-  if(files['/_redirects']!=='ce7caca07b1fa78422967d089efa83f965e24dcc')throw Error('baseline_routes_changed_review_required');
+  const prior=JSON.parse(await readFile(evidence,'utf8'));
+  const expectedRedirect=prior.publishedAt&&prior.draft===base&&prior.sourceCommit==='9b9768ca360913448798e8c3c9cd5b8932bb905c'
+    ? prior.files['/_redirects'] : 'ce7caca07b1fa78422967d089efa83f965e24dcc';
+  if(files['/_redirects']!==expectedRedirect)throw Error('baseline_routes_changed_review_required');
   const uploads=[];
   async function add(path,body){const sha=hash(body);files[path]=sha;uploads.push({path,sha});await writeFile(join(stage,sha),body);}
   let html=await readFile(join(output,'index.html'),'utf8');
