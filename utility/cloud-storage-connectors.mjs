@@ -521,21 +521,38 @@ export async function downloadCapsuleFromDropbox(capsuleId, targetDir, opts = {}
 
   for (const entry of fileEntries) {
     const filePath = path.join(targetDir, entry.name);
-    const downloadRes = await fetchImpl('https://content.dropboxapi.com/2/files/download', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Dropbox-API-Arg': JSON.stringify({ path: `${remoteCapsulePath}/${entry.name}` }),
-      },
-    });
+    let lastErr = null;
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      try {
+        const downloadRes = await fetchImpl('https://content.dropboxapi.com/2/files/download', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Dropbox-API-Arg': JSON.stringify({ path: `${remoteCapsulePath}/${entry.name}` }),
+          },
+        });
 
-    if (!downloadRes.ok) {
-      const errText = await downloadRes.text();
-      throw new Error(`Dropbox file download failed for ${entry.name} (${downloadRes.status}): ${errText}`);
+        if (!downloadRes.ok) {
+          const errText = await downloadRes.text();
+          throw new Error(`Dropbox file download failed for ${entry.name} (${downloadRes.status}): ${errText}`);
+        }
+
+        if (downloadRes.body && typeof downloadRes.body.getReader === 'function') {
+          const { Readable } = await import('node:stream');
+          const { pipeline } = await import('node:stream/promises');
+          await pipeline(Readable.fromWeb(downloadRes.body), fs.createWriteStream(filePath));
+        } else {
+          const arrayBuffer = await downloadRes.arrayBuffer();
+          await fs.promises.writeFile(filePath, Buffer.from(arrayBuffer));
+        }
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (attempt < 4) await new Promise(r => setTimeout(r, 2000 * attempt));
+      }
     }
-
-    const arrayBuffer = await downloadRes.arrayBuffer();
-    await fs.promises.writeFile(filePath, Buffer.from(arrayBuffer));
+    if (lastErr) throw lastErr;
 
     if (entry.content_hash) {
       const computedHash = await computeDropboxFileContentHash(filePath);

@@ -21,7 +21,7 @@ export function captureOptions(config = {}, args = []) {
 export function validateRecoveryArgs(command, args) {
   const captureBooleans = 'trial storage-first-per-bucket ddl-only storage-inventory-only exclude-binaries delta progress json allow-large-local incremental-binary'.split(' ');
   const captureValues = 'config license exclude-table-data exclude-table-list include-table-data exclude-buckets include-buckets baseline'.split(' ');
-  const restoreBooleans = 'execute preflight drill json overwrite-target allow-occupied-target allow-source-target'.split(' ');
+  const restoreBooleans = 'execute preflight drill json progress overwrite-target allow-occupied-target allow-source-target'.split(' ');
   const restoreValues = 'capsule baseline restore-plan max-restore-bytes target-db-name confirm-target-db confirm-target storage-to-s3 s3-expected-owner overwrite-scope confirm-overwrite rollback-capsule rollback-evidence'.split(' ');
   const booleans = new Set(command === 'backup' ? captureBooleans : restoreBooleans);
   const values = new Set(command === 'backup' ? captureValues : restoreValues);
@@ -74,7 +74,7 @@ export function assertDatabaseTarget({ sourceUrl, targetUrl, targetRef, confirma
   if (sourceUrl && databaseIdentity(sourceUrl) === identity) throw new Error('Target database is the source database.');
   const url = new URL(targetUrl);
   const hosted = url.hostname.endsWith('.supabase.co') || url.hostname.endsWith('.supabase.com');
-  if (hosted && !url.hostname.split('.').includes(targetRef) && decodeURIComponent(url.username) !== `postgres.${targetRef}`) {
+  if (hosted && !url.hostname.split('.').includes(targetRef) && !new RegExp(`^(?:postgres|cli_login_[a-z0-9_]+)\\.${targetRef}$`, 'i').test(decodeURIComponent(url.username))) {
     throw new Error('Target database connection does not match the confirmed target project.');
   }
   if ((overwrite || !hosted) && confirmation !== identity) {

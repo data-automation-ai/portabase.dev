@@ -12,7 +12,7 @@ import {renderAttestationCertificate} from './attestation-certificate.mjs';
 import {needsOAuthOffer} from './oauth-offer.mjs';
 import {handleVaultAction} from './helper-vault-actions.mjs';
 const CONTROLLER='https://portabase-confidential-controller-26ulj3ikia-uc.a.run.app';
-const DIGEST='sha256:7c0c45c071cb9ee25668ca1b878d3d9a97f6081f734ade976a53762aa4c7b33a';
+const DIGEST='sha256:ceadbf8c8bcfa34cfc42a170bd6581faea028b6a50bb3468a13880283ec19dde';
 const REF='eoiqvdmvgaurlecdzqkp',ID='6f454f7b-b490-4fe9-9c49-48ce5b6f4408';
 // Supabase's live authorize endpoint rejects HTTP loopback callbacks even
 // when registered. The test verifier receives the HTTPS callback by handoff.
@@ -37,7 +37,7 @@ const pending=new Map(),links={},offers={},projects={source:[],target:[]},runNon
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function main(){
  let previousScope=null;
- try{const previous=JSON.parse(await readFile(new URL('./evidence/customer-session-live.json',import.meta.url),'utf8'));previousScope={source:previous.selection?.source,scope:previous.scope};}catch{}
+ try{const previous=JSON.parse(await readFile(new URL('./evidence/customer-session-live.json',import.meta.url),'utf8'));previousScope={source:previous.selection?.source,scope:previous.scope};if(previous.backup?.id&&(previous.backup?.state==='running'||(previous.backup?.state==='complete'&&previous.backup?.result?.captureComplete)))status.backup=previous.backup;}catch{}
  const google=await operatorGoogle();
  const raw=await google('/v1/projects/portabase-dev/secrets/portabase-confidential-validation/versions/latest:access');
  const fixture=JSON.parse(Buffer.from(raw.payload.data,'base64').toString());
@@ -90,7 +90,7 @@ async function main(){
   try{
    result=await client.command(operation,input);
   }catch(err){
-   if(['runner_not_ready','session_open_required','confidential_service_unavailable'].includes(err.message)){
+   if(['encrypted_request_rejected','confidential_request_failed','attestation_unavailable','runner_busy'].includes(err.message)){await sleep(2500);result=await client.command(operation,input);}else if(['runner_not_ready','session_open_required','confidential_service_unavailable'].includes(err.message)){
     await ensureRunnerSession(true);
     result=await client.command(operation,input);
    }else throw err;

@@ -65,7 +65,7 @@ function runEngine(args, env, root, maxBytes, progress, { spawnImpl = spawn, sig
         if (!line.startsWith('@portabase ')) continue;
         try {
           const event = JSON.parse(line.slice(11));
-          if (['database-manifest','database','storage','functions','package','encrypt','transfer','done'].includes(event?.phase))
+          if (['database-manifest','database','storage','functions','package','encrypt','transfer','decrypt','verify','done'].includes(event?.phase))
             progress({ phase: event.phase, completed: event.completed, total: event.total,
               bytesReceived:event.bytesReceived,totalBytes:event.totalBytes,verifiedBytes:event.verifiedBytes });
         } catch { /* An untrusted or partial progress line is ignored. */ }
@@ -190,7 +190,7 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
               await downloadCapsuleFromDropbox(remoteCapsuleId, targetCapsuleDir, provider);
               capsulePath = targetCapsuleDir;
             }
-            args = ['replay', '--capsule', capsulePath, '--confirm-target', targetRef, ...((allowOverwrite || prior?.allowOverwrite) ? ['--allow-occupied-target'] : [])];
+            args = ['replay', '--progress', '--capsule', capsulePath, '--confirm-target', targetRef, ...((allowOverwrite || prior?.allowOverwrite) ? ['--allow-occupied-target'] : [])];
           }
           await run(args,env,root,maxBytes,event => {
             const name = typeof event === 'string' ? event : event?.phase;
@@ -231,7 +231,16 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
             }
           }
           job.state = 'complete'; phase('complete');
-        } catch (error) { job.state = 'failed'; job.error = /^[a-z0-9_]{3,80}$/.test(error.message) ? error.message : 'job_failed'; }
+        } catch (error) {
+          if (operation === 'restore' && !job.result) {
+            try {
+              const files = await readdir(join(root,'evidence'));
+              const name = files.filter(n => n.endsWith('.json')).sort().at(-1);
+              if (name) job.result = { restoreVerified: false, evidence: JSON.parse(await readFile(join(root,'evidence',name),'utf8')) };
+            } catch {}
+          }
+          job.state = 'failed'; job.error = /^[a-z0-9_]{3,80}$/.test(error.message) ? error.message : 'job_failed';
+        }
         finally { clearInterval(refreshTimer); if(refreshPromise)await refreshPromise; job.finishedAt = new Date().toISOString();
           const current = job.phaseTimings.at(-1); if (current && !current.finishedAt) current.finishedAt = job.finishedAt;
           await rm(join(root,'database-access.json'),{force:true});

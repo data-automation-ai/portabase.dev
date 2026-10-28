@@ -13,7 +13,7 @@ export async function executeDryRun({command,status,persist,sourceRef,targetRef,
   async function wait(job,kind){
    const deadline=Date.now()+90*60000;
    do {
-    const current=await command('job.status',{id:job.id});
+    let current;try{current=await command('job.status',{id:job.id});}catch(err){if(Date.now()>deadline)throw err;await sleep(5000);continue;}
     status[kind]=current;await persist();
     if(current.state==='complete')return current;
     if(current.state==='failed')throw new Error(current.error||'drill_job_failed');
@@ -99,13 +99,15 @@ export async function executeDryRun({command,status,persist,sourceRef,targetRef,
   if(check.source?.ref!==sourceRef||check.target?.ref!==targetRef||(!check.target?.blank&&!allowOverwrite)||!check.ready)throw new Error('unsafe_test_selection');
   status.state='capturing';
   const targetVault = (effectiveMode === 'dropbox' && (vaultProvider === 's3' || status.activeVault === 's3')) ? 's3' : effectiveMode;
-  const backup=await command('backup.start',{requestId:randomUUID(),vault:targetVault,vaultProvider:targetVault,scope,allowOverwrite:Boolean(allowOverwrite)});
+  const backup=(status.backup?.id&&(status.backup?.state==='running'||(status.backup?.state==='complete'&&status.backup?.result?.captureComplete&&status.backup?.result?.vaultVerified)))
+   ?status.backup
+   :await command('backup.start',{requestId:randomUUID(),vault:targetVault,vaultProvider:targetVault,scope,allowOverwrite:Boolean(allowOverwrite)});
   status.backupExecuted=true;
-  const captured=await wait(backup,'backup');
+  const captured=backup.state==='complete'?backup:await wait(backup,'backup');
   if(!captured.result?.captureComplete)throw new Error('capture_not_complete');
   if(['dropbox','s3'].includes(targetVault) && (captured.result?.destinationKind!==targetVault||captured.result?.vaultVerified!==true))throw new Error(targetVault+'_delivery_unverified');
   status.state='restoring';await persist();
-  const restore=await command('restore.start',{requestId:randomUUID(),capsuleId:backup.id,confirmTarget:targetRef,acknowledgeManualConfig:true,allowOverwrite:Boolean(allowOverwrite),vaultProvider:targetVault});
+  const restore=await command('restore.start',{requestId:randomUUID(),capsuleId:backup.id,...(captured.result?.capsuleId?{dropboxCapsuleId:captured.result.capsuleId}:{}),confirmTarget:targetRef,acknowledgeManualConfig:true,allowOverwrite:Boolean(allowOverwrite),vaultProvider:targetVault});
   status.restoreExecuted=true;
   const restored=await wait(restore,'restore');
   if(!restored.result?.restoreVerified)throw new Error('restore_not_verified');

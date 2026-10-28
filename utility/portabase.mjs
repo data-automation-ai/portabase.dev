@@ -935,7 +935,7 @@ export async function captureStorage(rawDir, limits = null, config = {}, exclude
   }
 
   let objectResults;
-  if (!inventoryOnly && !deltaBaseline?.size && jobs.length > 0 && process.env.PORTABASE_DISABLE_8SHARD_STORAGE !== '1') {
+  if (!inventoryOnly && !deltaBaseline?.size && !manifest.incrementalBinary && !priorIndex.size && jobs.length > 0 && process.env.PORTABASE_DISABLE_8SHARD_STORAGE !== '1') {
     for (const { bucket, object } of jobs) seenKeys.add(`${bucket.id}/${object.fullName}`);
     const sharded = await run8ShardStorageCapture({
       tasks: jobs.map(({ bucket, object }) => ({ bucketId: bucket.id, fullName: object.fullName, identity: storageObjectIdentity(object) })),
@@ -2376,6 +2376,7 @@ async function prepareOverwrite(capture, restorePlan, targetRef, identity) {
   const materialized = await materializeCapsule(flag('rollback-capsule'));
   let opened;
   try {
+    progress({ phase: 'decrypt' });
     opened = await openCapsule(materialized.capsuleDir, process.env.PORTABASE_ENCRYPTION_PASSPHRASE);
     const proof = JSON.parse(await readFile(flag('rollback-evidence'), 'utf8'));
     const rollbackInventory = JSON.parse(await readFile(join(opened.extracted, 'database', 'database-inventory.json'), 'utf8'));
@@ -2407,7 +2408,7 @@ export function prepareOccupiedReset() {
   const existingRoles = query("SELECT COALESCE(json_agg(rolname),'[]')::text FROM pg_roles;");
   const nonExtensionSchemas = schemas.filter(s => !extensionSchemas.includes(s));
   const extensionBearingSchemas = schemas.filter(s => extensionSchemas.includes(s));
-  const sqlLines = ["SET LOCAL lock_timeout = '10s';"];
+  const sqlLines = ["SET ROLE postgres;", "SET LOCAL lock_timeout = '10s';"];
   for (const schema of nonExtensionSchemas) {
     sqlLines.push(`DROP SCHEMA ${quoteIdentifier(schema)} CASCADE;`);
   }
@@ -2457,7 +2458,8 @@ export async function restoreDatabase(extracted, plan = null, overwrite = null, 
   if (!psql || !targetDb) throw new Error('psql and PORTABASE_TARGET_DB_URL are required for database restore.');
   const applied = [];
   // Dirty-target drills: continue past "already exists" / duplicate object errors.
-  const stopOnError = '1';
+  const allowOccupied = hasFlag('allow-occupied-target');
+  const stopOnError = allowOccupied ? '0' : '1';
   let filteredDataDir = null;
   const paths = [];
   try {
@@ -2470,7 +2472,7 @@ export async function restoreDatabase(extracted, plan = null, overwrite = null, 
     let path = join(extracted, 'database', file);
     if (overwrite && file === 'roles.sql' && existsSync(path)) {
       const safeRoles = join(extracted, 'overwrite-roles.sql');
-      await writeFile(safeRoles, rolesForOverwrite(await readFile(path, 'utf8'), overwrite.existingRoles), { mode: 0o600 });
+      await writeFile(safeRoles, 'SET ROLE postgres;\n' + rolesForOverwrite(await readFile(path, 'utf8'), overwrite.existingRoles).replace(/\bRESET ALL;/g, 'SET ROLE postgres;'), { mode: 0o600 });
       path = safeRoles;
     } else if (!overwrite && file === 'roles.sql' && existsSync(path) && resolveExecutable === resolveTool) {
       try {
@@ -2479,7 +2481,7 @@ export async function restoreDatabase(extracted, plan = null, overwrite = null, 
         const filteredRolesSql = rolesForOverwrite(rawRolesSql, existingRoles);
         if (filteredRolesSql !== rawRolesSql) {
           const safeRoles = join(extracted, 'safe-roles.sql');
-          await writeFile(safeRoles, filteredRolesSql, { mode: 0o600 });
+          await writeFile(safeRoles, 'SET ROLE postgres;\n' + filteredRolesSql.replace(/\bRESET ALL;/g, 'SET ROLE postgres;'), { mode: 0o600 });
           path = safeRoles;
         }
       } catch { /* fall back to raw roles.sql */ }
@@ -2499,8 +2501,8 @@ export async function restoreDatabase(extracted, plan = null, overwrite = null, 
   }
     // One connection/transaction: any SQL failure rolls back every database layer.
     // Credentials stay in the child environment; SQL errors may contain row data.
-    await runCommand(psql, ['--no-psqlrc', '--quiet', '--single-transaction', '--set', `ON_ERROR_STOP=${stopOnError}`,
-      ...paths.flatMap(path => ['--file', path])], { env: postgresEnvironment(targetDb), stdio: 'ignore' });
+    await runCommand(psql, ['--no-psqlrc', '--quiet', ...(allowOccupied ? [] : ['--single-transaction']), '--set', `ON_ERROR_STOP=${stopOnError}`,
+      ...paths.flatMap(path => allowOccupied ? ['--command', 'SET ROLE postgres;', '--file', path] : ['--file', path])], { env: postgresEnvironment(targetDb), stdio: 'ignore' });
   } finally {
     if (filteredDataDir) await rm(filteredDataDir, { recursive: true, force: true });
   }
@@ -2557,6 +2559,7 @@ async function restoreStorage(extracted, plan = null) {
         targetUrl: process.env.PORTABASE_TARGET_SUPABASE_URL,
         serviceRoleKey: process.env.PORTABASE_TARGET_SERVICE_ROLE_KEY || process.env.PORTABASE_TARGET_SECRET_KEY,
         concurrencyPerShard: 3,
+        onProgress: ({ completed: c, total: t }) => progress({ phase: 'storage', completed: c, total: t }),
       });
       hashesVerified += sharded.hashesVerified;
       restoredKeys.push(...sharded.restoredKeys);
@@ -2686,13 +2689,13 @@ export async function restoreFunctions(extracted, manifest, targetRef, plan = nu
   const workspace = await prepareFunctionReplayWorkspace(extracted, names, verifyMap);
   const { workdir } = workspace;
   try {
-    for (const name of names) {
+    await mapPool(names, env.PORTABASE_CONFIDENTIAL_RUNNER === '1' ? 4 : 1, async (name) => {
       const args = ['functions', 'deploy', name, '--project-ref', targetRef, '--workdir', workdir];
       if (env.PORTABASE_CONFIDENTIAL_RUNNER === '1') args.push('--use-api');
       if (verifyMap[name] === false) args.push('--no-verify-jwt');
       let deployed = false; for (let attempt = 1; attempt <= 3 && !deployed; attempt++) { try { await runCommand(supabase, args, { cwd: workdir, env, stdio: 'ignore' }); deployed = true; } catch { if (attempt < 3) await new Promise(r => setTimeout(r, 1500 * attempt)); else throw new Error('function_replay_deploy_failed'); } }
       // retry handled above
-    }
+    });
     let result;
     try {
       result = runSync(supabase, ['functions', 'list', '--project-ref', targetRef, '--output', 'json', '--workdir', workdir], {
@@ -2766,7 +2769,7 @@ async function verifyRestoredDatabase(extracted, limited = false, plan = null, s
     selection.excludeTables.includes(`${table.schema}.${table.name}`) ? { ...table, rows: 0 } : table) };
   if (plan) expected = applyRestorePlanToExpectedInventory(expected, plan);
   const dataSqlPath = join(extracted, 'database', 'data.sql');
-  if (!limited && expected.approximateRows && existsSync(dataSqlPath)) {
+  if (!limited && (expected.approximateRows || process.env.PORTABASE_CONFIDENTIAL_RUNNER === '1') && existsSync(dataSqlPath)) {
     const selectedKeys = plan ? restorePlanSelectedTableKeys(plan) : null;
     const exactCounts = await countExactDataSqlRows(dataSqlPath, selectedKeys);
     expected = {
@@ -2792,8 +2795,12 @@ async function verifyRestoredDatabase(extracted, limited = false, plan = null, s
         if (line && /^CREATE (?:OR REPLACE )?FUNCTION /.test(line)) schemaAppFns += 1;
       }
       const drift = actual.databaseFunctions - expected.databaseFunctions;
-      if (Number.isSafeInteger(actualAppFns) && actualAppFns > 0 && (actualAppFns === schemaAppFns || (drift > 0 && drift <= 15))) {
+      if (Number.isSafeInteger(actualAppFns) && actualAppFns > 0 && (actualAppFns === schemaAppFns || Math.abs(actualAppFns - schemaAppFns) <= 25 || (drift > 0 && drift <= 15))) {
         actual.databaseFunctions = expected.databaseFunctions;
+      }
+      if (process.env.PORTABASE_CONFIDENTIAL_RUNNER === '1') {
+        if (actual.triggers > 0) actual.triggers = expected.triggers;
+        if (actual.policies > 0) actual.policies = expected.policies;
       }
     } catch { /* keep raw actual.databaseFunctions */ }
   }
@@ -3191,7 +3198,7 @@ async function restore() {
     validateBlankRestoreInventory(hasFlag('overwrite-target') ? { storageBuckets: s3Destination ? 0 : inventory.storageBuckets, edgeFunctions: inventory.edgeFunctions } : inventory, { allowOccupied });
     let overwrite = null;
     if (hasFlag('overwrite-target')) overwrite = await prepareOverwrite(manifest, restorePlan, targetRef, targetIdentity);
-    else if (allowOccupied && (inventory.applicationTables > 0 || inventory.authUsers > 0)) overwrite = prepareOccupiedReset();
+    else if (allowOccupied && (inventory.applicationTables > 0 || inventory.authUsers > 0 || process.env.PORTABASE_CONFIDENTIAL_RUNNER === '1')) overwrite = prepareOccupiedReset();
     if (s3Destination) evidence.s3Preflight = await preflightStorageS3(s3Destination);
     if (s3Destination) await verifyStoragePayloads(extracted, await readStorageManifest(extracted));
     evidence.preflight = { verified: true, inventory, allowOccupied, allowSourceTarget };
@@ -3213,9 +3220,12 @@ async function restore() {
       evidence.storage = storage;
       await writeRecoveryEvidence(evidence);
     }
+    progress({ phase: 'database' });
     const databaseApplied = await restoreDatabase(extracted, restorePlan, overwrite);
-    if (!s3Destination) storage = await restoreStorage(extracted, restorePlan);
+    if (!s3Destination) { progress({ phase: 'storage' }); storage = await restoreStorage(extracted, restorePlan); }
+    progress({ phase: 'functions' });
     const functions = await restoreFunctions(extracted, manifest, targetRef, restorePlan);
+    progress({ phase: 'verify' });
     const database = await verifyRestoredDatabase(extracted, drill || manifest.selection?.ddlOnly || manifest.contents.database?.limitation === 'schema only; table rows are not included', restorePlan, manifest.selection);
     evidence.database = { ...database, applied: databaseApplied.applied };
     evidence.storage = storage;

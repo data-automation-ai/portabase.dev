@@ -1,5 +1,5 @@
 import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { join, resolve, sep } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 
 const namePattern = /^[A-Za-z][A-Za-z0-9_-]{0,99}$/;
 const fail = code => { throw new Error(`function_replay_${code}`); };
@@ -11,14 +11,46 @@ async function directory(path) {
   const value = await info(path);
   if (!value?.isDirectory() || value.isSymbolicLink()) fail('invalid_source');
 }
-async function copyTree(source, destination) {
+async function copyTree(source, destination, stagedRoot = null, fnName = null) {
   const value = await info(source);
   if (!value || value.isSymbolicLink() || (!value.isFile() && !value.isDirectory()) || (value.isFile() && value.nlink !== 1)) fail('invalid_source');
   if (value.isFile()) {
     const raw = await readFile(source);
     if (raw.length >= 5 && raw.subarray(0, 5).toString('utf8') === 'ESZIP') {
       const text = raw.toString('utf8');
-      const match = /\{"version":3,"sources":\[[^\]]+\],"sourcesContent":\[("(?:[^"\\]|\\.)*")/.exec(text);
+      const mapRe = /\{"version":3,"sources":(\[(?:[^\[\]]|"(?:[^"\\]|\\.)*")*\]),"sourcesContent":(\[(?:[^\[\]]|"(?:[^"\\]|\\.)*")*\])/g;
+      let m, primary = null, fallback = null;
+      while ((m = mapRe.exec(text)) !== null) {
+        try {
+          const sources = JSON.parse(m[1]), contents = JSON.parse(m[2]);
+          for (let i = 0; i < sources.length; i += 1) {
+            const srcUrl = String(sources[i] || ''), code = contents[i];
+            if (typeof code !== 'string' || !code.trim()) continue;
+            fallback = code;
+            const sharedMatch = /\/functions\/(_shared\/[A-Za-z0-9_./-]+\.(?:ts|js|tsx|jsx|mjs|json))$/.exec(srcUrl);
+            if (sharedMatch && stagedRoot && !sharedMatch[1].includes('..')) {
+              const sharedTarget = join(stagedRoot, sharedMatch[1]);
+              await mkdir(dirname(sharedTarget), { recursive: true, mode: 0o700 });
+              await writeFile(sharedTarget, code, { mode: 0o600 }).catch(() => {});
+              continue;
+            }
+            if (fnName) {
+              const fnMatch = new RegExp(`/functions/${fnName}/([A-Za-z0-9_./-]+\\.(?:ts|js|tsx|jsx|mjs|json))$`).exec(srcUrl);
+              if (fnMatch && !fnMatch[1].includes('..')) {
+                if (/^index\.(?:ts|js|tsx|jsx|mjs)$/.test(fnMatch[1])) primary = code;
+                else {
+                  const subTarget = join(dirname(destination), fnMatch[1]);
+                  await mkdir(dirname(subTarget), { recursive: true, mode: 0o700 });
+                  await writeFile(subTarget, code, { mode: 0o600 }).catch(() => {});
+                }
+                continue;
+              }
+            }
+            if (!srcUrl.includes('/_shared/') && !srcUrl.startsWith('http') && !srcUrl.startsWith('npm:')) primary = code;
+          }
+        } catch { /* ignore */ }
+      }
+      const match = (primary || fallback) ? [null, JSON.stringify(primary || fallback)] : /\{"version":3,"sources":\[[^\]]+\],"sourcesContent":\[("(?:[^"\\]|\\.)*")/.exec(text);
       if (match) {
         try {
           const extractedSource = JSON.parse(match[1]);
@@ -39,7 +71,7 @@ async function copyTree(source, destination) {
     if (seen.has(key) || /[\\/:\x00-\x1f]/.test(item) || /[. ]$/.test(item)
       || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(item) || /^\.env(?:\.|$)/i.test(item)) fail('invalid_source');
     seen.add(key);
-    await copyTree(join(source, item), join(destination, item));
+    await copyTree(join(source, item), join(destination, item), stagedRoot, fnName);
   }
 }
 
@@ -117,7 +149,7 @@ export async function prepareFunctionReplayWorkspace(extracted, names, verifyMap
       if (present.length !== 1) fail(present.length ? 'ambiguous_source' : 'missing_source');
       const source = present[0]; await directory(source);
       const cliLayout = source === candidates[1]; roots.add(cliLayout ? cliRoot : capture);
-      await copyTree(source, join(staged, name));
+      await copyTree(source, join(staged, name), staged, name);
       const config = cliLayout ? settings.get(name) || {} : {};
       if (config.enabled === false || (Object.hasOwn(config, 'verify_jwt') && config.verify_jwt !== verifyMap[name])) fail('config_mismatch');
       let entrypoint = config.entrypoint;
