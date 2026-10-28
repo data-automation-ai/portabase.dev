@@ -97,6 +97,9 @@ import { resolveEdition } from './license.mjs';
 import { emitTelemetry } from './telemetry.mjs';
 import { createCaptureLog } from './capture-log.mjs';
 import { enforceJobCapsuleLimit } from './job-capsule-limit.mjs';
+import { encryptedBinaryCatalog, strongEtag } from '../cloud/confidential/binary-catalog.mjs';
+import { binaryVaultStore } from '../cloud/confidential/binary-vault-store.mjs';
+import { sealManifest, openManifest } from '../cloud/confidential/manifest-envelope.mjs';
 import { runAwsCli } from './aws/cli.mjs';
 import {
   captureOptions, inventoryObject, payloadStorage, targetDatabaseUrl, databaseIdentity,
@@ -881,6 +884,7 @@ export async function captureStorage(rawDir, limits = null, config = {}, exclude
       : buckets;
   // Flatten work queue so concurrency is global (not stuck on one huge bucket).
   const jobs = [];
+  if(config.binaryCatalog)config.binaryCatalog.setScope(selectedBuckets.map(bucket=>bucket.id));
   if (limits?.firstObjectPerBucket) {
     for (const bucket of selectedBuckets) {
       const objects = listedObjects.get(bucket.id) || [];
@@ -938,6 +942,39 @@ export async function captureStorage(rawDir, limits = null, config = {}, exclude
     const key = `${bucket.id}/${object.fullName}`;
     seenKeys.add(key);
     if (inventoryOnly) return { bucketId: bucket.id, entry: inventoryObject(object.fullName, identity) };
+    if (config.binaryCatalog) {
+      const catalog=config.binaryCatalog,prior=catalog.previous(bucket.id,object.fullName);
+      const objectPath=object.fullName.split('/').map(encodeURIComponent).join('/');
+      const validator=strongEtag(prior?.etag);
+      if(prior&&!validator)throw Error('binary_strong_validator_required');
+      if(prior){
+        const head=await sourceFetch(`/storage/v1/object/authenticated/${encodeURIComponent(bucket.id)}/${objectPath}`,
+          {method:'HEAD',headers:{'If-None-Match':validator},redirect:'error'});
+        const current=strongEtag(head.headers.get('etag'));
+        if((!head.ok&&head.status!==304)||!current)throw Error('binary_strong_validator_required');
+        if(current===validator){const entry=await catalog.reuse(prior);completed+=1;progress({phase:'storage',completed,total:jobs.length});
+          return {bucketId:bucket.id,entry:{...entry,contentType:identity.contentType||null,updatedAt:identity.updatedAt,includedInCapsule:true,payloadLocation:'encrypted-vault',downloaded:false,reused:true}};}
+        if(head.status===304)throw Error('binary_validator_mismatch');
+      }
+      const response=await sourceFetch(`/storage/v1/object/authenticated/${encodeURIComponent(bucket.id)}/${objectPath}`,
+        {headers:validator?{'If-None-Match':validator}:{},redirect:'error'});
+      let entry;
+      if(response.status===304){
+        if(!prior||!validator||strongEtag(response.headers.get('etag'))!==validator)throw Error('binary_validator_mismatch');
+        entry=await catalog.reuse(prior);
+      }else{
+        if(!response.ok)throw Error('binary_source_download_failed');
+        if(!strongEtag(response.headers.get('etag'))){await response.body?.cancel();throw Error('binary_strong_validator_required');}
+        // The temporary plaintext file is only inside the attested runner.
+        const file=join(storageDir,'.object-'+createHash('sha256').update(key).digest('hex'));
+        try{await pipeline(Readable.fromWeb(response.body),createWriteStream(file,{flags:'wx',mode:0o600}));
+          entry=await catalog.capture({bucket:bucket.id,name:object.fullName,file,etag:response.headers.get('etag')});}
+        finally{await rm(file,{force:true});}
+      }
+      completed+=1;progress({phase:'storage',completed,total:jobs.length});
+      return {bucketId:bucket.id,entry:{...entry,contentType:identity.contentType||null,updatedAt:identity.updatedAt,
+        includedInCapsule:true,payloadLocation:'encrypted-vault',downloaded:response.status!==304,reused:response.status===304}};
+    }
     const deltaHit = deltaBaseline?.size ? deltaBaseline.get(key) : null;
     if (deltaHit && baselineObjectUnchanged(deltaHit, identity)) {
       completed += 1;
@@ -1125,6 +1162,10 @@ export async function captureStorage(rawDir, limits = null, config = {}, exclude
     manifest.capsuleNamesFingerprintMd5,
   );
   manifest.sourceInventory = inventory;
+  if(config.binaryCatalog){
+    manifest.formatVersion=4;manifest.binarySnapshot=config.binaryCatalog.snapshot();
+    manifest.tombstones=manifest.binarySnapshot.tombstones;
+  }
   const manifestPath = join(storageDir, 'storage-manifest.json');
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   let limitation = null;
@@ -1613,7 +1654,7 @@ async function loadDeltaBaseline(baselinePath, passphrase) {
     manifest = JSON.parse(await readFile(topManifest, 'utf8'));
     const outer = join(dir, 'capsule.json');
     if (existsSync(outer)) {
-      try { capsuleId = JSON.parse(await readFile(outer, 'utf8')).id || capsuleId; } catch { /* keep dirname */ }
+      try { capsuleId = (await readCapsuleMetadata(outer,passphrase)).id || capsuleId; } catch { /* keep dirname */ }
     }
   } else {
     const materialized = await materializeCapsule(dir);
@@ -1737,6 +1778,28 @@ async function backup() {
   const passphraseEnv = config.encryption?.passphraseEnv || 'PORTABASE_ENCRYPTION_PASSPHRASE';
   const passphrase = process.env[passphraseEnv];
   if (!passphrase || passphrase.length < 16) throw new Error(`${passphraseEnv} must contain at least 16 characters.`);
+  let binaryCatalog,usageMeter;
+  if(process.env.PORTABASE_USAGE_CONFIG){
+    const meterConfig=JSON.parse(process.env.PORTABASE_USAGE_CONFIG);
+    if(meterConfig.kind!=='backup'||meterConfig.projectRef!==config.projectRef)throw Error('usage_backup_source_mismatch');
+    usageMeter=(await import('../cloud/confidential/usage-meter.mjs')).createUsageMeter(meterConfig);
+  }
+  const usageTotals={databaseBytes:0,binaryBytes:0,otherBytes:0};
+  let binaryReceipt={};
+  if(config.capture?.binaryVault===true){
+    if(process.env.PORTABASE_CONFIDENTIAL_RUNNER!=='1'||!process.env.PORTABASE_USAGE_CONFIG)throw Error('attested_binary_meter_required');
+    if(hasFlag('delta')||trial||firstPerBucket||options.storageInventoryOnly)throw Error('binary_policy_requires_complete_selected_objects');
+    const store=binaryVaultStore(config.provider);
+    // The persisted encrypted catalog, not a request flag, decides whether this
+    // is the first binary baseline. The server independently claims that grant.
+    binaryCatalog=encryptedBinaryCatalog({store,recoveryKey:passphrase,owner:process.env.PORTABASE_CUSTOMER_OWNER,sourceRef:config.projectRef,
+      onTransfer:async event=>{await reserveTransferUsage(usageMeter,usageTotals,{binaryBytes:event.binaryBytes,otherBytes:event.otherBytes||0});}});
+    await binaryCatalog.load();const initial=binaryCatalog.begin();binaryCatalog.setScope([]);
+    const usageConfig=JSON.parse(process.env.PORTABASE_USAGE_CONFIG);
+    if(!initial.initial&&usageConfig.binaryMode==='baseline')throw Error('binary_baseline_already_exists');
+    config.binaryCatalog=binaryCatalog;
+  }
+  if(usageMeter)await usageMeter.reserve(usageTotals);
   const deltaMode = hasFlag('delta');
   const baselineFlag = flag('baseline', null);
   if (deltaMode && !baselineFlag) throw new Error('--delta requires --baseline <capsule directory>.');
@@ -1857,7 +1920,7 @@ async function backup() {
     // Persist storage object identity for next-run resume (metadata only; lives outside capsule)
     try {
       const sm = manifest.contents.storage?.manifestPath;
-      if (sm && existsSync(sm)) {
+      if (!binaryCatalog && sm && existsSync(sm)) {
         await mkdir(resolve(config.statusDirectory || './portabase-status'), { recursive: true });
         await writeFile(lastStorageManifestPath(config), await readFile(sm, 'utf8'));
       }
@@ -1923,15 +1986,24 @@ async function backup() {
       encryption,
       durationMs: Date.now() - startedAt,
     };
-    await writeFile(join(capsuleDir, 'capsule.json'), `${JSON.stringify(capsuleMetadata, null, 2)}\n`);
+    await writeFile(join(capsuleDir, 'capsule.json'), `${JSON.stringify(process.env.PORTABASE_CONFIDENTIAL_RUNNER==='1'?sealManifest(capsuleMetadata,passphrase):capsuleMetadata, null, 2)}\n`);
     await writeFile(join(capsuleDir, 'RECOVER.txt'), 'This capsule is encrypted. Keep PORTABASE_ENCRYPTION_PASSPHRASE outside the backup destination. Use Portabase restore without --execute to inspect the recovery plan.\n');
     if (trial) await writeTrialReport(capsuleDir, capsuleMetadata);
     await writeChecksums(capsuleDir);
     const capsuleHash = await hashFile(join(capsuleDir, 'capsule.pbase'));
     const manifestHash = await hashFile(join(capsuleDir, 'capsule.json'));
     const sizeBytes = await directoryByteSize(capsuleDir);
+    if(usageMeter&&config.provider.type!=='local')await reserveTransferUsage(usageMeter,usageTotals,{databaseBytes:sizeBytes});
     progress({ phase: 'transfer', item: config.provider.type });
     const transfer = await transferCapsule(config, capsuleDir, delivery=>progress({phase:'transfer',...delivery}));
+    if(binaryCatalog){
+      if(!transfer.verified||!['COMPLETE','SELECTIVE'].includes(manifest.status))throw Error('binary_manifest_capture_incomplete');
+      binaryReceipt=await binaryCatalog.commit(id);
+    }
+    if(usageMeter){const success=transfer.verified&&['COMPLETE','SELECTIVE'].includes(manifest.status);
+      await usageMeter.finish({...usageTotals,...binaryReceipt,status:success?'succeeded':'failed',durationMs:Date.now()-startedAt,
+        completeness:success?(manifest.status==='COMPLETE'?'complete':'selected'):'unverified',verified:!!success});
+    }
     const state = {
       state: manifest.status,
       capsule: id,
@@ -1949,6 +2021,7 @@ async function backup() {
         : 0,
       errors: manifest.errors,
       durationMs: Date.now() - startedAt,
+      ...(usageMeter?{usage:{...usageTotals,...binaryReceipt}}:{}),
     };
     await writeStatus(config, state);
     await touchAgentRegistry(config, { type: 'backup.completed', capsule: id });
@@ -1967,6 +2040,7 @@ async function backup() {
     if (hasFlag('json')) console.log(JSON.stringify({ ...state, contents: manifest.contents }));
     if (!['COMPLETE', 'SELECTIVE', 'TRIAL'].includes(manifest.status)) process.exitCode = 3;
   } catch (error) {
+    if(usageMeter)await usageMeter.finish({...usageTotals,status:'failed',durationMs:Date.now()-startedAt,completeness:'unverified',verified:false}).catch(()=>{});
     const state = { state: 'FAILED', capsule: id, failedAt: new Date().toISOString(), error: error.message };
     await writeStatus(config, state);
     await touchAgentRegistry(config, { type: 'backup.failed', capsule: id });
@@ -1975,8 +2049,19 @@ async function backup() {
     if (hasFlag('json')) console.log(JSON.stringify(state));
     throw error;
   } finally {
+    binaryCatalog?.close();
     await rm(workDir, { recursive: true, force: true });
   }
+}
+
+// Commit accounting only after reservation succeeds. A denied transfer must not
+// poison the final failure receipt with bytes the runner never attempted.
+export async function reserveTransferUsage(meter,accepted,changes){
+  const next={...accepted,...changes};await meter.reserve(next);Object.assign(accepted,next);
+}
+
+async function readCapsuleMetadata(file,passphrase=process.env.PORTABASE_ENCRYPTION_PASSPHRASE){
+  const value=JSON.parse(await readFile(file,'utf8'));return value.encryptedManifestVersion?openManifest(value,passphrase):value;
 }
 
 async function verify() {
@@ -1985,7 +2070,7 @@ async function verify() {
   for (const result of results) console.log(`${result.ok ? 'PASS' : 'FAIL'}  ${result.path}`);
   let failures = results.filter(item => !item.ok).length;
   if (hasFlag('decrypt')) {
-    const metadata = JSON.parse(await readFile(join(capsuleDir, 'capsule.json'), 'utf8'));
+    const metadata = await readCapsuleMetadata(join(capsuleDir,'capsule.json'));
     const temp = await mkdtemp(join(tmpdir(), 'portabase-verify-'));
     try {
       await decryptFile(join(capsuleDir, 'capsule.pbase'), join(temp, 'capsule.tar.gz'), process.env.PORTABASE_ENCRYPTION_PASSPHRASE, metadata.encryption);
@@ -2050,7 +2135,7 @@ async function simulate() {
       fail('capsule.json', 'missing outer metadata');
       throw new Error('Cannot continue without capsule.json');
     }
-    const outer = JSON.parse(await readFile(outerPath, 'utf8'));
+    const outer = await readCapsuleMetadata(outerPath);
     pass('capsule.json', `id=${outer.id} status=${outer.status} edition=${outer.edition || 'n/a'}`);
 
     if (!process.env.PORTABASE_ENCRYPTION_PASSPHRASE) {
@@ -2333,17 +2418,31 @@ async function simulate() {
 }
 
 async function openCapsule(capsuleDir, passphrase) {
-  const metadata = JSON.parse(await readFile(join(capsuleDir, 'capsule.json'), 'utf8'));
+  const outer = JSON.parse(await readFile(join(capsuleDir, 'capsule.json'), 'utf8'));
+  const metadata = outer.encryptedManifestVersion ? openManifest(outer,passphrase) : outer;
   const temp = await mkdtemp(join(tmpdir(), 'portabase-restore-'));
   const archive = join(temp, 'capsule.tar.gz');
   const extracted = join(temp, 'extracted');
+  try {
   await mkdir(extracted);
   await decryptFile(join(capsuleDir, 'capsule.pbase'), archive, passphrase, metadata.encryption);
   const tar = resolveTool('tar');
   if (!tar) throw new Error('tar is required to inspect a capsule.');
   await run(tar, ['-xzf', archive, '-C', extracted]);
   const manifest = JSON.parse(await readFile(join(extracted, 'manifest.json'), 'utf8'));
+  const storageManifestPath=join(extracted,'storage','storage-manifest.json');
+  if(existsSync(storageManifestPath)){
+    const storage=JSON.parse(await readFile(storageManifestPath,'utf8'));
+    if(storage.binarySnapshot){
+      const {config}=await loadConfig(),snapshot=storage.binarySnapshot;
+      if(snapshot.sourceRef!==manifest.projectRef)throw Error('binary_snapshot_source_mismatch');
+      const catalog=encryptedBinaryCatalog({store:binaryVaultStore(config.provider),recoveryKey:passphrase,owner:snapshot.owner,sourceRef:manifest.projectRef});
+      try{const loaded=await catalog.load();if(!loaded.manifests.some(row=>row.id===snapshot.id))throw Error('binary_snapshot_not_committed');await catalog.restore(snapshot,join(extracted,'storage'));}
+      finally{catalog.close();}
+    }
+  }
   return { metadata, manifest, extracted, temp };
+  }catch(error){await rm(temp,{recursive:true,force:true});throw error;}
 }
 
 async function materializeCapsule(value) {
@@ -3074,6 +3173,8 @@ async function restore() {
   }
   const materialized = await materializeCapsule(flag('capsule', argv[1] || '.'));
   let opened;
+  let restoreMeter;
+  const restoreUsage={databaseBytes:0,binaryBytes:0,otherBytes:0};
   const startedAt = new Date().toISOString();
   const drill = hasFlag('drill');
   const writesTarget = hasFlag('execute') || drill;
@@ -3082,6 +3183,11 @@ async function restore() {
   try {
     opened = await openCapsule(materialized.capsuleDir, process.env.PORTABASE_ENCRYPTION_PASSPHRASE);
     let { manifest, metadata, extracted } = opened;
+    if(process.env.PORTABASE_USAGE_CONFIG){
+      const meterConfig=JSON.parse(process.env.PORTABASE_USAGE_CONFIG);
+      if(meterConfig.kind!=='restore'||meterConfig.projectRef!==manifest.projectRef)throw Error('usage_restore_source_mismatch');
+      restoreMeter=(await import('../cloud/confidential/usage-meter.mjs')).createUsageMeter(meterConfig);
+    }
     if (manifest.kind === 'delta') {
       const baselineFlag = flag('baseline', null);
       if (!baselineFlag) throw new Error(`Capsule ${metadata.id} is a delta capsule: pass --baseline <full capsule directory> (a delta never restores alone).`);
@@ -3173,6 +3279,18 @@ async function restore() {
       return;
     }
     console.log(`${drill ? 'LIMITED DRILL' : 'TARGET WRITE'} CONFIRMED: ${targetRef}`);
+    if(restoreMeter){
+      // Logical payload bytes, not TLS/HTTP packet overhead. Reserve the entire
+      // attempted restore before the first write; failures cannot free a budget
+      // which may already have left the runner during a partial transfer.
+      const storageManifest=existsSync(join(extracted,'storage','storage-manifest.json'))?await readStorageManifest(extracted):{buckets:[]};
+      const selected=restorePlan?filterStorageManifestByPlan(storageManifest,restorePlan):storageManifest;
+      const nextUsage={databaseBytes:0,binaryBytes:0,otherBytes:0};
+      nextUsage.binaryBytes=(selected.buckets||[]).flatMap(b=>b.objects||[]).reduce((sum,o)=>sum+(Number(o.size)||0),0);
+      for(const file of ['roles.sql','schema.sql','data.sql'])if(existsSync(join(extracted,'database',file)))nextUsage.databaseBytes+=(await stat(join(extracted,'database',file))).size;
+      if(existsSync(join(extracted,'functions')))nextUsage.otherBytes=await directoryByteSize(join(extracted,'functions'));
+      await reserveTransferUsage(restoreMeter,restoreUsage,nextUsage);
+    }
     // Preserve binary bytes before any database overwrite. If this fails, DB is untouched.
     let storage;
     if (s3Destination) {
@@ -3189,6 +3307,7 @@ async function restore() {
     evidence.database = { ...database, applied: databaseApplied.applied };
     evidence.storage = storage;
     evidence.functions = functions;
+    if(restoreMeter)evidence.transferUsage={...restoreUsage,basis:'logical-payload-attempted'};
     evidence.status = recoveryEvidenceStatus({ mode, captureStatus: manifest.status, database, storage, functions, restorePlan });
     if (evidence.status === 'FAILED') throw new Error('Recovery verification failed. Review the generated evidence for mismatched or unverified layers.');
     if (drill) {
@@ -3205,8 +3324,11 @@ async function restore() {
       console.log('\nRECOVERY DATA PATH VERIFIED. Finish and verify the listed manual configuration before cutover.');
     }
     await writeRecoveryEvidence(evidence);
+    if(restoreMeter)await restoreMeter.finish({...restoreUsage,status:'succeeded',durationMs:Date.now()-Date.parse(startedAt),
+      completeness:manifest.status==='COMPLETE'&&!restorePlan?'complete':'selected',verified:true});
     if (hasFlag('json')) console.log(JSON.stringify(evidence));
   } catch (error) {
+    if(restoreMeter)await restoreMeter.finish({...restoreUsage,status:'failed',durationMs:Date.now()-Date.parse(startedAt),completeness:'unverified',verified:false}).catch(()=>{});
     evidence.status = 'FAILED';
     evidence.error = error.message;
     try { await writeRecoveryEvidence(evidence); } catch (reportError) { console.error(`Unable to write recovery evidence: ${reportError.message}`); }
@@ -3337,8 +3459,10 @@ async function prune() {
   if (!hasFlag('execute')) return console.log('\nDRY RUN ONLY. Add --execute after reviewing the exact capsule IDs.');
   const metas = [];
   for (const name of capsules) {
+    const raw=JSON.parse(await readFile(join(root,name,'capsule.json'),'utf8'));
+    if(raw.encryptedManifestVersion)throw Error('encrypted_binary_retention_requires_catalog_review');
     try {
-      metas.push(JSON.parse(await readFile(join(root, name, 'capsule.json'), 'utf8')));
+      metas.push(raw);
     } catch { /* foreign or partial directory; prune matches by name only */ }
   }
   const protectedIds = findProtectedBaselines(metas);
@@ -3858,7 +3982,7 @@ async function exportManifest() {
   if (!capsuleDir || !existsSync(join(capsuleDir, 'capsule.json'))) {
     throw new Error('export-manifest requires --capsule <dir> with capsule.json');
   }
-  const metadata = JSON.parse(await readFile(join(capsuleDir, 'capsule.json'), 'utf8'));
+  const metadata = await readCapsuleMetadata(join(capsuleDir,'capsule.json'));
   if (hasFlag('for-sharing')) {
     const requested = flag('out');
     if (!requested) throw new Error('--for-sharing requires --out <new-file.json>');
@@ -3880,7 +4004,7 @@ async function capsuleUnload() {
   if (!capsuleDir || !existsSync(join(capsuleDir, 'capsule.json'))) {
     throw new Error('capsule-unload requires --capsule <dir> with capsule.json');
   }
-  const metadata = JSON.parse(await readFile(join(capsuleDir, 'capsule.json'), 'utf8'));
+  const metadata = await readCapsuleMetadata(join(capsuleDir,'capsule.json'));
   const report = namesOnlyCapsuleReport(metadata, 'capsule-unload');
   report.unloadable = report.layers.filter((name) => report.layerComplete[name]);
   report.stillCiphertext = true;

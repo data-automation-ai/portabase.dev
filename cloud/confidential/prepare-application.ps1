@@ -1,4 +1,5 @@
-param([Parameter(Mandatory=$true)][string]$SourceRoot,[string]$BuildId='20261024a',
+param([Parameter(Mandatory=$true)][string]$SourceRoot,
+  [Parameter(Mandatory=$true)][ValidatePattern('^[a-f0-9]{40}$')][string]$SourceCommit,[string]$BuildId='20261024a',
   [string]$AdmissionEndpoint='', [switch]$BuildOnly)
 $ErrorActionPreference='Stop'
 if($BuildId -notmatch '^[a-z0-9]{6,20}$'){throw 'Invalid build id'}
@@ -18,25 +19,38 @@ $source=(Resolve-Path -LiteralPath $SourceRoot).Path
 if($source.StartsWith('F:',[StringComparison]::OrdinalIgnoreCase)){throw 'Forbidden drive'}
 $root=& git -C $source rev-parse --show-toplevel
 if($LASTEXITCODE -ne 0 -or $root.Replace('/','\') -ne $source){throw 'Source must be a verified Git root'}
-$dirty=& git -C $source status --porcelain
-if($dirty){throw 'Build source must be clean'}
-$commit=& git -C $source rev-parse HEAD
-$stage=Join-Path ([IO.Path]::GetTempPath()) "portabase-confidential-app-$BuildId"
+$commit=& git -C $source rev-parse "$SourceCommit^{commit}"
+if($LASTEXITCODE -ne 0 -or $commit -ne $SourceCommit){throw 'SourceCommit must identify the reviewed commit exactly'}
+# Unknown dirty files stay untouched; only immutable reviewed Git objects enter the image.
+$stage=Join-Path $source ".portabase/confidential-build-$BuildId"
 if(Test-Path -LiteralPath $stage){throw 'Stage already exists; inspect before reuse'}
 New-Item -ItemType Directory -Path "$stage/cloud/confidential","$stage/cloud/runner","$stage/utility" | Out-Null
 $runtime=@('attestation.mjs','google-token.mjs','command-channel.mjs','customer-identity.mjs','customer-profile.mjs',
   'oauth-connections.mjs','dropbox-vault.mjs','supabase-access.mjs','pg-command.mjs','supabase-root.crt','engine-jobs.mjs','application.mjs',
   'cloud-config.mjs','server.mjs','production-workload.mjs','Dockerfile.application','package.json','package-lock.json',
-  'controller.mjs','controller-main.mjs','compute-control.mjs','Dockerfile.controller')
-$paths=@('package.json','package-lock.json','cloud/runner/supabase-oauth.mjs','cloud/runner/storage-oauth.mjs')
+  'controller.mjs','controller-main.mjs','compute-control.mjs','Dockerfile.controller',
+  's3-vault.mjs','r2-vault.mjs','binary-vault-store.mjs','binary-catalog.mjs','manifest-envelope.mjs','usage-meter.mjs','usage-attestation.mjs',
+  'beacon-config.mjs','beacon-storage.mjs','beacon-crypto.mjs','destination-beacon.mjs','beacon-worker.mjs',
+  'beacon-scheduler.mjs','beacon-scheduler-identity.mjs','runner-usage.mjs')
+$paths=@('package.json','package-lock.json','cloud/control-plane/forbidden.mjs')
+$tree=@(& git -C $source ls-tree -r --name-only $commit -- cloud/runner utility)
+if($LASTEXITCODE -ne 0){throw 'Unable to enumerate reviewed source tree'}
+$paths+=@($tree | Where-Object {$_ -match '^cloud/runner/.+\.mjs$' -and $_ -notmatch '\.test\.mjs$'})
 $paths+=@($runtime | ForEach-Object {"cloud/confidential/$_"})
-$paths+=@(& git -C $source ls-files 'utility/*.mjs' 'utility/**/*.mjs' 'utility/aws/schema/*.json' | Where-Object {$_ -notmatch '\.test\.mjs$'})
-$manifest=@()
-foreach($relative in ($paths | Sort-Object -Unique)){
+$paths+=@($tree | Where-Object {($_ -match '^utility/.+\.mjs$' -and $_ -notmatch '\.test\.mjs$') -or $_ -match '^utility/aws/schema/[^/]+\.json$'})
+$paths=@($paths | Sort-Object -Unique)
+foreach($relative in $paths){
   if($relative -match '(^|/)(\.env|node_modules|evidence|credentials)' -or $relative -match '\.\.'){throw 'Unsafe source path'}
-  $from=Join-Path $source $relative;$to=Join-Path $stage $relative
-  New-Item -ItemType Directory -Path (Split-Path $to) -Force | Out-Null
-  Copy-Item -LiteralPath $from -Destination $to
+}
+$archive=Join-Path $stage 'reviewed-source.tar'
+& git -C $source archive --format=tar "--output=$archive" $commit -- @paths
+if($LASTEXITCODE -ne 0){throw 'Unable to archive reviewed source; required modules may not be committed'}
+& tar -xf $archive -C $stage
+if($LASTEXITCODE -ne 0){throw 'Unable to extract reviewed source'}
+$manifest=@()
+foreach($relative in $paths){
+  $to=Join-Path $stage $relative
+  if(-not (Test-Path -LiteralPath $to -PathType Leaf)){throw 'Reviewed source is incomplete'}
   $manifest+=@{path=$relative;sha256=(Get-FileHash -LiteralPath $to -Algorithm SHA256).Hash.ToLower()}
 }
 if(-not $BuildOnly){

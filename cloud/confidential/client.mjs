@@ -21,23 +21,31 @@ export function confidentialClient({url,policy,getAuthorization,fetchImpl=fetch,
     session:requestId=>request('/session',{requestId}),
     terminate:()=>request('/session',null,'DELETE'),
     evidence:()=>lastEvidence,
-    async command(operation,input={}) {
+    async command(operation,input={}, { envelopeFactory } = {}) {
       const challenge=nonce(),responseKey=crypto.getRandomValues(new Uint8Array(32));
       try {
         const offer=await request('/attest',{challenge});
         const {encryptionKey,evidence}=await verify(offer,challenge,approvedPolicy);
         // No customer input or recovery key leaves this process before verification.
-        const plaintext=new TextEncoder().encode(JSON.stringify({sessionId:offer.sessionId,challenge,
-          responseKey:base64url.encode(responseKey),operation,input}));
-        const envelope=await new CompactEncrypt(plaintext).setProtectedHeader({alg:'RSA-OAEP-256',enc:'A256GCM',typ:TYPE}).encrypt(encryptionKey);
-        plaintext.fill(0);
+        let envelope;
+        if (envelopeFactory) {
+          // Hosted provider grants remain HttpOnly. The bridge independently
+          // verifies this same offer, then returns only a bound JWE command.
+          envelope=await envelopeFactory({offer,challenge,responseKey:base64url.encode(responseKey)});
+          if(typeof envelope!=='string'||envelope.length>262144)throw new Error('invalid_encrypted_command');
+        } else {
+          const plaintext=new TextEncoder().encode(JSON.stringify({sessionId:offer.sessionId,challenge,
+            responseKey:base64url.encode(responseKey),operation,input}));
+          try {envelope=await new CompactEncrypt(plaintext).setProtectedHeader({alg:'RSA-OAEP-256',enc:'A256GCM',typ:TYPE}).encrypt(encryptionKey);}
+          finally {plaintext.fill(0);}
+        }
         const reply=await request('/command',{sessionId:offer.sessionId,envelope});
         if(typeof reply.envelope!=='string' || reply.envelope.length>8*1024*1024)throw new Error('invalid_encrypted_response');
         const decoded=await compactDecrypt(reply.envelope,responseKey,{keyManagementAlgorithms:['dir'],contentEncryptionAlgorithms:['A256GCM']});
         if(decoded.protectedHeader.typ!==TYPE)throw new Error('invalid_encrypted_response');
         const result=JSON.parse(new TextDecoder().decode(decoded.plaintext));decoded.plaintext.fill(0);
         if(result.sessionId!==offer.sessionId || result.challenge!==challenge)throw new Error('response_binding_mismatch');
-        lastEvidence=Object.freeze({...evidence,verifiedAt:new Date().toISOString()});
+        lastEvidence=Object.freeze({...evidence,verifiedAt:new Date().toISOString(),attestationToken:offer.attestation});
         if(result.ok!==true)throw new Error(/^[a-z0-9_]{3,80}$/.test(result.error||'')?result.error:'confidential_operation_failed');
         return result.data;
       } finally {responseKey.fill(0);}

@@ -103,3 +103,15 @@ test('allowOverwrite allows occupied target and appends --allow-occupied-target 
   const restoreCall = seen.find(s => s.args[0] === 'replay');
   assert.ok(restoreCall.args.includes('--allow-occupied-target'));
 });
+
+test('engine wrapper aborts trusted usage reservations when credentials or child process fails',async()=>{
+  for(const failure of ['credentials','child']){
+    let aborted=0,authorized=0;
+    const jobs=engineJobs({platform:'linux',meter:config=>({abort:async()=>{assert.equal(config.requestId,'synthetic-request');aborted++;}}),
+      access:()=>({inspect:async()=>({blank:true,measuredBytes:1}),credentials:async()=>{if(failure==='credentials')throw Error('credentials_failed');return {ref:'s'.repeat(20),managementToken:'synthetic'};}}),
+      run:async()=>{throw Error('child_failed');}});
+    const owner='a'.repeat(64),job=await jobs.start({owner,sourceRef:'s'.repeat(20),passphrase:'b'.repeat(43),maxBytes:1024,
+      scope:{database:true,storage:false,auth:false,functions:false},usageConfig:{requestId:'synthetic-request'},authorize:async()=>{authorized++;}});
+    assert.equal((await jobs.wait(owner,job.id)).state,'failed');assert.equal(authorized,1);assert.equal(aborted,1);
+  }
+});

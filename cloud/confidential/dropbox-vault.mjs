@@ -50,6 +50,15 @@ export function dropboxVault({ clientId, fetchImpl = fetch, now = Date.now } = {
       profile.dropbox = tokens;
       return { connected: true, accountId: tokens.accountId || null };
     },
+    async importSession(profile,{provider,session}={}) {
+      if(provider!=='dropbox'||!session||Object.keys(session).some(key=>!['accessToken','refreshToken','expiresAt'].includes(key))
+        ||![session.accessToken,session.refreshToken].every(value=>typeof value==='string'&&/^[\x21-\x7e]{1,16384}$/.test(value))
+        ||!Number.isSafeInteger(session.expiresAt)||session.expiresAt<=now()||session.expiresAt>now()+24*60*60*1000)fail('invalid_dropbox_session');
+      const account=await testDropboxConnection({accessToken:session.accessToken,fetchImpl:secureFetch});
+      profile.dropbox={accessToken:session.accessToken,refreshToken:session.refreshToken,expiresAt:session.expiresAt,tokenType:'bearer'};
+      delete profile.dropboxPending;profile.activeVault='dropbox';
+      return {connected:true,accountId:account.accountId||null};
+    },
     async provider(profile) {
       let tokens = profile.dropbox;
       if (!tokens?.refreshToken) fail('dropbox_connection_required');

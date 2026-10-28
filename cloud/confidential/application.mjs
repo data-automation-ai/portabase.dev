@@ -5,6 +5,10 @@ import { projectRef } from './supabase-access.mjs';
 import { dropboxVault } from './dropbox-vault.mjs';
 import { s3Vault } from './s3-vault.mjs';
 import { r2Vault } from './r2-vault.mjs';
+import { encryptedBinaryCatalog } from './binary-catalog.mjs';
+import { binaryVaultStore } from './binary-vault-store.mjs';
+import { createUsageMeter } from './usage-meter.mjs';
+import { destinationBeacons } from './destination-beacon.mjs';
 const fail = code => { throw new Error(code); };
 const TABLE_SELECTION = /^[A-Za-z_][A-Za-z0-9_$]*\.[A-Za-z0-9_$]+$/;
 const BUCKET_SELECTION = /^[A-Za-z0-9._-]{1,100}$/;
@@ -69,8 +73,10 @@ async function captureScope(api, ref, requested) {
   };
 }
 export function confidentialApplication({ oauthConfig, jobs = engineJobs(), connections = oauthConnections(oauthConfig),
-  vault = oauthConfig?.dropboxClientId ? dropboxVault({clientId:oauthConfig.dropboxClientId}) : null, s3 = s3Vault(),r2=r2Vault(), admit, now = Date.now }) {
+  vault = oauthConfig?.dropboxClientId ? dropboxVault({clientId:oauthConfig.dropboxClientId}) : null, s3 = s3Vault(),r2=r2Vault(), beacons=destinationBeacons(), meter=createUsageMeter, admit, now = Date.now }) {
   const customers = new Map(), locks = new Set();
+  connections.setTargetGrantAccess?.(profile=>beacons.access(profile,connections));
+  const revokeTarget=async(profile,slot)=>{if(slot==='target'&&connections.setTargetGrantAccess)await beacons.revokeForReplacement(profile);};
   return async ({owner,operation,input,authorization}) => {
     if (locks.has(owner)) fail('request_in_progress');
     locks.add(owner);
@@ -94,13 +100,25 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
         case 'session.open': data={ connected:{source:!!profile.connections.source,target:!!profile.connections.target,dropbox:!!profile.dropbox?.refreshToken,s3:!!profile.s3?.bucket,r2:!!profile.r2?.bucket,activeVault:profile.activeVault||(profile.s3?.bucket?'s3':'dropbox')},s3Summary:profile.s3?{bucket:profile.s3.bucket,region:profile.s3.region,prefix:profile.s3.prefix||'Portabase'}:null,r2Summary:profile.r2?{bucket:profile.r2.bucket,prefix:profile.r2.prefix}:null,selection:profile.selection,keyAcknowledged:!!profile.keyAcknowledged,accountConfirmation:profile.accountConfirmation?{confirmed:true,method:profile.accountConfirmation.method}:null }; break;
         case 'key.acknowledge': profile.keyAcknowledged=true; data={acknowledged:true}; break;
         case 'oauth.begin': data=connections.begin(profile,input.slot,input.redirectUri); break;
-        case 'oauth.finish': data=await connections.finish(profile,input); break;
-        case 'oauth.token': data=await connections.connectToken(profile,input); break;
-        case 'oauth.disconnect': data=connections.disconnect(profile,input.slot); break;
+        case 'oauth.finish':
+          await revokeTarget(profile,input.slot);
+          data=await connections.finish(profile,input); break;
+        case 'oauth.token':
+          await revokeTarget(profile,input.slot);
+          data=await connections.connectToken(profile,input); break;
+        case 'oauth.import':
+          await revokeTarget(profile,input.slot);
+          data=await connections.importSession(profile,input);break;
+        case 'oauth.disconnect':
+          await revokeTarget(profile,input.slot);
+          data=connections.disconnect(profile,input.slot); break;
+        case 'beacon.configure': data=await beacons.configure(profile,input,connections);break;
+        case 'beacon.status': data=await beacons.status(profile);break;
         case 'oauth.identity': data={slot:input.slot,identity:await connections.identity(profile,input.slot)}; break;
         case 'oauth.account.confirm': data=connections.confirm(profile,input); break;
         case 'vault.begin': if(!vault)fail('dropbox_app_not_configured');data=vault.begin(profile,input.redirectUri);break;
         case 'vault.finish': if(!vault)fail('dropbox_app_not_configured');profile.activeVault='dropbox';data=await vault.finish(profile,input.state?{code:input.code,state:input.state}:input.code);break;
+        case 'vault.import': if(!vault)fail('dropbox_app_not_configured');data=await vault.importSession(profile,input);break;
         case 'vault.s3.connect': data=await s3.connect(profile,input);break;
         case 'vault.s3.disconnect': delete profile.s3;if(profile.activeVault==='s3')profile.activeVault='dropbox';data={connected:false};break;
         case 'vault.r2.connect': data=await r2.connect(profile,input);break;
@@ -125,6 +143,12 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
         }
         case 'vault.capsules': {
           data={ capsules: vault && profile.dropbox?.refreshToken ? await vault.capsules(profile) : [] }; break;
+        }
+        case 'catalog.list': {
+          const provider=profile.activeVault==='s3'?await s3.provider(profile):profile.activeVault==='r2'?await r2.provider(profile):await vault.provider(profile);
+          const catalog=encryptedBinaryCatalog({store:binaryVaultStore(provider),recoveryKey,owner,sourceRef:projectRef(profile.selection.source)});
+          try{const loaded=await catalog.load();data={encrypted:true,manifests:loaded.manifests.map(row=>({id:row.id,baselineId:row.baselineId,createdAt:row.createdAt,capsuleId:row.capsuleId,objects:row.objects.length,bytes:row.objects.reduce((sum,object)=>sum+object.size,0)}))};}
+          finally{catalog.close();}break;
         }
         case 'preflight': {
           if (input?.mode === 'capsule_only') {
@@ -205,15 +229,31 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
           if (wantsVault && !provider) fail(useS3?'s3_connection_required':useR2?'r2_connection_required':'dropbox_connection_required');
 
           const selectedScope = operation === 'backup.start' && source ? await captureScope(source.api, sourceRef, input.scope) : null;
+          if(!sourceRef)fail('source_project_required');
+          let usageConfig={authorization,requestId:input.requestId,projectRef:sourceRef,kind:operation==='backup.start'?'backup':'restore',binaryMode:'none'};
+          if(admission.plan==='cloud-9'){
+            if(!provider)fail('incremental_binary_requires_durable_vault');
+            if(!sourceRef)fail('source_project_required');
+            let binaryMode='none';
+            if(operation==='backup.start'){
+              const catalog=encryptedBinaryCatalog({store:binaryVaultStore(provider),recoveryKey,owner,sourceRef});
+              try{binaryMode=(await catalog.load()).latest||admission.usage?.initialBinarySnapshotAvailable!==true?'incremental':'baseline';}finally{catalog.close();}
+            }
+            usageConfig={authorization,requestId:input.requestId,projectRef:sourceRef,kind:operation==='backup.start'?'backup':'restore',binaryMode};
+          }
           data = await jobs.start({
             owner, sourceRef, targetRef,
             sourceToken: source?.token, targetToken: target?.token,
             passphrase: recoveryKey, provider, maxBytes: admission.maxBytes,
+            usageConfig, binaryVault:admission.plan==='cloud-9',
             operation: operation === 'backup.start' ? 'backup' : 'restore',
             capsuleId: input.capsuleId, dropboxCapsuleId: input.dropboxCapsuleId,
             scope: selectedScope?.capture, scopeSummary: selectedScope?.summary,
             allowOverwrite: input.allowOverwrite === true,
-            authorize: () => admit({ authorization, operation, requestId: input.requestId }),
+            authorize: async () => {
+              if(usageConfig)await meter(usageConfig).reserve({});
+              return admit({ authorization, operation, requestId: input.requestId });
+            },
             refreshAccess: async () => {
               if (operation === 'backup.start' && source) return (await connections.access(profile, 'source')).token;
               if (operation === 'restore.start' && target) return (await connections.access(profile, 'target')).token;
@@ -224,6 +264,15 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
         case 'jobs.list': data={jobs:jobs.list(owner)}; break;
         case 'job.status': data=jobs.status(owner,input.id); break;
         default: fail('unsupported_operation');
+      }
+      if(operation==='session.open'&&profile.selection?.source&&(profile.s3?.bucket||profile.r2?.bucket||profile.dropbox?.refreshToken)){
+        let catalog;
+        try{
+          const provider=profile.activeVault==='s3'?await s3.provider(profile):profile.activeVault==='r2'?await r2.provider(profile):await vault.provider(profile);
+          catalog=encryptedBinaryCatalog({store:binaryVaultStore(provider),recoveryKey,owner,sourceRef:projectRef(profile.selection.source)});
+          const loaded=await catalog.load();data.binaryCatalog={state:'loaded',encrypted:true,snapshots:loaded.count,latestSnapshotId:loaded.latest?.id||null};
+        }catch{data.binaryCatalog={state:'unavailable',encrypted:true};}
+        finally{catalog?.close();}
       }
       return { ...data, sealedProfile:await sealProfile(profile,recoveryKey) };
     } finally { locks.delete(owner); }

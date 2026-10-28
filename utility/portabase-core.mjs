@@ -360,17 +360,21 @@ export async function mapPool(items, concurrency, worker) {
   const list = Array.isArray(items) ? items : [];
   const n = Math.max(1, Math.min(Number(concurrency) || 1, 64));
   const results = new Array(list.length);
-  let next = 0;
+  let next = 0, stopped = false;
   async function runWorker() {
-    while (true) {
+    while (!stopped) {
       const i = next;
       next += 1;
       if (i >= list.length) return;
-      results[i] = await worker(list[i], i);
+      try { results[i] = await worker(list[i], i); }
+      catch(error) { stopped = true; throw error; }
     }
   }
   const workers = Array.from({ length: Math.min(n, list.length || 1) }, () => runWorker());
-  await Promise.all(workers);
+  // Drain every in-flight transfer before reporting failure or cleaning spool.
+  const outcomes = await Promise.allSettled(workers);
+  const failed = outcomes.find(outcome => outcome.status === 'rejected');
+  if (failed) throw failed.reason;
   return results;
 }
 

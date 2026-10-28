@@ -5,7 +5,7 @@
     "access": "public"
   },
   "version": "0.4.1",
-  "description": "Open-source Supabase Escape — encrypted customer-owned recovery capsules (database, Auth, Storage bytes, Edge Functions). Optional Portabase Cloud for GUI and alerts.",
+  "description": "Open-source Supabase Escape â€” encrypted customer-owned recovery capsules (database, Auth, Storage bytes, Edge Functions). Optional Portabase Cloud for GUI and alerts.",
   "homepage": "https://portabase.dev",
   "repository": {
     "type": "git",
@@ -42,7 +42,16 @@
     "!desktop/vendor/**",
     "README.md",
     "LICENSE",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "cloud/confidential/s3-vault.mjs",
+    "cloud/confidential/binary-vault-store.mjs",
+    "cloud/confidential/binary-catalog.mjs",
+    "cloud/confidential/manifest-envelope.mjs",
+    "cloud/confidential/usage-meter.mjs",
+    "cloud/confidential/google-token.mjs",
+    "cloud/confidential/attestation.mjs",
+    "cloud/confidential/usage-attestation.mjs",
+    "cloud/control-plane/forbidden.mjs"
   ],
   "scripts": {
     "dev": "vite",
@@ -56,7 +65,7 @@
     "desktop": "electron .",
     "desktop:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stage-desktop-tools.ps1 && electron-builder --win nsis",
     "desktop:linux": "node -e \"console.error('Launch desktop is Windows 11 only. Use the open-source CLI on Linux.'); process.exit(1)\"",
-    "desktop:mac": "node -e \"console.error('Launch desktop is Windows 11 only — do not build for Mac. Use the open-source CLI on macOS if needed.'); process.exit(1)\""
+    "desktop:mac": "node -e \"console.error('Launch desktop is Windows 11 only â€” do not build for Mac. Use the open-source CLI on macOS if needed.'); process.exit(1)\""
   },
   "dependencies": {
     "@aws-sdk/client-cloudtrail": "^3.1102.0",
@@ -66,6 +75,7 @@
     "@netlify/blobs": "^10.7.9",
     "@supabase/supabase-js": "^2.112.0",
     "aws-jwt-verify": "^5.2.1",
+    "jose": "^6.2.3",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "recharts": "^2.15.4",

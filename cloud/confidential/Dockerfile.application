@@ -16,6 +16,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 COPY utility ./utility
 COPY cloud/runner ./cloud/runner
+COPY cloud/control-plane/forbidden.mjs ./cloud/control-plane/forbidden.mjs
 COPY cloud/confidential ./cloud/confidential
 RUN mkdir -p /opt/portabase/bin && for tool in psql pg_dump pg_dumpall; do \
     printf '#!/bin/sh\nexec node /app/cloud/confidential/pg-command.mjs %s "$@"\n' "$tool" > /opt/portabase/bin/$tool; \

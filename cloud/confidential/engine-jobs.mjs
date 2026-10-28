@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { supabaseAccess, projectRef } from './supabase-access.mjs';
+import {createUsageMeter} from './usage-meter.mjs';
 import { downloadCapsuleFromDropbox } from '../../utility/cloud-storage-connectors.mjs';
 import { verifyS3Capsule, downloadCapsuleFromS3 } from './s3-vault.mjs';
 const ENGINE = fileURLToPath(new URL('../../utility/portabase.mjs', import.meta.url));
@@ -87,11 +88,11 @@ export function confidentialJobSnapshot(job) {
       durationMs: finishedAt ? Date.parse(finishedAt) - Date.parse(startedAt) : null })),
     result: job.result || null, error: job.error || null, scopeSummary: job.scopeSummary || null };
 }
-export function engineJobs({ run = runEngine, access = supabaseAccess, platform = process.platform } = {}) {
+export function engineJobs({ run = runEngine, access = supabaseAccess, platform = process.platform, meter = createUsageMeter } = {}) {
   const jobs = new Map();
   const snapshot = confidentialJobSnapshot;
   return {
-    async start({ owner, sourceRef, targetRef, sourceToken, targetToken, passphrase, provider, maxBytes, operation = 'backup', capsuleId, dropboxCapsuleId, scope, scopeSummary, authorize, refreshAccess, allowOverwrite = false }) {
+    async start({ owner, sourceRef, targetRef, sourceToken, targetToken, passphrase, provider, maxBytes, operation = 'backup', capsuleId, dropboxCapsuleId, scope, scopeSummary, authorize, refreshAccess, allowOverwrite = false, usageConfig, binaryVault=false }) {
       if (platform !== 'linux') fail('cloud_runner_required');
       if (!/^[a-f0-9]{64}$/.test(owner || '') || !/^[A-Za-z0-9_-]{43}$/.test(passphrase || '')) fail('invalid_job');
       if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 100 * 1024 ** 3) fail('invalid_job_limit');
@@ -121,8 +122,10 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
       if (admissionBytes > maxBytes) fail('plan_size_limit');
       if (operation === 'backup' && (!scope || typeof scope.storage !== 'boolean' || typeof scope.auth !== 'boolean' || typeof scope.functions !== 'boolean')) fail('source_scope_required');
       // Charge a manual run only after destination, size and capsule validation.
-      if(authorize)await authorize();
-      const root = await mkdtemp('/tmp/portabase-job-');
+      const abortUsage=async()=>{if(usageConfig)try{await meter(usageConfig).abort();}catch{/* Durable lease expiry reconciles an unavailable meter. */}};
+      if(authorize)try{await authorize();}catch(error){await abortUsage();throw error;}
+      let root;try{root=await mkdtemp('/tmp/portabase-job-');}
+      catch(error){await abortUsage();throw error;}
       const job = { id: randomUUID(), owner, sourceRef, targetRef, operation, root, vaultRequested: !!provider, scopeSummary: scopeSummary || null,
         allowOverwrite: Boolean(allowOverwrite),
         state: 'running', phase: 'preflight',
@@ -155,11 +158,13 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
             })().finally(()=>{refreshPromise=null;});
           },60000);
           const config = { projectRef: sourceRef, backupDirectory: join(root,'capsules'), statusDirectory: join(root,'status'),
-            ...(operation === 'backup' ? { capture: scope } : {}),
+            ...(operation === 'backup' ? { capture: {...scope,...(binaryVault?{binaryVault:true,incrementalBinary:true}:{})} } : {}),
             encryption: { passphraseEnv: 'PORTABASE_ENCRYPTION_PASSPHRASE' }, provider: provider || { type: 'local', maxBytes, allowLargeLocal: true }, ...(provider?.type === 's3' ? { storageProviders: { s3: provider } } : {}) };
           const env = { PORTABASE_RUNTIME_CONFIG: JSON.stringify(config), PORTABASE_ENCRYPTION_PASSPHRASE: passphrase,
             PORTABASE_JOB_MAX_CAPSULE_BYTES: String(maxBytes), PORTABASE_EVIDENCE_DIRECTORY: join(root,'evidence'),
             PORTABASE_DB_REFRESH_FILE:refreshFile, PORTABASE_CONFIDENTIAL_RUNNER:'1',
+            PORTABASE_CUSTOMER_OWNER:owner,
+            ...(usageConfig?{PORTABASE_USAGE_CONFIG:JSON.stringify(usageConfig)}:{}),
             SUPABASE_ACCESS_TOKEN: credential.managementToken };
           let args;
           if (operation === 'backup') {
@@ -200,6 +205,7 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
               captureComplete: true, vaultVerified: !!provider && status.destinationVerified === true, restoreVerified: false,
               captureScope:status.state==='SELECTIVE'?'selected':'full',
               destinationKind: provider?.type || 'temporary_runner', temporaryCapsuleRetained: !provider,
+              usage:status.usage||null,
               measuredSourceBytes: sourceStatus.measuredBytes };
           } else {
             const files = await readdir(join(root,'evidence'));
@@ -217,7 +223,7 @@ export function engineJobs({ run = runEngine, access = supabaseAccess, platform 
             }
           }
           job.state = 'complete'; phase('complete');
-        } catch (error) { job.state = 'failed'; job.error = /^[a-z0-9_]{3,80}$/.test(error.message) ? error.message : 'job_failed'; }
+        } catch (error) { await abortUsage();job.state = 'failed'; job.error = /^[a-z0-9_]{3,80}$/.test(error.message) ? error.message : 'job_failed'; }
         finally { clearInterval(refreshTimer); if(refreshPromise)await refreshPromise; job.finishedAt = new Date().toISOString();
           const current = job.phaseTimings.at(-1); if (current && !current.finishedAt) current.finishedAt = job.finishedAt;
           await rm(join(root,'database-access.json'),{force:true});

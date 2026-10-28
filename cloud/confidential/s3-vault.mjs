@@ -1,40 +1,68 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import {pipeline} from 'node:stream/promises';
+import {Readable} from 'node:stream';
+import {request as httpRequest} from 'node:http';
+async function streamedHash(file){const hash=crypto.createHash('sha256');for await(const chunk of fs.createReadStream(file))hash.update(chunk);return hash.digest('hex');}
+
+const ATTESTATION_SOCKET='/run/container_launcher/teeserver.sock';
+// localhost is the logical HTTP authority; transport is exclusively the
+// Confidential Space launcher's Unix socket, never TCP port 80.
+export function s3AttestationFetch(_url,options,{request=httpRequest}={}) {
+  return new Promise((resolve,reject)=>{
+    const fail=()=>reject(Error('s3_attestation_unavailable'));
+    const req=request({socketPath:ATTESTATION_SOCKET,path:'/v1/token',method:'POST',headers:{'content-type':'application/json'}},res=>{
+      let raw='';res.setEncoding('utf8');
+      res.on('data',chunk=>{raw+=chunk;if(raw.length>100000)req.destroy(Error('s3_attestation_unavailable'));});
+      res.on('end',()=>resolve({ok:res.statusCode===200,text:async()=>raw}));
+      res.on('error',fail);res.on('aborted',fail);
+    });
+    req.setTimeout(10000,()=>req.destroy(Error('s3_attestation_unavailable')));
+    req.on('error',fail);req.end(options.body);
+  });
+}
 
 const roleSessions=new Map();
+export function s3RoleAudience(owner){
+  if(!/^[a-f0-9]{64}$/.test(owner||''))throw Error('invalid_s3_owner');
+  return `https://portabase.dev/vault/${owner}`;
+}
 export async function resolveS3Credentials(opts={}) {
   if(!opts.roleArn)return opts;
   if(!/^arn:aws:iam::\d{12}:role\/[A-Za-z0-9_+=,.@/-]+$/.test(opts.roleArn))throw Error('invalid_s3_role');
-  if(process.env.PORTABASE_CONFIDENTIAL_RUNNER!=='1'&&!opts.attestationFetch)throw Error('s3_role_requires_confidential_runner');
-  const cached=roleSessions.get(opts.roleArn);
+  if(!/^https:\/\/portabase\.dev\/vault\/[a-f0-9]{64}$/.test(opts.roleAudience||''))throw Error('s3_owner_audience_required');
+  if(opts.endpoint)throw Error('invalid_s3_endpoint');
+  if(!opts.attestationFetch&&!fs.existsSync(ATTESTATION_SOCKET))throw Error('s3_role_requires_confidential_runner');
+  const cacheKey=opts.roleArn+'|'+opts.roleAudience,cached=roleSessions.get(cacheKey);
   if(cached&&cached.expiresAt>Date.now()+5*60_000)return {...opts,...cached.credentials};
-  const attestationFetch=opts.attestationFetch||globalThis.fetch;
+  const attestationFetch=opts.attestationFetch||s3AttestationFetch;
   const tokenResponse=await attestationFetch('http://localhost/v1/token',{method:'POST',headers:{'content-type':'application/json'},
-    body:JSON.stringify({audience:'https://portabase.dev',token_type:'AWS_PRINCIPALTAGS'})});
+    body:JSON.stringify({audience:opts.roleAudience,token_type:'AWS_PRINCIPALTAGS'})});
   if(!tokenResponse.ok)throw Error('s3_attestation_unavailable');
   const token=(await tokenResponse.text()).trim();
   if(!token||token.length>100_000)throw Error('s3_attestation_invalid');
   const stsFetch=opts.stsFetch||globalThis.fetch;
   const body=new URLSearchParams({Action:'AssumeRoleWithWebIdentity',Version:'2011-06-15',RoleArn:opts.roleArn,
     RoleSessionName:'portabase-capsule-'+Date.now(),WebIdentityToken:token});
-  const response=await stsFetch('https://sts.amazonaws.com/',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body});
+  const response=await stsFetch('https://sts.amazonaws.com/',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded'},body,redirect:'error',signal:AbortSignal.timeout(15000)});
   if(!response.ok)throw Error('s3_attested_role_denied');
   const xml=await response.text();
   const field=name=>xml.match(new RegExp(`<${name}>([^<]+)</${name}>`))?.[1];
   const credentials={accessKeyId:field('AccessKeyId'),secretAccessKey:field('SecretAccessKey'),sessionToken:field('SessionToken')};
   const expiresAt=Date.parse(field('Expiration')||'');
   if(Object.values(credentials).some(value=>!value)||!Number.isFinite(expiresAt))throw Error('s3_role_response_invalid');
-  roleSessions.set(opts.roleArn,{credentials,expiresAt});
+  roleSessions.set(cacheKey,{credentials,expiresAt});
   return {...opts,...credentials};
 }
 
-export function signS3Request({ method, url, body = Buffer.alloc(0), accessKeyId, secretAccessKey, sessionToken, region = 'us-east-1' }) {
+export function signS3Request({ method, url, body = Buffer.alloc(0), bodyHash, accessKeyId, secretAccessKey, sessionToken, region = 'us-east-1' }) {
   const parsed = new URL(url);
   const now = new Date();
   const dateStamp = now.toISOString().slice(0, 10).replace(/-/g, '');
   const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
-  const payloadHash = crypto.createHash('sha256').update(body).digest('hex');
+  if(bodyHash!==undefined&&!/^[a-f0-9]{64}$/.test(bodyHash))throw Error('invalid_s3_payload_hash');
+  const payloadHash = bodyHash||crypto.createHash('sha256').update(body).digest('hex');
   const headers = {
     host: parsed.host,
     'x-amz-content-sha256': payloadHash,
@@ -65,15 +93,16 @@ export function signS3Request({ method, url, body = Buffer.alloc(0), accessKeyId
 
 export function buildS3Url(opts, pathAndQuery = '') {
   const bucket = opts.bucket;
+  if(!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket||'')||bucket.includes('..'))throw Error('invalid_s3_bucket');
   const region = opts.region || 'us-east-1';
   const endpoint = opts.endpoint;
   const cleanPath = pathAndQuery.startsWith('/') ? pathAndQuery : `/${pathAndQuery}`;
   if (endpoint) {
-    const base = endpoint.includes('://') ? endpoint : `https://${endpoint}`;
-    const u = new URL(base);
-    if (u.hostname.includes(bucket)) return `${u.origin}${cleanPath}`;
+    if(opts.roleArn||!/^https:\/\/[a-f0-9]{32}\.r2\.cloudflarestorage\.com$/.test(endpoint))throw Error('invalid_s3_endpoint');
+    const u = new URL(endpoint);
     return `${u.origin.replace(/\/+$/, '')}/${bucket}${cleanPath}`;
   }
+  if(!/^(?:us|eu|ap|sa|ca|me|af|il|mx)-(?:[a-z]+-)+\d$/.test(region))throw Error('invalid_s3_region');
   return `https://${bucket}.s3.${region}.amazonaws.com${cleanPath}`;
 }
 
@@ -86,7 +115,7 @@ export async function testS3Connection(opts = {}) {
   const fetchImpl = opts.fetchImpl || globalThis.fetch;
   const url = buildS3Url(opts, `/?list-type=2&max-keys=1&prefix=${encodeURIComponent(prefix)}`);
   const headers = signS3Request({ method: 'GET', url, ...opts });
-  const res = await fetchImpl(url, { method: 'GET', headers });
+  const res = await fetchImpl(url, { method: 'GET', headers, redirect:'error' });
   if (!res.ok) throw new Error(`S3 connection test failed (${res.status}): ${await res.text()}`);
   return { ok: true, bucket: opts.bucket, region, prefix };
 }
@@ -102,28 +131,32 @@ export async function uploadCapsuleToS3(capsuleDir, opts = {}) {
     const filesUploaded = files.map(name => ({ name, key: `${prefix}/${capsuleId}/${name}`, verified: true }));
     return { destination, verified: true, mode: 's3-api', simulated: true, filesUploaded, sha256Checksums: {} };
   }
-  const fileBuffers = files.map(name => ({ name, buf: fs.readFileSync(path.join(capsuleDir, name)) }));
-  const totalBytes = fileBuffers.reduce((sum, f) => sum + f.buf.length, 0);
+  const fileEntries = files.map(name => ({ name, file:path.join(capsuleDir,name), size:fs.statSync(path.join(capsuleDir,name)).size }));
+  const totalBytes = fileEntries.reduce((sum, f) => sum + f.size, 0);
   let bytesReceived = 0;
   const filesUploaded = [], sha256Checksums = {};
-  for (const { name, buf } of fileBuffers) {
+  for (const { name, file, size } of fileEntries) {
     const signedOpts=await resolveS3Credentials(opts);
-    const hash = crypto.createHash('sha256').update(buf).digest('hex');
+    const hash = await streamedHash(file);
     const s3Key = `${prefix}/${capsuleId}/${name}`;
     const url = buildS3Url(opts, `/${encodeURI(s3Key)}`);
-    const headers = signS3Request({ method: 'PUT', url, body: buf, ...signedOpts });
+    const headers = signS3Request({ method: 'PUT', url, bodyHash:hash, ...signedOpts });
     headers['Content-Type'] = 'application/octet-stream';
-    const res = await fetchImpl(url, { method: 'PUT', headers, body: buf });
+    headers['Content-Length']=String(size);
+    const body=size<=8*1024*1024?await fs.promises.readFile(file):fs.createReadStream(file);
+    const res = await fetchImpl(url, { method: 'PUT', headers, body, redirect:'error', ...(Buffer.isBuffer(body)?{}:{duplex:'half'}) });
     if (!res.ok) throw new Error(`S3 upload failed for ${name} (${res.status}): ${await res.text()}`);
     const readHeaders = signS3Request({ method: 'GET', url, ...await resolveS3Credentials(opts) });
-    const readback = await fetchImpl(url, { method: 'GET', headers: readHeaders });
+    const readback = await fetchImpl(url, { method: 'GET', headers: readHeaders, redirect:'error' });
     if (!readback.ok) throw new Error(`S3 readback failed for ${name} (${readback.status})`);
-    const remote = Buffer.from(await readback.arrayBuffer());
-    if (remote.length !== buf.length || crypto.createHash('sha256').update(remote).digest('hex') !== hash)
+    const remoteHash=crypto.createHash('sha256');let remoteSize=0;
+    if(readback.body){for await(const chunk of readback.body){remoteSize+=chunk.length;if(remoteSize>size)throw Error('s3_readback_size_mismatch');remoteHash.update(chunk);}}
+    else{const remote=Buffer.from(await readback.arrayBuffer());remoteSize=remote.length;remoteHash.update(remote);}
+    if (remoteSize !== size || remoteHash.digest('hex') !== hash)
       throw new Error(`S3 readback checksum mismatch for ${name}`);
-    bytesReceived += buf.length;
+    bytesReceived += size;
     opts.onProgress?.({ bytesReceived, totalBytes, verifiedBytes: bytesReceived });
-    filesUploaded.push({ name, key: s3Key, size: buf.length, sha256: hash, verified: true });
+    filesUploaded.push({ name, key: s3Key, size, sha256: hash, verified: true });
     sha256Checksums[name] = hash;
   }
   return { destination, verified: true, mode: 's3-api', filesUploaded, sha256Checksums };
@@ -137,7 +170,7 @@ export async function verifyS3Capsule(capsuleId, opts = {}) {
   const keyPrefix = `${prefix}/${capsuleId}/`;
   const url = buildS3Url(opts, `/?list-type=2&prefix=${encodeURIComponent(keyPrefix)}`);
   const headers = signS3Request({ method: 'GET', url, ...await resolveS3Credentials(opts) });
-  const res = await fetchImpl(url, { method: 'GET', headers });
+  const res = await fetchImpl(url, { method: 'GET', headers, redirect:'error' });
   if (!res.ok) return { verified: false, error: `S3 list failed (${res.status})` };
   const text = await res.text();
   const keys = [...text.matchAll(/<Key>([^<]+)<\/Key>/g)].map(m => m[1]);
@@ -153,14 +186,14 @@ export async function listS3Capsules(opts = {}) {
   const folderPrefix = prefix ? `${prefix}/` : '';
   const url = buildS3Url(opts, `/?list-type=2&delimiter=%2F&prefix=${encodeURIComponent(folderPrefix)}`);
   const headers = signS3Request({ method: 'GET', url, ...await resolveS3Credentials(opts) });
-  const res = await fetchImpl(url, { method: 'GET', headers });
+  const res = await fetchImpl(url, { method: 'GET', headers, redirect:'error' });
   if (!res.ok) return [];
   const text = await res.text();
   const prefixes = [...text.matchAll(/<CommonPrefixes>\s*<Prefix>([^<]+)<\/Prefix>\s*<\/CommonPrefixes>/gi)].map(m => m[1]);
   return prefixes.map(p => {
     const id = p.replace(/\/+$/, '').split('/').pop();
     return { id, name: id, path: `${opts.type==='r2'?'r2':'s3'}://${opts.bucket}/${p}` };
-  }).filter(c => c.id && c.id !== prefix).sort((a, b) => b.id.localeCompare(a.id));
+  }).filter(c => c.id && !c.id.startsWith('.') && c.id !== prefix).sort((a, b) => b.id.localeCompare(a.id));
 }
 
 export async function downloadCapsuleFromS3(capsuleId, targetDir, opts = {}) {
@@ -169,7 +202,7 @@ export async function downloadCapsuleFromS3(capsuleId, targetDir, opts = {}) {
   const keyPrefix = `${prefix}/${capsuleId}/`;
   const url = buildS3Url(opts, `/?list-type=2&prefix=${encodeURIComponent(keyPrefix)}`);
   const headers = signS3Request({ method: 'GET', url, ...await resolveS3Credentials(opts) });
-  const res = await fetchImpl(url, { method: 'GET', headers });
+  const res = await fetchImpl(url, { method: 'GET', headers, redirect:'error' });
   if (!res.ok) throw new Error(`S3 list failed (${res.status}): ${await res.text()}`);
   const text = await res.text();
   const keys = [...text.matchAll(/<Key>([^<]+)<\/Key>/g)].map(m => m[1]);
@@ -179,10 +212,10 @@ export async function downloadCapsuleFromS3(capsuleId, targetDir, opts = {}) {
     const filename = path.basename(key);
     const fileUrl = buildS3Url(opts, `/${encodeURI(key)}`);
     const fileHeaders = signS3Request({ method: 'GET', url: fileUrl, ...await resolveS3Credentials(opts) });
-    const fileRes = await fetchImpl(fileUrl, { method: 'GET', headers: fileHeaders });
+    const fileRes = await fetchImpl(fileUrl, { method: 'GET', headers: fileHeaders, redirect:'error' });
     if (!fileRes.ok) throw new Error(`S3 download failed for ${key} (${fileRes.status})`);
-    const buf = Buffer.from(await fileRes.arrayBuffer());
-    await fs.promises.writeFile(path.join(targetDir, filename), buf);
+    if(fileRes.body)await pipeline(Readable.fromWeb(fileRes.body),fs.createWriteStream(path.join(targetDir,filename),{flags:'wx',mode:0o600}));
+    else await fs.promises.writeFile(path.join(targetDir,filename),Buffer.from(await fileRes.arrayBuffer()),{flag:'wx',mode:0o600});
   }
   const checksumPath = path.join(targetDir, 'checksums.sha256');
   if (fs.existsSync(checksumPath)) {
@@ -193,7 +226,7 @@ export async function downloadCapsuleFromS3(capsuleId, targetDir, opts = {}) {
         const [, expected, fName] = match;
         const filePath = path.join(targetDir, fName.trim());
         if (!fs.existsSync(filePath)) throw new Error(`Checksum verification failed: missing file ${fName}`);
-        const actual = crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+        const actual = await streamedHash(filePath);
         if (actual.toLowerCase() !== expected.toLowerCase()) throw new Error(`Checksum mismatch on ${fName}: expected ${expected}, got ${actual}`);
       }
     }
@@ -201,26 +234,33 @@ export async function downloadCapsuleFromS3(capsuleId, targetDir, opts = {}) {
   return { downloaded: true, files: keys.map(k => path.basename(k)) };
 }
 
+export function ownedS3Configuration(profile){
+    if(profile.s3?.endpoint)throw Error('invalid_s3_endpoint');
+    const config=Object.fromEntries(['bucket','region','prefix','roleArn','accessKeyId','secretAccessKey'].filter(key=>profile.s3?.[key]!==undefined).map(key=>[key,profile.s3[key]]));
+    if(config.roleArn)config.roleAudience=s3RoleAudience(profile.owner);
+    return config;
+}
 export function s3Vault({ fetchImpl = globalThis.fetch, now = Date.now } = {}) {
   return {
     async connect(profile, input = {}) {
       if (!input.bucket || (!input.roleArn&&(!input.accessKeyId || !input.secretAccessKey))) throw new Error('missing_s3_credentials');
       const region = input.region || 'us-east-1';
       const prefix = input.prefix || 'Portabase';
-      const endpoint = input.endpoint || undefined;
-      await testS3Connection({ bucket: input.bucket, region, prefix, endpoint, roleArn:input.roleArn,accessKeyId: input.accessKeyId, secretAccessKey: input.secretAccessKey, fetchImpl });
-      profile.s3 = { bucket: input.bucket, region, prefix, endpoint, roleArn:input.roleArn,accessKeyId: input.accessKeyId, secretAccessKey: input.secretAccessKey };
+      if(input.endpoint)throw Error('invalid_s3_endpoint');
+      const config={bucket:input.bucket,region,prefix,roleArn:input.roleArn,accessKeyId:input.accessKeyId,secretAccessKey:input.secretAccessKey};
+      await testS3Connection({...config,...(input.roleArn?{roleAudience:s3RoleAudience(profile.owner)}:{}),fetchImpl});
+      profile.s3 = config;
       profile.activeVault = 's3';
       return { connected: true, bucket: input.bucket, region, prefix };
     },
     async provider(profile) {
       if (!profile.s3?.bucket || (!profile.s3?.roleArn&&(!profile.s3?.accessKeyId || !profile.s3?.secretAccessKey))) throw new Error('s3_not_connected');
-      await testS3Connection({ ...profile.s3, fetchImpl });
-      return { type: 's3', mode: 'api', ...profile.s3 };
+      const config=ownedS3Configuration(profile);await testS3Connection({ ...config, fetchImpl });
+      return { type: 's3', mode: 'api', ...config };
     },
     async capsules(profile) {
       if (!profile.s3?.bucket) return [];
-      return await listS3Capsules({ ...profile.s3, fetchImpl });
+      return await listS3Capsules({ ...ownedS3Configuration(profile), fetchImpl });
     },
   };
 }

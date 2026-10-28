@@ -16,7 +16,7 @@ async function tokenOperation(action) {
 }
 export function oauthConnections({ clientId, clientSecret, redirectUri, fetchImpl = fetch, now = Date.now }) {
   if (!clientId || !clientSecret || redirectUri !== 'https://portabase.dev/confidential/callback') fail('oauth_configuration_invalid');
-  const refreshes=new WeakMap();
+  const refreshes=new WeakMap();let targetGrantAccess;
   const secureFetch=(url,options)=>fetchImpl(url,{...options,redirect:'error',signal:AbortSignal.timeout(30000)});
   async function identity(profile,slot) {
     if(profile.connections?.[slot]?.identity)return profile.connections[slot].identity;
@@ -43,6 +43,7 @@ export function oauthConnections({ clientId, clientSecret, redirectUri, fetchImp
     return {source,target,method:'manual'};
   }
   const connections={
+    setTargetGrantAccess(handler){targetGrantAccess=handler;},
     begin(profile, slot, callback=redirectUri) {
       if (!SLOT.has(slot)) fail('invalid_connection_slot');
       if(!CALLBACKS.has(callback))fail('invalid_oauth_callback');
@@ -79,6 +80,22 @@ export function oauthConnections({ clientId, clientSecret, redirectUri, fetchImp
         throw error;
       }
     },
+    async importSession(profile,{slot,session}={}) {
+      if(!SLOT.has(slot))fail('invalid_connection_slot');
+      if(!session||Object.keys(session).some(key=>!['accessToken','refreshToken','expiresAt'].includes(key))
+        ||![session.accessToken,session.refreshToken].every(value=>typeof value==='string'&&/^[\x21-\x7e]{1,16384}$/.test(value))
+        ||!Number.isSafeInteger(session.expiresAt)||session.expiresAt<=now()||session.expiresAt>now()+24*60*60*1000)fail('invalid_oauth_session');
+      // Hosted transport supplies only ciphertext to the browser. Provider API
+      // checks still establish the grant's identity inside the enclave.
+      await supabaseAccess(session.accessToken,secureFetch).projects().catch(()=>fail('invalid_oauth_session'));
+      profile.connections||={};const previous=profile.connections[slot];
+      profile.connections[slot]={accessToken:session.accessToken,refreshToken:session.refreshToken,expiresAt:session.expiresAt,tokenType:'bearer',grantId:randomUUID()};
+      try{
+        const current=await identity(profile,slot),other=slot==='source'?'target':'source';
+        if(profile.connections[other]){const counterpart=await identity(profile,other);if(current.verified&&counterpart.verified&&(current.id===counterpart.id||current.email===counterpart.email))fail('destination_account_must_differ');}
+        delete profile.accountConfirmation;return {slot,connected:true,method:'oauth',identity:current};
+      }catch(error){if(previous)profile.connections[slot]=previous;else delete profile.connections[slot];throw error;}
+    },
     async connectToken(profile, { slot, token } = {}) {
       if (!SLOT.has(slot)) fail('invalid_connection_slot');
       const cleanToken = typeof token === 'string' ? token.trim() : '';
@@ -114,7 +131,8 @@ export function oauthConnections({ clientId, clientSecret, redirectUri, fetchImp
         throw error;
       }
     },
-    async access(profile, slot) {
+    async access(profile, slot, {delegated=true}={}) {
+      if(slot==='target'&&delegated&&targetGrantAccess){const shared=await targetGrantAccess(profile);if(shared)return shared;}
       if (!SLOT.has(slot)) fail('invalid_connection_slot');
       let tokens = profile.connections?.[slot];
       if (!tokens?.accessToken) fail('supabase_connection_required');

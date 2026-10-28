@@ -13,18 +13,62 @@ import {
   downloadCapsuleFromS3,
   s3Vault,
   resolveS3Credentials,
+  s3AttestationFetch,
+  buildS3Url,
+  s3RoleAudience,
+  ownedS3Configuration,
 } from './s3-vault.mjs';
+
+test('S3 attestation uses launcher Unix socket with bounded failures, never TCP',async()=>{
+  const {EventEmitter}=await import('node:events');
+  for(const mode of ['success','denied','oversize','timeout']){
+    let requestOptions,body,timeout;
+    const request=(options,callback)=>{
+      requestOptions=options;const req=new EventEmitter();
+      req.setTimeout=(ms,handler)=>{assert.equal(ms,10000);timeout=handler;};
+      req.destroy=error=>req.emit('error',error);
+      req.end=value=>{body=JSON.parse(value);queueMicrotask(()=>{
+        if(mode==='timeout'){timeout();return;}
+        const res=new EventEmitter();res.statusCode=mode==='denied'?403:200;res.setEncoding=()=>{};
+        callback(res);res.emit('data',mode==='oversize'?'x'.repeat(100001):'signed-token');res.emit('end');
+      });};return req;
+    };
+    const pending=s3AttestationFetch('http://localhost/v1/token',{body:JSON.stringify({audience:'https://portabase.dev',token_type:'AWS_PRINCIPALTAGS'})},{request});
+    if(['oversize','timeout'].includes(mode))await assert.rejects(pending,/attestation_unavailable/);
+    else{const response=await pending;assert.equal(response.ok,mode==='success');assert.equal(await response.text(),'signed-token');}
+    assert.equal(requestOptions.socketPath,'/run/container_launcher/teeserver.sock');assert.equal(requestOptions.path,'/v1/token');
+    assert.equal(requestOptions.hostname,undefined);assert.equal(body.token_type,'AWS_PRINCIPALTAGS');
+  }
+});
 
 test('attested S3 role resolves short-lived credentials without customer keys', async()=>{
   const roleArn='arn:aws:iam::123456789012:role/test-capsule-vault';
   const calls=[];
-  const result=await resolveS3Credentials({roleArn,
+  const roleAudience=s3RoleAudience('a'.repeat(64));
+  const result=await resolveS3Credentials({roleArn,roleAudience,
     attestationFetch:async(url,request)=>{calls.push([url,JSON.parse(request.body)]);return {ok:true,text:async()=> 'signed-attestation-token'};},
     stsFetch:async(url,request)=>{calls.push([url,new URLSearchParams(request.body).get('RoleArn')]);return {ok:true,text:async()=>`<Credentials><AccessKeyId>temporary-id</AccessKeyId><SecretAccessKey>temporary-secret</SecretAccessKey><SessionToken>temporary-session</SessionToken><Expiration>2099-01-01T00:00:00Z</Expiration></Credentials>`};}});
   assert.equal(result.accessKeyId,'temporary-id');
   assert.equal(result.sessionToken,'temporary-session');
-  assert.deepEqual(calls[0],["http://localhost/v1/token",{audience:'https://portabase.dev',token_type:'AWS_PRINCIPALTAGS'}]);
+  assert.deepEqual(calls[0],["http://localhost/v1/token",{audience:roleAudience,token_type:'AWS_PRINCIPALTAGS'}]);
   assert.deepEqual(calls[1],['https://sts.amazonaws.com/',roleArn]);
+});
+
+test('role credentials cannot be reused by another owner and endpoint substitutions are rejected',async()=>{
+  const roleArn='arn:aws:iam::123456789012:role/test-capsule-vault';
+  const configured=ownedS3Configuration({owner:'b'.repeat(64),s3:{bucket:'fixture',roleArn,roleAudience:s3RoleAudience('a'.repeat(64)),owner:'a'.repeat(64)}});
+  assert.equal(configured.roleAudience,s3RoleAudience('b'.repeat(64)));assert.equal(configured.owner,undefined);
+  let denied=false;
+  await assert.rejects(resolveS3Credentials({roleArn,roleAudience:s3RoleAudience('b'.repeat(64)),
+    attestationFetch:async(_url,request)=>{assert.equal(JSON.parse(request.body).audience,s3RoleAudience('b'.repeat(64)));return {ok:true,text:async()=>'other-owner-token'};},
+    stsFetch:async()=>{denied=true;return {ok:false};}}),/attested_role_denied/);
+  assert.equal(denied,true); // Must not return the first owner's cached session.
+  for(const endpoint of ['http://127.0.0.1','https://attacker.example','https://'+'a'.repeat(32)+'.r2.cloudflarestorage.com']){
+    await assert.rejects(s3Vault().connect({owner:'a'.repeat(64)},{bucket:'fixture',roleArn,endpoint}),/invalid_s3_endpoint/);
+    assert.throws(()=>buildS3Url({bucket:'fixture',roleArn,endpoint}),/invalid_s3_endpoint/);
+  }
+  assert.throws(()=>buildS3Url({bucket:'fixture',region:'us-east-1.attacker.example'}),/invalid_s3_region/);
+  assert.throws(()=>buildS3Url({bucket:'fixture@attacker.example'}),/invalid_s3_bucket/);
 });
 
 test('signS3Request generates valid AWS SigV4 authorization header', () => {

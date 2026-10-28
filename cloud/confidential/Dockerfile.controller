@@ -1,6 +1,9 @@
 FROM node:24-bookworm-slim
 WORKDIR /app/cloud/confidential
+COPY cloud/confidential/package.json cloud/confidential/package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 COPY cloud/confidential/controller.mjs cloud/confidential/controller-main.mjs cloud/confidential/compute-control.mjs cloud/confidential/customer-identity.mjs cloud/confidential/cloud-config.mjs ./
+COPY cloud/confidential/beacon-config.mjs cloud/confidential/beacon-storage.mjs cloud/confidential/beacon-scheduler.mjs cloud/confidential/beacon-scheduler-identity.mjs cloud/confidential/runner-usage.mjs ./
 ENV NODE_ENV=production
 USER node
 EXPOSE 8080

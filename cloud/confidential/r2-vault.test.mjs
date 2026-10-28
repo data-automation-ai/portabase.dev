@@ -14,3 +14,10 @@ test('R2 uses the selected account endpoint and bucket without exposing credenti
   assert.equal(JSON.stringify(result).includes('test-secret'),false);
   assert.throws(()=>r2Endpoint('wrong'),/invalid_r2_account_id/);
 });
+
+test('restored R2 profile cannot smuggle a foreign AWS role or an arbitrary endpoint',async()=>{
+  const vault=r2Vault({fetchImpl:async()=>assert.fail('must reject before network')});
+  const config={bucket:'fixture',accessKeyId:'fixture',secretAccessKey:'fixture',endpoint:r2Endpoint('a'.repeat(32))};
+  await assert.rejects(vault.provider({r2:{...config,roleArn:'arn:aws:iam::123456789012:role/foreign'}}),/invalid_r2_configuration/);
+  await assert.rejects(vault.provider({r2:{...config,endpoint:'https://attacker.example'}}),/invalid_r2_configuration/);
+});

@@ -23,7 +23,7 @@ test('source inventory returns names and estimates, and selected scope reaches c
   const connections={access(_profile,slot){return {token:`synthetic-${slot}-token`,api:sourceApi};}};
   let started;
   const jobs={async start(options){started=options;await options.authorize();return {id:'job',state:'running'};}};
-  const app=confidentialApplication({oauthConfig:{},connections,jobs,
+  const app=confidentialApplication({oauthConfig:{},connections,jobs,meter:config=>({reserve:async()=>{assert.equal(config.kind,'backup');assert.equal(config.projectRef,sourceRef);assert.equal(config.binaryMode,'none');}}),
     vault:{async provider(){return {type:'dropbox'};}},
     s3:{async connect(profile){profile.s3={bucket:'test-vault'};profile.activeVault='s3';return {connected:true};},
       async provider(){return {type:'s3',bucket:'test-vault'};}},

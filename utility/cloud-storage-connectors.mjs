@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import {pipeline} from 'node:stream/promises';
 
 /**
  * Computes Dropbox's official content_hash:
@@ -473,7 +474,7 @@ export async function listDropboxCapsules(opts = {}) {
   const data = await res.json();
   const entries = Array.isArray(data.entries) ? data.entries : [];
   return entries
-    .filter(entry => entry['.tag'] === 'folder' && /^[A-Za-z0-9_.:-]+$/.test(entry.name))
+    .filter(entry => entry['.tag'] === 'folder' && !entry.name.startsWith('.') && /^[A-Za-z0-9_.:-]+$/.test(entry.name))
     .map(entry => ({
       id: entry.name,
       name: entry.name,
@@ -520,6 +521,7 @@ export async function downloadCapsuleFromDropbox(capsuleId, targetDir, opts = {}
   const filesDownloaded = [];
 
   for (const entry of fileEntries) {
+    if(typeof entry.name!=='string'||entry.name!==path.basename(entry.name)||/[\\/\x00-\x1f]/.test(entry.name)||['.','..'].includes(entry.name))throw Error('invalid_capsule_file_name');
     const filePath = path.join(targetDir, entry.name);
     const downloadRes = await fetchImpl('https://content.dropboxapi.com/2/files/download', {
       method: 'POST',
@@ -534,8 +536,8 @@ export async function downloadCapsuleFromDropbox(capsuleId, targetDir, opts = {}
       throw new Error(`Dropbox file download failed for ${entry.name} (${downloadRes.status}): ${errText}`);
     }
 
-    const arrayBuffer = await downloadRes.arrayBuffer();
-    await fs.promises.writeFile(filePath, Buffer.from(arrayBuffer));
+    if(downloadRes.body)await pipeline(downloadRes.body,fs.createWriteStream(filePath,{flags:'wx',mode:0o600}));
+    else await fs.promises.writeFile(filePath, Buffer.from(await downloadRes.arrayBuffer()),{flag:'wx',mode:0o600});
 
     if (entry.content_hash) {
       const computedHash = await computeDropboxFileContentHash(filePath);

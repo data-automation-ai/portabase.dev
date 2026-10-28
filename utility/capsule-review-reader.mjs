@@ -1,5 +1,6 @@
 // Authenticated, bounded private inspection. No archive entry is extracted to disk.
 import { createHash } from 'node:crypto';
+import { openManifest } from '../cloud/confidential/manifest-envelope.mjs';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { lstat, open, mkdir, mkdtemp, unlink, rmdir } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -55,14 +56,14 @@ async function boundedFile(path, max) {
   } finally { await file.close(); }
 }
 
-export async function capsuleReviewBinding({ directory, capsulePath, projectRef, maxCipherBytes, maxExpandedBytes }) {
+export async function capsuleReviewBinding({ directory, capsulePath, projectRef, maxCipherBytes, maxExpandedBytes, passphrase }) {
   if (!integer(maxCipherBytes) || maxCipherBytes < 1 || !integer(maxExpandedBytes) || maxExpandedBytes < 1024
     || !/^[a-z0-9]{20}$/.test(projectRef || '')) fail('capsule_review_setup_required');
   const root = await validatePrivateDirectory(directory), capsule = within(root, capsulePath);
   await validatePrivateDirectory(capsule);
   const bytes = await boundedFile(join(capsule, 'capsule.json'), REVIEW_JSON_BYTES);
   let metadata;
-  try { metadata = JSON.parse(bytes); } catch { fail('invalid_capsule_metadata'); }
+  try { metadata = JSON.parse(bytes); if(metadata.encryptedManifestVersion)metadata=openManifest(metadata,passphrase); } catch { fail('invalid_capsule_metadata'); }
   const enc = metadata?.encryption;
   if (metadata?.formatVersion !== 1 || !/^[A-Za-z0-9_-]{1,160}$/.test(metadata.id || '') || metadata.projectRef !== projectRef
     || enc?.format !== CAPSULE_CRYPTO_FORMAT || enc.cipher !== CAPSULE_CIPHER || enc.kdf?.name !== 'scrypt'

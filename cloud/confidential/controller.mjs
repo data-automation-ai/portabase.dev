@@ -3,10 +3,23 @@
 import {createServer} from 'node:http';
 import {customerIdentity} from './customer-identity.mjs';
 import {computeControl} from './compute-control.mjs';
+import {beaconScheduler,beaconUsage} from './beacon-scheduler.mjs';
+import {schedulerIdentity} from './beacon-scheduler-identity.mjs';
+import {runnerUsage} from './runner-usage.mjs';
 const reply=(res,status,body)=>{res.writeHead(status,{'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff'});res.end(JSON.stringify(body));};
+export function controllerCustomerPolicy(env=process.env){
+  const mode=env.PORTABASE_CUSTOMER_MODE||'validation';
+  if(mode==='public')return undefined;
+  if(mode!=='validation')throw Error('invalid_customer_mode');
+  const list=(env.VALIDATION_CUSTOMERS||'').split(',').filter(Boolean);
+  if(!list.length||list.some(id=>!/^[a-f0-9-]{36}$/i.test(id)))throw Error('validation_customers_required');
+  return new Set(list);
+}
 export function controllerServer({compute=computeControl({image:process.env.APPLICATION_IMAGE}),authenticate=customerIdentity,
-  fetchImpl=fetch,admit,allowedCustomers}={}) {
+  fetchImpl=fetch,admit,allowedCustomers,usage=runnerUsage(),beaconStatus=beaconUsage,
+  scheduledBeacons=process.env.PORTABASE_BEACONS_ENABLED==='1',authenticateScheduler=schedulerIdentity(),dispatchBeacons}={}) {
   const locks=new Set();
+  const tick=dispatchBeacons||beaconScheduler({compute});
   const server=createServer(async(req,res)=>{
     const origin=req.headers.origin;
     if(origin && origin!=='https://portabase.dev')return reply(res,403,{error:'origin_not_allowed'});
@@ -15,11 +28,26 @@ export function controllerServer({compute=computeControl({image:process.env.APPL
       res.writeHead(204,{'access-control-allow-methods':'POST, DELETE, OPTIONS','access-control-allow-headers':'authorization, content-type','access-control-max-age':'600'});return res.end();
     }
     if(req.method==='GET' && req.url==='/health')return reply(res,200,{service:'portabase-confidential-controller',protocol:1});
-    const valid=(req.method==='POST' && ['/session','/attest','/command'].includes(req.url)) || (req.method==='DELETE' && req.url==='/session');
+    if(req.method==='POST'&&req.url==='/beacon/tick'){
+      if(!scheduledBeacons)return reply(res,503,{error:'beacon_scheduler_not_enabled'});
+      try{await authenticateScheduler(req.headers.authorization);}catch{return reply(res,401,{error:'beacon_scheduler_unauthorized'});}
+      try{return reply(res,200,await tick());}catch{return reply(res,503,{error:'beacon_scheduler_unavailable'});}
+    }
+    const valid=(req.method==='POST' && ['/session','/attest','/command','/usage','/beacon/status'].includes(req.url)) || (req.method==='DELETE' && req.url==='/session');
     if(!valid)return reply(res,404,{error:'not_found'});
     let identity;
     try{identity=await authenticate(req.headers.authorization);}catch{return reply(res,401,{error:'sign_in_required'});}
     if(allowedCustomers && !allowedCustomers.has(identity.id))return reply(res,403,{error:'isolated_validation_only'});
+    if(req.url==='/usage'){
+      let options;
+      try{let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>256)throw Error('size');}options=raw?JSON.parse(raw):{};
+        if(!options||Array.isArray(options)||Object.keys(options).some(k=>k!=='windowStart')||(options.windowStart!==undefined&&(typeof options.windowStart!=='string'||!Number.isFinite(Date.parse(options.windowStart)))))throw Error('window');
+      }catch{return reply(res,400,{error:'invalid_usage_window'});}
+      try{return reply(res,200,await usage(identity.owner,options));}catch{return reply(res,503,{error:'runner_usage_unavailable'});}
+    }
+    if(req.url==='/beacon/status'){
+      try{return reply(res,200,await beaconStatus(identity.owner));}catch{return reply(res,503,{error:'beacon_status_unavailable'});}
+    }
     try {
       let instance=await compute.get(identity.owner);
       if(req.method==='DELETE'){await compute.remove(identity.owner);return reply(res,200,{terminated:true});}

@@ -1,8 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {controllerServer} from './controller.mjs';
+import {controllerServer,controllerCustomerPolicy} from './controller.mjs';
 import {instanceConfiguration,runnerName,computeControl} from './compute-control.mjs';
 const owner='a'.repeat(64),image=`us-central1-docker.pkg.dev/portabase-dev/portabase-confidential/application@sha256:${'b'.repeat(64)}`;
+test('public customer mode requires explicit operator flag; default validation fails closed',()=>{
+  assert.throws(()=>controllerCustomerPolicy({}),/validation_customers_required/);
+  assert.throws(()=>controllerCustomerPolicy({PORTABASE_CUSTOMER_MODE:'true'}),/invalid_customer_mode/);
+  const id='11111111-1111-1111-1111-111111111111';
+  assert.deepEqual([...controllerCustomerPolicy({VALIDATION_CUSTOMERS:id})],[id]);
+  assert.equal(controllerCustomerPolicy({PORTABASE_CUSTOMER_MODE:'public'}),undefined);
+});
 test('compute config requires an immutable image and bounds the hardware lifecycle',()=>{
   assert.throws(()=>instanceConfiguration(owner,image.replace(/@sha256:.*/,':latest')),/immutable/);
   const config=instanceConfiguration(owner,image);
@@ -46,4 +53,22 @@ test('only ciphertext is relayed; private upstream properties are dropped',async
 test('a denied compute allowance never creates an instance',async t=>{
   let creates=0;const call=await serve(t,{authenticate:async()=>({id:'fixture',owner}),compute:{get:async()=>null,create:async()=>{creates++;}},admit:async()=>{throw new Error('quota');}});
   assert.equal((await call('/session',{requestId:crypto.randomUUID()})).status,503);assert.equal(creates,0);
+});
+
+test('usage uses authenticated owner only and cannot allocate compute',async t=>{
+  let called;
+  const call=await serve(t,{authenticate:async()=>({id:'fixture',owner}),compute:{get:async()=>assert.fail('usage must not allocate or inspect compute')},
+    usage:async(o,options)=>{called={o,options};return {runnerRuntimeMs:60000,source:'google_compute_uptime'};}});
+  assert.equal((await call('/usage',{owner:'other'})).status,400);
+  assert.equal((await call('/usage',{windowStart:'2026-10-28T00:00:00Z'})).status,200);
+  assert.equal(called.o,owner);assert.equal(called.options.windowStart,'2026-10-28T00:00:00Z');
+});
+
+test('scheduled beacon route requires separate scheduler identity and feature enablement',async t=>{
+  let calls=0;
+  const invoke=await serve(t,{scheduledBeacons:true,authenticateScheduler:async h=>{if(h!=='Bearer scheduler')throw Error('deny');},dispatchBeacons:async()=>{calls++;return {started:1};}});
+  assert.equal((await invoke('/beacon/tick',{})).status,401);assert.equal(calls,0);
+  assert.equal((await invoke('/beacon/tick',{}, {Authorization:'Bearer scheduler'})).status,200);assert.equal(calls,1);
+  const disabled=await serve(t,{scheduledBeacons:false,dispatchBeacons:async()=>assert.fail('must not launch')});
+  assert.equal((await disabled('/beacon/tick',{})).status,503);
 });
