@@ -366,7 +366,7 @@ function ModelExplainer() {
     <div className="model-explainer-head">
       <span className="section-kicker green">THE PRODUCT MODEL</span>
       <h3>Same idea as Supabase itself.</h3>
-      <p>The recovery stack is open and self-hostable. The hosted control plane is convenience: console niceties, telemetry, and multi-person alert chains — not a second landlord for your data.</p>
+      <p>The recovery engine is open and self-hostable. Cloud adds a console and managed compute in an attested Google Confidential Space Secure Enclave using Intel TDX. Your durable recovery copy stays in storage you control.</p>
     </div>
     <div className="model-layer-grid">
       {modelLayers.map(layer => (
@@ -392,15 +392,15 @@ function WhatIsThis() {
         <h2>Open-source recovery.<br />Hosted convenience.</h2>
         <div>
           <p><strong>Community (free · open source):</strong> run the engine on a server, NAS, container, or your cloud account. Built for <strong>Supabase only</strong> today — database, Auth, <strong>Storage files (not just metadata)</strong>, and Edge Functions; encrypt; store where you choose; restore into a fresh project.</p>
-          <p><strong>Cloud (this website · paid):</strong> hosted <strong>GUI</strong>, easier configuration, <strong>telemetry</strong>, SMS on success/failure, and multi-person alerts. Same engine underneath. Never needs your passphrase or capsule bytes to page people.</p>
+          <p><strong>Cloud (this website):</strong> a hosted <strong>console</strong>, guided configuration and managed runner compute. Jobs process credentials, keys and plaintext inside an attested Google Confidential Space Secure Enclave using Intel TDX. Portabase operates the Google project; hosted OAuth connections also involve our provider bridge. Alerts contain operational status.</p>
           <p><strong>Full capture is free. No license gate. Encryption code you can read.</strong></p>
         </div>
       </div>
       <div className="definition-strip">
         <div><small>OPEN SOURCE</small><b>Full capture<br />Encrypt &amp; verify<br />Guarded restore</b></div>
         <div><small>SELF-HOST</small><b>Your runner<br />Your schedule<br />Your destinations</b></div>
-        <div><small>CLOUD ADDS</small><b>Console ease<br />Telemetry<br />Alert chains</b></div>
-        <div><small>NEVER HOSTED</small><b>Passphrase<br />Service keys<br />Capsule contents</b></div>
+        <div><small>CLOUD ADDS</small><b>Guided console<br />Attested compute<br />Run status</b></div>
+        <div><small>DURABLE RECOVERY</small><b>Your destination<br />Encrypted capsule<br />Retained manifests</b></div>
       </div>
       <ModelExplainer />
       <div className="open-core-story" id="open-core-story">
@@ -423,12 +423,12 @@ function WhatIsThis() {
           <article>
             <small>02 · CLOUD LAYER</small>
             <b>We make Escape something you live with.</b>
-            <p>On top of that engine we add the boring-but-critical layer: a calm GUI, guided workflows, telemetry that SMS/email the right people, and — most importantly — <strong>hosted runner compute</strong> so you are not babysitting a laptop cron for the rest of your life.</p>
+            <p>Cloud adds guided workflows, run status and <strong>hosted runner compute</strong>. The $9 policy allows one backup per 24 hours; that limit does not promise automatic daily backups. Check current availability and recovery proof before relying on managed service.</p>
           </article>
           <article>
             <small>03 · WHAT STAYS YOURS</small>
             <b>Capsules and keys never become our product.</b>
-            <p>Cloud stages the job and watches it. Encrypted recovery bytes land in <em>your</em> S3, Dropbox, or Local Starter vault. Passphrases and service keys stay on the runner path — not as our “backup of record.”</p>
+            <p>Managed jobs use temporary cloud working space. Encrypted capsules and the baseline and manifests needed for recovery belong in <em>your</em> destination. Encrypted connection profiles can persist between runner launches; the workload processes their credentials inside the enclave.</p>
           </article>
         </div>
         <p className="open-core-story-close">
@@ -713,38 +713,38 @@ function TwoScenarios() {
   );
 }
 
-/** Conceptual runner architecture: sealed isolated container, keys decrypted only inside it, tunnel is break-glass access only. */
+/** Managed runner architecture and its explicit persistence and trust boundaries. */
 function RunnerArchitectureDiagram() {
   const box = { border: '1px solid var(--paper-line-strong)', borderRadius: 'var(--radius)', background: 'var(--paper-raised)', padding: '16px 18px' };
   return (
     <section className="section" id="how-the-runner-works" style={{ background: 'var(--paper)' }}>
       <div className="shell">
-        <div className="section-kicker green">CONCEPTUAL · HOW MANAGED ESCAPE IS DESIGNED TO WORK</div>
+        <div className="section-kicker green">GOOGLE CONFIDENTIAL SPACE · INTEL TDX</div>
         <div className="split-heading">
-          <h2>A sealed container, not a shared server.</h2>
-          <p>Conceptual illustration of the managed-runner design — not a live dashboard. Your source credentials are sealed to a container built only for your job, run in an isolated cloud environment, and never decrypted anywhere Portabase's own systems can read them.</p>
+          <h2>Managed recovery inside a Secure Enclave.</h2>
+          <p>The workload runs inside Google Confidential Space on Intel TDX. It processes credentials and plaintext within the attested VM, in a Google project operated by Portabase. This architecture diagram describes the trust boundaries; it is not evidence that your recovery has been tested.</p>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20, alignItems: 'stretch', marginTop: 24 }}>
           <div style={box}>
-            <b>1. You seal your keys</b>
-            <p style={{ color: 'var(--ink-muted)', fontSize: 14, marginTop: 8 }}>Your browser encrypts your Supabase credentials to a key only your job's container can unwrap. Portabase's servers see ciphertext only.</p>
+            <b>1. Verify the workload</b>
+            <p style={{ color: 'var(--ink-muted)', fontSize: 14, marginTop: 8 }}>The client checks Google-signed attestation and the approved image digest before releasing encrypted commands to the workload key. Hosted OAuth grants also pass through the provider bridge.</p>
           </div>
           <div style={box}>
-            <b>2. An isolated container runs, then disappears</b>
-            <p style={{ color: 'var(--ink-muted)', fontSize: 14, marginTop: 8 }}>A short-lived, per-customer container spins up in an isolated cloud environment, decrypts your keys <em>inside itself only</em>, runs the capture, and is destroyed. Nothing persists.</p>
+            <b>2. Process inside the enclave</b>
+            <p style={{ color: 'var(--ink-muted)', fontSize: 14, marginTop: 8 }}>The temporary runner decrypts job material and captures data inside the VM. Credentials, encryption keys and plaintext exist there while the job runs. Portabase operates this managed workload and its Google project.</p>
           </div>
           <div style={box}>
             <b>3. The capsule goes to your vault</b>
-            <p style={{ color: 'var(--ink-muted)', fontSize: 14, marginTop: 8 }}>The encrypted capsule lands in storage you own — Dropbox, S3, NAS. Portabase never holds a copy.</p>
+            <p style={{ color: 'var(--ink-muted)', fontSize: 14, marginTop: 8 }}>Durable delivery to customer-controlled S3 or Dropbox must be verified. Keep the encrypted initial binary snapshot and required manifests for later incremental recovery. Temporary runner storage is not your vault.</p>
           </div>
           <div style={box}>
-            <b>4. Break-glass access is yours alone</b>
-            <p style={{ color: 'var(--ink-muted)', fontSize: 14, marginTop: 8 }}>An encrypted tunnel lets <em>you</em> reach your own container for debugging (e.g. <code>portabase doctor</code>) — never a bypass of capsule encryption, and never a path in for Portabase.</p>
+            <b>4. Retain state and test recovery</b>
+            <p style={{ color: 'var(--ink-muted)', fontSize: 14, marginTop: 8 }}>Encrypted connection profiles can be reopened on a later attested runner. Operational status and usage also persist. An independent recovery drill must verify that the retained vault copy restores correctly.</p>
           </div>
         </div>
         <p className="esc-cmp-foot">
-          This describes the managed-runner design, not a claim that automatic scheduled runs are live today —
-          check the Cloud page for what's currently shipped versus what's on the roadmap.
+          Independent verifier distribution and a full recovery drill remain release gates.
+          Check the Cloud page for current availability; a backup allowance does not imply an automatic schedule.
         </p>
       </div>
     </section>
@@ -1225,7 +1225,7 @@ function CloudPage() {
                   {isBase ? (
                     <div className="price-ribbon">MOST TEAMS · START HERE</div>
                   ) : (
-                    <div className="price-ribbon price-ribbon-free">IN-APP EXPANSION · +$10/MO</div>
+                    <div className="price-ribbon price-ribbon-free">IN-APP EXPANSION · +$8/MO</div>
                   )}
                   <div className="price-top">
                     <span>{isBase ? 'STARTER ESCAPE' : 'DAILY ESCAPE (IN-APP UPGRADE)'}</span>

@@ -751,7 +751,7 @@ function UtilitiesSection({ model, state, setState, toast, smsAllowed, plan }) {
         {!demo ? <NotificationPreferences embedded /> : <div className="pb-card">
           <div className="pb-card-head"><h3>Status alerts</h3><span>$17 optional</span></div>
           {!smsAllowed ? (
-            <p className="pb-muted">SMS is optional on Daily Escape ($17) — not on Cloud Free or $7.</p>
+            <p className="pb-muted">SMS is optional on Daily Escape ($17) — not on Cloud Free or Starter.</p>
           ) : (
             <>
               <p className="pb-muted">{u.sms.note}</p>

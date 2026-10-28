@@ -46,7 +46,7 @@ export function TransferWindowPanel({
         {' · '}
         {tw.planId === 'cloud-free' ? 'No scheduled service.' : tw.extraTransfersAddon
           ? `Extra transfers add-on on (up to ${ADDON_TRANSFERS_PER_24H}).`
-          : `$7 includes 1 / ${TRANSFER_WINDOW_HOURS}h. $17 includes 3 / day.`}
+          : `${tw.planId === 'cloud-7' ? 'Legacy $7' : '$9 Starter'} includes 1 / ${TRANSFER_WINDOW_HOURS}h. $17 includes 3 / day.`}
         {' '}
         {tw.remaining === 0 ? 'No slots left in this window.' : `${tw.remaining} remaining.`}
       </p>

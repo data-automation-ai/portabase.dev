@@ -415,7 +415,7 @@ export function OneTwoThreeDone({ state, setState, toast, navigate }) {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span data-testid="scope-quota-display" className="mono" style={{ fontSize: '11px', fontWeight: 600, color: '#f0f6fc' }}>
-                {(scopeSummary?.includedMb ?? scopeSummary?.grandTotalMb ?? 0).toFixed(2)} MB / 40 GB Free Quota
+                {(scopeSummary?.includedMb ?? scopeSummary?.grandTotalMb ?? 0).toFixed(2)} MB / 10 GB Free Capture Cap
               </span>
               <div style={{ width: '100px', height: '8px', background: '#21262d', borderRadius: '4px', overflow: 'hidden', border: '1px solid #30363d' }}>
                 <div style={{ width: `${Math.min(100, Math.max(1, (((scopeSummary?.includedMb ?? scopeSummary?.grandTotalMb ?? 0) / 40960) * 100)))}%`, height: '100%', background: '#3ecf8e', transition: 'width 0.3s ease' }} />

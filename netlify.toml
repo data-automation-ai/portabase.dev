@@ -1,4 +1,9 @@
 [[redirects]]
+  from = "/api/cloud/confidential-admission"
+  to = "/.netlify/functions/cloud-confidential-admission"
+  status = 200
+
+[[redirects]]
   from = "/api/cases/submit"
   to = "/.netlify/functions/cases-submit"
   status = 200

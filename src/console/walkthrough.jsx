@@ -377,7 +377,7 @@ export function GuidedWalkthrough({ state, setState, toast, navigate, plan, me, 
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '240px' }}>
-            <span className="mono" style={{ fontSize: '11px', fontWeight: 600, color: '#f0f6fc' }}>{(scopeSummary?.includedMb ?? scopeSummary?.grandTotalMb ?? 0).toFixed(2)} MB / 40 GB Free Quota</span>
+            <span className="mono" style={{ fontSize: '11px', fontWeight: 600, color: '#f0f6fc' }}>{(scopeSummary?.includedMb ?? scopeSummary?.grandTotalMb ?? 0).toFixed(2)} MB / 10 GB Free Capture Cap</span>
             <div style={{ flex: 1, height: '6px', background: '#222630', borderRadius: '3px', overflow: 'hidden' }}>
               <div style={{ width: `${Math.min(100, Math.max(1, (((scopeSummary?.includedMb ?? scopeSummary?.grandTotalMb ?? 0) / 40960) * 100)))}%`, height: '100%', background: '#2ea043' }} />
             </div>

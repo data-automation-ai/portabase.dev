@@ -127,7 +127,7 @@ portabase restore \\
             <tr><td>Who runs capture</td><td>You, on a machine, VM, NAS, or CI you control</td><td>Your Cloud Runner or local agent</td></tr>
             <tr><td>Keys &amp; Passphrase</td><td>Stay on that machine (<code>.env.portabase.local</code>)</td><td>Browser seals keys to the runner only</td></tr>
             <tr><td>Control plane</td><td>None (100% standalone)</td><td>Status and hashes — never keys or capsule bytes</td></tr>
-            <tr><td>Scheduled service</td><td>Your cron / Task Scheduler</td><td>The free plan has no scheduled service. Paid $7 / $17 include schedules.</td></tr>
+            <tr><td>Scheduled service</td><td>Your cron / Task Scheduler</td><td>Cloud Free and $9 Starter use interactive runs. Scheduled service is available on eligible legacy and $17 plans.</td></tr>
             <tr><td>Price</td><td>Free forever (Apache-2.0)</td><td>Cloud Free, then {planPriceRangeLabel()}</td></tr>
           </tbody>
         </table>
@@ -226,11 +226,11 @@ function CloudDocs() {
       <p>
         Before a Cloud job, the dashboard sizer shows per-table sizes and per-bucket sizes / object counts from the free engine
         doctor / size inventory. You selectively <strong>include or exclude</strong> tables and Storage buckets so the capsule fits
-        Cloud Free 40 GB, $7 500 MB, or $17 10 GB. Anything omitted is called out as <strong>NOT COVERED</strong>.
+        Cloud Free 10 GB, $9 Starter 10 GB per capture, or $17 Daily 25 GB. Starter also has a separate 10 GB outbound allowance per 30 days. Anything omitted is called out as <strong>NOT COVERED</strong>.
         Table omit uses existing <code>--exclude-table-list</code>. No new CLI capture flags.
         The control plane stores the include list, size estimates, and job metadata / hashes — never keys or row bodies.
       </p>
-      <h2>Cloud Free vs paid schedules</h2>
+      <h2>Cloud allowances and scheduling</h2>
       <div className="docs-table-wrap">
         <table className="docs-table">
           <thead>
@@ -239,19 +239,19 @@ function CloudDocs() {
           <tbody>
             <tr><td>Price</td><td>$0 · no card</td><td>Square after a 7-day trial (card on file)</td></tr>
             <tr><td>Projects</td><td>1</td><td>Plan caps, up to 12 agents</td></tr>
-            <tr><td>Capsule usage Cloud may meter</td><td>Up to {CLOUD_FREE.storageCapLabel}</td><td>$7 · 500 MB · $17 · 10 GB</td></tr>
-            <tr><td>Databases</td><td>1 project</td><td>$7 · 1 project · $17 · unlimited projects &amp; databases</td></tr>
-            <tr><td>Capsules</td><td>Manual only</td><td>$7 · 1 / 24h · $17 · 3 / day</td></tr>
-            <tr><td>Scheduled service</td><td><strong>The free plan has no scheduled service</strong></td><td>Yes · managed schedules</td></tr>
+            <tr><td>Capsule usage Cloud may meter</td><td>Up to {CLOUD_FREE.storageCapLabel}</td><td>$9 · 10 GB outbound / 30 days · $17 · 25 GB per capture</td></tr>
+            <tr><td>Databases</td><td>1 project</td><td>$9 · 1 project · $17 · unlimited projects &amp; databases</td></tr>
+            <tr><td>Capsules</td><td>Manual only</td><td>$9 · 1 / 24h · $17 · 3 / day</td></tr>
+            <tr><td>Scheduled service</td><td><strong>The free plan has no scheduled service</strong></td><td>$9: interactive runs; eligible legacy and $17 plans: schedules</td></tr>
             <tr><td>SMS status</td><td>No</td><td>Optional on $17 — status only</td></tr>
-            <tr><td>Table + bucket sizer</td><td>Yes · fit 40 GB</td><td>Yes · include/exclude before a job</td></tr>
+            <tr><td>Table + bucket sizer</td><td>Yes · fit 10 GB</td><td>Yes · include/exclude before a job</td></tr>
             <tr><td>Vault</td><td>Customer-owned</td><td>Customer-owned</td></tr>
           </tbody>
         </table>
       </div>
       <div className="docs-callout honest">
-        <strong>Designed offer.</strong> Cloud Free is 40 GB, dashboard and manual runs — <strong>no scheduled service</strong>.
-        Live entitlement enforcement of that cap is not a completed production proof. Paid schedules are the {planPriceRangeLabel()} Square plans.
+        <strong>Availability and allowances.</strong> Cloud Free is 10 GB, dashboard and manual runs — <strong>no scheduled service</strong>.
+        The $9 Starter offer remains gated until managed release validation is complete. It includes one interactive backup per day and 10 decimal GB outbound per fixed 30-day window. Portabase covers the first binary snapshot; later binary transfers include only new or changed objects, while the full selected database is captured each run.
       </div>
     </>
   );
@@ -774,7 +774,7 @@ function RestoreTargets() {
         billing dispute, lost credentials. The business keeps running under a login the incident
         cannot touch. This is the contingency Portabase exists for.</p>
       <p><strong>Disadvantages:</strong> slower to set up — a second account, fresh secrets and
-        API keys, possibly a different region or plan limits (a free target caps at 500 MB).
+        API keys, possibly a different region, and separate provider limits for database size, object storage and features.
         Anything outside the capsule (DNS, custom domains, third-party integrations) must be
         re-pointed by hand.</p>
       <h2>Choosing the region</h2>
@@ -812,9 +812,9 @@ function DisasterRecovery() {
       </p>
       <h2>2 · Create the lifeboat project</h2>
       <p>
-        New blank project in an account the incident cannot touch. Pick the region deliberately —
-        you are re-creating the project anyway, so put it where you want it (a free target works if
-        the capsule is ≤ 500 MB total). Create <strong>nothing</strong> in it: replay refuses a
+        New blank project in a separate account with independent access. Pick the region deliberately —
+        you are re-creating the project anyway, so put it where you want it. A free target requires
+        the database, object storage and features to fit their respective provider limits. Create <strong>nothing</strong> in it: replay refuses a
         non-blank target, which is your guarantee you are not overwriting someone else's data.
       </p>
       <h2>3 · Replay the capsule</h2>

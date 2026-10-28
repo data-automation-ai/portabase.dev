@@ -3,12 +3,12 @@
  *
  * Launch target: Supabase projects only (DB, Auth, Storage, Edge Functions).
  * Payment: Square · public paid plans:
- *   Cloud Free — 40 GB, manual only (no scheduled service)
- *   $7/mo  — 1 project, up to 500 MB, 1 capsule / 24h
- *   $17/mo — unlimited projects & databases, incremental capsules up to 10 GB, 3 capsules / day
+ *   Cloud Free — 10 GB, manual only (no scheduled service)
+ *   $9/mo — 1 project, 1 backup / 24h, 10 decimal GB outbound / 30 days
+ *   $17/mo — unlimited projects & databases, capsules up to 25 GB, 3 capsules / day
  * Hidden legacy `cloud-37` stays in the table for compile / existing Square pins only.
- * Capsule vault: ALWAYS customer-provided — never hosted by Portabase Cloud.
- * Encryption passphrases: customer-side only. Cloud is provably zero-knowledge of keys and capsule contents.
+ * Durable capsule vault is customer-provided; managed jobs use temporary cloud working space.
+ * Managed credentials and plaintext are processed in the attested Portabase-operated enclave.
  *
  * Unit of work = an "escape" (capture → encrypt capsule → verify destination).
  * Avoid "backup" in customer-facing copy.
@@ -35,7 +35,7 @@ export const CLI_INSTALL = Object.freeze({
 const GB = 1024 * 1024 * 1024;
 const MB = 1024 * 1024;
 
-/** Fixed commercial plans. Public cards: Free + $7 + $17. `cloud-37` is hidden/legacy. */
+/** Fixed commercial plans. Public cards: Free + $9 + $17. `cloud-7` and `cloud-37` remain legacy. */
 export const CLOUD_PLANS = Object.freeze({
   'cloud-9': Object.freeze({
     id: 'cloud-9', priceMonthlyUsd: 9, priceMonthlyCents: 900,
@@ -93,7 +93,7 @@ export const CLOUD_PLANS = Object.freeze({
     customerFacing: true,
     title: 'Daily Escape',
     cadenceLabel: 'unlimited projects · capsules up to 25 GB · 3 capsules / day',
-    shortLabel: '$17/mo (+$10) · unlimited projects · 25 GB',
+    shortLabel: '$17/mo · unlimited projects · 25 GB',
     squareEnvKey: 'SQUARE_CLOUD_PLAN_VARIATION_ID',
     smsOptional: true,
   }),
@@ -122,7 +122,7 @@ export const CLOUD_PLANS = Object.freeze({
 
 /**
  * Cloud Free — not a Square catalog plan.
- * 40 GB, dashboard + manual runs. No scheduled service.
+ * 10 GB, dashboard + manual runs. No scheduled service.
  */
 export const CLOUD_FREE = Object.freeze({
   id: 'cloud-free',
@@ -462,15 +462,15 @@ export function whatCloudIncludes(planIdOrExtra = CLOUD_DEFAULT_PLAN_ID) {
     : resolvePlan({ extraCycles: planIdOrExtra });
   return [
     'Supabase project recovery ops (launch scope)',
-    'Hosted ops console (status, alerts, replay, CloudWatch/CloudTrail live)',
+    'Hosted console for run status, usage and recovery workflows',
     `${plan.cadenceLabel} (plan cap — vault is still yours)`,
     `${plan.transfersPer24h} capsule transfer${plan.transfersPer24h === 1 ? '' : 's'} / ${TRANSFER_WINDOW_HOURS} hours included`,
     plan.smsOptional
       ? 'Optional SMS status on $17 (Twilio) — status only; never keys, capsule bytes, or customer data'
-      : 'SMS status is optional on $17 — not included on $7 or Cloud Free',
+      : 'SMS status is optional on $17 — not included on Starter or Cloud Free',
     `Up to ${CLOUD_MAX_AGENTS} agents (telemetry runners)`,
-    'Opt-in agent health metadata only',
-    'Multi-person alert chains (SMS / email / Slack)',
+    'Operational status, duration, transferred bytes and verification results',
+    'Managed credentials and plaintext processed in the attested Google Intel TDX enclave',
     `7-day trial then ${priceLabel(plan.priceMonthlyCents)} via Square (card required)`,
   ];
 }
@@ -487,13 +487,13 @@ export function agentSlotsUsed(count) {
 
 export function whatCloudDoesNotInclude() {
   return [
-    'Capsule storage (you bring S3, Drive, Dropbox, NAS, Local Starter, etc.)',
-    'Encryption passphrases or Supabase service keys — designed so Cloud never holds customer keys',
-    'Capsule ciphertext (never lands in Portabase Cloud)',
+    'Long-term capsule storage: you provide a supported destination',
+    'A substitute for your business-grade backup and recovery process',
+    'Permanent runner working space: encrypted vault copies and connection profiles persist separately',
     'Managed object store billed by Portabase',
-    'Unlimited vault size (choose Cloud Free 40 GB, $7 · 500 MB, or $17 · 10 GB)',
+    'Unlimited usage: Cloud Free has a 10 GB capture cap; $9 includes 10 GB outbound / 30 days; $17 supports 25 GB captures',
     'Scheduled service on Cloud Free (manual runs only)',
-    'Capsule plaintext, object names, or sealing keys (control plane: status and hashes only)',
+    'A recovery guarantee without a verified restore drill',
   ];
 }
 

@@ -7,6 +7,7 @@ import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {build} from 'vite';
 import {operatorConfig,SITE_ID} from '../cloud/confidential/operator-config.mjs';
+import {verifyNativePackage} from './lib/verify-netlify-package.mjs';
 const root=resolve('.'),stage=resolve('.portabase/enclave-policy-release'),evidence=join(stage,'release.json');
 const action=process.argv[2]||'plan',arg=name=>process.argv.find(x=>x.startsWith('--'+name+'='))?.slice(name.length+3);
 // Parent verified the served graphical-dashboard revision on 2026-10-28.
@@ -84,9 +85,14 @@ if(action==='plan'){
  const cli=join(process.env.APPDATA,'npm/node_modules/netlify-cli');
  const {zipFunction}=await import(pathToFileURL(join(cli,'node_modules/@netlify/zip-it-and-ship-it/dist/main.js')));
  const functionArtifacts=[];const schedules=[...(deploy.function_schedules||[])];
+ // Native v2 forces NFT tracing, which excludes dependencies above repositoryRoot.
+ // This worktree resolves installed packages in the main checkout's node_modules.
+ // Include that traced boundary; archive source still comes only from sourceCommit.
+ const dependencyRoot=resolve(git('rev-parse','--git-common-dir'),'..');
  for(const row of affected){
-  const bundle=await zipFunction(join(source,row.file),stage,{basePath:source,repositoryRoot:source,config:{'*':{nodeBundler:'esbuild',nodeVersion:'24'}}});
+  const bundle=await zipFunction(join(source,row.file),stage,{basePath:source,repositoryRoot:dependencyRoot,config:{'*':{nodeBundler:'esbuild',nodeVersion:'24'}}});
   if(['cloud-confidential-admission','cloud-confidential-usage','cloud-confidential-session','cloud-dashboard','cases','cases-submit','cases-manage'].includes(row.name)&&bundle.runtimeAPIVersion!==2)throw Error('native_function_runtime_required');
+  await verifyNativePackage({...bundle,name:row.name},join(stage,'package-check-'+sourceCommit));
   const bytes=await readFile(bundle.path),digest=hash(bytes,'sha256');functions[row.name]=digest;
   functions_config[row.name]={runtime:'nodejs24.x',build_data:bundle.buildData,routes:bundle.routes,excluded_routes:bundle.excludedRoutes,memory:bundle.memory??functions_config[row.name]?.memory,region:bundle.region??functions_config[row.name]?.region};
   // Schedule changes need an explicit reviewed scheduler release, not accidental activation.

@@ -144,7 +144,7 @@ export function TableSizer({
           <p>
             Selected estimate {formatHumanSize(fit.usedBytes)} of {fit.capLabel}
             {fit.overCap ? ` · over by ${formatHumanSize(fit.overByBytes)}` : ` · ${formatHumanSize(fit.remainingBytes)} remaining`}.
-            Exclude tables or buckets so the capsule fits Cloud Free 40 GB, $7 10 GB, or $17 25 GB.
+            Exclude tables or buckets so the capture fits Cloud Free 10 GB, Starter 10 GB, or Daily 25 GB. Starter also has a separate 10 GB outbound allowance per 30 days.
             Smallest public cap that fits this selection: <strong>{recommended.shortLabel}</strong>
             {recommended.stillOver ? ' (still over $17 25 GB)' : ''}.
           </p>
@@ -308,7 +308,7 @@ export function JobSetupWizard({
           </ol>
           {step === 0 && (
             <>
-              <p className="pb-muted">Pick the cap this capsule must fit. Cloud Free is 40 GB, manual only. $7 is one database up to 10 GB, 1 capsule / 24h. $17 is unlimited databases up to 25 GB, 3 capsules / day.</p>
+              <p className="pb-muted">Pick the capture cap: Cloud Free 10 GB, manual only; $9 Starter 10 GB per capture, one project and one backup / 24h; $17 Daily 25 GB per capture and three / day. Starter’s separate transfer allowance is 10 decimal GB outbound per 30 days, excluding the first binary snapshot covered by Portabase.</p>
               <TableSizer
                 inventory={inv}
                 planId={planId}

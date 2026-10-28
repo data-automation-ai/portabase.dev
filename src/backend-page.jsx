@@ -367,7 +367,7 @@ export function BackendPage({ Logo, Arrow, Footer }) {
                   <li>capsuleId · status · timing · error class</li>
                   <li>Worker heartbeat / online</li>
                   <li>SMS / email / Slack — no capsule bytes</li>
-                  <li>Plan usage vs 40 GB / 10 GB / 25 GB cap</li>
+                  <li>Capture caps: Free 10 GB / Starter 10 GB / Daily 25 GB; Starter transfer allowance shown separately</li>
                 </ul>
               </div>
             </figure>
@@ -462,7 +462,7 @@ export function BackendPage({ Logo, Arrow, Footer }) {
             <h2>See the trust dial, or run the engine yourself.</h2>
             <p>
               Backend describes the wires. Security explains residual key visibility on managed jobs.
-              Cloud is the optional GUI, telemetry, and SMS product — Cloud Free 40 GB, then $7 or $17 per month (10 GB / 25 GB), BYO storage.
+              Cloud adds managed Secure Enclave execution and usage reporting. Cloud Free has a 10 GB capture cap; $9 Starter includes 10 GB outbound per 30 days; $17 Daily supports 25 GB captures and optional SMS. Bring your own storage; managed Starter availability is gated until validation is complete.
             </p>
             <div className="security-cta-actions">
               <a className="button button-primary" href="/security">Open Security <Arrow /></a>
