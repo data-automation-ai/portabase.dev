@@ -29,7 +29,6 @@ import {
 } from './pages.jsx';
 import { StorageProvidersPage } from './storage-providers-page.jsx';
 import { OneTwoThreeDone } from './one-two-three-done.jsx';
-import { EnclaveDashboard } from './enclave-dashboard.jsx';
 import { TelemetryPage } from './telemetry-page.jsx';
 import { liveEventToHealthEvent } from '../lib/telemetry-view.js';
 import { ConnectSupabaseFlow } from './connect-supabase.jsx';
@@ -563,7 +562,7 @@ export function ConsoleApp() {
     case 'account': body = <AccountHubPage {...pageProps} tab={route.accountTab} />; break;
     case 'dashboard':
     default:
-      body = <EnclaveDashboard {...pageProps} />;
+      body = <OneTwoThreeDone {...pageProps} />;
       break;
   }
 
@@ -572,7 +571,7 @@ export function ConsoleApp() {
     : (TITLES[route.page] || 'Home');
 
   return (
-    <div className="pb-console pb-single-view" style={route.page === 'dashboard' ? { background: '#ffffff' } : undefined}>
+    <div className="pb-console pb-single-view">
       <header className="pb-top-clean">
         <div className="pb-top-clean-brand-nav">
           <a href="/" className="pb-top-clean-logo">
