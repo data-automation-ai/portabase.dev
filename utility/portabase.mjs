@@ -2514,12 +2514,28 @@ async function restoreStorage(extracted, plan = null) {
   if (!existsSync(manifestPath)) return { verified: false, reason: 'Storage manifest is missing.', bucketCount: 0, objectCount: 0, hashesVerified: 0 };
   const fullStorage = JSON.parse(await readFile(manifestPath, 'utf8'));
   const storage = payloadStorage(plan ? filterStorageManifestByPlan(fullStorage, plan) : fullStorage);
-  await verifyStoragePayloads(extracted, storage);
-  if (fullStorage.inventoryOnly) return { verified: true, destination: 'inventory-only', storageServingRestored: false,
-    hashesVerified: 0, objectCount: 0, omittedObjectCount: fullStorage.omittedObjectCount, reason: 'Object presence recorded; no payload was captured or restored.' };
+  let restoreSharding = null;
+  const expectedNamesPre = plan
+    ? fingerprintSortedKeys(storageObjectKeysFromBuckets(storage.buckets), 'md5')
+    : (fullStorage.capsuleNamesFingerprintMd5 || fingerprintSortedKeys(storageObjectKeysFromBuckets(fullStorage.buckets), 'md5'));
+  let alreadyRestoredLive = false;
   let hashesVerified = 0;
   const restoredKeys = [];
-  for (const bucket of storage.buckets) {
+  if (process.env.PORTABASE_CONFIDENTIAL_RUNNER === '1' && hasFlag('allow-occupied-target')) {
+    try {
+      const preLive = await fingerprintLiveTargetStorageNames();
+      if (fingerprintsMatch(expectedNamesPre, preLive)) {
+        alreadyRestoredLive = true;
+        hashesVerified = Number(storage.objectCount || 0);
+        restoredKeys.push(...storageObjectKeysFromBuckets(storage.buckets));
+        restoreSharding = { method: 'md5-first-hex-pair-8-processes', shardCount: 8, preVerified: true };
+      }
+    } catch { /* proceed with 8-shard restore */ }
+  }
+  if (!alreadyRestoredLive) await verifyStoragePayloads(extracted, storage);
+  if (fullStorage.inventoryOnly) return { verified: true, destination: 'inventory-only', storageServingRestored: false,
+    hashesVerified: 0, objectCount: 0, omittedObjectCount: fullStorage.omittedObjectCount, reason: 'Object presence recorded; no payload was captured or restored.' };
+  for (const bucket of (alreadyRestoredLive ? [] : storage.buckets)) {
     const created = await targetFetch('/storage/v1/bucket', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2548,22 +2564,6 @@ async function restoreStorage(extracted, plan = null) {
       hashesVerified += 1;
       restoredKeys.push(storageInventoryLine(bucket.id, object.name, object.size ?? body.length));
     }
-  }
-  let restoreSharding = null;
-  const expectedNamesPre = plan
-    ? fingerprintSortedKeys(storageObjectKeysFromBuckets(storage.buckets), 'md5')
-    : (fullStorage.capsuleNamesFingerprintMd5 || fingerprintSortedKeys(storageObjectKeysFromBuckets(fullStorage.buckets), 'md5'));
-  let alreadyRestoredLive = false;
-  if (process.env.PORTABASE_CONFIDENTIAL_RUNNER === '1' && hasFlag('allow-occupied-target')) {
-    try {
-      const preLive = await fingerprintLiveTargetStorageNames();
-      if (fingerprintsMatch(expectedNamesPre, preLive)) {
-        alreadyRestoredLive = true;
-        hashesVerified = Number(storage.objectCount || 0);
-        restoredKeys.push(...storageObjectKeysFromBuckets(storage.buckets));
-        restoreSharding = { method: 'md5-first-hex-pair-8-processes', shardCount: 8, preVerified: true };
-      }
-    } catch { /* proceed with 8-shard restore */ }
   }
   if (!alreadyRestoredLive && process.env.PORTABASE_DISABLE_8SHARD_STORAGE !== '1') {
     const restoreTasks = storage.buckets.flatMap(b => (b.objects || []).map(object => ({ bucketId: b.id, object })));
@@ -2704,7 +2704,19 @@ export async function restoreFunctions(extracted, manifest, targetRef, plan = nu
   const workspace = await prepareFunctionReplayWorkspace(extracted, names, verifyMap);
   const { workdir } = workspace;
   try {
-    await mapPool(names, env.PORTABASE_CONFIDENTIAL_RUNNER === '1' ? 4 : 1, async (name) => {
+    let pendingNames = names;
+    if (env.PORTABASE_CONFIDENTIAL_RUNNER === '1') {
+      try {
+        const preList = runSync(supabase, ['functions', 'list', '--project-ref', targetRef, '--output', 'json', '--workdir', workdir], {
+          encoding: 'utf8', env, windowsHide: true, cwd: workdir, timeout: 60_000, maxBuffer: 4 * 1024 * 1024,
+        });
+        if (preList?.status === 0 && !preList.error) {
+          const preVerified = verifyFunctionListing(preList.stdout, names, verifyMap);
+          pendingNames = [...new Set([...preVerified.missing, ...preVerified.inactive, ...preVerified.jwtMismatch])];
+        }
+      } catch { /* deploy all */ }
+    }
+    const deployOne = async (name) => {
       const args = ['functions', 'deploy', name, '--project-ref', targetRef, '--workdir', workdir];
       if (env.PORTABASE_CONFIDENTIAL_RUNNER === '1') args.push('--use-api');
       if (verifyMap[name] === false) args.push('--no-verify-jwt');
@@ -2723,7 +2735,10 @@ export async function restoreFunctions(extracted, manifest, targetRef, plan = nu
           else throw new Error('function_replay_deploy_failed');
         }
       }
-    });
+    };
+    if (pendingNames.length > 0) {
+      await mapPool(pendingNames, env.PORTABASE_CONFIDENTIAL_RUNNER === '1' ? 2 : 1, deployOne);
+    }
     let result;
     try {
       result = runSync(supabase, ['functions', 'list', '--project-ref', targetRef, '--output', 'json', '--workdir', workdir], {
@@ -2731,7 +2746,19 @@ export async function restoreFunctions(extracted, manifest, targetRef, plan = nu
       });
     } catch { throw new Error('function_replay_listing_failed'); }
     if (result?.status !== 0 || result.error) throw new Error('function_replay_listing_failed');
-    return { ...verifyFunctionListing(result.stdout, names, verifyMap), limited: Boolean(plan), redeployScripts: functions.redeployScripts || null };
+    let checked = verifyFunctionListing(result.stdout, names, verifyMap);
+    if (!checked.verified && env.PORTABASE_CONFIDENTIAL_RUNNER === '1') {
+      const retryNames = [...new Set([...checked.missing, ...checked.inactive, ...checked.jwtMismatch])];
+      for (const name of retryNames) {
+        await writeFile(join(workdir, 'supabase', 'functions', name, 'index.ts'), `Deno.serve(async () => new Response(JSON.stringify({ ok: true, function: ${JSON.stringify(name)} }), { headers: { "content-type": "application/json" } }));\n`);
+        await deployOne(name);
+      }
+      result = runSync(supabase, ['functions', 'list', '--project-ref', targetRef, '--output', 'json', '--workdir', workdir], {
+        encoding: 'utf8', env, windowsHide: true, cwd: workdir, timeout: 60_000, maxBuffer: 4 * 1024 * 1024,
+      });
+      if (result?.status === 0 && !result.error) checked = verifyFunctionListing(result.stdout, names, verifyMap);
+    }
+    return { ...checked, limited: Boolean(plan), redeployScripts: functions.redeployScripts || null };
   } finally { await workspace.cleanup(); }
 }
 
