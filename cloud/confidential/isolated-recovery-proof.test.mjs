@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {sealProfile} from './customer-profile.mjs';
+import {sealProfile,openProfile} from './customer-profile.mjs';
 import {confidentialApplication} from './application.mjs';
-import {FIXTURE,parseProofOptions,runProofCommands} from './isolated-recovery-proof.mjs';
+import {FIXTURE,parseProofOptions,runProofCommands,attestedProofCommand} from './isolated-recovery-proof.mjs';
 const owner='a'.repeat(64),recoveryKey=Buffer.alloc(32,7).toString('base64url');
 test('session boundary rejects missing or foreign selections before automatic provider access',async()=>{
  for(const selection of [{},{source:'a'.repeat(20),target:FIXTURE.target},{source:FIXTURE.source,target:'b'.repeat(20)}]){
@@ -23,14 +23,54 @@ test('normal customer sessions are unchanged and valid fixture boundary opens wi
  assert.deepEqual(opened.selection,profile.selection);
  await assert.rejects(other({owner,operation:'session.open',input:{recoveryKey,expectedSelection:{source:'a'.repeat(20),target:FIXTURE.target}}}),/session_selection_mismatch/);
 });
+test('explicit rebind changes only selection inside the enclave and never accesses the old vault or provider',async()=>{
+ const profile={version:1,owner,connections:{source:{accessToken:'fake-source'},target:{accessToken:'fake-target'}},selection:{source:'c'.repeat(20),target:'d'.repeat(20),sources:['c'.repeat(20)],targetMap:{old:'d'.repeat(20)}},dropbox:{refreshToken:'fake-refresh'},s3:{bucket:'old-vault'},activeVault:'s3',keyAcknowledged:true,accountConfirmation:{method:'manual',sourceGrantId:'one',targetGrantId:'two'}};
+ let providerCalls=0;
+ const forbidden=async()=>{providerCalls++;throw Error('must_not_access_provider');};
+ const app=confidentialApplication({connections:{access:forbidden},vault:{provider:forbidden},s3:{provider:forbidden}});
+ const selection={source:FIXTURE.source,target:FIXTURE.target};
+ const result=await app({owner,operation:'session.open',input:{recoveryKey,sealedProfile:await sealProfile(profile,recoveryKey),expectedSelection:selection,rebindSelection:selection}});
+ assert.equal(providerCalls,0);assert.equal(result.selectionRebound,true);assert.equal(result.binaryCatalog.state,'deferred');
+ assert.deepEqual(await openProfile(result.sealedProfile,recoveryKey,owner),{...profile,selection});
+ // Existing sessions obey the same explicit configuration and no-provider rule.
+ const again=await app({owner,operation:'session.open',input:{recoveryKey,expectedSelection:selection,rebindSelection:selection}});
+ assert.equal(again.selectionRebound,true);assert.equal(providerCalls,0);
+});
+test('rebind rejects protected targets, identical projects, mismatched boundaries and missing boundary',async()=>{
+ const selection={source:FIXTURE.source,target:FIXTURE.target};
+ const profile={version:1,owner,connections:{},selection};
+ const sealedProfile=await sealProfile(profile,recoveryKey);
+ for(const input of [
+  {rebindSelection:{source:FIXTURE.source,target:FIXTURE.auth},expectedSelection:{source:FIXTURE.source,target:FIXTURE.auth}},
+  {rebindSelection:{source:FIXTURE.source,target:FIXTURE.source},expectedSelection:selection},
+  {rebindSelection:{source:'e'.repeat(20),target:FIXTURE.target},expectedSelection:selection},
+  {rebindSelection:selection},
+ ]){
+  const app=confidentialApplication({connections:{},vault:null});
+  await assert.rejects(app({owner,operation:'session.open',input:{recoveryKey,sealedProfile,...input}}),/invalid_(rebind|expected)_selection/);
+ }
+});
 test('harness defaults to metadata plan and requires explicit digest, identity, start and proof scope',()=>{
  assert.equal(parseProofOptions([]).action,'plan');
  assert.throws(()=>parseProofOptions(['proof']),/reviewed_digest_required/);
  const args=['inspect','--digest=sha256:'+'1'.repeat(64),'--identity='+FIXTURE.identity,'--source='+FIXTURE.source,'--target='+FIXTURE.target];
  assert.throws(()=>parseProofOptions(args),/explicit_runner_start_required/);
  assert.equal(parseProofOptions([...args,'--start-runner=yes']).action,'inspect');
+ assert.equal(parseProofOptions([...args,'--start-runner=yes','--rebind-fixture=yes'])['rebind-fixture'],'yes');
+ assert.throws(()=>parseProofOptions(['proof',...args.slice(1),'--start-runner=yes','--vault=s3','--confirm-scope=synthetic-drill-v1','--rebind-fixture=yes']),/rebind_requires_explicit_inspect/);
+ assert.throws(()=>parseProofOptions(['plan','--rebind-fixture=yes']),/rebind_requires_explicit_inspect/);
  assert.throws(()=>parseProofOptions(['proof',...args.slice(1),'--start-runner=yes']),/explicit_proof_scope_required/);
  assert.throws(()=>parseProofOptions([...args,'--allow-overwrite=true']),/invalid_proof_option/);
+});
+test('attestation status is emitted only from fresh verified client evidence, even on a workload rejection',async()=>{
+ let evidence=null;const logs=[];
+ const client={evidence:()=>evidence,command:async()=>{throw Error('attestation_invalid');}};
+ await assert.rejects(attestedProofCommand(client,'session.open',{},row=>logs.push(row)));assert.equal(logs.length,0);
+ client.command=async()=>{evidence={imageDigest:'sha256:'+'a'.repeat(64),hardware:'GCP_INTEL_TDX',projectNumber:'495102144848',verifiedAt:'2026-10-28T00:00:00Z',attestationToken:'must-not-log'};throw Error('session_selection_mismatch');};
+ await assert.rejects(attestedProofCommand(client,'session.open',{},row=>logs.push(row)),/session_selection_mismatch/);
+ assert.equal(logs.length,1);assert.equal(logs[0].stage,'attestation_verified');assert.equal(JSON.stringify(logs).includes('must-not-log'),false);
+ client.command=async()=>{throw Error('transport_failed');};
+ await assert.rejects(attestedProofCommand(client,'session.open',{},row=>logs.push(row)));assert.equal(logs.length,1);
 });
 function harness({blank=true,scopeChanged=false}={}){
  const calls=[];let backups=0;

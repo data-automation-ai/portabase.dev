@@ -14,9 +14,10 @@ export function parseProofOptions(args){
  const action=args[0]||'plan',options={action};
  if(!['plan','inspect','proof'].includes(action))fail('invalid_proof_action');
  for(const arg of args.slice(1)){
-  const match=/^--(digest|identity|source|target|vault|confirm-scope|start-runner)=(.+)$/.exec(arg);
+  const match=/^--(digest|identity|source|target|vault|confirm-scope|start-runner|rebind-fixture)=(.+)$/.exec(arg);
   if(!match||options[match[1]]!==undefined)fail('invalid_proof_option');options[match[1]]=match[2];
  }
+ if(options['rebind-fixture']!==undefined&&(options['rebind-fixture']!=='yes'||action!=='inspect'))fail('rebind_requires_explicit_inspect');
  if(action==='plan')return options;
  if(!/^sha256:[a-f0-9]{64}$/.test(options.digest||''))fail('reviewed_digest_required');
  if(options.identity!==FIXTURE.identity||options.source!==FIXTURE.source||options.target!==FIXTURE.target)fail('exact_fixture_identity_required');
@@ -26,9 +27,20 @@ export function parseProofOptions(args){
 }
 const projectSummary=p=>({ref:p.ref,blank:p.blank,applicationTables:p.applicationTables,authUsers:p.authUsers,storageObjects:p.storageObjects,functions:p.functions,databaseBytes:p.databaseBytes,storageBytes:p.storageBytes});
 const safeError=error=>/^[a-z0-9_]{3,100}$/.test(error?.message||'')?error.message:'isolated_proof_failed';
+export async function attestedProofCommand(client,operation,input,report){
+ const before=client.evidence();
+ try{return await client.command(operation,input);}
+ finally{
+  // client sets fresh evidence only after signature/policy/key verification
+  // and a bound encrypted reply, including a workload rejection reply.
+  const evidence=client.evidence();
+  if(evidence&&evidence!==before)report({stage:'attestation_verified',operation,imageDigest:evidence.imageDigest,hardware:evidence.hardware,projectNumber:evidence.projectNumber,verifiedAt:evidence.verifiedAt});
+ }
+}
 export async function runProofCommands({command,options,report=()=>{},wait=sleep}){
  const expected={source:FIXTURE.source,target:FIXTURE.target};
- // session.open's boundary must already have rejected any stale foreign refs.
+ // session.open has either rejected foreign refs or explicitly rebound only
+ // selection. Provider access below is restricted to the approved fixture refs.
  const grants={};
  for(const slot of ['source','target']){
   const result=await command('projects.list',{slot});
@@ -85,6 +97,11 @@ export async function main(args=process.argv.slice(2)){
  const envelope=await google(PROFILE+'/versions/latest:access');
  let version=envelope?.name,sealedProfile=JSON.parse(Buffer.from(envelope?.payload?.data||'','base64').toString()).sealedProfile;
  if(typeof sealedProfile!=='string'||!sealedProfile||!version)fail('saved_fixture_profile_required');
+ const originalMetadata=await google(PROFILE+'/versions/'+version.split('/').at(-1));
+ if(originalMetadata?.name!==version||originalMetadata.state!=='ENABLED')fail('original_profile_checkpoint_required');
+ // Secret versions are immutable; addVersion below never replaces or deletes
+ // this encrypted checkpoint. Evidence records metadata only, never its JWE.
+ report({stage:'original_profile_checkpoint',secret:'portabase-confidential-validation-profile',version:version.split('/').at(-1),createdAt:originalMetadata.createTime,state:originalMetadata.state,rebindRequested:options['rebind-fixture']==='yes'});
  let session;
  const authorization=async()=>{
   if(!session||session.expires_at<Date.now()/1000+120){
@@ -98,7 +115,7 @@ export async function main(args=process.argv.slice(2)){
  // Every response's possibly rotated grant is sealed and durable before another
  // provider command. Single operator owns this fixture; concurrent writes fail.
  async function command(operation,input){
-  const result=await client.command(operation,input);
+  const result=await attestedProofCommand(client,operation,input,report);
   if(typeof result.sealedProfile!=='string')fail('sealed_profile_response_required');
   const latest=await google(PROFILE+'/versions/latest');
   if(latest?.name!==version)fail('fixture_profile_changed_concurrently');
@@ -115,7 +132,8 @@ export async function main(args=process.argv.slice(2)){
  const requestId=randomUUID(),deadline=Date.now()+8*60_000;
  for(;;){const ready=await client.session(requestId);if(ready.state==='ready')break;if(Date.now()>deadline)fail('runner_start_timeout');await sleep(6000);}
  const recoveryKey=createHash('sha256').update('portabase-isolated-validation:'+fixture.password).digest('base64url');
- const opened=await command('session.open',{recoveryKey,sealedProfile,expectedSelection:{source:FIXTURE.source,target:FIXTURE.target}});
+ const expectedSelection={source:FIXTURE.source,target:FIXTURE.target};
+ const opened=await command('session.open',{recoveryKey,sealedProfile,expectedSelection,...(options['rebind-fixture']==='yes'?{rebindSelection:expectedSelection}:{})});
  report({stage:'session',attestationVerified:true,imageDigest:options.digest,connections:{source:opened.connected?.source===true,target:opened.connected?.target===true,dropbox:opened.connected?.dropbox===true,s3:opened.connected?.s3===true},accountConfirmed:opened.accountConfirmation?.confirmed===true,keyAcknowledged:opened.keyAcknowledged===true});
  if(!opened.connected?.source||!opened.connected?.target)fail('fixture_provider_consent_required');
  if(options.action==='proof'&&!opened.connected?.[options.vault])fail('fixture_vault_consent_required');

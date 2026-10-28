@@ -85,15 +85,21 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
       if (operation === 'session.open') {
         recoveryKeyBytes(input.recoveryKey).fill(0);
         if (customer && customer.recoveryKey !== input.recoveryKey) fail('session_key_mismatch');
+        const validateSelection = value => {
+          if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).length!==2||!value.source||!value.target)fail('invalid_expected_selection');
+          projectRef(value.source);projectRef(value.target);
+          if(value.source===value.target)fail('invalid_expected_selection');
+          return {source:value.source,target:value.target};
+        };
+        const expected=input.expectedSelection===undefined?null:validateSelection(input.expectedSelection);
+        const rebound=input.rebindSelection===undefined?null:validateSelection(input.rebindSelection);
+        if(rebound&&(!expected||rebound.target==='eoiqvdmvgaurlecdzqkp'||rebound.source!==expected.source||rebound.target!==expected.target))fail('invalid_rebind_selection');
         const checkExpectedSelection = profile => {
-          if(input.expectedSelection===undefined)return;
-          const expected=input.expectedSelection;
-          if(!expected||typeof expected!=='object'||Array.isArray(expected)||Object.keys(expected).length!==2||!expected.source||!expected.target)fail('invalid_expected_selection');
-          for(const slot of ['source','target']){
-            projectRef(expected[slot]);
-            if(profile.selection?.[slot]!==expected[slot])fail('session_selection_mismatch');
-          }
-          if(expected.source===expected.target)fail('invalid_expected_selection');
+          const selected=rebound||profile.selection;
+          if(expected&&['source','target'].some(slot=>selected?.[slot]!==expected[slot]))fail('session_selection_mismatch');
+          // Explicit keyholder configuration only. Drop stale batch mappings;
+          // preserve credentials and every other field. No provider calls here.
+          if(rebound)profile.selection={...rebound};
         };
         if(customer)checkExpectedSelection(customer.profile);
         if (!customer) {
@@ -279,7 +285,11 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
         case 'job.status': data=jobs.status(owner,input.id); break;
         default: fail('unsupported_operation');
       }
-      if(operation==='session.open'&&profile.selection?.source&&(profile.s3?.bucket||profile.r2?.bucket||profile.dropbox?.refreshToken)){
+      if(operation==='session.open'&&input.rebindSelection!==undefined){
+        data.selectionRebound=true;
+        data.binaryCatalog={state:'deferred',encrypted:true};
+      }
+      if(operation==='session.open'&&input.rebindSelection===undefined&&profile.selection?.source&&(profile.s3?.bucket||profile.r2?.bucket||profile.dropbox?.refreshToken)){
         let catalog;
         try{
           const provider=profile.activeVault==='s3'?await s3.provider(profile):profile.activeVault==='r2'?await r2.provider(profile):await vault.provider(profile);
