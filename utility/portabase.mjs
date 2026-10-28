@@ -97,6 +97,7 @@ import { resolveEdition } from './license.mjs';
 import { emitTelemetry } from './telemetry.mjs';
 import { createCaptureLog } from './capture-log.mjs';
 import { enforceJobCapsuleLimit } from './job-capsule-limit.mjs';
+import { run8ShardStorageCapture, run8ShardStorageRestore } from './storage-shards.mjs';
 import { runAwsCli } from './aws/cli.mjs';
 import {
   captureOptions, inventoryObject, payloadStorage, targetDatabaseUrl, databaseIdentity,
@@ -933,7 +934,20 @@ export async function captureStorage(rawDir, limits = null, config = {}, exclude
     throw lastErr;
   }
 
-  const objectResults = await mapPool(jobs, concurrency, async ({ bucket, object }) => {
+  let objectResults;
+  if (!inventoryOnly && !deltaBaseline?.size && jobs.length > 0 && process.env.PORTABASE_DISABLE_8SHARD_STORAGE !== '1') {
+    for (const { bucket, object } of jobs) seenKeys.add(`${bucket.id}/${object.fullName}`);
+    const sharded = await run8ShardStorageCapture({
+      tasks: jobs.map(({ bucket, object }) => ({ bucketId: bucket.id, fullName: object.fullName, identity: storageObjectIdentity(object) })),
+      storageDir,
+      sourceUrl: process.env.SUPABASE_URL,
+      serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY,
+      concurrencyPerShard: 2,
+      onProgress: ({ completed: c, total: t }) => progress({ phase: 'storage', completed: c, total: t }),
+    });
+    manifest.sharding = { method: 'md5-first-hex-pair-8-processes', shardCount: 8, durationMs: sharded.durationMs, shards: sharded.shards };
+    objectResults = sharded.results;
+  } else objectResults = await mapPool(jobs, concurrency, async ({ bucket, object }) => {
     const identity = storageObjectIdentity(object);
     const key = `${bucket.id}/${object.fullName}`;
     seenKeys.add(key);
@@ -2513,7 +2527,7 @@ async function restoreStorage(extracted, plan = null) {
     if (!created.ok && created.status !== 409 && created.status !== 400) {
       throw new Error(`Unable to create blank-target bucket ${bucket.id}: HTTP ${created.status}`);
     }
-    for (const object of bucket.objects) {
+    for (const object of (process.env.PORTABASE_DISABLE_8SHARD_STORAGE === '1' ? bucket.objects : [])) {
       const source = join(extracted, 'storage', safeObjectPath(bucket.id), safeObjectPath(object.name));
       const objectPath = object.name.split('/').map(encodeURIComponent).join('/');
       // Buffer body avoids Node/Windows spawn EINVAL with stream+fetch duplex on some builds
@@ -2531,6 +2545,22 @@ async function restoreStorage(extracted, plan = null) {
       if (remoteHash !== expectedHash) throw new Error(`Read-back hash mismatch for ${bucket.id}/${object.name}.`);
       hashesVerified += 1;
       restoredKeys.push(storageInventoryLine(bucket.id, object.name, object.size ?? body.length));
+    }
+  }
+  let restoreSharding = null;
+  if (process.env.PORTABASE_DISABLE_8SHARD_STORAGE !== '1') {
+    const restoreTasks = storage.buckets.flatMap(b => (b.objects || []).map(object => ({ bucketId: b.id, object })));
+    if (restoreTasks.length > 0) {
+      const sharded = await run8ShardStorageRestore({
+        tasks: restoreTasks,
+        extracted,
+        targetUrl: process.env.PORTABASE_TARGET_SUPABASE_URL,
+        serviceRoleKey: process.env.PORTABASE_TARGET_SERVICE_ROLE_KEY || process.env.PORTABASE_TARGET_SECRET_KEY,
+        concurrencyPerShard: 2,
+      });
+      hashesVerified += sharded.hashesVerified;
+      restoredKeys.push(...sharded.restoredKeys);
+      restoreSharding = { method: 'md5-first-hex-pair-8-processes', shardCount: 8, durationMs: sharded.durationMs, shards: sharded.shards };
     }
   }
   // Name+size inventory fingerprint: destination restored set vs capsule snapshot (or, with a
@@ -2572,6 +2602,7 @@ async function restoreStorage(extracted, plan = null) {
     bucketCount: storage.buckets.length,
     objectCount: storage.objectCount,
     hashesVerified,
+    sharding: restoreSharding,
     namesFingerprint: actualNames,
     expectedNamesFingerprint: expectedNames,
     namesMatch,
