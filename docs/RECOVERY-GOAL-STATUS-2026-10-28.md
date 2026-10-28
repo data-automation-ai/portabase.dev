@@ -34,6 +34,7 @@ Overall: INCOMPLETE. No capture or restore started in this repair run.
 - Admission rollback: restore prior endpoint https://6ae13026e2b5d043da3537ba--portabase-dev.netlify.app/.netlify/functions/cloud-confidential-admission. This reinstates recovery quota; prior controller revision 00022-79k.
 - Public homepage deployment remains 6ae10a3f5208a45fbdb6ed1e. Certificate section is not publicly deployed.
 - Helper restarts were performed only while idle; encrypted grants and selected scope retained, no job automatically started.
+- The VM stopped near its four-hour lifetime during final checks. Restarted the same approved TDX VM; at 03:04 UTC fresh attestation and preflight passed, source/target/Dropbox grants and 718-table/17-bucket scope restored. Backup and restore remain false. Controller expiresAt is derived from original creation time and may be stale after a provider restart; recheck runner lifetime before an approved job.
 - Recovery staging remains cloud-only. No F: writes, workstation data staging, or Codex Cloud transfer.
 
 ## Limits that remain explicit
@@ -41,3 +42,5 @@ Overall: INCOMPLETE. No capture or restore started in this repair run.
 Supabase integration supports postgres; additional/standalone databases are not implemented merely by displaying a database name. Storage selection is whole-bucket. S3, fresh OAuth consent, multi-project recovery, complete recovery, restored application behavior and durable vault delivery have not been proved by this repair. Passing focused tests/builds is not end-to-end proof. Browser debugger intermittently detaches; do not infer success from a timed-out interaction.
 
 Certificate source: original codex-clipboard-EPwbs7.png, copied unchanged to public/evidence/portabase-live-attestation.png. No genuine secret was visible to redact. Public IPs, hashes, key fingerprint and project identifiers remain visible as requested. The caption distinguishes attestation from independent audit or successful recovery.
+
+Saved repair commit: 1cb2f50; homepage preparation commit: 95141cb. Original and copied screenshot SHA-256 match: 21e733c22eecdd83b629737b7e07b0137f3c8de70ce8ab1dba483b6ea678d7c1. Latest focused rerun: 11 mapping/execution tests and 19 GUI/picker/vault/visual tests passed; prior admission suite 9 passed.
