@@ -28,7 +28,7 @@ import {
   BackupsHubPage, AgentsHubPage, AlertsHubPage, AccountHubPage,
 } from './pages.jsx';
 import { StorageProvidersPage } from './storage-providers-page.jsx';
-import { OneTwoThreeDone } from './one-two-three-done.jsx';
+import { EnclaveDashboard } from './enclave-dashboard.jsx';
 import { TelemetryPage } from './telemetry-page.jsx';
 import { liveEventToHealthEvent } from '../lib/telemetry-view.js';
 import { ConnectSupabaseFlow } from './connect-supabase.jsx';
@@ -36,7 +36,7 @@ import { CustomerDashboardPage } from './customer-dashboard.jsx';
 
 /** Portabase-native IA — recovery ops only (not a Supabase Studio clone). */
 const NAV = [
-  { id: 'dashboard', label: '1-2-3 Backup', icon: 'capsule' },
+  { id: 'dashboard', label: 'Recovery', icon: 'capsule' },
   { id: 'storage', label: 'Connections & Vaults', icon: 'cloud' },
   { id: 'backups', label: 'Backup Capsules', icon: 'folder' },
   { id: 'restore', label: 'Restore & Replay', icon: 'restore' },
@@ -562,7 +562,7 @@ export function ConsoleApp() {
     case 'account': body = <AccountHubPage {...pageProps} tab={route.accountTab} />; break;
     case 'dashboard':
     default:
-      body = <OneTwoThreeDone {...pageProps} />;
+      body = <EnclaveDashboard {...pageProps} />;
       break;
   }
 

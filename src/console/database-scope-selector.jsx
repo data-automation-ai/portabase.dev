@@ -63,6 +63,8 @@ export function DatabaseScopeSelector({
   onDisconnect = null,
   readOnly = false,
   activeDbId = null,
+  allowAddDatabase = true,
+  allowAddTable = true,
 }) {
   const [expandedDbId, setExpandedDbId] = useState(() => {
     if (activeDbId) return activeDbId;
@@ -633,20 +635,20 @@ export function DatabaseScopeSelector({
             >
               All Structure Only
             </button>
-            <button
+            {allowAddDatabase && <button
               type="button"
               className="pb-btn pb-btn-sm pb-btn-primary"
               onClick={() => setShowAddDb((v) => !v)}
               style={{ fontSize: '12px', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
             >
               <Icon name="plus" size={12} /> Add Supabase Database
-            </button>
+            </button>}
           </div>
         )}
       </div>
 
       {/* Add Database Form Collapsible */}
-      {showAddDb && !readOnly && (
+      {showAddDb && !readOnly && allowAddDatabase && (
         <form
           onSubmit={handleAddDatabase}
           style={{
@@ -1784,7 +1786,7 @@ export function DatabaseScopeSelector({
                       </div>
 
                       {/* Quick Add Custom Table Input */}
-                      {!readOnly && (
+                      {!readOnly && allowAddTable && (
                         <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
                           <input
                             type="text"

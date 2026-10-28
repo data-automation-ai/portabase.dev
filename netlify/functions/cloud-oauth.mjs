@@ -1,5 +1,5 @@
 import zlib from 'node:zlib';
-import { jsonResponse } from '../shared/verify-user.mjs';
+import { jsonResponse, verifyCloudUser } from '../shared/verify-user.mjs';
 import {
   generatePkcePair,
   generateOAuthState,
@@ -15,6 +15,8 @@ import {
   refreshDropboxOAuthToken,
 } from '../../cloud/runner/storage-oauth.mjs';
 import { discoverSupabaseProjectsAndDatabases } from '../../cloud/runner/supabase-discovery.mjs';
+import { openSupabaseSession, sealSupabaseSession } from '../../cloud/runner/oauth-session-cookie.mjs';
+import { supabaseAccess } from '../../cloud/confidential/supabase-access.mjs';
 import {
   computeDatabaseScopeSummary,
   buildExportManifest,
@@ -42,7 +44,17 @@ function clearCookie(name) {
   return `${name}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 }
 
-export async function handler(event) {
+export function supabaseTokenCookieName(slot) {
+  if (slot === 'target') return 'pb_oauth_sb_target_token';
+  if (slot === 'source') return 'pb_oauth_sb_source_token';
+  return 'pb_oauth_sb_token';
+}
+
+function oauthCookieSecret() {
+  return process.env.PORTABASE_OAUTH_COOKIE_SECRET || process.env.SUPABASE_OAUTH_CLIENT_SECRET || '';
+}
+
+export async function handler(event, { authenticate = verifyCloudUser } = {}) {
   if (event.httpMethod === 'OPTIONS') {
     return jsonResponse(204, {}, {
       'Access-Control-Allow-Origin': '*',
@@ -64,6 +76,14 @@ export async function handler(event) {
     try { body = JSON.parse(event.body); } catch { /* ignore */ }
   }
 
+  // Top-level OAuth navigation has no bearer header. The PKCE callback binds
+  // each grant to its own source/destination slot; discovery remains signed in.
+  if (pathname.startsWith('/api/cloud/oauth') && ['authorize', 'start'].includes(query.action)) {
+    const provider = query.provider || 'supabase';
+    if (!['supabase', 'dropbox'].includes(provider)) return jsonResponse(400, { error: 'unsupported_provider' });
+    return { statusCode: 302, headers: { Location: `/oauth/${provider}/start?${new URLSearchParams({ slot: query.slot === 'target' ? 'target' : 'source' })}`, 'Cache-Control': 'no-store' } };
+  }
+
   // 1. API: Discovery, Disconnect, Capsule Generate & Capsule Restore via /api/cloud/oauth
   if (
     pathname.startsWith('/api/cloud/oauth') ||
@@ -73,9 +93,13 @@ export async function handler(event) {
     query.action === 'generate_capsule' ||
     query.action === 'restore_capsule'
   ) {
+    try { await authenticate(event); }
+    catch { return jsonResponse(401, { ok: false, error: 'unauthorized' }, { 'Cache-Control': 'no-store' }); }
     const provider = query.provider || body.provider || 'supabase';
     const action = query.action || body.action || 'discover';
     const targetRef = (query.project || body.project || '').trim().toLowerCase();
+    const rawSlot = (query.slot || body.slot || '').trim().toLowerCase();
+    const slot = rawSlot === 'source' ? 'source' : (rawSlot === 'target' ? 'target' : '');
 
     if (action === 'generate_capsule') {
       const capsule = generateRunnerCapsule({
@@ -99,18 +123,20 @@ export async function handler(event) {
     }
 
     if (provider === 'supabase' && action === 'disconnect') {
+      const cookieName = supabaseTokenCookieName(slot);
       return jsonResponse(
         200,
         {
           ok: true,
           connected: false,
           disconnected: true,
+          slot: slot || 'default',
           message: 'Disconnected from Supabase.',
           databases: [],
           projects: [],
         },
         {
-          'Set-Cookie': clearCookie('pb_oauth_sb_token'),
+          'Set-Cookie': clearCookie(cookieName),
         },
       );
     }
@@ -147,58 +173,97 @@ export async function handler(event) {
       );
     }
 
-    if (provider === 'supabase' && (action === 'discover' || action === 'test')) {
-      const authHeader = ((event.headers?.authorization || event.headers?.Authorization) || '')
-        .replace(/^Bearer\s+/i, '')
-        .trim();
+    if (provider === 'supabase' && ['discover', 'test', 'inspect'].includes(action)) {
+      if (body.token || query.token) {
+        return jsonResponse(400, { ok: false, error: 'Manual Supabase tokens are not accepted. Connect with OAuth.' });
+      }
       const cookieHeader = event.headers?.cookie || event.headers?.Cookie;
-      const cookieSession = parseCookie(cookieHeader, 'pb_oauth_sb_token');
-      const token =
-        (body.token || '').trim() ||
-        (query.token || '').trim() ||
-        authHeader ||
-        (cookieSession?.accessToken || '') ||
-        process.env.SUPABASE_MANAGEMENT_TOKEN ||
-        process.env.SUPABASE_ACCESS_TOKEN ||
-        '';
-
-      if (!token) {
+      let cookieName = supabaseTokenCookieName(slot);
+      let rawCookie = parseCookie(cookieHeader, cookieName);
+      if (!rawCookie && slot === 'source') {
+        rawCookie = parseCookie(cookieHeader, 'pb_oauth_sb_token');
+        if (rawCookie) cookieName = 'pb_oauth_sb_token';
+      }
+      if (!rawCookie && !slot) {
+        const sourceCookie = parseCookie(cookieHeader, 'pb_oauth_sb_source_token');
+        if (sourceCookie) {
+          rawCookie = sourceCookie;
+          cookieName = 'pb_oauth_sb_source_token';
+        } else {
+          const defaultCookie = parseCookie(cookieHeader, 'pb_oauth_sb_token');
+          if (defaultCookie) {
+            rawCookie = defaultCookie;
+            cookieName = 'pb_oauth_sb_token';
+          }
+        }
+      }
+      // Preserve an existing HttpOnly legacy source grant during migration.
+      // It is never used for the destination or sourced from server credentials.
+      const cookieSession = openSupabaseSession(rawCookie, oauthCookieSecret()) ||
+        (slot !== 'target' && rawCookie?.accessToken ? { ...rawCookie, expiresAt: rawCookie.expiresAt || Date.now() + 300000 } : null);
+      if (!cookieSession) {
         if (action === 'test') {
           return jsonResponse(200, {
             ok: false,
             connected: false,
+            slot: slot || 'default',
             error: 'No active Supabase OAuth token or session found. Click "Connect Supabase (OAuth PKCE)" first.',
           });
         }
         return jsonResponse(200, {
           ok: true,
           connected: false,
-          message: 'No management token configured on server.',
+          slot: slot || 'default',
+          message: 'Connect Supabase with OAuth to discover projects.',
           databases: [],
           projects: [],
         });
       }
 
+      let session = cookieSession;
+      let renewalCookie;
       try {
+        if (session.expiresAt <= Date.now() + 60_000) {
+          const renewed = await refreshSupabaseAccessToken({
+            refreshToken: session.refreshToken,
+            clientId: process.env.SUPABASE_OAUTH_CLIENT_ID,
+            clientSecret: process.env.SUPABASE_OAUTH_CLIENT_SECRET,
+          });
+          session = renewed;
+          renewalCookie = serializeCookie(cookieName, sealSupabaseSession(session, oauthCookieSecret()), 60 * 60 * 24 * 7);
+        }
+        if (action === 'inspect') {
+          const inspection = await supabaseAccess(session.accessToken).inspect(targetRef);
+          return jsonResponse(200, { ok: true, connected: true, slot: slot || 'default', inspection }, renewalCookie ? { 'Set-Cookie': renewalCookie } : {});
+        }
         const result = await discoverSupabaseProjectsAndDatabases({
-          token,
+          token: session.accessToken,
           targetRef,
-          inspectAllActive: action !== 'test',
+          inspectAllActive: action !== 'test' && slot !== 'target',
         });
         if (action === 'test') {
           const count = result.projects?.length || 0;
+          const selected = targetRef ? result.projects?.some(project => project.id === targetRef) : false;
+          const databaseReadable = selected && result.databases?.some(database =>
+            database.projectRef === targetRef && database.estimatedSizeMb !== null);
           return jsonResponse(200, {
             ok: true,
             connected: true,
+            slot: slot || 'default',
+            targetAccessible: selected,
+            databaseReadable: Boolean(databaseReadable),
             projectCount: count,
             databaseCount: result.databases?.length || 0,
-            message: `Connection verified! Successfully authenticated with Supabase Management API (${count} accessible project${count === 1 ? '' : 's'}).`,
-          });
+            message: databaseReadable
+              ? `Selected source is readable through Supabase OAuth (${count} accessible project${count === 1 ? '' : 's'}).`
+              : `Supabase OAuth is connected, but the selected source has not passed the database read check.`,
+          }, renewalCookie ? { 'Set-Cookie': renewalCookie } : {});
         }
         const scopeSummary = computeDatabaseScopeSummary(result.databases || []);
         const includeFullManifest = Boolean(query.includeManifest || body.includeManifest);
         const payloadObj = {
           ...result,
+          slot: slot || 'default',
           scopeSummary,
           ...(includeFullManifest ? { exportManifest: buildExportManifest(result.databases || []) } : {}),
         };
@@ -213,14 +278,16 @@ export async function handler(event) {
               'Content-Type': 'application/json; charset=utf-8',
               'Content-Encoding': 'gzip',
               'Cache-Control': 'no-store',
-              'Access-Control-Allow-Origin': '*',
+              ...(renewalCookie ? { 'Set-Cookie': renewalCookie } : {}),
             },
             body: gz.toString('base64'),
           };
         }
-        return jsonResponse(200, payloadObj);
+        return jsonResponse(200, payloadObj, renewalCookie ? { 'Set-Cookie': renewalCookie } : {});
       } catch (err) {
-        return jsonResponse(500, { ok: false, error: err.message });
+        return jsonResponse(401, { ok: false, connected: false, slot: slot || 'default', error: 'Supabase OAuth session failed. Reconnect Supabase.' }, {
+          'Set-Cookie': clearCookie(cookieName),
+        });
       }
     }
 
@@ -230,14 +297,15 @@ export async function handler(event) {
   // 2. /oauth/supabase/start
   if (pathname.includes('/oauth/supabase/start')) {
     const project = query.project || '';
+    const slot = query.slot === 'target' ? 'target' : (query.slot === 'source' ? 'source' : '');
     const clientId = process.env.SUPABASE_OAUTH_CLIENT_ID;
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clientId || '');
 
-    if (isUuid) {
+    if (isUuid && oauthCookieSecret().length >= 16) {
       const { codeVerifier, codeChallenge } = generatePkcePair();
       const state = generateOAuthState();
-      const redirectUri = `${origin}/oauth/supabase/callback`;
-      const cookie = serializeCookie('pb_oauth_supabase', { codeVerifier, state, project });
+      const redirectUri = process.env.SUPABASE_OAUTH_REDIRECT_URI || `${origin}/oauth/supabase/callback`;
+      const cookie = serializeCookie(slot ? `pb_oauth_supabase_${slot}` : 'pb_oauth_supabase', { codeVerifier, state, project, slot, redirectUri });
       const authorizeUrl = buildSupabaseAuthorizeUrl({ clientId, redirectUri, codeChallenge, state });
       return {
         statusCode: 302,
@@ -246,33 +314,58 @@ export async function handler(event) {
           'Set-Cookie': cookie,
           'Cache-Control': 'no-store',
         },
+        multiValueHeaders: {
+          'Set-Cookie': [cookie],
+        },
       };
     }
 
-    // Direct resolution using server management credentials
     return {
-      statusCode: 302,
-      headers: {
-        Location: `/dashboard?oauth=supabase_connected&project=${encodeURIComponent(project)}`,
-        'Cache-Control': 'no-store',
-      },
+      statusCode: 503,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+      body: 'Supabase OAuth is not configured for this site.',
     };
   }
 
-  // 3. /oauth/supabase/callback
-  if (pathname.includes('/oauth/supabase/callback')) {
+  // 3. /oauth/supabase/callback AND /confidential/callback
+  if (pathname.includes('/oauth/supabase/callback') || pathname.includes('/confidential/callback')) {
     const code = query.code;
     const state = query.state;
-    const cookieHeader = event.headers.cookie || event.headers.Cookie;
-    const pkce = parseCookie(cookieHeader, 'pb_oauth_supabase');
+    const cookieHeader = event.headers?.cookie || event.headers?.Cookie;
+    const pendingNames=['pb_oauth_supabase_source','pb_oauth_supabase_target','pb_oauth_supabase'];
+    const pkceName=pendingNames.find(name=>parseCookie(cookieHeader,name)?.state===state) || 'pb_oauth_supabase';
+    const pkce = parseCookie(cookieHeader, pkceName);
+
+    if (pathname.includes('/confidential/callback') && !pkce) {
+      const hasCodeAndState = typeof code === 'string' && typeof state === 'string';
+      const hasError = typeof query.error === 'string';
+      if (!hasCodeAndState && !hasError) {
+        return {
+          statusCode: 400,
+          headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+          body: 'Invalid callback parameters: code and state or error required.',
+        };
+      }
+      return {
+        statusCode: 302,
+        headers: {
+          Location: `http://127.0.0.1:58441/confidential/callback?${new URLSearchParams(query).toString()}`,
+          'Cache-Control': 'no-store',
+        },
+      };
+    }
 
     if (!code || !state || !pkce || pkce.state !== state) {
+      const clearPkceCookie = clearCookie(pkceName);
       return {
         statusCode: 302,
         headers: {
           Location: '/dashboard?oauth_error=invalid_state',
-          'Set-Cookie': clearCookie('pb_oauth_supabase'),
+          'Set-Cookie': clearPkceCookie,
           'Cache-Control': 'no-store',
+        },
+        multiValueHeaders: {
+          'Set-Cookie': [clearPkceCookie],
         },
       };
     }
@@ -280,7 +373,7 @@ export async function handler(event) {
     try {
       const clientId = process.env.SUPABASE_OAUTH_CLIENT_ID;
       const clientSecret = process.env.SUPABASE_OAUTH_CLIENT_SECRET;
-      const redirectUri = `${origin}/oauth/supabase/callback`;
+      const redirectUri = pkce.redirectUri || `${origin}/oauth/supabase/callback`;
       const tokenResp = await exchangeSupabaseOAuthCode({
         code,
         codeVerifier: pkce.codeVerifier,
@@ -289,25 +382,45 @@ export async function handler(event) {
         clientSecret,
       });
 
-      const sessionCookie = tokenResp?.access_token
-        ? serializeCookie('pb_oauth_sb_token', { accessToken: tokenResp.access_token }, 3600)
-        : clearCookie('pb_oauth_supabase');
+      const slotCookieName = supabaseTokenCookieName(pkce.slot);
+      const sealedSession = sealSupabaseSession({
+        accessToken: tokenResp.accessToken,
+        refreshToken: tokenResp.refreshToken,
+        expiresAt: tokenResp.expiresAt,
+      }, oauthCookieSecret());
+      const sessionCookie = serializeCookie(slotCookieName, sealedSession, 60 * 60 * 24 * 7);
+      const clearPkce = clearCookie(pkceName);
 
+      const setCookies = [sessionCookie];
+      if ((pkce.slot === 'source' || !pkce.slot) && slotCookieName !== 'pb_oauth_sb_token') {
+        setCookies.push(serializeCookie('pb_oauth_sb_token', sealedSession, 60 * 60 * 24 * 7));
+      }
+      setCookies.push(clearPkce);
+
+      const slotParam = pkce.slot ? `&slot=${encodeURIComponent(pkce.slot)}` : '';
       return {
-        statusCode: 302,
+        statusCode: 200,
         headers: {
-          Location: `/dashboard?oauth=supabase_connected&project=${encodeURIComponent(pkce.project || '')}`,
+          'Content-Type': 'text/html; charset=utf-8',
           'Set-Cookie': sessionCookie,
           'Cache-Control': 'no-store',
         },
+        multiValueHeaders: {
+          'Set-Cookie': setCookies,
+        },
+        body: `<!doctype html><html><head><meta name="referrer" content="no-referrer"><title>Supabase connected</title></head><body><p>Supabase connected. You can return to your recovery screen.</p><script>if(window.opener){window.opener.postMessage({type:'portabase_oauth_complete'},location.origin);window.close();}else{location.replace('/dashboard?oauth=supabase_connected${slotParam}');}</script></body></html>`,
       };
     } catch (err) {
+      const clearPkceCookie = clearCookie(pkceName);
       return {
         statusCode: 302,
         headers: {
           Location: `/dashboard?oauth_error=${encodeURIComponent(err.message)}`,
-          'Set-Cookie': clearCookie('pb_oauth_supabase'),
+          'Set-Cookie': clearPkceCookie,
           'Cache-Control': 'no-store',
+        },
+        multiValueHeaders: {
+          'Set-Cookie': [clearPkceCookie],
         },
       };
     }

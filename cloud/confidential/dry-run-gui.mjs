@@ -1,3 +1,4 @@
+import {destinationCapacityPanel} from './destination-capacity.mjs';
 import {sourceObjectPicker,pickerCss} from './source-object-picker.mjs';
 import {machineCss,transferView,dataPipe,capsuleJar,sourceReadMeter,destinationWriteMeter,enclaveChassisSvg,internalConduitArrow} from './machine-visual.mjs';
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -28,31 +29,6 @@ function patDetails(slot, nonce) {
 function incognitoControls(link) {
   if (!link) return '';
   return `<button type="button" class="btn-copy-incognito" data-copy-url="${esc(link)}" style="margin-left:6px;font-size:10px;padding:3px 6px;background:#1e293b;border:1px solid #3b4d66;color:#e2e8f0;border-radius:4px;cursor:pointer">📋 Copy Link for Incognito Window</button><a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer" style="font-size:10px;margin-left:6px;color:#38bdf8;background:none;padding:0;text-decoration:underline">1. Sign out of Supabase.com first ↗</a>`;
-}
-
-function destinationCapacityPanel(status) {
-  const target = status.preflight?.target || status.inspections?.target;
-  if (!target) return `<div class="dest-capacity-panel" style="margin:4px 0;padding:6px 8px;border:1px solid #233044;border-radius:6px;background:#0d131f;font-size:10.5px"><strong style="color:#38bdf8">Destination Capacity &amp; Auto-Growth:</strong> <span style="color:#94a3b8">Select and check destination project to inspect disk limits.</span></div>`;
-  const cap = target.diskCapacity;
-  const usedDb = Number.isFinite(target.databaseBytes) ? inventorySize(target.databaseBytes) : '0 MiB';
-  const usedStorage = Number.isFinite(target.storageBytes) ? inventorySize(target.storageBytes) : '0 MiB';
-  if (!cap || !Number.isFinite(cap.sizeGb)) {
-    return `<div class="dest-capacity-panel" style="margin:4px 0;padding:6px 8px;border:1px solid #233044;border-radius:6px;background:#0d131f;font-size:10.5px;line-height:1.4"><div><strong style="color:#38bdf8">Destination Space:</strong> DB used <strong>${esc(usedDb)}</strong> · Storage used <strong>${esc(usedStorage)}</strong></div><div style="color:#94a3b8">Max allowed space / auto-growth: <em>Not disclosed by Supabase Management API for this grant/plan (Free plan hard barrier: 500 MB DB / 1 GB Storage; Pro default: 8 GB DB + auto-growth)</em></div></div>`;
-  }
-  const ag = cap.autoGrowth;
-  const agText = !ag
-    ? 'Unavailable from Management API'
-    : ag.enabled
-      ? `<strong style="color:#00dc82">Enabled</strong>${ag.isDefaultPolicy ? ' <small style="display:inline;color:#94a3b8">(Pro default)</small>' : ''} · Increment: <strong>${ag.growthPercent ? `+${esc(ag.growthPercent)}%` : ''}${ag.growthPercent && ag.minIncrementGb ? ' / ' : ''}${ag.minIncrementGb ? `min +${esc(ag.minIncrementGb)} GB` : ''}</strong> · Max size: <strong>${esc(ag.maxSizeGb)} GB</strong>`
-      : `<strong style="color:#f59e0b">Disabled</strong> (hard cap at <strong>${esc(cap.sizeGb)} GB</strong>)`;
-  const spendFlash = ag?.enabled
-    ? `<div class="autogrowth-spend-flash" role="alert"><span class="spend-flash-dot"></span><strong>AUTO-GROWTH ENABLED — AUTO-GROWTH MAY INCREASE SPENDING</strong><div>Expanding beyond provisioned space (<strong>${esc(cap.sizeGb)} GB</strong>) triggers automatic disk/storage expansion (${ag.growthPercent ? `+${esc(ag.growthPercent)}%` : ''}${ag.minIncrementGb ? ` / min +${esc(ag.minIncrementGb)} GB` : ''}${ag.maxSizeGb ? `, up to <strong>${esc(ag.maxSizeGb)} GB</strong> max` : ''}) and bills additional GBs automatically.</div></div>`
-    : '';
-  const sourceTotalBytes = status.selectedBytes || status.preflight?.source?.measuredBytes || status.preflight?.source?.databaseBytes || 0;
-  const hardCeilingBytes = (ag?.enabled && Number.isFinite(ag.maxSizeBytes)) ? ag.maxSizeBytes : cap.maxAllowedBytes;
-  const overProvisioned = Number.isFinite(cap.maxAllowedBytes) && sourceTotalBytes > cap.maxAllowedBytes;
-  const overHardLimit = Number.isFinite(hardCeilingBytes) && sourceTotalBytes > hardCeilingBytes;
-  return `<div class="dest-capacity-panel${overHardLimit ? ' warn' : ''}" style="margin:4px 0;padding:6px 8px;border:1px solid ${overHardLimit ? '#b45309' : '#233044'};border-radius:6px;background:#0d131f;font-size:10.5px;line-height:1.45"><div><strong style="color:#38bdf8">Current Max Allowed Space:</strong> <strong style="color:#e6edf3">${esc(cap.sizeGb)} GB</strong>${cap.diskType ? ` (${esc(cap.diskType.toUpperCase())})` : ''} · Used: <strong>${esc(usedDb)}</strong> DB / <strong>${esc(usedStorage)}</strong> Storage</div><div><strong style="color:#38bdf8">Auto-Growth:</strong> ${agText}</div>${spendFlash}${overHardLimit ? `<div style="color:#fca5a5;font-weight:700;margin-top:2px">🛑 HARD BARRIER: Selected source (${esc(inventorySize(sourceTotalBytes))}) exceeds destination maximum allowed space (${esc(ag?.enabled ? ag.maxSizeGb : cap.sizeGb)} GB)!</div>` : (overProvisioned && ag?.enabled ? `<div style="color:#fcd34d;font-weight:700;margin-top:2px">⚠️ Selected source (${esc(inventorySize(sourceTotalBytes))}) exceeds current ${esc(cap.sizeGb)} GB baseline and will trigger auto-growth (up to ${esc(ag.maxSizeGb)} GB).</div>` : '')}</div>`;
 }
 
 function connection(slot,connected,projects,selected,link,nonce,account,allowOverwrite=true,status={}) {

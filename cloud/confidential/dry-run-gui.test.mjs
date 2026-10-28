@@ -56,9 +56,9 @@ test('GUI requires source and blank destination and offers explicit capsule hand
   assert.match(withDropbox,/public/);
   assert.match(withDropbox,/avatars/);
   assert.match(withDropbox,/acknowledgeScope/);
-  assert.match(withDropbox,/name="vault" required/);
+  assert.match(withDropbox,/type="hidden" name="vault" value="temporary_runner"/);
   assert.match(withDropbox,/value="temporary_runner"/);
-  assert.match(withDropbox,/not a durable backup/);
+  assert.match(withDropbox,/Source → Destination \(temporary runner\)/);
   const occupied=renderDryRunPage({...base,status:{...base.status,state:'preflight_blocked',preflight:{target:{blank:false}}}});
   assert.doesNotMatch(occupied,/action="\/execute"/);
   const occupiedPassed=renderDryRunPage({...base,status:{...base.status,connections:{...base.status.connections,dropbox:true},

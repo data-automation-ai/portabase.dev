@@ -48,11 +48,11 @@ export function supabaseAccess(accessToken, fetchImpl = fetch) {
     const rawGrowth = autoscaleCfg?.growth_percent;
     const rawMinInc = autoscaleCfg?.min_increment_gb;
     const rawMaxSize = autoscaleCfg?.max_size_gb;
-    const growthPercent = rawGrowth != null ? Number(rawGrowth) : (sizeGb >= 8 ? 50 : null);
-    const minIncrementGb = rawMinInc != null ? Number(rawMinInc) : (sizeGb >= 8 ? 4 : null);
-    const maxSizeGb = rawMaxSize != null ? Number(rawMaxSize) : (sizeGb >= 8 ? Math.max(200, sizeGb * 2) : null);
+    const growthPercent = rawGrowth != null ? Number(rawGrowth) : null;
+    const minIncrementGb = rawMinInc != null ? Number(rawMinInc) : null;
+    const maxSizeGb = rawMaxSize != null ? Number(rawMaxSize) : null;
     if (Number.isFinite(sizeGb) && sizeGb > 0) {
-      const hasAutoscaleFields = Number.isFinite(growthPercent) || Number.isFinite(minIncrementGb) || Number.isFinite(maxSizeGb);
+      const hasAutoscaleFields = autoscaleCfg != null && (Number.isFinite(growthPercent) || Number.isFinite(minIncrementGb) || Number.isFinite(maxSizeGb));
       const autoGrowthEnabled = hasAutoscaleFields && Number.isFinite(maxSizeGb) && maxSizeGb > sizeGb && (
         (Number.isFinite(growthPercent) && growthPercent > 0) ||
         (Number.isFinite(minIncrementGb) && minIncrementGb > 0)
