@@ -28,20 +28,53 @@ export function supabaseAccess(accessToken, fetchImpl = fetch) {
     projectRef(ref);
     const selected = (await projects()).find(p => p.ref === ref);
     if (!selected) throw new Error('project_not_authorized');
-    const data = await query(ref, `SELECT pg_database_size(current_database())::text AS database_bytes,
+    const [data, functions, diskCfg, autoscaleCfg] = await Promise.all([
+      query(ref, `SELECT pg_database_size(current_database())::text AS database_bytes,
       (SELECT COALESCE(sum(CASE WHEN metadata->>'size' ~ '^[0-9]+$' THEN (metadata->>'size')::numeric ELSE 0 END),0)::text FROM storage.objects) AS storage_bytes,
       (SELECT count(*)::int FROM pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema','auth','storage','realtime','supabase_functions','supabase_migrations','extensions','vault','graphql','graphql_public','net','pgsodium','pgsodium_masks','cron','_realtime','_analytics')) AS application_tables,
       (SELECT count(*)::int FROM auth.users) AS auth_users,
-      (SELECT count(*)::int FROM storage.objects) AS storage_objects`);
+      (SELECT count(*)::int FROM storage.objects) AS storage_objects`),
+      request(`/projects/${ref}/functions`),
+      request(`/projects/${ref}/config/disk`).catch(() => null),
+      request(`/projects/${ref}/config/disk/autoscale`).catch(() => null),
+    ]);
     const row = Array.isArray(data) ? data[0] : null;
     if (!row) throw new Error('database_inspection_failed');
-    const functions = await request(`/projects/${ref}/functions`);
     if (!Array.isArray(functions)) throw new Error('function_inspection_failed');
     const databaseBytes = Number(row.database_bytes), storageBytes = Number(row.storage_bytes);
     if (![databaseBytes,storageBytes].every(n => Number.isSafeInteger(n) && n >= 0)) throw new Error('invalid_project_size');
+    let diskCapacity = null;
+    const sizeGb = Number(diskCfg?.attributes?.size_gb ?? diskCfg?.size_gb);
+    const rawGrowth = autoscaleCfg?.growth_percent;
+    const rawMinInc = autoscaleCfg?.min_increment_gb;
+    const rawMaxSize = autoscaleCfg?.max_size_gb;
+    const growthPercent = rawGrowth != null ? Number(rawGrowth) : (sizeGb >= 8 ? 50 : null);
+    const minIncrementGb = rawMinInc != null ? Number(rawMinInc) : (sizeGb >= 8 ? 4 : null);
+    const maxSizeGb = rawMaxSize != null ? Number(rawMaxSize) : (sizeGb >= 8 ? Math.max(200, sizeGb * 2) : null);
+    if (Number.isFinite(sizeGb) && sizeGb > 0) {
+      const hasAutoscaleFields = Number.isFinite(growthPercent) || Number.isFinite(minIncrementGb) || Number.isFinite(maxSizeGb);
+      const autoGrowthEnabled = hasAutoscaleFields && Number.isFinite(maxSizeGb) && maxSizeGb > sizeGb && (
+        (Number.isFinite(growthPercent) && growthPercent > 0) ||
+        (Number.isFinite(minIncrementGb) && minIncrementGb > 0)
+      );
+      diskCapacity = {
+        sizeGb,
+        maxAllowedBytes: Math.round(sizeGb * 1024 ** 3),
+        diskType: diskCfg?.attributes?.type || diskCfg?.type || null,
+        autoGrowth: hasAutoscaleFields ? {
+          enabled: autoGrowthEnabled,
+          isDefaultPolicy: rawGrowth == null && rawMinInc == null && rawMaxSize == null && sizeGb >= 8,
+          growthPercent: Number.isFinite(growthPercent) ? growthPercent : null,
+          minIncrementGb: Number.isFinite(minIncrementGb) ? minIncrementGb : null,
+          maxSizeGb: Number.isFinite(maxSizeGb) ? maxSizeGb : null,
+          maxSizeBytes: Number.isFinite(maxSizeGb) ? Math.round(maxSizeGb * 1024 ** 3) : null,
+        } : null,
+      };
+    }
     return { ...selected, databaseBytes, storageBytes, measuredBytes: databaseBytes + storageBytes,
       applicationTables: Number(row.application_tables), authUsers: Number(row.auth_users),
       storageObjects: Number(row.storage_objects), functions: functions.length,
+      ...(diskCapacity ? { diskCapacity } : {}),
       blank: Number(row.application_tables) === 0 && Number(row.auth_users) === 0 && Number(row.storage_objects) === 0 && functions.length === 0,
       checkedAt: new Date().toISOString() };
   }
