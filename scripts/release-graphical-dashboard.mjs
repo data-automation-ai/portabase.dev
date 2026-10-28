@@ -27,7 +27,7 @@ if(action==='prepare'){
   const bundle=await rolldown({input:join(source,'netlify/functions/cloud-oauth.mjs'),platform:'node',
     external:[...builtinModules,...builtinModules.map(n=>'node:'+n)]});
   const functionFile=join(stage,'cloud-oauth.js');
-  await bundle.write({file:functionFile,format:'cjs'});await bundle.close();
+  await bundle.write({file:functionFile,format:'cjs',codeSplitting:false});await bundle.close();
   execFileSync('python',['-c','import sys,zipfile; z=zipfile.ZipFile(sys.argv[2],"w",zipfile.ZIP_DEFLATED); z.write(sys.argv[1],"cloud-oauth.js"); z.close()',functionFile,join(stage,'cloud-oauth.zip')]);
   const base=op.site.published_deploy.id,deploy=await op.netlify('/deploys/'+base),entries=await op.netlify('/deploys/'+base+'/files');
   if(deploy.edge_functions_present||entries.some(e=>e.path.includes('edge-functions')))throw Error('edge_review_required');
