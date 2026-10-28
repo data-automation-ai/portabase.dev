@@ -12,7 +12,7 @@ import {renderAttestationCertificate} from './attestation-certificate.mjs';
 import {needsOAuthOffer} from './oauth-offer.mjs';
 import {handleVaultAction} from './helper-vault-actions.mjs';
 const CONTROLLER='https://portabase-confidential-controller-26ulj3ikia-uc.a.run.app';
-const DIGEST='sha256:85d4ba838b4e31edf97156f8711c981798ec23220ffe0ba52598f733a1c682dd';
+const DIGEST='sha256:7c0c45c071cb9ee25668ca1b878d3d9a97f6081f734ade976a53762aa4c7b33a';
 const REF='eoiqvdmvgaurlecdzqkp',ID='6f454f7b-b490-4fe9-9c49-48ce5b6f4408';
 // Supabase's live authorize endpoint rejects HTTP loopback callbacks even
 // when registered. The test verifier receives the HTTPS callback by handoff.

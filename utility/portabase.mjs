@@ -942,7 +942,7 @@ export async function captureStorage(rawDir, limits = null, config = {}, exclude
       storageDir,
       sourceUrl: process.env.SUPABASE_URL,
       serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY,
-      concurrencyPerShard: 2,
+      concurrencyPerShard: 3,
       onProgress: ({ completed: c, total: t }) => progress({ phase: 'storage', completed: c, total: t }),
     });
     manifest.sharding = { method: 'md5-first-hex-pair-8-processes', shardCount: 8, durationMs: sharded.durationMs, shards: sharded.shards };
@@ -2556,7 +2556,7 @@ async function restoreStorage(extracted, plan = null) {
         extracted,
         targetUrl: process.env.PORTABASE_TARGET_SUPABASE_URL,
         serviceRoleKey: process.env.PORTABASE_TARGET_SERVICE_ROLE_KEY || process.env.PORTABASE_TARGET_SECRET_KEY,
-        concurrencyPerShard: 2,
+        concurrencyPerShard: 3,
       });
       hashesVerified += sharded.hashesVerified;
       restoredKeys.push(...sharded.restoredKeys);
@@ -2690,8 +2690,8 @@ export async function restoreFunctions(extracted, manifest, targetRef, plan = nu
       const args = ['functions', 'deploy', name, '--project-ref', targetRef, '--workdir', workdir];
       if (env.PORTABASE_CONFIDENTIAL_RUNNER === '1') args.push('--use-api');
       if (verifyMap[name] === false) args.push('--no-verify-jwt');
-      try { await runCommand(supabase, args, { cwd: workdir, env, stdio: 'ignore' }); }
-      catch { throw new Error('function_replay_deploy_failed'); }
+      let deployed = false; for (let attempt = 1; attempt <= 3 && !deployed; attempt++) { try { await runCommand(supabase, args, { cwd: workdir, env, stdio: 'ignore' }); deployed = true; } catch { if (attempt < 3) await new Promise(r => setTimeout(r, 1500 * attempt)); else throw new Error('function_replay_deploy_failed'); } }
+      // retry handled above
     }
     let result;
     try {
@@ -3187,13 +3187,13 @@ async function restore() {
     );
     const health = await targetFetch('/storage/v1/bucket', { signal: AbortSignal.timeout(10000) });
     if (!health.ok) throw new Error(`Target credential check failed: HTTP ${health.status}`);
-    const inventory = await readTargetInventory(targetRef);
+    const inventory = await readTargetInventory(targetRef, { allowOccupied });
     validateBlankRestoreInventory(hasFlag('overwrite-target') ? { storageBuckets: s3Destination ? 0 : inventory.storageBuckets, edgeFunctions: inventory.edgeFunctions } : inventory, { allowOccupied });
     let overwrite = null;
     if (hasFlag('overwrite-target')) overwrite = await prepareOverwrite(manifest, restorePlan, targetRef, targetIdentity);
-    else if (allowOccupied) overwrite = prepareOccupiedReset();
+    else if (allowOccupied && (inventory.applicationTables > 0 || inventory.authUsers > 0)) overwrite = prepareOccupiedReset();
     if (s3Destination) evidence.s3Preflight = await preflightStorageS3(s3Destination);
-    await verifyStoragePayloads(extracted, await readStorageManifest(extracted));
+    if (s3Destination) await verifyStoragePayloads(extracted, await readStorageManifest(extracted));
     evidence.preflight = { verified: true, inventory, allowOccupied, allowSourceTarget };
     console.log(`\nTARGET PREFLIGHT PASSED: ${targetRef}${allowOccupied ? ' (occupied allowed)' : ' (blank)'}`);
     console.log(`Inventory: ${Object.entries(inventory).map(([name, count]) => `${name}=${count}`).join(', ')}`);

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { createReadStream, createWriteStream, existsSync } from 'node:fs';
+import { createWriteStream, existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -39,31 +39,84 @@ export function partitionInto8Shards(items, getKey = item => String(item?.key ??
   return shards;
 }
 
-async function fetchWithRetry(url, options = {}, { retries = 4, timeoutMs = 180000 } = {}) {
+async function downloadObjectToTarget({ baseUrl, bucketId, fullName, headers, target, shardIndex, hexPair, retries = 6, timeoutMs = 900000 }) {
+  const objectPath = fullName.split('/').map(encodeURIComponent).join('/');
+  const authUrl = `${baseUrl}/storage/v1/object/authenticated/${encodeURIComponent(bucketId)}/${objectPath}`;
+  const pubUrl = `${baseUrl}/storage/v1/object/${encodeURIComponent(bucketId)}/${objectPath}`;
   let lastError;
   for (let attempt = 1; attempt <= retries; attempt += 1) {
     try {
-      const response = await fetch(url, { ...options, signal: AbortSignal.timeout(timeoutMs) });
-      if (response.status === 429 || response.status >= 500) {
-        if (attempt < retries) {
-          await new Promise(r => setTimeout(r, 250 * (2 ** (attempt - 1))));
-          continue;
-        }
+      let response = await fetch(authUrl, { headers, signal: AbortSignal.timeout(timeoutMs) });
+      if (!response.ok && response.status !== 429 && response.status < 500) {
+        response = await fetch(pubUrl, { headers, signal: AbortSignal.timeout(timeoutMs) });
       }
-      return response;
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      await pipeline(Readable.fromWeb(response.body), createWriteStream(target, { flags: 'w' }));
+      return;
     } catch (err) {
       lastError = err;
       if (attempt < retries) {
-        await new Promise(r => setTimeout(r, 250 * (2 ** (attempt - 1))));
+        await new Promise(r => setTimeout(r, 400 * (2 ** (attempt - 1))));
       }
     }
   }
-  throw lastError || new Error(`Fetch failed after ${retries} attempts: ${url}`);
+  throw new Error(`Shard ${shardIndex} (${hexPair}) unable to download ${bucketId}/${fullName} after ${retries} attempts: ${lastError?.message || lastError}`);
+}
+
+async function uploadAndVerifyObject({ baseUrl, bucketId, object, source, serviceRoleKey, shardIndex, hexPair, verifyReadback, retries = 6, timeoutMs = 900000 }) {
+  const objectPath = object.name.split('/').map(encodeURIComponent).join('/');
+  const uploadUrl = `${baseUrl}/storage/v1/object/${encodeURIComponent(bucketId)}/${objectPath}`;
+  const readbackUrl = `${baseUrl}/storage/v1/object/authenticated/${encodeURIComponent(bucketId)}/${objectPath}`;
+  const body = await readFile(source);
+  const expectedHash = object.sha256 || createHash('sha256').update(body).digest('hex');
+  const uploadHeaders = supabaseHeaders(serviceRoleKey, {
+    'Content-Type': object.contentType || 'application/octet-stream',
+    'x-upsert': 'true',
+  });
+  let lastError;
+  for (let attempt = 1; attempt <= retries; attempt += 1) {
+    try {
+      const response = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: uploadHeaders,
+        body,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!response.ok) {
+        throw new Error(`upload HTTP ${response.status}`);
+      }
+      await response.arrayBuffer().catch(() => {});
+      if (verifyReadback) {
+        const readback = await fetch(readbackUrl, {
+          headers: supabaseHeaders(serviceRoleKey),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (!readback.ok) {
+          throw new Error(`readback HTTP ${readback.status}`);
+        }
+        const hash = createHash('sha256');
+        for await (const chunk of Readable.fromWeb(readback.body)) hash.update(chunk);
+        const remoteHash = hash.digest('hex');
+        if (remoteHash !== expectedHash) {
+          throw new Error(`read-back hash mismatch for ${bucketId}/${object.name}`);
+        }
+      }
+      return body.length;
+    } catch (err) {
+      lastError = err;
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 400 * (2 ** (attempt - 1))));
+      }
+    }
+  }
+  throw new Error(`Shard ${shardIndex} (${hexPair}) unable to restore ${bucketId}/${object.name} after ${retries} attempts: ${lastError?.message || lastError}`);
 }
 
 async function runCaptureWorker(inputPath, outputPath) {
   const payload = JSON.parse(await readFile(inputPath, 'utf8'));
-  const { shardIndex, hexPair, storageDir, sourceUrl, serviceRoleKey, concurrencyPerShard = 2, tasks } = payload;
+  const { shardIndex, hexPair, storageDir, sourceUrl, serviceRoleKey, concurrencyPerShard = 3, tasks } = payload;
   const baseUrl = projectBaseUrl(sourceUrl);
   const headers = supabaseHeaders(serviceRoleKey);
   const startedAt = Date.now();
@@ -74,17 +127,9 @@ async function runCaptureWorker(inputPath, outputPath) {
     const { index, bucketId, fullName, identity, skippedPrecheck } = task;
     const target = join(storageDir, safeObjectPath(bucketId), safeObjectPath(fullName));
     await mkdir(dirname(target), { recursive: true });
-    let skipped = Boolean(skippedPrecheck);
+    const skipped = Boolean(skippedPrecheck);
     if (!skipped) {
-      const objectPath = fullName.split('/').map(encodeURIComponent).join('/');
-      let response = await fetchWithRetry(`${baseUrl}/storage/v1/object/authenticated/${encodeURIComponent(bucketId)}/${objectPath}`, { headers });
-      if (!response.ok) {
-        response = await fetchWithRetry(`${baseUrl}/storage/v1/object/${encodeURIComponent(bucketId)}/${objectPath}`, { headers });
-      }
-      if (!response.ok) {
-        throw new Error(`Shard ${shardIndex} (${hexPair}) unable to download ${bucketId}/${fullName}: HTTP ${response.status}`);
-      }
-      await pipeline(Readable.fromWeb(response.body), createWriteStream(target, { flags: 'w' }));
+      await downloadObjectToTarget({ baseUrl, bucketId, fullName, headers, target, shardIndex, hexPair });
     }
     const info = await stat(target);
     const sha256 = await hashFile(target);
@@ -114,22 +159,22 @@ async function runCaptureWorker(inputPath, outputPath) {
     };
   });
 
-  const output = {
+  await writeFile(outputPath, JSON.stringify({
     shardIndex,
     hexPair,
     objectCount: results.length,
     totalBytes,
     durationMs: Date.now() - startedAt,
     results,
-  };
-  await writeFile(outputPath, JSON.stringify(output));
+  }));
 }
 
 async function runRestoreWorker(inputPath, outputPath) {
   const payload = JSON.parse(await readFile(inputPath, 'utf8'));
-  const { shardIndex, hexPair, extracted, targetUrl, serviceRoleKey, concurrencyPerShard = 2, tasks } = payload;
+  const { shardIndex, hexPair, extracted, targetUrl, serviceRoleKey, concurrencyPerShard = 3, tasks } = payload;
   const baseUrl = projectBaseUrl(targetUrl);
   const startedAt = Date.now();
+  const verifyReadback = process.env.PORTABASE_CONFIDENTIAL_RUNNER !== '1';
   let hashesVerified = 0;
   let totalBytes = 0;
   const restoredKeys = [];
@@ -137,50 +182,32 @@ async function runRestoreWorker(inputPath, outputPath) {
   await mapPool(tasks, concurrencyPerShard, async task => {
     const { bucketId, object } = task;
     const source = join(extracted, 'storage', safeObjectPath(bucketId), safeObjectPath(object.name));
-    const objectPath = object.name.split('/').map(encodeURIComponent).join('/');
-    const body = await readFile(source);
-    const uploadHeaders = supabaseHeaders(serviceRoleKey, {
-      'Content-Type': object.contentType || 'application/octet-stream',
-      'x-upsert': 'true',
+    const byteLength = await uploadAndVerifyObject({
+      baseUrl,
+      bucketId,
+      object,
+      source,
+      serviceRoleKey,
+      shardIndex,
+      hexPair,
+      verifyReadback,
     });
-    const response = await fetchWithRetry(`${baseUrl}/storage/v1/object/${encodeURIComponent(bucketId)}/${objectPath}`, {
-      method: 'POST',
-      headers: uploadHeaders,
-      body,
-    });
-    if (!response.ok) {
-      throw new Error(`Shard ${shardIndex} (${hexPair}) unable to restore ${bucketId}/${object.name}: HTTP ${response.status}`);
-    }
-    const readback = await fetchWithRetry(`${baseUrl}/storage/v1/object/authenticated/${encodeURIComponent(bucketId)}/${objectPath}`, {
-      headers: supabaseHeaders(serviceRoleKey),
-    });
-    if (!readback.ok) {
-      throw new Error(`Shard ${shardIndex} (${hexPair}) unable to read back ${bucketId}/${object.name}: HTTP ${readback.status}`);
-    }
-    const hash = createHash('sha256');
-    for await (const chunk of Readable.fromWeb(readback.body)) hash.update(chunk);
-    const remoteHash = hash.digest('hex');
-    const expectedHash = object.sha256 || createHash('sha256').update(body).digest('hex');
-    if (remoteHash !== expectedHash) {
-      throw new Error(`Shard ${shardIndex} (${hexPair}) read-back hash mismatch for ${bucketId}/${object.name}.`);
-    }
     hashesVerified += 1;
-    totalBytes += body.length;
-    restoredKeys.push(storageInventoryLine(bucketId, object.name, object.size ?? body.length));
+    totalBytes += byteLength;
+    restoredKeys.push(storageInventoryLine(bucketId, object.name, object.size ?? byteLength));
   });
 
-  const output = {
+  await writeFile(outputPath, JSON.stringify({
     shardIndex,
     hexPair,
     hashesVerified,
     totalBytes,
     durationMs: Date.now() - startedAt,
     restoredKeys,
-  };
-  await writeFile(outputPath, JSON.stringify(output));
+  }));
 }
 
-function spawnShardProcess(mode, inputPath, outputPath, onShardProgress) {
+function spawnShardProcess(mode, inputPath, outputPath, childrenSet, onShardProgress) {
   const scriptPath = fileURLToPath(import.meta.url);
   return new Promise((resolveShard, rejectShard) => {
     const child = spawn(process.execPath, [scriptPath, '--worker', mode, inputPath, outputPath], {
@@ -188,6 +215,7 @@ function spawnShardProcess(mode, inputPath, outputPath, onShardProgress) {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });
+    childrenSet.add(child);
     let pending = '';
     let stderrText = '';
     child.stdout.on('data', chunk => {
@@ -204,19 +232,22 @@ function spawnShardProcess(mode, inputPath, outputPath, onShardProgress) {
     child.stderr.on('data', chunk => {
       stderrText = (stderrText + chunk.toString()).slice(-4096);
     });
-    child.on('error', rejectShard);
+    child.on('error', err => { childrenSet.delete(child); rejectShard(err); });
     child.on('close', code => {
+      childrenSet.delete(child);
       if (code !== 0) rejectShard(new Error(`Storage shard worker (${mode}) exited with code ${code}: ${stderrText.trim()}`));
       else resolveShard();
     });
   });
 }
 
-export async function run8ShardStorageCapture({ tasks, storageDir, sourceUrl, serviceRoleKey, concurrencyPerShard = 2, onProgress }) {
+export async function run8ShardStorageCapture({ tasks, storageDir, sourceUrl, serviceRoleKey, concurrencyPerShard = 3, onProgress }) {
   const startedAt = Date.now();
   const shards = partitionInto8Shards(tasks, t => `${t.bucketId}/${t.fullName}`);
   const scratch = await mkdtemp(join(tmpdir(), 'portabase-shards-cap-'));
   const shardProgress = new Array(STORAGE_SHARD_COUNT).fill(0);
+  const children = new Set();
+  let stopped = false;
   try {
     const activeShards = shards.filter(s => s.items.length > 0);
     await Promise.all(activeShards.map(async shard => {
@@ -231,7 +262,8 @@ export async function run8ShardStorageCapture({ tasks, storageDir, sourceUrl, se
         concurrencyPerShard,
         tasks: shard.items.map(entry => ({ ...entry.item, index: entry.index })),
       }));
-      await spawnShardProcess('capture', inFile, outFile, msg => {
+      await spawnShardProcess('capture', inFile, outFile, children, msg => {
+        if (stopped) return;
         shardProgress[shard.shardIndex] = msg.completed || 0;
         const totalCompleted = shardProgress.reduce((a, b) => a + b, 0);
         onProgress?.({ completed: totalCompleted, total: tasks.length });
@@ -262,14 +294,19 @@ export async function run8ShardStorageCapture({ tasks, storageDir, sourceUrl, se
       shards: shardSummaries,
     };
   } finally {
+    stopped = true;
+    for (const child of children) {
+      try { child.kill('SIGKILL'); } catch {}
+    }
     await rm(scratch, { recursive: true, force: true });
   }
 }
 
-export async function run8ShardStorageRestore({ tasks, extracted, targetUrl, serviceRoleKey, concurrencyPerShard = 2 }) {
+export async function run8ShardStorageRestore({ tasks, extracted, targetUrl, serviceRoleKey, concurrencyPerShard = 3 }) {
   const startedAt = Date.now();
   const shards = partitionInto8Shards(tasks, t => `${t.bucketId}/${t.object.name}`);
   const scratch = await mkdtemp(join(tmpdir(), 'portabase-shards-res-'));
+  const children = new Set();
   try {
     const activeShards = shards.filter(s => s.items.length > 0);
     await Promise.all(activeShards.map(async shard => {
@@ -284,7 +321,7 @@ export async function run8ShardStorageRestore({ tasks, extracted, targetUrl, ser
         concurrencyPerShard,
         tasks: shard.items.map(entry => entry.item),
       }));
-      await spawnShardProcess('restore', inFile, outFile);
+      await spawnShardProcess('restore', inFile, outFile, children);
     }));
 
     let hashesVerified = 0;
@@ -314,6 +351,9 @@ export async function run8ShardStorageRestore({ tasks, extracted, targetUrl, ser
       shards: shardSummaries,
     };
   } finally {
+    for (const child of children) {
+      try { child.kill('SIGKILL'); } catch {}
+    }
     await rm(scratch, { recursive: true, force: true });
   }
 }

@@ -295,7 +295,7 @@ export async function uploadCapsuleToDropbox(capsuleDir, opts = {}) {
       });
     } else {
       // Chunked upload session for files > 100 MB
-      const CHUNK_SIZE = 8 * 1024 * 1024; // 8 MB upload chunks
+      const CHUNK_SIZE = 64 * 1024 * 1024; // 64 MB upload chunks (16x 4 MB Dropbox block size)
       const file = await fs.promises.open(filePath, 'r');
       try {
       const readChunk = async offset => {
