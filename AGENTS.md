@@ -2,6 +2,22 @@
 
 **Project brief (what this is + what to do):** [PROJECT.md](./PROJECT.md)
 
+## Worktree custody — mandatory for every agent
+
+Worktrees are allowed, but they are not disposable scratch space. Read and maintain [docs/WORKTREE-LEDGER.md](./docs/WORKTREE-LEDGER.md).
+
+**Owner notice to every agent:** Creating a worktree without a signed ledger check-out **before creation** is grounds for immediate firing. The owner will fire agents that ignore this rule. Do not treat an automatic worktree feature as an exception.
+
+1. Before work, run `git worktree list --porcelain`, `git status --short --branch`, and `git remote -v` in the intended checkout. Reconcile every checkout with the ledger, including worktrees outside this repository directory. Preserve unknown changes and untracked files. Check free disk space before creating a worktree; reuse an existing suitable checkout when possible.
+2. **Hotel check-out is a prerequisite, not an afterthought.** Before `git worktree add`, create a ledger reservation with the proposed absolute path, purpose, agent name and session ID, UTC check-out time, branch, base commit, integration destination, and expected disk use. If the reservation cannot be written, do not create the worktree. Immediately after creation, fill in its actual HEAD and path. Never leave task work on a detached HEAD without recording its commit ID and intended destination. Do not use a temporary directory for work that must survive the session.
+3. Before handoff, commit only the task's own reviewed files on the named branch (`git add -- <explicit paths>`). Push the branch when authorized for remote checkpointing. Never stage unrelated dirty files. If work cannot be committed, record every changed/untracked path, why, and the exact recovery command in the ledger and handoff. A prose claim of "done" is insufficient.
+4. Do not merge or deploy from an unreviewed or dirty checkout. Record the source commit, remote, target branch, build result, and deploy ID. A push is not proof of deployment. Verify the served revision and requested user behavior before calling it live.
+5. **Hotel check-in is mandatory before ending a session.** Sign the same entry with agent name, session ID, UTC check-in time, HEAD, commits, push result, remaining changed/untracked paths, disk use, validation, deployment status, and named next owner/action. Mark it `active`, `awaiting integration`, or `eligible for owner-reviewed removal`. An entry without check-in becomes `overdue check-in`; identify the responsible agent/session and last evidence in the ledger, without guessing intent. Audit worktree count and disk use. Do not `clean`, `reset`, `prune`, remove, or move a worktree or its build artifacts without the owner's explicit authorization after its commits, untracked files, and integration status are checked. Never remove a worktree solely because it is old or large.
+6. When replacing another agent, sign a **takeover** entry with your own session ID and UTC time. Inventory the previous checkout, branch, HEAD, remotes, dirty/untracked paths, and deploy evidence before edits. Preserve the predecessor's checkout and attribute any missing check-in to that named session. Do not sign a check-in on another agent's behalf. Continue in an existing safe checkout or reserve a new one first; integrate predecessor commits only after reviewing the diff.
+7. If the owner fires or stops you, stop work immediately. The successor records `owner terminated` in the ledger with the agent name/session (or `unknown`), owner-stated reason (or `not provided`), UTC time recorded, affected worktrees, and exact handoff document name. The successor signs a separate forced handoff/takeover inventory. Never forge the fired agent's check-in or infer an unstated reason. An outgoing agent may prepare a handoff before stopping only when the owner explicitly asks for that order.
+
+These rules apply equally to Claude, Gemini/Antigravity, Codex, and any subagent. If they conflict with a direct owner instruction, follow the owner instruction and document the exception.
+
 ## NEVER write to F:
 
 **HARD RULE:** Never write, create, move, copy, stage, cache, or spool any file to the **F:** drive (`F:\`, `F:/`).
