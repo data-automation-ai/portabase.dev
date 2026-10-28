@@ -8,7 +8,6 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
   const [connectors, setConnectors] = useState(null);
   const [testing, setTesting] = useState(null);
   const [testResult, setTestResult] = useState({});
-  const [localPath, setLocalPath] = useState('./portabase-capsules');
 
   const refreshConnectors = async () => {
     try {
@@ -89,8 +88,7 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
         <div>
           <h1>External Vault Storage Providers</h1>
           <p className="pb-page-lead">
-            Portabase stores recovery capsules directly into <strong>your customer-owned vaults</strong>.
-            Keys and cryptographic capsules stay in your accounts — zero platform lock-in.
+            Choose a customer-owned destination for encrypted recovery capsules. A provider is ready only after its connection and delivery are verified.
           </p>
         </div>
       </div>
@@ -180,7 +178,7 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
               <LedIndicator state="red" />
             </div>
             <p style={{ fontSize: '13px', color: '#c9d1d9', lineHeight: 1.5 }}>
-              Zero egress fees. S3-compatible endpoints for ultra-low cost storage of multi-gigabyte Postgres &amp; storage backups.
+              Choose an R2 bucket, folder, and capsule naming rule in Recovery. Connection and delivery remain pending.
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #30363d' }}>
@@ -191,7 +189,7 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
           </div>
         </div>
 
-        {/* Google Cloud Storage / Google Drive Card */}
+        {/* Google Drive Card */}
         <div className="pb-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderTop: '4px solid #4285F4' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
@@ -202,14 +200,14 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
                   <path d="M8.2 3.8h7.6L22 14.5H9.8z" fill="#FFBB00" />
                 </svg>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '18px' }}>Google Cloud / Drive</h3>
-                  <small style={{ color: '#8b949e' }}>OAuth 2.0 PKCE • GCS Buckets</small>
+                  <h3 style={{ margin: 0, fontSize: '18px' }}>Google Drive</h3>
+                  <small style={{ color: '#8b949e' }}>OAuth 2.0 PKCE</small>
                 </div>
               </div>
               <LedIndicator state={getGdriveState()} />
             </div>
             <p style={{ fontSize: '13px', color: '#c9d1d9', lineHeight: 1.5 }}>
-              Direct integration with Google Cloud Storage and Google Drive folders with strict cryptographic read-back proof.
+              Connect a Google Drive account for capsule storage. Confirm delivery before relying on a backup.
             </p>
             {testResult['google-drive'] && (
               <div style={{ padding: '8px 12px', borderRadius: '6px', fontSize: '12px', marginBottom: 12, background: testResult['google-drive'].success ? '#0d281e' : '#3d1214', color: testResult['google-drive'].success ? '#3ecf8e' : '#ff7b72' }}>
@@ -230,7 +228,7 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
                 </>
               ) : (
                 <button type="button" className="pb-btn pb-btn-sm pb-btn-primary" onClick={handleGoogleDriveOAuth}>
-                  Connect Google Drive / GCS
+                  Connect Google Drive
                 </button>
               )}
             </div>
@@ -254,7 +252,7 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
               <LedIndicator state="red" />
             </div>
             <p style={{ fontSize: '13px', color: '#c9d1d9', lineHeight: 1.5 }}>
-              Standard AWS S3 vaults with customer-managed SSE-KMS keys, object lock compliance, or cross-region replication.
+              Choose an S3 bucket, folder, and capsule naming rule in Recovery. Connection and delivery remain pending.
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #30363d' }}>
@@ -262,44 +260,6 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
               Choose S3 location in Recovery
             </button>
             <LedIndicator state="red" label="" size={10} />
-          </div>
-        </div>
-
-        {/* Local Storage / Hard Drive Card */}
-        <div className="pb-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderTop: '4px solid #3ecf8e' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#3ecf8e" strokeWidth="2">
-                  <rect x="2" y="4" width="20" height="16" rx="2" />
-                  <line x1="6" y1="12" x2="6.01" y2="12" />
-                  <line x1="10" y1="12" x2="10.01" y2="12" />
-                </svg>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '18px' }}>Local Storage / NAS</h3>
-                  <small style={{ color: '#8b949e' }}>On-Premises • USB • Network Share</small>
-                </div>
-              </div>
-              <LedIndicator state="green" />
-            </div>
-            <p style={{ fontSize: '13px', color: '#c9d1d9', lineHeight: 1.5 }}>
-              Save capsules locally on this workstation or mapped network drive. 100% offline, zero network egress.
-            </p>
-            <div style={{ marginTop: 8 }}>
-              <label style={{ fontSize: '11px', color: '#8b949e', display: 'block', marginBottom: 4 }}>Vault Directory</label>
-              <input
-                type="text"
-                value={localPath}
-                onChange={e => setLocalPath(e.target.value)}
-                style={{ width: '100%', padding: '6px 10px', background: '#0d1117', border: '1px solid #30363d', borderRadius: '4px', color: '#c9d1d9', fontSize: '12px', fontFamily: 'monospace' }}
-              />
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #30363d' }}>
-            <button type="button" className="pb-btn pb-btn-sm pb-btn-primary" onClick={() => toast(`Local vault directory set to: ${localPath}`, 'success')}>
-              Save Local Path
-            </button>
-            <LedIndicator state="green" label="" size={10} />
           </div>
         </div>
 
