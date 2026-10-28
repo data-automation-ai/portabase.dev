@@ -31,7 +31,7 @@ export function confidentialAdmission({authenticate=verifyCloudUser,subscription
       if(['restore.start','quota.inspect'].includes(body.operation)) return jsonResponse(200,{maxBytes,plan:admission.plan.id});
       const counter=body.operation==='runner.start'?'starts':'runs';
       const development=operatingMode==='development'&&Boolean(validationCap(user,validationOwnerId,validationMaxBytes));
-      const startLimit=counter==='starts' && development?Infinity:counter==='starts' && validationCap(user,validationOwnerId,validationMaxBytes)?3:dailyLimit;
+      const startLimit=development?Infinity:counter==='starts' && validationCap(user,validationOwnerId,validationMaxBytes)?3:dailyLimit;
       // No disk or in-memory fallback: quotas must survive instance restarts.
       const db=database?database():getStore({name:'portabase-confidential-admission',consistency:'strong'});
       const key=createHash('sha256').update(`${user.cloudVersion}:${user.id}`).digest('hex');

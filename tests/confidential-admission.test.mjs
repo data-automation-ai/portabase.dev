@@ -72,17 +72,21 @@ test('isolated validation owner may restart a failed runner without changing pub
   assert.equal((await other.run(event('runner.start'))).statusCode,429);
 });
 
-test('development removes only the isolated owner startup quota, retaining replay and backup limits',async()=>{
+test('development removes isolated owner start and recovery quotas while retaining replay and public limits',async()=>{
   const options={operatingMode:'development',validationOwnerId:user.id,validationMaxBytes:25*1024**3};
   const {run}=fixture(options),first=event('runner.start');
   assert.equal((await run(first)).statusCode,200);
   for(let i=0;i<5;i++)assert.equal((await run(event('runner.start'))).statusCode,200);
   assert.equal((await run(first)).statusCode,409);
-  assert.equal((await run(event())).statusCode,200);
-  assert.equal((await run(event())).statusCode,429);
+  const backup=event();
+  assert.equal((await run(backup)).statusCode,200);
+  for(let i=0;i<5;i++)assert.equal((await run(event())).statusCode,200);
+  assert.equal((await run(backup)).statusCode,409);
   const other=fixture({...options,authenticate:async()=>({...user,id:'other'})});
   assert.equal((await other.run(event('runner.start'))).statusCode,200);
   assert.equal((await other.run(event('runner.start'))).statusCode,429);
+  assert.equal((await other.run(event())).statusCode,200);
+  assert.equal((await other.run(event())).statusCode,429);
   const invalid=fixture({...options,operatingMode:'dev'});
   for(let i=0;i<3;i++)assert.equal((await invalid.run(event('runner.start'))).statusCode,200);
   assert.equal((await invalid.run(event('runner.start'))).statusCode,429);
