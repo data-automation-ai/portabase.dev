@@ -31,6 +31,8 @@ This is the durable index for worktrees, branches, and release custody. It does 
 
 ## Signed session log
 
+Active continuation: Codex `/root`, 2026-10-28, existing `enclave-home-20261025` checkout at `e2e73bf`. Task: release the existing `c42c8c2` picker route repair through a narrowly scoped artifact deployment preserving all published functions and unrelated assets. No new worktree. Check-in pending release verification.
+
 | Agent / session | Worktree | UTC check-out | UTC check-in | Status and next owner |
 | --- | --- | --- | --- | --- |
 | Codex `/root` / current rescue session (retrospective registration) | `C:\Users\ryanh\git\portabase.dev` | 2026-10-28 11:39:54 | 2026-10-28 11:46:56 | `bc28b40` committed and pushed to `origin/codex/worktree-custody-20261028`; root still has 65 unrelated changed and 30 untracked porcelain entries, all preserved. Next owner: integration/release agent to review custody branch and root dirty state. |
