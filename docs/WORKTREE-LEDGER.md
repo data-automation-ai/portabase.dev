@@ -33,8 +33,8 @@ This is the durable index for worktrees, branches, and release custody. It does 
 
 | Agent / session | Worktree | UTC check-out | UTC check-in | Status and next owner |
 | --- | --- | --- | --- | --- |
-| Codex `/root` / current rescue session (retrospective registration) | `C:\Users\ryanh\git\portabase.dev` | 2026-10-28 11:39:54 | pending | Active: root instruction and ledger edits; Codex `/root` to check in |
-| Codex `/root` / current rescue session (retrospective registration) | `.worktrees\enclave-home-20261025` | 2026-10-28 11:39:54 | pending | Awaiting integration: `c42c8c2` pushed to `origin/main`, not verified live; Codex `/root` to check in |
+| Codex `/root` / current rescue session (retrospective registration) | `C:\Users\ryanh\git\portabase.dev` | 2026-10-28 11:39:54 | 2026-10-28 11:46:56 | `bc28b40` committed and pushed to `origin/codex/worktree-custody-20261028`; root still has 65 unrelated changed and 30 untracked porcelain entries, all preserved. Next owner: integration/release agent to review custody branch and root dirty state. |
+| Codex `/root` / current rescue session (retrospective registration) | `.worktrees\enclave-home-20261025` | 2026-10-28 11:39:54 | 2026-10-28 11:46:56 | `c42c8c2` pushed to `origin/main`; 0 tracked changes, 1 untracked `AGENTS.mdx` preserved. Build passed; browser preview unavailable; not verified live. Next owner: release agent to reconcile current Netlify source before deployment. |
 
 ### Owner termination and forced handoff — 2026-10-28
 
