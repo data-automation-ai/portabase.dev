@@ -4,7 +4,7 @@ export const RECOVERY_SCREEN_VERSION = 'graphical-recovery-v2';
 export function emptyRecoveryState() {
   return {version:RECOVERY_SCREEN_VERSION, mode:'dropbox', activeVault:'dropbox', allowOverwrite:false,
     selection:{source:'',target:'',sources:[],targetMap:{}}, projects:{source:[],target:[]},
-    databases:[], inspections:{}, connections:{source:false,target:false,dropbox:false,s3:false},
+    databases:[], inspections:{}, connections:{source:false,target:false,dropbox:false,googleDrive:false,s3:false},
     checkedAt:{}, accountConfirmation:null};
 }
 export function restoreRecoveryState(saved) {
