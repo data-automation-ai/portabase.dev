@@ -31,7 +31,7 @@ This is the durable index for worktrees, branches, and release custody. It does 
 
 ## Signed session log
 
-Active continuation: Codex `/root`, 2026-10-28, existing `enclave-home-20261025` checkout at `e2e73bf`. Task: release the existing `c42c8c2` picker route repair through a narrowly scoped artifact deployment preserving all published functions and unrelated assets. No new worktree. Check-in pending release verification.
+Checked in: Codex `/root`, 2026-10-28 12:27:07 UTC, existing `enclave-home-20261025` checkout. Base `e2e73bf`; implementation commits `fa01467`, `368850e`; integration target `origin/main` at `https://github.com/data-automation-ai/portabase.dev.git`. No new worktree. Published deploy `6ae1e92f86a13c701e2fe143`, all five served asset hashes verified; 37 backend functions preserved. Isolated browser interaction passed; final authenticated public interaction unverified after browser connection failure. Earlier bad draft was immediately rolled back. Handoff: `docs/PICKER-RESCUE-2026-10-28.md`. Remaining untracked `AGENTS.mdx` preserved. Release staging is 2,145,980 bytes; no worktree deletion or cleanup. Next owner: Codex `/root` on next authorized continuation to verify the signed-in public picker and continue backend reconciliation. Push result is recorded by the final Git push for this check-in commit.
 
 | Agent / session | Worktree | UTC check-out | UTC check-in | Status and next owner |
 | --- | --- | --- | --- | --- |
