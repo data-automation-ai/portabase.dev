@@ -13,6 +13,10 @@ test('original selector receives real inventory and sends structure-only as excl
   assert.deepEqual(form.getAll('tableIndex'),['0']);
   assert.deepEqual(form.getAll('bucketIndex'),['0']);
   assert.equal(form.get('auth'),'yes');assert.equal(form.has('functions'),false);
+  assert.equal(form.get('databaseName'),'postgres');
+  dbs[0].databaseName='another_database';
+  assert.throws(()=>scopeForm(status,dbs,['files'],'fixture'),/only the postgres database/);
+  dbs[0].databaseName='postgres';
   dbs[0].tables[0].mode='structure_only';
   assert.equal(scopeForm(status,dbs,[],'fixture').has('tableIndex'),false);
 });

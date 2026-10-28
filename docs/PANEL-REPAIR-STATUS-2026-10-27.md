@@ -1,5 +1,7 @@
 # Panel repair — connected panels restored and verified
 
+Current expanded goal status: [Recovery goal status](RECOVERY-GOAL-STATUS-2026-10-28.md). This supersedes the historical quota blocker and target-selection notes below; the recovery remains unexecuted pending exact destination/overwrite and capacity confirmation.
+
 Target: `codex/12gb-timing-20261025` in this worktree. Preserve the original chassis, layout, meters, source and destination capabilities. Simplify with disclosures and one Mode dropdown, not replacement controls or sample connections.
 
 ## Verified facts
@@ -38,3 +40,18 @@ Owner requested Development mode with no startup limit. Dedicated validation adm
 Final browser confirmation passed after the idle helper restart: Development mode visible, original chassis and module layout preserved, source/destination settings collapsed, real project options populated, and Dropbox selection returns to the panel with no error. `/status` confirms source, destination and Dropbox connected, preflight passed, and both backupExecuted and restoreExecuted false. User working tab now points to port 58441, not sample preview port 4197.
 
 Scope limit: this verifies restored panel interactions and existing provider grants. Fresh OAuth consent, S3 service-plane setup and complete backup/restore are not claimed as tested. No production website release, backup/restore execution, or Codex Cloud transfer occurred.
+
+## Follow-up connected verification
+
+### Mapping and picker revision
+
+- Restore execution validates every mapping before any cloud operation: no missing destination fallback, duplicate destinations, or restoring into any selected source. The helper validates destination authorization; batch preflight checks every pair before the first capture and rechecks each pair before execution.
+- Single-source selection clears stale batch mappings. The panel displays the selected source-to-destination mapping and a recheck action after failure. Explicit overwrite consent is no longer overridden by a stale checked state.
+- Picker shows Database: postgres, Schema, Object Type, Object Name; objects group by type within schemas. Storage bucket selection is separate. Database name is retained in the definition and submitted scope; unsupported database names are rejected, not silently treated as postgres.
+- UI build preserves provider logos. Focused mapping, execution, picker-model and GUI checks passed 24/24. Browser automation became unavailable during final visual verification, so the new hierarchy is built and served but not yet browser-verified.
+- Recovery remains blocked by the existing daily recovery-job quota. No capture or restore was started by this revision. Additional PostgreSQL databases and standalone PostgreSQL recovery are not claimed as supported.
+
+- Real object picker Save & Close completed after the cloud round trip; reopening and Cancel closed successfully. Restore-only mode exposed a real existing Dropbox capsule option.
+- Mode returned to temporary_runner; status confirms all three connections, preflight_passed, no error, and no backup or restore executed. Focused GUI, vault, refresh and admission tests passed 30/30.
+- Recovery drill BLOCKED: approved target jmqjsyyyhhwvkbqexxog is absent from the current destination grant, which exposes only wunfzvzguqlnxhtxipen and kiuwcdpjsdotkoojbkoi. Requested the account owning the isolated target. Do not use either unrelated destination for this drill.
+- Browser automation detached during remaining checks. Fresh account switching and complete four-mode live verification remain unproven. Development helper no longer closes automatically after 230 minutes.

@@ -51,12 +51,12 @@ function ScopeModal(){
   function createPortalContent(){
     return createPortal(<div className="advanced-scope">
       <header><h2>Database objects & capsule scope</h2><div style={{display:'flex',gap:'8px'}}><button type="button" onClick={apply} disabled={busy}>Save &amp; Close</button><button type="button" onClick={()=>dialog.close()} disabled={busy} style={{background:'#526c5e'}}>Cancel</button></div></header>
-      <p>Original Portabase object selector. Table sizes are estimates; definition sizes are not measured.</p>
+      <p>Database → Schema → Object type → Object name. Table sizes are estimates; definition sizes are not measured.</p>
       {busy&&<p role="status">Working…</p>}
       {error&&<p role="alert" className="scope-error">{error}</p>}
       {status&&<>
-        <DatabaseScopeSelector databases={databases} activeDbId={databases[0]?.id} onChange={handleDatabasesChange} readOnly={busy||status.executing===true}/>
-        <h3>Storage buckets</h3><p>Bucket selection is connected. Individual Storage-object selection is not wired yet.</p>
+        <DatabaseScopeSelector allowAddDatabase={false} databaseOnly databases={databases.map(db=>({...db,binaries:[]}))} activeDbId={databases[0]?.id} onChange={next=>handleDatabasesChange(next.map(db=>({...db,binaries:databases.find(original=>original.id===db.id)?.binaries||[]})))} readOnly={busy||status.executing===true}/>
+        <h3>Storage → Buckets</h3><p>Select whole buckets. Individual Storage-object selection is not currently supported.</p>
         <div className="bucket-options">{status.inventory.buckets.map(row=><label key={row.id}>
           <input type="checkbox" checked={buckets.includes(row.id)} disabled={busy} onChange={e=>handleBucketToggle(row.id,e.target.checked)}/>
           {row.id} · {(row.bytes/1024**2).toFixed(2)} MiB · {row.objects} objects

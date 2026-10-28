@@ -42,7 +42,7 @@ test('allowOverwrite allows occupied target and passes flag to engine',async()=>
   const calls=[],status={};
   const command=async(operation,input)=>{
     calls.push({operation,input});
-    if(operation==='preflight')return {ready:false,source:{ref:sourceRef},target:{ref:targetRef,blank:false}};
+    if(operation==='preflight')return {ready:input.allowOverwrite===true,source:{ref:sourceRef},target:{ref:targetRef,blank:false}};
     if(operation==='backup.start')return {id:'capture'};
     if(operation==='restore.start')return {id:'restore'};
     if(operation==='job.status')return input.id==='capture'
@@ -109,11 +109,12 @@ test('Multi-Project Batch: sequential capture and optional 1-to-1 restore across
   const calls = [], status = {};
   const sourceRefs = ['proj-alpha-123', 'proj-beta-456'];
   const targetMap = { 'proj-alpha-123': 'target-alpha', 'proj-beta-456': 'target-beta' };
+  const selected={source:sourceRefs[0],target:'target-alpha'};
 
   const command = async (operation, input) => {
     calls.push({ operation, input });
-    if (operation === 'preflight') return { ready: true, source: { ref: sourceRefs[0] }, target: { ref: 'target-alpha', blank: true } };
-    if (operation === 'project.select') return { ok: true, ref: input.ref };
+    if (operation === 'preflight') return { ready: true, source: { ref: selected.source }, target: { ref: selected.target, blank: true } };
+    if (operation === 'project.select') { selected[input.slot]=input.ref;return { ok: true, ref: input.ref }; }
     if (operation === 'backup.start') return { id: 'capture-' + calls.filter(c => c.operation === 'backup.start').length };
     if (operation === 'restore.start') return { id: 'restore-' + calls.filter(c => c.operation === 'restore.start').length };
     if (operation === 'job.status') {
@@ -135,7 +136,7 @@ test('Multi-Project Batch: sequential capture and optional 1-to-1 restore across
   assert.equal(status.batchProgress.completedCapsules.length, 2);
 
   const selectSourceCalls = calls.filter(c => c.operation === 'project.select' && c.input.slot === 'source');
-  assert.equal(selectSourceCalls.length, 2);
+  assert.equal(selectSourceCalls.length, 4);
   assert.equal(selectSourceCalls[0].input.ref, 'proj-alpha-123');
   assert.equal(selectSourceCalls[1].input.ref, 'proj-beta-456');
 

@@ -63,6 +63,8 @@ export function DatabaseScopeSelector({
   onDisconnect = null,
   readOnly = false,
   activeDbId = null,
+  allowAddDatabase = true,
+  databaseOnly = false,
 }) {
   const [expandedDbId, setExpandedDbId] = useState(() => {
     if (activeDbId) return activeDbId;
@@ -485,6 +487,7 @@ export function DatabaseScopeSelector({
     const multiplier = direction === 'asc' ? 1 : -1;
 
     return [...filteredGroups].sort((a, b) => {
+      if(a.isBinary!==b.isBinary)return a.isBinary?1:-1;
       if (column === 'type') {
         const cmp = a.objectType.localeCompare(b.objectType);
         return cmp !== 0 ? cmp * multiplier : a.schemaOrBucket.localeCompare(b.schemaOrBucket) * multiplier;
@@ -608,10 +611,10 @@ export function DatabaseScopeSelector({
       >
         <div>
           <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#f0f6fc' }}>
-            Accessible Supabase Databases
+            Database objects
           </h4>
           <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#8b949e' }}>
-            Click any database to open the sortable buckets, tables &amp; objects spreadsheet for capsule transfer.
+            Browse Database → Schema → Object type → Object name.
           </p>
         </div>
 
@@ -633,20 +636,20 @@ export function DatabaseScopeSelector({
             >
               All Structure Only
             </button>
-            <button
+            {allowAddDatabase && <button
               type="button"
               className="pb-btn pb-btn-sm pb-btn-primary"
               onClick={() => setShowAddDb((v) => !v)}
               style={{ fontSize: '12px', padding: '5px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
             >
               <Icon name="plus" size={12} /> Add Supabase Database
-            </button>
+            </button>}
           </div>
         )}
       </div>
 
       {/* Add Database Form Collapsible */}
-      {showAddDb && !readOnly && (
+      {allowAddDatabase && showAddDb && !readOnly && (
         <form
           onSubmit={handleAddDatabase}
           style={{
@@ -760,7 +763,7 @@ export function DatabaseScopeSelector({
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <span style={{ textTransform: 'uppercase', letterSpacing: '0.06em', color: '#58a6ff', fontWeight: 700 }}>
-                    DATABASE: {db.projectName || db.name || 'Supabase Database'}
+                    Project: {db.projectName || db.name || 'Supabase project'}
                   </span>
                   {db.projectRef && (
                     <span className="pb-badge" style={{ fontFamily: 'monospace', fontSize: '11px', background: '#21262d' }}>
@@ -772,7 +775,7 @@ export function DatabaseScopeSelector({
                   )}
                 </div>
                 <div style={{ fontFamily: 'monospace', fontWeight: 600, color: '#c9d1d9' }}>
-                  Database + Storage Total:{' '}
+                  {databaseOnly?'Database total:':'Database + Storage Total:'}{' '}
                   <span style={{ color: '#3ecf8e' }}>
                     {(() => {
                       const total = typeof dbMetrics.totalSourceMb === 'number' && dbMetrics.totalSourceMb > 0
@@ -818,7 +821,7 @@ export function DatabaseScopeSelector({
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <strong style={{ fontSize: '14px', color: '#f0f6fc', textDecoration: 'underline', textDecorationColor: '#30363d' }}>
-                        {db.databaseName || db.name || 'postgres'}
+                        <span style={{fontWeight:400,color:'#8b949e'}}>Database: </span>{db.databaseName || db.name || 'postgres'}
                       </strong>
                       <span className="pb-badge pb-badge-ok" style={{ fontSize: '11px', fontFamily: 'monospace' }}>
                         {typeof dbMetrics.includedMb === 'number'
@@ -921,9 +924,9 @@ export function DatabaseScopeSelector({
                         fontWeight: 600,
                       }}
                     >
-                      <span>{isExpanded ? '▴ Hide spreadsheet of schemas, buckets & objects' : '▾ Click into database schemas & buckets (Spreadsheet View)'}</span>
+                      <span>{isExpanded ? '▴ Hide objects' : '▾ Browse schemas and objects'}</span>
                       <span className="pb-badge" style={{ fontSize: '11px', background: '#21262d', color: '#c9d1d9' }}>
-                        {sortedGroups.length} schemas/buckets · {allObjects.length} objects
+                        {sortedGroups.filter(g=>!g.isBinary).length} schemas · {allObjects.length} objects
                       </span>
                     </button>
 
@@ -950,7 +953,7 @@ export function DatabaseScopeSelector({
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '180px', flexWrap: 'wrap' }}>
                           <input
                             type="text"
-                            placeholder="Filter schemas, buckets, or individual object names..."
+                            placeholder="Filter schemas, object types, or object names..."
                             value={searchQuery[db.id] || ''}
                             onChange={(e) => setSearchQuery({ ...searchQuery, [db.id]: e.target.value })}
                             style={{
@@ -985,7 +988,7 @@ export function DatabaseScopeSelector({
                             </button>
                           ) : (
                             <span style={{ fontSize: '11px', color: '#8b949e' }}>
-                              Click one Schema or Bucket row to explode, pick its records, then close
+                              Expand a schema, then choose its object types and objects
                             </span>
                           )}
                         </div>
@@ -1048,8 +1051,8 @@ export function DatabaseScopeSelector({
                         >
                           <thead>
                             <tr>
+                              {renderSortHeader(db.id, 'schema', 'Schema', 'left')}
                               {renderSortHeader(db.id, 'type', 'Object Type', 'left')}
-                              {renderSortHeader(db.id, 'schema', 'Schema / Bucket', 'left')}
                               {renderSortHeader(db.id, 'name', 'Object Name', 'left')}
                               {renderSortHeader(db.id, 'size', 'Size (MB)', 'right')}
                               {renderSortHeader(db.id, 'createdAt', 'Date Created', 'left')}
@@ -1114,7 +1117,7 @@ export function DatabaseScopeSelector({
                                   verticalAlign: 'middle',
                                 };
 
-                                const childItems = grp.matchingItems || [];
+                                const childItems = [...(grp.matchingItems || [])].sort((a,b)=>parseObjectRow(a).objectType.localeCompare(parseObjectRow(b).objectType));
                                 const limitKey = `${db.id}:${grp.groupKey}`;
                                 const rowLimit = groupRowLimits[limitKey] || 500;
                                 const visibleChildren = isGroupExpanded ? childItems.slice(0, rowLimit) : [];
@@ -1123,6 +1126,10 @@ export function DatabaseScopeSelector({
 
                                 return (
                                   <React.Fragment key={grp.groupKey}>
+                                    {isBucket && (grpIdx===0 || !sortedGroups[grpIdx-1].isBinary) && <>
+                                      <tr><th colSpan={8} style={{padding:'10px 6px',textAlign:'left',background:'#162032',color:'#e6edf3'}}>Storage → Bucket → Object name</th></tr>
+                                      <tr><th>Bucket</th><th>Object Type</th><th>Object Name</th><th>Size (MB)</th><th>Date Created</th><th>Last Updated</th><th>Operation Switch</th><th>Stacked MB</th></tr>
+                                    </>}
                                     {/* Schema-Level or Bucket-Level Summary Row (Default View) */}
                                     <tr
                                       style={{ height: '22px', cursor: 'pointer' }}
@@ -1132,24 +1139,23 @@ export function DatabaseScopeSelector({
                                       <td
                                         style={{
                                           ...grpCellStyle,
-                                          width: `${colWidths.type}px`,
+                                          width: `${colWidths.schema}px`,
                                           fontWeight: 700,
                                           color: isGrpSkip ? '#94a3b8' : isBucket ? '#9a3412' : '#0f172a',
                                         }}
                                       >
-                                        {grp.objectType}
+                                        {isGroupExpanded ? '▼ ' : '▶ '}{grp.schemaOrBucket}
                                       </td>
                                       <td
                                         style={{
                                           ...grpCellStyle,
-                                          width: `${colWidths.schema}px`,
+                                          width: `${colWidths.type}px`,
                                           fontWeight: 700,
                                           color: isGrpSkip ? '#94a3b8' : isBucket ? '#7c2d12' : '#1e3a8a',
                                         }}
-                                        title={grp.schemaOrBucket}
+                                        title={isBucket?'Storage bucket':'Schema'}
                                       >
-                                        {isGroupExpanded ? '▼ ' : '▶ '}
-                                        {grp.schemaOrBucket}
+                                        {isBucket?'Files':'Schema'}
                                       </td>
                                       <td
                                         style={{
@@ -1384,29 +1390,31 @@ export function DatabaseScopeSelector({
                                       };
 
                                       return (
-                                        <tr key={parsed.key} style={{ height: '21px' }}>
-                                          <td
-                                            style={{
-                                              ...baseCellStyle,
-                                              width: `${colWidths.type}px`,
-                                              paddingLeft: '14px',
-                                              fontWeight: 600,
-                                              color: isSkip ? '#94a3b8' : isBinary ? '#9a3412' : '#334155',
-                                            }}
-                                            title={parsed.objectType}
-                                          >
-                                            {parsed.objectType}
-                                          </td>
+                                        <React.Fragment key={parsed.key}>
+                                        {(rowIdx===0 || parseObjectRow(visibleChildren[rowIdx-1]).objectType!==parsed.objectType) && <tr><th colSpan={8} style={{textAlign:'left',padding:'5px 20px',background:'#e2e8f0',color:'#334155'}}>{grp.schemaOrBucket} → {parsed.objectType}</th></tr>}
+                                        <tr style={{ height: '21px' }}>
                                           <td
                                             style={{
                                               ...baseCellStyle,
                                               width: `${colWidths.schema}px`,
                                               paddingLeft: '14px',
-                                              color: isSkip ? '#94a3b8' : '#64748b',
+                                              fontWeight: 600,
+                                              color: isSkip ? '#94a3b8' : isBinary ? '#9a3412' : '#334155',
                                             }}
                                             title={parsed.schemaOrBucket}
                                           >
-                                            └ {parsed.schemaOrBucket}
+                                            {parsed.schemaOrBucket}
+                                          </td>
+                                          <td
+                                            style={{
+                                              ...baseCellStyle,
+                                              width: `${colWidths.type}px`,
+                                              paddingLeft: '14px',
+                                              color: isSkip ? '#94a3b8' : '#64748b',
+                                            }}
+                                            title={parsed.objectType}
+                                          >
+                                            {parsed.objectType}
                                           </td>
                                           <td
                                             style={{
@@ -1612,6 +1620,7 @@ export function DatabaseScopeSelector({
                                             +{rowIncludedMb.toFixed(2)} (Σ {childRunningMb.toFixed(2)})
                                           </td>
                                         </tr>
+                                        </React.Fragment>
                                       );
                                     })}
 
@@ -1784,7 +1793,7 @@ export function DatabaseScopeSelector({
                       </div>
 
                       {/* Quick Add Custom Table Input */}
-                      {!readOnly && (
+                      {!readOnly && allowAddDatabase && (
                         <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
                           <input
                             type="text"
@@ -1873,7 +1882,7 @@ export function DatabaseScopeSelector({
         </div>
 
         {/* Dynamic Target Budget Cap & Safety Gauge */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '260px' }}>
+        <div style={{ display: databaseOnly?'none':'flex', flexDirection: 'column', gap: '6px', minWidth: '260px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
             <span style={{ fontSize: '11px', color: '#8b949e', textTransform: 'uppercase' }}>Target Budget Cap:</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>

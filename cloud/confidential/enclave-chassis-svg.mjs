@@ -124,10 +124,7 @@ export function renderMultiLayerConduit(active, direction = 'right', opts = {}) 
     <svg class="pipe-svg pipe-svg-h" viewBox="0 0 80 28" preserveAspectRatio="none">
       <line x1="6" y1="14" x2="74" y2="14" class="pipe-track-wide"/>
       <line x1="6" y1="14" x2="74" y2="14" class="pipe-channel"/>
-      <line x1="6" y1="14" x2="74" y2="14" class="pipe-stream"/>
-      <polygon points="6,14 14,8 14,20" class="pipe-arrowhead-left"/>
-      <polygon points="74,14 66,8 66,20" class="pipe-arrowhead-right"/>
-      <circle cx="20" cy="14" r="3.5" class="packet-orb packet-orb-h"/>
+      ${active && !isDimmed ? [0,1,2,3].map(i=>`<path d="M -4 9 L 2 14 L -4 19" class="transfer-chevron" style="animation-delay:-${i*0.35}s"/>`).join('') : '<path d="M 35 9 L 41 14 L 35 19" class="transfer-chevron-idle"/>'}
     </svg>
     <i></i><i></i><i></i>
   </div>`;

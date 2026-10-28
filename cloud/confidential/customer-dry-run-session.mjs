@@ -1,6 +1,7 @@
 // Operator-only, isolated test identity. Tokens, recovery key and OAuth codes
 // remain in memory; the code/token exchange occurs inside the attested VM.
 import {createServer} from 'node:http';
+import {validateProjectMapping} from './project-mapping.mjs';
 import {createHash,randomUUID} from 'node:crypto';
 import {readFile,writeFile} from 'node:fs/promises';
 import {operatorGoogle} from './operator-google.mjs';
@@ -35,6 +36,8 @@ async function refreshCapsules(command){
 const pending=new Map(),links={},offers={},projects={source:[],target:[]},runNonce=randomUUID();
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function main(){
+ let previousScope=null;
+ try{const previous=JSON.parse(await readFile(new URL('./evidence/customer-session-live.json',import.meta.url),'utf8'));previousScope={source:previous.selection?.source,scope:previous.scope};}catch{}
  const google=await operatorGoogle();
  const raw=await google('/v1/projects/portabase-dev/secrets/portabase-confidential-validation/versions/latest:access');
  const fixture=JSON.parse(Buffer.from(raw.payload.data,'base64').toString());
@@ -130,6 +133,15 @@ async function main(){
   }
   status.inventory=result.inventory;
   status.scope={tables:result.inventory.tables.map(row=>row.name),excludedTables:[],buckets:result.inventory.buckets.map(row=>row.id),auth:true,functions:true};
+  if(previousScope?.source===ref&&previousScope.scope){
+   const prior=previousScope.scope;
+   if(Array.isArray(prior.tables)&&Array.isArray(prior.buckets)){
+    status.scope={tables:prior.tables.filter(name=>result.inventory.tables.some(row=>row.name===name)),
+     excludedTables:(prior.excludedTables||[]).filter(name=>result.inventory.tables.some(row=>row.name===name)),
+     buckets:prior.buckets.filter(id=>result.inventory.buckets.some(row=>row.id===id)),auth:prior.auth!==false,functions:prior.functions!==false};
+   }
+  }
+  previousScope=null;
   return status.inventory;
  }
  async function preflight(){
@@ -245,13 +257,18 @@ async function main(){
      const targetMap={};
      for(const r of refs){
        const t=form.get('targetFor_'+r);
-       if(t&&projects.target.some(p=>p.ref===t))targetMap[r]=t;
+       if(t)targetMap[r]=t;
      }
+     validateProjectMapping({sourceRefs:refs,targetRef:targetMap[refs[0]],targetMap,mode:status.mode,authorizedTargets:projects.target.map(p=>p.ref)});
      status.selection.sources=refs;
      status.selection.source=refs[0];
      status.selection.targetMap=targetMap;
      const inspected=await command('project.select',{slot:'source',ref:refs[0]});
      status.inspections||={};status.inspections.source=inspected;
+     if(status.mode!=='capsule_only'){
+      status.selection.target=targetMap[refs[0]];
+      status.inspections.target=await command('project.select',{slot:'target',ref:status.selection.target});
+     }
      await preflight();res.writeHead(303,{location:'/'});return res.end();
     }
     if(url.pathname==='/select'){
@@ -263,6 +280,12 @@ async function main(){
      status.inspections||={};status.inspections[slot]=inspected;
      if(status.selection[slot]!==ref){delete status.preflight;if(slot==='source'){status.inventory=null;status.scope=null;}}
      status.selection[slot]=ref;
+     if(slot==='source'){
+      delete status.selection.sources;
+      delete status.selection.targetMap;
+     }else if(status.selection.sources?.length>1){
+      status.selection.targetMap={...status.selection.targetMap,[status.selection.source]:ref};
+     }
      await preflight();res.writeHead(303,{location:'/'});return res.end();
     }
     if(url.pathname==='/mode'){
@@ -273,6 +296,7 @@ async function main(){
      await preflight();res.writeHead(303,{location:'/'});return res.end();
     }
     if(url.pathname==='/scope'){
+     if(form.has('databaseName')&&form.get('databaseName')!=='postgres')throw new Error('unsupported_database');
      if(status.executing||!status.inventory||status.inventory.ref!==status.selection.source)throw new Error('source_inventory_required');
      const indices=(key,max)=>form.getAll(key).map(value=>{
       if(!/^(0|[1-9][0-9]*)$/.test(value))throw new Error('invalid_source_scope');
@@ -294,11 +318,12 @@ async function main(){
     if(!['dropbox','temporary_runner','capsule_only','restore_only'].includes(vaultChoice))throw new Error('capsule_choice_required');
     const isRestoreOnly=vaultChoice==='restore_only';
     const isCapsuleOnly=vaultChoice==='capsule_only';
+    validateProjectMapping({sourceRef:status.selection.source,targetRef:status.selection.target,sourceRefs:status.selection.sources,targetMap:status.selection.targetMap,mode:vaultChoice,authorizedTargets:projects.target.map(p=>p.ref)});
     if(!isRestoreOnly){
      if(form.get('confirmSource')!==status.selection.source||form.get('acknowledgeScope')!=='yes')throw new Error('test_confirmation_required');
      if(!status.inventory||!status.scope)throw new Error('source_scope_required');
     }
-    const allowOverwrite=form.get('allowOverwrite')==='yes'||status.allowOverwrite===true;
+    const allowOverwrite=form.get('allowOverwrite')==='yes';
     status.allowOverwrite=allowOverwrite;
     if(status.state!=='preflight_passed')throw new Error('preflight_required');
     if(!isCapsuleOnly&&!(status.preflight?.target?.blank===true||allowOverwrite))throw new Error('preflight_required');
