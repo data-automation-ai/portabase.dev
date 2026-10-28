@@ -36,7 +36,7 @@ export function sourceReadMeter(status = {}) {
   if (status.mode === 'restore_only') {
     return `<div class="io-meter" data-meter="source-read"><div class="io-meter-head"><span>Source Read · <small class="io-meter-sub" style="display:inline;margin:0">Bypassed (Mode 4)</small></span><strong>0%</strong></div><div class="io-meter-track"><div class="io-meter-fill" style="width:0%"></div></div></div>`;
   }
-  const done = backup?.state === 'complete' || Boolean(status.backupExecuted) || ['package', 'encrypt', 'transfer', 'done'].includes(backup?.phase);
+  const done = backup?.state === 'complete' || (Boolean(status.backupExecuted) && backup?.state !== 'running' && backup?.state !== 'failed') || ['package', 'encrypt', 'transfer', 'done'].includes(backup?.phase);
   const raw = Number(backup?.estimatedPercent);
   const phasePct = { preflight: 3, 'database-manifest': 10, database: 35, storage: 72, functions: 95 }[backup?.phase];
   const percent = done ? 100 : (Number.isFinite(raw) && raw > 0 ? Math.min(99, Math.max(1, Math.round((raw / 85) * 100))) : (phasePct ?? (status.state === 'capturing' ? 2 : 0)));
@@ -50,7 +50,7 @@ export function destinationWriteMeter(status = {}) {
   if (status.mode === 'capsule_only') {
     return `<div class="io-meter" data-meter="destination-write"><div class="io-meter-head"><span>Destination Written · <small class="io-meter-sub" style="display:inline;margin:0">Bypassed (Mode 3)</small></span><strong>0%</strong></div><div class="io-meter-track"><div class="io-meter-fill io-meter-fill-target" style="width:0%"></div></div></div>`;
   }
-  const done = restore?.state === 'complete' || Boolean(status.restoreExecuted) || status.state === 'complete';
+  const done = restore?.state === 'complete' || (Boolean(status.restoreExecuted) && restore?.state !== 'running' && restore?.state !== 'failed') || status.state === 'complete';
   const raw = Number(restore?.estimatedPercent);
   const phasePct = { transfer: 12, preflight: 22, 'database-manifest': 35, database: 58, schema: 45, data: 65, auth: 75, storage: 86, functions: 94, verify: 98, done: 99, complete: 100 }[restore?.phase];
   const percent = done ? 100 : (Number.isFinite(raw) && raw > 0 ? Math.min(99, Math.round(raw)) : (phasePct ?? (restore?.state === 'running' || status.state === 'restoring' ? 25 : 0)));

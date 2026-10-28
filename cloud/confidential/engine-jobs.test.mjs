@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { engineJobs } from './engine-jobs.mjs';
+import { engineJobs, directorySize } from './engine-jobs.mjs';
 
 test('a selected scope cannot bypass the populated-target guard',async()=>{
   const jobs=engineJobs({platform:'linux',run:async()=>assert.fail('must not run'),access:()=>({
@@ -102,4 +102,31 @@ test('allowOverwrite allows occupied target and appends --allow-occupied-target 
   assert.equal(restored.result.restoreVerified, true);
   const restoreCall = seen.find(s => s.args[0] === 'replay');
   assert.ok(restoreCall.args.includes('--allow-occupied-target'));
+});
+
+test('directorySize ignores transient ENOENT from concurrent temporary cache renames', async () => {
+  const entries = [
+    { name: 'stable.bin', isSymbolicLink: () => false, isDirectory: () => false },
+    { name: 'transient.tmp', isSymbolicLink: () => false, isDirectory: () => false },
+    { name: 'vanishing-dir', isSymbolicLink: () => false, isDirectory: () => true },
+  ];
+  const bytes = await directorySize('/tmp/job', {
+    readdirImpl: async dir => {
+      if (dir.endsWith('vanishing-dir')) {
+        const err = new Error('vanished');
+        err.code = 'ENOENT';
+        throw err;
+      }
+      return entries;
+    },
+    statImpl: async file => {
+      if (file.endsWith('transient.tmp')) {
+        const err = new Error('renamed');
+        err.code = 'ENOENT';
+        throw err;
+      }
+      return { size: 4096 };
+    },
+  });
+  assert.equal(bytes, 4096);
 });

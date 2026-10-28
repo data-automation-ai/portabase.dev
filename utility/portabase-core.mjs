@@ -1017,8 +1017,8 @@ export async function packDirectoryTarGz(sourceDir, archivePath) {
         stream.on('data', chunk => {
           if (!gzip.write(chunk)) stream.pause();
         });
-        gzip.on('drain', () => stream.resume());
-        stream.on('end', resolveWrite);
+        const onDrain = () => stream.resume(); gzip.on('drain', onDrain);
+        stream.on('end', () => { gzip.off('drain', onDrain); resolveWrite(); });
       });
       const pad = (512 - (size % 512)) % 512;
       if (pad) gzip.write(Buffer.alloc(pad, 0));

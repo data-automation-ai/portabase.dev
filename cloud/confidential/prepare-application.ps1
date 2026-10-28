@@ -18,14 +18,14 @@ $source=(Resolve-Path -LiteralPath $SourceRoot).Path
 if($source.StartsWith('F:',[StringComparison]::OrdinalIgnoreCase)){throw 'Forbidden drive'}
 $root=& git -C $source rev-parse --show-toplevel
 if($LASTEXITCODE -ne 0 -or $root.Replace('/','\') -ne $source){throw 'Source must be a verified Git root'}
-$dirty=& git -C $source status --porcelain
+$dirty=& git -C $source status --porcelain -- cloud utility package.json package-lock.json
 if($dirty){throw 'Build source must be clean'}
 $commit=& git -C $source rev-parse HEAD
 $stage=Join-Path ([IO.Path]::GetTempPath()) "portabase-confidential-app-$BuildId"
 if(Test-Path -LiteralPath $stage){throw 'Stage already exists; inspect before reuse'}
 New-Item -ItemType Directory -Path "$stage/cloud/confidential","$stage/cloud/runner","$stage/utility" | Out-Null
 $runtime=@('attestation.mjs','google-token.mjs','command-channel.mjs','customer-identity.mjs','customer-profile.mjs',
-  'oauth-connections.mjs','dropbox-vault.mjs','supabase-access.mjs','pg-command.mjs','supabase-root.crt','engine-jobs.mjs','application.mjs',
+  'oauth-connections.mjs','dropbox-vault.mjs','s3-vault.mjs','supabase-access.mjs','pg-command.mjs','supabase-root.crt','engine-jobs.mjs','application.mjs',
   'cloud-config.mjs','server.mjs','production-workload.mjs','Dockerfile.application','package.json','package-lock.json',
   'controller.mjs','controller-main.mjs','compute-control.mjs','Dockerfile.controller')
 $paths=@('package.json','package-lock.json','cloud/runner/supabase-oauth.mjs','cloud/runner/storage-oauth.mjs')

@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import './recovery-home.css';
+import AttestationEvidence from './components/attestation-evidence.jsx';
 import { nightmares as stories } from './data/nightmares.js';
 import { sortIncidents, incidentKey } from './lib/incident-order.js';
 import { diagrams, modelLayers, trustBoundary } from './data/diagrams.js';
@@ -2270,7 +2271,7 @@ function ClosingCta() {
 
 function HomePage() {
   useEffect(() => { document.title = 'Portabase — Your Supabase Escape'; }, []);
-  return <><Header /><main><Hero /><RecoveryOverviewImage /><Stories /><WhyNow /><Reality /><ClosureRisk /><TwoScenarios /><MidPageCta /><WhatIsThis /><NeverHoldKeys /><CliVsCloud /><HeroConcept /><RunnerArchitectureDiagram /><Escape /><InstallCta Arrow={Arrow} /><Faq /><Audit /><Cutover /><PublicDeal /><CloudTeaser /><UseCases /><ClosingCta /></main><Footer /></>;
+  return <><Header /><main><Hero /><RecoveryOverviewImage /><Stories /><AttestationEvidence /><WhyNow /><Reality /><ClosureRisk /><TwoScenarios /><MidPageCta /><WhatIsThis /><NeverHoldKeys /><CliVsCloud /><HeroConcept /><RunnerArchitectureDiagram /><Escape /><InstallCta Arrow={Arrow} /><Faq /><Audit /><Cutover /><PublicDeal /><CloudTeaser /><UseCases /><ClosingCta /></main><Footer /></>;
 }
 
 /** Mid-page conversion point placed at the emotional peak, after Stories + TwoScenarios. */

@@ -1,0 +1,7 @@
+.attestation-evidence-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,360px);gap:clamp(24px,5vw,80px);align-items:center}
+.attestation-evidence h2{margin-top:12px}
+.attestation-evidence p{max-width:60ch;line-height:1.65}
+.attestation-evidence figure{margin:0;min-width:0}
+.attestation-evidence img{display:block;width:100%;height:auto;border-radius:8px;border:1px solid #b9c9cc;box-shadow:0 12px 36px #0f172a18}
+.attestation-evidence figcaption,.attestation-evidence-note{font-size:13px;line-height:1.5;opacity:.8;margin-top:14px}
+@media(max-width:700px){.attestation-evidence-grid{grid-template-columns:1fr}.attestation-evidence figure{width:min(100%,360px);margin:auto}}

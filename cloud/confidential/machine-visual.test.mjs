@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {transferView} from './machine-visual.mjs';
+import {transferView,sourceReadMeter,destinationWriteMeter} from './machine-visual.mjs';
 test('phase estimates never become measured capsule fill',()=>{
   const state={executing:true,backup:{state:'running',phase:'transfer',estimatedPercent:96}};
   assert.equal(transferView(state).percent,null);
@@ -20,4 +20,12 @@ test('failed, paused and idle jobs never show moving transfer pulses',()=>{
     const view=transferView({...state,...changed});
     assert.equal(view.sourceActive,false);assert.equal(view.targetActive,false);assert.equal(view.vaultActive,false);
   }
+});
+test('source and destination meters do not show 100% while job is still running',()=>{
+  const runningBackup={executing:true,backupExecuted:true,backup:{state:'running',phase:'database',estimatedPercent:5}};
+  assert.doesNotMatch(sourceReadMeter(runningBackup),/100% read/);
+  assert.match(sourceReadMeter(runningBackup),/Reading database/);
+  const runningRestore={executing:true,restoreExecuted:true,restore:{state:'running',phase:'data'}};
+  assert.doesNotMatch(destinationWriteMeter(runningRestore),/100% written/);
+  assert.match(destinationWriteMeter(runningRestore),/Writing data/);
 });

@@ -1021,7 +1021,7 @@ export async function captureStorage(rawDir, limits = null, config = {}, exclude
     const sha256 = await hashFile(target);
     // Dual-key cache promote — best-effort only
     try {
-      const cacheKeys = new Set([storageCacheKey(identity, sha256)].filter(Boolean));
+      const cacheKeys = new Set(process.env.PORTABASE_CONFIDENTIAL_RUNNER === '1' ? [] : [storageCacheKey(identity, sha256)].filter(Boolean));
       for (const keyHash of cacheKeys) {
         const destCache = join(cacheRoot, keyHash.slice(0, 2), keyHash);
         if (existsSync(destCache)) continue;
@@ -1895,17 +1895,17 @@ async function backup() {
     console.log('Packaging capsule archive...');
     // Prefer pure-Node tar.gz on Windows (system tar often fails on large trees / missing drives).
     try {
-      await packDirectoryTarGz(rawDir, archive);
+      const linuxTar = process.platform !== 'win32' ? resolveTool('tar') : null; if (linuxTar) await run(linuxTar, ['-czf', archive, '-C', rawDir, '.']); else await packDirectoryTarGz(rawDir, archive);
     } catch (packError) {
       const tar = resolveTool('tar');
       if (!tar) throw new Error(`Archive pack failed: ${packError.message}`);
       console.warn(`Node pack failed (${packError.message}); falling back to system tar...`);
       await run(tar, ['-czf', archive, '-C', rawDir, '.']);
     }
-    progress({ phase: 'encrypt' });
+    await rm(rawDir, { recursive: true, force: true }); progress({ phase: 'encrypt' });
     console.log('Encrypting capsule...');
     await mkdir(capsuleDir, { recursive: false });
-    const encryption = await encryptFile(archive, join(capsuleDir, 'capsule.pbase'), passphrase, id);
+    const encryption = await encryptFile(archive, join(capsuleDir, 'capsule.pbase'), passphrase, id); await rm(workDir, { recursive: true, force: true });
     const capsuleMetadata = {
       formatVersion: 1,
       id,
@@ -2341,7 +2341,7 @@ async function openCapsule(capsuleDir, passphrase) {
   await decryptFile(join(capsuleDir, 'capsule.pbase'), archive, passphrase, metadata.encryption);
   const tar = resolveTool('tar');
   if (!tar) throw new Error('tar is required to inspect a capsule.');
-  await run(tar, ['-xzf', archive, '-C', extracted]);
+  await run(tar, ['-xzf', archive, '-C', extracted]); await rm(archive, { force: true });
   const manifest = JSON.parse(await readFile(join(extracted, 'manifest.json'), 'utf8'));
   return { metadata, manifest, extracted, temp };
 }

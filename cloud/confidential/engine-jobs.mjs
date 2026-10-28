@@ -22,12 +22,27 @@ export function estimateCapturePercent(previous, event) {
   }
   return Math.max(0, Math.min(99, Math.max(previous || 0, estimate ?? 0)));
 }
-async function directorySize(root) {
+export async function directorySize(root, { readdirImpl = readdir, statImpl = stat } = {}) {
   let size = 0;
-  for (const e of await readdir(root, { withFileTypes: true })) {
-    const path = join(root,e.name);
+  let entries;
+  try {
+    entries = await readdirImpl(root, { withFileTypes: true });
+  } catch (err) {
+    if (err?.code === 'ENOENT') return 0;
+    throw err;
+  }
+  for (const e of entries) {
+    const path = join(root, e.name);
     if (e.isSymbolicLink()) fail('unexpected_work_file');
-    size += e.isDirectory() ? await directorySize(path) : (await stat(path)).size;
+    if (e.isDirectory()) {
+      size += await directorySize(path, { readdirImpl, statImpl });
+    } else {
+      try {
+        size += (await statImpl(path)).size;
+      } catch (err) {
+        if (err?.code !== 'ENOENT') throw err;
+      }
+    }
   }
   return size;
 }
