@@ -6,6 +6,7 @@ import {computeDatabaseScopeSummary} from '../../cloud/runner/database-scope.mjs
 import {authHeaders,loadSession} from '../lib/session.js';
 import {ensureSessionForVersion,fetchStorageConnectors} from '../lib/cloud-api.js';
 import {emptyRecoveryState,restoreRecoveryState,applyDiscovery,recoveryScene,recoveryCache,RECOVERY_SCREEN_VERSION} from './graphical-recovery-state.mjs';
+import {validateVaultLocation} from './vault-location.mjs';
 import consoleCss from './console.css?inline';
 
 const oauthLink=slot=>`/oauth/supabase/start?slot=${slot}`;
@@ -33,6 +34,12 @@ const modalCss=`
   .hosted-vault-provider strong{font-size:12px;line-height:1.15}
   .hosted-vault-provider small{font-size:10px;color:#aab9cb;line-height:1.2}
   .hosted-vault-note{font-size:11px;color:#aab9cb;margin:9px 0 0}
+  .hosted-vault-location{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:12px;padding:12px;border:1px solid #49617b;border-radius:8px;background:#101b2b}
+  .hosted-vault-location h3,.hosted-vault-location p{grid-column:1/-1;margin:0;color:#e6edf3}
+  .hosted-vault-location label{display:grid;gap:3px;color:#e6edf3;font-size:11px}
+  .hosted-vault-location input,.hosted-vault-location select{box-sizing:border-box;width:100%;padding:7px;border:1px solid #52647d;border-radius:5px;background:#0b1421;color:#e6edf3}
+  .hosted-vault-location button{border:1px solid #2dd4bf;border-radius:5px;background:#0f766e;color:white;padding:8px 12px;cursor:pointer}
+  .hosted-vault-location .cancel{background:#243247;border-color:#52647d}
   @media(max-width:700px){.recovery-scope-header{align-items:flex-start;flex-wrap:wrap}.recovery-scope-header h2{font-size:16px}.hosted-vault-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 `;
 
@@ -42,14 +49,18 @@ const vaultProviders=[
   {id:'s3',name:'Amazon S3',icon:'<svg viewBox="0 0 40 40" aria-hidden="true"><path fill="#ff9900" d="M20 2 4 10v20l16 8 16-8V10L20 2Zm0 5 11 5.5L20 18 9 12.5 20 7Zm-12 9 10 5v11L8 27V16Zm24 11-10 5V21l10-5v11Z"/></svg>'},
   {id:'r2',name:'Cloudflare R2',icon:'<svg viewBox="0 0 40 40" aria-hidden="true" fill="#f38020"><path d="M9 28h22a7 7 0 0 0 .4-14 11.5 11.5 0 0 0-21.8 2.2A6 6 0 0 0 9 28Z"/><text x="20" y="25" text-anchor="middle" font-size="11" font-weight="bold" fill="#fff">R2</text></svg>'},
 ];
-function hostedVaultMarkup(workspace){
+const htmlEscape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function hostedVaultMarkup(workspace,editor){
   const off=workspace.mode==='temporary_runner';
   const cards=vaultProviders.map(provider=>{
     const connected=provider.id==='google-drive'?workspace.connections.googleDrive:workspace.connections[provider.id];
-    const state=connected?'Connected':provider.route?'Connect account':'Setup pending';
-    return `<button type="button" class="hosted-vault-provider" ${provider.route?`data-vault-connect="${provider.id}"`:'disabled title="Connection setup is not available yet"'} aria-label="${state}: ${provider.name}">${provider.icon}<span><strong>${provider.name}</strong><small>${state}</small></span></button>`;
+    const saved=workspace.vaultLocations?.[provider.id];
+    const state=connected?'Connected':provider.route?'Connect account':saved?'Location saved · access pending':'Configure location';
+    return `<button type="button" class="hosted-vault-provider" ${provider.route?`data-vault-connect="${provider.id}"`:`data-vault-settings="${provider.id}"`} aria-label="${state}: ${provider.name}">${provider.icon}<span><strong>${provider.name}</strong><small>${state}</small></span></button>`;
   }).join('');
-  return `<div class="hosted-vault-head"><strong>Backup destinations</strong><button type="button" class="hosted-vault-off" data-vault-off aria-pressed="${off}">Off · no capsule retained</button></div><div class="hosted-vault-grid">${cards}</div><p class="hosted-vault-note">Connect accounts independently. Delivery to multiple vaults is not available yet.</p>`;
+  const saved=editor?workspace.vaultLocations?.[editor]||{}:{};
+  const form=editor?`<form class="hosted-vault-location" action="/vault-location"><input type="hidden" name="provider" value="${editor}"><h3>${editor==='r2'?'Cloudflare R2':'Amazon S3'} capsule location</h3><p>Choose exactly where capsules should be stored. Saving this location does not connect the provider yet.</p>${editor==='r2'?`<label>Cloudflare account ID<input name="accountId" value="${htmlEscape(saved.accountId)}" required></label>`:`<label>AWS region<input name="region" value="${htmlEscape(saved.region||'us-east-1')}" required></label>`}<label>Bucket<input name="bucket" value="${htmlEscape(saved.bucket)}" required></label><label>Folder / prefix<input name="prefix" value="${htmlEscape(saved.prefix||'Portabase/capsules')}" required></label><label>Capsule naming<select name="naming"><option value="overwrite"${saved.naming==='overwrite'?' selected':''}>Same name each time (overwrite)</option><option value="date-stamped"${saved.naming!=='overwrite'?' selected':''}>Date-stamped capsule each run</option></select></label><div><button type="submit">Save location</button> <button type="button" class="cancel" data-vault-cancel>Cancel</button></div></form>`:'';
+  return `<div class="hosted-vault-head"><strong>Backup destinations</strong><button type="button" class="hosted-vault-off" data-vault-off aria-pressed="${off}">Off · no capsule retained</button></div><div class="hosted-vault-grid">${cards}</div>${form}<p class="hosted-vault-note">Connect accounts independently. Hosted capsule delivery and multiple vaults are not available yet.</p>`;
 }
 
 export function EnclaveDashboard({me,toast,fixtureApi}) {
@@ -59,6 +70,7 @@ export function EnclaveDashboard({me,toast,fixtureApi}) {
   const stateRef=useRef(workspace);stateRef.current=workspace;
   const [loaded,setLoaded]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const [pickerOpen,setPickerOpen]=useState(false),[draft,setDraft]=useState([]),[saveState,setSaveState]=useState('');
+  const [vaultEditor,setVaultEditor]=useState(null);
   const hostRef=useRef(null),shadowRef=useRef(null),sceneRef=useRef(null),dialogRef=useRef(null);
   const [mount,setMount]=useState(null),alive=useRef(true),refreshing=useRef(false);
 
@@ -141,7 +153,7 @@ export function EnclaveDashboard({me,toast,fixtureApi}) {
     for(const form of scene.querySelectorAll('form[action="/supabase-token"]'))form.closest('details')?.remove();
     scene.querySelector('form[action="/callback"]')?.closest('section')?.remove();
     const vault=scene.querySelector('.enclave-vault-conduit + .internal-module');
-    if(vault)vault.innerHTML=hostedVaultMarkup(workspace);
+    if(vault)vault.innerHTML=hostedVaultMarkup(workspace,vaultEditor);
     const capsule=scene.querySelector('.capsule-branch section');
     if(capsule){
       const heading=capsule.querySelector('h2');if(heading)heading.textContent='Capsule delivery';
@@ -158,7 +170,7 @@ export function EnclaveDashboard({me,toast,fixtureApi}) {
     const selected=scene.querySelector('.machine-selected');
     const summary=computeDatabaseScopeSummary(workspace.databases.filter(db=>workspace.selection.sources.includes(db.projectRef)||db.projectRef===workspace.selection.source));
     if(selected)selected.textContent=`${(summary.includedDatabaseMb+summary.includedBinaryMb).toFixed(2)} MB`;
-  },[workspace,mount,loaded]);
+  },[workspace,mount,loaded,vaultEditor]);
 
   function openPicker(){flushSync(()=>{setDraft(structuredClone(stateRef.current.databases));setPickerOpen(true);});dialogRef.current?.showModal();}
   async function savePicker(){
@@ -189,6 +201,8 @@ export function EnclaveDashboard({me,toast,fixtureApi}) {
     const click=event=>{
       const button=event.target.closest?.('[data-open-scope]');if(button){openPicker();return;}
       const off=event.target.closest?.('[data-vault-off]');if(off){setWorkspace(s=>({...s,mode:'temporary_runner'}));return;}
+      const settings=event.target.closest?.('[data-vault-settings]');if(settings){setVaultEditor(settings.dataset.vaultSettings);return;}
+      if(event.target.closest?.('[data-vault-cancel]')){setVaultEditor(null);return;}
       const vault=event.target.closest?.('[data-vault-connect]');if(vault){
         const provider=vaultProviders.find(item=>item.id===vault.dataset.vaultConnect);
         if(provider?.route)window.open(provider.route,'portabase_vault_'+provider.id,'popup,width=700,height=800');
@@ -206,6 +220,12 @@ export function EnclaveDashboard({me,toast,fixtureApi}) {
       const form=event.target;if(!sceneRef.current.scene.contains(form))return;event.preventDefault();
       const action=form.getAttribute('action'),data=new FormData(form);
       if(action==='/select')checkProject(String(data.get('slot')),String(data.get('ref')||''),data.get('allowOverwrite')==='yes');
+      else if(action==='/vault-location'){
+        const provider=String(data.get('provider')||'');
+        try{const location=validateVaultLocation(provider,Object.fromEntries(data));
+          setWorkspace(s=>({...s,vaultLocations:{...s.vaultLocations,[provider]:location}}));setVaultEditor(null);setError('');
+        }catch(e){setError(e.message);}
+      }
       else if(action==='/reauthorize')window.open(oauthLink(data.get('slot')),'portabase_oauth_'+data.get('slot'),'popup,width=700,height=800');
       else if(action==='/vault-provider')setWorkspace(s=>({...s,activeVault:String(data.get('provider'))}));
       else if(action==='/mode'){if(data.get('mode'))setWorkspace(s=>({...s,mode:String(data.get('mode'))}));refresh();}

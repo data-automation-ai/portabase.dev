@@ -5,7 +5,7 @@ export function emptyRecoveryState() {
   return {version:RECOVERY_SCREEN_VERSION, mode:'dropbox', activeVault:'dropbox', allowOverwrite:false,
     selection:{source:'',target:'',sources:[],targetMap:{}}, projects:{source:[],target:[]},
     databases:[], inspections:{}, connections:{source:false,target:false,dropbox:false,googleDrive:false,s3:false},
-    checkedAt:{}, accountConfirmation:null};
+    checkedAt:{}, accountConfirmation:null,vaultLocations:{}};
 }
 export function restoreRecoveryState(saved) {
   const base=emptyRecoveryState();
@@ -14,7 +14,7 @@ export function restoreRecoveryState(saved) {
     selection:{...base.selection,...saved.selection,sources:Array.isArray(saved.selection?.sources)?saved.selection.sources:[],targetMap:saved.selection?.targetMap||{}},
     projects:{source:Array.isArray(saved.projects?.source)?saved.projects.source:[],target:Array.isArray(saved.projects?.target)?saved.projects.target:[]},
     connections:{...base.connections,...saved.connections},inspections:saved.inspections||{},checkedAt:saved.checkedAt||{},
-    databases:Array.isArray(saved.databases)?saved.databases:[]};
+    databases:Array.isArray(saved.databases)?saved.databases:[],vaultLocations:saved.vaultLocations||{}};
 }
 
 export function mergeDiscoveredDatabases(current, incoming) {
@@ -71,7 +71,8 @@ export function recoveryCache(owner, storage=globalThis.localStorage, indexed=gl
   const key=`portabase.graphical-recovery.v2:${owner}`;
   const select=value=>({version:RECOVERY_SCREEN_VERSION,mode:value.mode,activeVault:value.activeVault,
     selection:value.selection,allowOverwrite:value.allowOverwrite,accountConfirmation:value.accountConfirmation,
-    projects:value.projects,inspections:value.inspections,connections:value.connections,checkedAt:value.checkedAt});
+    projects:value.projects,inspections:value.inspections,connections:value.connections,checkedAt:value.checkedAt,
+    vaultLocations:value.vaultLocations});
   let database;
   async function open(){
     if(!indexed)return null;
