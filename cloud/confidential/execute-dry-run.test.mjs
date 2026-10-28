@@ -84,8 +84,29 @@ test('Mode 3 (capsule_only) captures to dropbox, verifies upload, and skips rest
   };
   await executeDryRun({command,status,persist:async()=>{},sourceRef,targetRef:undefined,mode:'capsule_only'});
   assert.equal(status.state,'capsule_delivered');
-  assert.equal(calls.find(c=>c.operation==='backup.start').input.vault,'dropbox');
+  assert.equal(calls.find(c=>c.operation==='backup.start').input.vault,'capsule_only');
   assert.equal(calls.some(c=>c.operation==='restore.start'),false);
+});
+
+test('S3 drill separates backup mode from provider for single, capsule-only, and batch runs',async()=>{
+  for(const variant of ['single','capsule','batch']){
+    const calls=[],status={};
+    const mode=variant==='capsule'?'capsule_only':'dropbox';
+    const command=async(operation,input)=>{
+      calls.push({operation,input});
+      if(operation==='preflight')return {ready:true,source:{ref:sourceRef},target:{ref:targetRef,blank:true}};
+      if(operation==='backup.start'){
+        assert.equal(input.vault,mode);assert.equal(input.vaultProvider,'s3');return {id:'capture'};
+      }
+      if(operation==='restore.start')return {id:'restore'};
+      if(operation==='job.status')return {state:'complete',result:{captureComplete:true,vaultVerified:true,destinationKind:'s3',restoreVerified:true}};
+      return {};
+    };
+    await executeDryRun({command,status,persist:async()=>{},sourceRef,targetRef,mode,vaultProvider:'s3',
+      ...(variant==='batch'?{sourceRefs:[sourceRef,'other-fixture-source'],targetMap:{[sourceRef]:targetRef,'other-fixture-source':targetRef}}:{})});
+    assert.equal(status.state,variant==='capsule'?'capsule_delivered':'recovery_data_path_verified');
+    assert.equal(calls.filter(c=>c.operation==='backup.start').length,variant==='batch'?2:1);
+  }
 });
 
 test('Mode 4 (restore_only) skips capture and restores specified capsule into destination',async()=>{

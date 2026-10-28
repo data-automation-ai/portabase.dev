@@ -85,9 +85,23 @@ export function confidentialApplication({ oauthConfig, jobs = engineJobs(), conn
       if (operation === 'session.open') {
         recoveryKeyBytes(input.recoveryKey).fill(0);
         if (customer && customer.recoveryKey !== input.recoveryKey) fail('session_key_mismatch');
+        const checkExpectedSelection = profile => {
+          if(input.expectedSelection===undefined)return;
+          const expected=input.expectedSelection;
+          if(!expected||typeof expected!=='object'||Array.isArray(expected)||Object.keys(expected).length!==2||!expected.source||!expected.target)fail('invalid_expected_selection');
+          for(const slot of ['source','target']){
+            projectRef(expected[slot]);
+            if(profile.selection?.[slot]!==expected[slot])fail('session_selection_mismatch');
+          }
+          if(expected.source===expected.target)fail('invalid_expected_selection');
+        };
+        if(customer)checkExpectedSelection(customer.profile);
         if (!customer) {
           const profile = input.sealedProfile ? await openProfile(input.sealedProfile,input.recoveryKey,owner)
             : {version:1,owner,connections:{},selection:{},keyAcknowledged:false};
+          // Operator drills can bind saved profiles before automatic vault/catalog
+          // reads. Normal customer sessions without this option are unchanged.
+          checkExpectedSelection(profile);
           customer = { profile, recoveryKey: input.recoveryKey, touched: now() };
           customers.set(owner,customer);
         }

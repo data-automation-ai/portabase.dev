@@ -33,8 +33,8 @@ export async function executeDryRun({command,status,persist,sourceRef,targetRef,
      await command('project.select', { slot: 'target', ref: curTarget });
     }
     status.state = 'capturing'; await persist();
-    const targetVault = (vaultProvider === 's3' || status.activeVault === 's3') ? 's3' : (effectiveMode === 'temporary_runner' ? 'temporary_runner' : 'dropbox');
-    const backup = await command('backup.start', { requestId: randomUUID(), vault: targetVault, vaultProvider: targetVault, scope, allowOverwrite: Boolean(allowOverwrite) });
+    const targetVault = effectiveMode === 'temporary_runner' ? 'temporary_runner' : (vaultProvider || status.activeVault || 'dropbox');
+    const backup = await command('backup.start', { requestId: randomUUID(), vault: effectiveMode, vaultProvider: targetVault, scope, allowOverwrite: Boolean(allowOverwrite) });
     const captured = await wait(backup, 'backup');
     if (!captured.result?.captureComplete) throw new Error('capture_not_complete');
     status.batchProgress.completedCapsules.push({ sourceRef: curSource, capsuleId: captured.result?.capsuleId, vaultVerified: captured.result?.vaultVerified });
@@ -54,8 +54,8 @@ export async function executeDryRun({command,status,persist,sourceRef,targetRef,
   if (effectiveMode === 'capsule_only') {
    if (check.source?.ref !== sourceRef || (!check.ready && !allowOverwrite)) throw new Error('unsafe_test_selection');
    status.state = 'capturing';
-   const targetVault = (vaultProvider === 's3' || status.activeVault === 's3') ? 's3' : 'dropbox';
-   const backup = await command('backup.start', { requestId: randomUUID(), vault: targetVault, vaultProvider: targetVault, scope, allowOverwrite: Boolean(allowOverwrite) });
+   const targetVault = vaultProvider || status.activeVault || 'dropbox';
+   const backup = await command('backup.start', { requestId: randomUUID(), vault: 'capsule_only', vaultProvider: targetVault, scope, allowOverwrite: Boolean(allowOverwrite) });
    status.backupExecuted = true;
    const captured = await wait(backup, 'backup');
    if (!captured.result?.captureComplete) throw new Error('capture_not_complete');
@@ -87,8 +87,8 @@ export async function executeDryRun({command,status,persist,sourceRef,targetRef,
   }
   if(check.source?.ref!==sourceRef||check.target?.ref!==targetRef||(!check.target?.blank&&!allowOverwrite)||(!check.ready&&!allowOverwrite))throw new Error('unsafe_test_selection');
   status.state='capturing';
-  const targetVault = (effectiveMode === 'dropbox' && (vaultProvider === 's3' || status.activeVault === 's3')) ? 's3' : effectiveMode;
-  const backup=await command('backup.start',{requestId:randomUUID(),vault:targetVault,vaultProvider:targetVault,scope,allowOverwrite:Boolean(allowOverwrite)});
+  const targetVault = effectiveMode === 'temporary_runner' ? 'temporary_runner' : (vaultProvider || status.activeVault || 'dropbox');
+  const backup=await command('backup.start',{requestId:randomUUID(),vault:effectiveMode,vaultProvider:targetVault,scope,allowOverwrite:Boolean(allowOverwrite)});
   status.backupExecuted=true;
   const captured=await wait(backup,'backup');
   if(!captured.result?.captureComplete)throw new Error('capture_not_complete');
