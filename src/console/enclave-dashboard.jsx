@@ -39,7 +39,7 @@ const modalCss=`
 const vaultProviders=[
   {id:'dropbox',name:'Dropbox',route:'/oauth/dropbox/start',icon:'<svg viewBox="0 0 43 40" aria-hidden="true" fill="#0061ff"><path d="M12.5 0 0 8.2l8.8 7.1 12.5-7.7L12.5 0Zm18 0-8.8 7.6 12.5 7.7L43 8.2 30.5 0ZM0 22.4l12.5 8.2 8.8-7.4-12.5-7.7L0 22.4Zm42.6 0-12.5-7.7-12.5 7.7 8.8 7.4 16.2-7.4ZM21.3 25.1l-8.8 7.3-3.7-2.4v3.5l12.5 7.5 12.5-7.5v-3.5l-3.7 2.4-8.8-7.3Z"/></svg>'},
   {id:'google-drive',name:'Google Drive',route:'/oauth/google-drive/start',icon:'<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285f4" d="M8.2 3.8 2 14.5l3.8 6.5L12 10.3Z"/><path fill="#0f9d58" d="m15.8 3.8-6.2 10.7 3.8 6.5H21Z"/><path fill="#ffbb00" d="M8.2 3.8h7.6L22 14.5H9.8Z"/></svg>'},
-  {id:'onedrive',name:'OneDrive',icon:'<svg viewBox="0 0 40 32" aria-hidden="true" fill="#1683d8"><path d="M15 5a11 11 0 0 1 10.3 7.3A8.5 8.5 0 0 1 31 11a9 9 0 0 1 8.8 9.2A8.5 8.5 0 0 1 31.2 29H9A9 9 0 0 1 6 11.5 11 11 0 0 1 15 5Z"/></svg>'},
+  {id:'box',name:'Box',icon:'<svg viewBox="0 0 40 32" aria-hidden="true"><rect x="2" y="5" width="36" height="22" rx="5" fill="#0061d5"/><text x="20" y="22" text-anchor="middle" font-size="16" font-weight="bold" fill="#fff">box</text></svg>'},
   {id:'s3',name:'Amazon S3',icon:'<svg viewBox="0 0 40 40" aria-hidden="true"><path fill="#ff9900" d="M20 2 4 10v20l16 8 16-8V10L20 2Zm0 5 11 5.5L20 18 9 12.5 20 7Zm-12 9 10 5v11L8 27V16Zm24 11-10 5V21l10-5v11Z"/></svg>'},
   {id:'r2',name:'Cloudflare R2',icon:'<svg viewBox="0 0 40 40" aria-hidden="true" fill="#f38020"><path d="M9 28h22a7 7 0 0 0 .4-14 11.5 11.5 0 0 0-21.8 2.2A6 6 0 0 0 9 28Z"/><text x="20" y="25" text-anchor="middle" font-size="11" font-weight="bold" fill="#fff">R2</text></svg>'},
 ];
