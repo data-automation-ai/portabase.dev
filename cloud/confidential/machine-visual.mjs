@@ -69,7 +69,7 @@ body{background:#ffffff!important;color:#0f172a!important;font-family:ui-sans-se
 .connection{background:#090d14!important;color:var(--text-main)!important;border:1px solid var(--border-subtle)!important;border-radius:8px;padding:7px 10px!important;display:flex;flex-direction:column;gap:3px;box-shadow:0 6px 18px rgba(15,23,42,0.14)}
 .connection h2{display:flex;align-items:center;gap:6px;font-size:13px;margin:0;color:var(--text-main)}
 .provider-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 5px;border-radius:4px;background:#1e293b;font-size:10px;font-weight:700;color:var(--text-main)}
-.provider-badge.supabase-badge{border:1px solid #3ecf8e33}
+.provider-badge.supabase-badge{border:1px solid #3ecf8e33;gap:8px;padding:4px 10px;font-size:20px;line-height:1}
 .provider-badge.dropbox-badge{border:1px solid #0061ff33}
 .io-meter{background:#0b121e;border:1px solid #1e334d;border-radius:5px;padding:3px 7px;margin:0}
 .io-meter.active{border-color:#00dc8288;box-shadow:0 0 10px rgba(0,220,130,0.18)}
