@@ -111,6 +111,8 @@ export function EnclaveDashboard({me,toast,fixtureApi}) {
     if(accountSection){const details=document.createElement('details');details.className='account-confirmation';const summary=document.createElement('summary');summary.textContent='Confirm separate Supabase accounts before running recovery';details.appendChild(summary);accountSection.replaceWith(details);details.appendChild(accountSection);}
     for(const form of scene.querySelectorAll('form[action="/supabase-token"]'))form.closest('details')?.remove();
     scene.querySelector('form[action="/callback"]')?.closest('section')?.remove();
+    scene.querySelector('.recovery-mapping')?.remove();
+    scene.querySelector('form[action="/mode"] input[type="hidden"][name="mode"]')?.form.closest('[role="status"]')?.remove();
     const cert=scene.querySelector('a[href="/attestation-certificate"]');
     if(cert){cert.removeAttribute('href');cert.removeAttribute('download');cert.textContent='Attestation pending';cert.setAttribute('aria-disabled','true');}
     scene.querySelectorAll('form[action="/select-batch"] select').forEach(select=>{
@@ -120,10 +122,6 @@ export function EnclaveDashboard({me,toast,fixtureApi}) {
     const selected=scene.querySelector('.machine-selected');
     const summary=computeDatabaseScopeSummary(workspace.databases.filter(db=>workspace.selection.sources.includes(db.projectRef)||db.projectRef===workspace.selection.source));
     if(selected)selected.textContent=`${(summary.includedDatabaseMb+summary.includedBinaryMb).toFixed(2)} MB`;
-    const recheck=scene.querySelector('form[action="/mode"] input[type="hidden"][name="mode"]')?.form;
-    if(recheck&&workspace.inspections.source&&workspace.inspections.target){
-      const p=recheck.previousElementSibling;if(p)p.textContent='Source and destination inspections are loaded. Object selection and destination capacity are shown above.';
-    }
   },[workspace,mount,loaded]);
 
   function openPicker(){flushSync(()=>{setDraft(structuredClone(stateRef.current.databases));setPickerOpen(true);});dialogRef.current?.showModal();}

@@ -35,7 +35,7 @@ if(action==='prepare'){
   if(deploy.edge_functions_present||entries.some(e=>e.path.includes('edge-functions')))throw Error('edge_review_required');
   const files=Object.fromEntries(entries.map(e=>[e.path,e.sha]));
   const prior=JSON.parse(await readFile(evidence,'utf8'));
-  const expectedRedirect=prior.publishedAt&&prior.draft===base&&prior.sourceCommit==='9b9768ca360913448798e8c3c9cd5b8932bb905c'
+  const expectedRedirect=prior.publishedAt&&prior.draft===base&&prior.files['/index.html']===files['/index.html']
     ? prior.files['/_redirects'] : 'ce7caca07b1fa78422967d089efa83f965e24dcc';
   if(files['/_redirects']!==expectedRedirect)throw Error('baseline_routes_changed_review_required');
   const uploads=[];
