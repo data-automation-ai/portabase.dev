@@ -6,8 +6,8 @@ import { OneTwoThreeDone } from './one-two-three-done.jsx';
 const DEFAULT_ATTESTATION = {
   hardware: 'GCP_INTEL_TDX',
   projectNumber: '495102144848',
-  imageDigest: 'sha256:14a54039672231b84464e70ae1623ffb07b4ef481deeebda504958f5ca45eb85',
-  keyFingerprint: 'i4dqTwVBoOGUdpRUO39HEElwNSj4mD1epmnazvWN_fo',
+  imageDigest: 'sha256:c2e912eb032c19446429e8992a05b37d35e3ea56034a56e31eb8c85b31c8ef31',
+  keyFingerprint: 'Xbv9EbZHgfjG89m3js65L7c2unUsp1iCagRl7iaylwI',
   debugDisabled: true,
   verifiedAt: new Date().toISOString(),
 };
@@ -34,7 +34,8 @@ export function EnclaveDashboard(props) {
 
   const [enclaveState, setEnclaveState] = useState(() => ({
     state: 'preflight_passed',
-    mode: 'temporary_runner',
+    operatingMode: 'development',
+    mode: 'dropbox',
     activeVault: 'dropbox',
     allowOverwrite: true,
     executing: false,
@@ -44,8 +45,12 @@ export function EnclaveDashboard(props) {
       target: 'wunfzvzguqlnxhtxipen',
     },
     accounts: {
-      source: { email: 'source@supabase.account', verified: true },
-      target: { email: 'destination@supabase.account', verified: true },
+      source: { verified: false },
+      target: { verified: false },
+    },
+    accountConfirmation: {
+      confirmed: true,
+      method: 'manual',
     },
     attestation: DEFAULT_ATTESTATION,
     preflight: {
@@ -53,31 +58,50 @@ export function EnclaveDashboard(props) {
       source: {
         ref: discoveredProjects[0]?.ref || 'ekklokrukxmqlahtonnc',
         name: discoveredProjects[0]?.name || 'DataAutomation',
-        databaseBytes: 12176385024,
-        storageBytes: 0,
+        databaseBytes: 1683578880,
+        storageBytes: 10499815221,
+        measuredBytes: 12183394101,
       },
       target: {
         ref: 'wunfzvzguqlnxhtxipen',
         name: 'portabase',
+        databaseBytes: 1608395923,
+        storageBytes: 10499815221,
+        measuredBytes: 12108211144,
         blank: false,
+        diskCapacity: {
+          sizeGb: 8,
+          maxAllowedBytes: 8 * 1024 ** 3,
+          diskType: 'gp3',
+          autoGrowth: {
+            enabled: true,
+            isDefaultPolicy: true,
+            growthPercent: 50,
+            minIncrementGb: 4,
+            maxSizeGb: 200,
+            maxSizeBytes: 200 * 1024 ** 3,
+          },
+        },
       },
     },
     inventory: {
       ref: discoveredProjects[0]?.ref || 'ekklokrukxmqlahtonnc',
       tables: [
-        { name: 'public.accounts', rows: 1420, bytes: 4194304, selectable: true },
-        { name: 'public.AuditLog', rows: 98410, bytes: 12172190720, selectable: true },
+        { name: 'public.accounts', schema: 'public', table: 'accounts', rows: 1420, bytes: 4194304, selectable: true },
+        { name: 'public.AuditLog', schema: 'public', table: 'AuditLog', rows: 98410, bytes: 1679384576, selectable: true },
       ],
-      buckets: [{ id: 'avatars', objects: 24, bytes: 1048576 }],
+      buckets: [{ id: 'prospect-screenshots', objects: 17391, bytes: 10499815221 }],
+      functions: 78,
+      authUsers: 151,
     },
     scope: {
       tables: ['public.accounts', 'public.AuditLog'],
       excludedTables: [],
-      buckets: ['avatars'],
+      buckets: ['prospect-screenshots'],
       auth: true,
       functions: true,
     },
-    capsules: ['ekklokrukxmqlahtonnc-2026-10-27T08-18-22.962Z'],
+    capsules: ['ekklokrukxmqlahtonnc-2026-10-28T06-27-42.819Z', 'ekklokrukxmqlahtonnc-2026-10-27T08-18-22.962Z'],
     targetProjects,
   }));
 

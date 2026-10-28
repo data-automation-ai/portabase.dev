@@ -36,7 +36,7 @@ export function sourceReadMeter(status = {}) {
   if (status.mode === 'restore_only') {
     return `<div class="io-meter" data-meter="source-read"><div class="io-meter-head"><span>Source Read · <small class="io-meter-sub" style="display:inline;margin:0">Bypassed (Mode 4)</small></span><strong>0%</strong></div><div class="io-meter-track"><div class="io-meter-fill" style="width:0%"></div></div></div>`;
   }
-  const done = backup?.state === 'complete' || Boolean(status.backupExecuted) || ['package', 'encrypt', 'transfer', 'done'].includes(backup?.phase);
+  const done = backup?.state === 'complete' || (Boolean(status.backupExecuted) && backup?.state !== 'running' && backup?.state !== 'failed') || ['package', 'encrypt', 'transfer', 'done'].includes(backup?.phase);
   const raw = Number(backup?.estimatedPercent);
   const phasePct = { preflight: 3, 'database-manifest': 10, database: 35, storage: 72, functions: 95 }[backup?.phase];
   const percent = done ? 100 : (Number.isFinite(raw) && raw > 0 ? Math.min(99, Math.max(1, Math.round((raw / 85) * 100))) : (phasePct ?? (status.state === 'capturing' ? 2 : 0)));
@@ -50,7 +50,7 @@ export function destinationWriteMeter(status = {}) {
   if (status.mode === 'capsule_only') {
     return `<div class="io-meter" data-meter="destination-write"><div class="io-meter-head"><span>Destination Written · <small class="io-meter-sub" style="display:inline;margin:0">Bypassed (Mode 3)</small></span><strong>0%</strong></div><div class="io-meter-track"><div class="io-meter-fill io-meter-fill-target" style="width:0%"></div></div></div>`;
   }
-  const done = restore?.state === 'complete' || Boolean(status.restoreExecuted) || status.state === 'complete';
+  const done = restore?.state === 'complete' || (Boolean(status.restoreExecuted) && restore?.state !== 'running' && restore?.state !== 'failed') || status.state === 'complete';
   const raw = Number(restore?.estimatedPercent);
   const phasePct = { transfer: 12, preflight: 22, 'database-manifest': 35, database: 58, schema: 45, data: 65, auth: 75, storage: 86, functions: 94, verify: 98, done: 99, complete: 100 }[restore?.phase];
   const percent = done ? 100 : (Number.isFinite(raw) && raw > 0 ? Math.min(99, Math.round(raw)) : (phasePct ?? (restore?.state === 'running' || status.state === 'restoring' ? 25 : 0)));
@@ -108,11 +108,20 @@ body{background:#ffffff!important;color:#0f172a!important;font-family:ui-sans-se
 .enclave-core-title{font-size:10.5px;font-weight:800;color:var(--accent-green);letter-spacing:0.6px;margin-bottom:4px;display:flex;align-items:center;gap:6px}
 .enclave-vault-conduit{position:relative;z-index:1;display:flex;justify-content:center;height:16px;margin:1px 0}
 .data-pipe{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:36px}
-.data-pipe.down{min-height:28px;height:28px;margin:0 auto}
+.data-pipe.down{min-height:56px;height:56px;width:32px;margin:0 auto}
+.machine-column{min-width:0}
+.capsule-branch>section{margin:0}
+.data-pipe.down .pipe-label{width:max-content;max-width:min(480px,80vw);white-space:normal;text-align:center;font-size:8px}
+.data-pipe:not(.active) .pipe-stream,.data-pipe:not(.active) .packet-orb{animation:none}
 .pipe-label{position:absolute;font-size:9px;font-weight:700;letter-spacing:0.5px;color:#94a3b8;text-transform:uppercase;background:var(--bg-deep);padding:1px 5px;border-radius:3px;z-index:3;white-space:nowrap;border:1px solid #1e293b}
 .pipe-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
 .data-pipe.right .pipe-svg-h{inset:50% 0 auto;width:100%;height:30px;box-sizing:border-box;transform:translateY(-50%);border:2px solid #536b80;border-radius:6px;background:linear-gradient(180deg,#172737 0%,#658096 18%,#30485c 42%,#142536 65%,#405b70 85%,#172737 100%);box-shadow:inset 0 1px 2px #b6d6e655,0 2px 5px #0008}
 .data-pipe.right .pipe-label{top:calc(50% - 36px)}
+.transfer-chevron,.transfer-chevron-idle{fill:none;stroke:var(--accent-green);stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.transfer-chevron{animation:transferChevronRight 1.4s linear infinite;filter:drop-shadow(0 0 2px var(--accent-green))}
+.transfer-chevron-idle{opacity:.4}
+@keyframes transferChevronRight{0%{transform:translateX(7px);opacity:0}12%,88%{opacity:1}100%{transform:translateX(74px);opacity:0}}
+@media(prefers-reduced-motion:reduce){.transfer-chevron{animation:none;transform:translateX(40px)}}
 .pipe-track-wide{stroke:#1e293b;stroke-width:8;stroke-linecap:round}
 .pipe-channel{stroke:#090d14;stroke-width:4}
 .pipe-stream{stroke:var(--accent-green);stroke-width:2.5;stroke-dasharray:6 6;animation:pipeStreamH 1.1s linear infinite}

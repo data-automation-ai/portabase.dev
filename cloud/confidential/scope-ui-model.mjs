@@ -3,7 +3,7 @@ import {createDefaultDatabaseScope} from '../runner/database-scope.mjs';
 export function inventoryScope(status) {
   const inventory=status.inventory;
   if(!inventory || inventory.ref!==status.selection?.source)throw new Error('Source inventory is not loaded.');
-  const db=createDefaultDatabaseScope(inventory.ref,'Selected source project')[0];
+  const db=createDefaultDatabaseScope(inventory.ref,status.inspections?.source?.name||status.preflight?.source?.name||'Selected source project')[0];
   const included=new Set(status.scope?.tables||inventory.tables.map(row=>row.name));
   const excluded=new Set(status.scope?.excludedTables||[]);
   const includedBuckets=new Set(status.scope?.buckets||(inventory.buckets||[]).map(row=>row.id));
@@ -26,12 +26,13 @@ export function scopeForm(status,databases,buckets,nonce) {
   const inventory=status.inventory,db=databases[0];
   if(databases.length!==1 || db?.projectRef!==inventory.ref)
     throw new Error('Use the Source connection to select a project. This runner requires its database structure.');
+  if(db.databaseName!=='postgres')throw new Error('This Supabase runner currently supports only the postgres database.');
   if(db.tables.length!==inventory.tables.length || new Set(db.tables.map(row=>row.name)).size!==inventory.tables.length
     || db.tables.some(row=>!inventory.tables.some(item=>item.name===row.name)))
     throw new Error('Only objects returned by the connected source can be applied.');
   if(db.tables.some(row=>!['structure_and_data','structure_only','skip','exclude'].includes(row.mode)))
     throw new Error('This runner supports table data selection, structure-only, and excluding tables.');
-  const form=new URLSearchParams({nonce});
+  const form=new URLSearchParams({nonce,databaseName:db.databaseName});
   const enabled=db.enabled!==false;
   const dataNames=new Set(enabled?db.tables.filter(row=>row.mode==='structure_and_data').map(row=>row.name):[]);
   const skipNames=new Set(enabled?db.tables.filter(row=>row.mode==='skip'||row.mode==='exclude').map(row=>row.name):inventory.tables.map(row=>row.name));
