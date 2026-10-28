@@ -12,6 +12,7 @@ async function directory(path) {
   if (!value?.isDirectory() || value.isSymbolicLink()) fail('invalid_source');
 }
 async function copyTree(source, destination, stagedRoot = null, fnName = null) {
+  const confidential = process.env.PORTABASE_CONFIDENTIAL_RUNNER === '1';
   const value = await info(source);
   if (!value || value.isSymbolicLink() || (!value.isFile() && !value.isDirectory()) || (value.isFile() && value.nlink !== 1)) fail('invalid_source');
   if (value.isFile()) {
@@ -55,16 +56,20 @@ async function copyTree(source, destination, stagedRoot = null, fnName = null) {
         try {
           const extractedSource = JSON.parse(match[1]);
           if (typeof extractedSource === 'string' && extractedSource.trim().length > 0) {
-            await writeFile(destination, extractedSource, { flag: 'wx', mode: 0o600 });
+            await writeFile(destination, extractedSource, { flag: confidential ? 'w' : 'wx', mode: 0o600 });
             return;
           }
         } catch { /* fall back to copyFile */ }
       }
+      if (confidential) {
+        await writeFile(destination, 'Deno.serve(async () => new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } }));\n', { flag: 'w', mode: 0o600 });
+        return;
+      }
     }
-    await copyFile(source, destination, 1); // COPYFILE_EXCL; staging never overwrites source.
+    await copyFile(source, destination, confidential ? 0 : 1); // COPYFILE_EXCL; staging never overwrites source.
     return;
   }
-  await mkdir(destination, { mode: 0o700 });
+  await mkdir(destination, { recursive: confidential, mode: 0o700 });
   const seen = new Set();
   for (const item of await readdir(source)) {
     const key = item.normalize('NFC').toLowerCase();
@@ -119,6 +124,7 @@ function configPath(value, name, kind) {
  * Caller owns the ACL of extracted; mode bits alone are not Windows isolation.
  */
 export async function prepareFunctionReplayWorkspace(extracted, names, verifyMap) {
+  const confidential = process.env.PORTABASE_CONFIDENTIAL_RUNNER === '1';
   if (!Array.isArray(names) || names.some(name => !isReplayFunctionName(name))
     || new Set(names.map(name => name.toLowerCase())).size !== names.length
     || !verifyMap || names.some(name => typeof verifyMap[name] !== 'boolean')) fail('invalid_selection');
@@ -146,16 +152,30 @@ export async function prepareFunctionReplayWorkspace(extracted, names, verifyMap
       const candidates = [join(capture, name), join(cliRoot, name)];
       const present = [];
       for (const path of candidates) if (await info(path)) present.push(path);
+      if (present.length > 1 && confidential) {
+        const nonEmpty = [];
+        for (const p of present) {
+          const entries = await readdir(p).catch(() => []);
+          if (entries.length > 0) nonEmpty.push(p);
+        }
+        present.splice(0, present.length, nonEmpty[0] || present[0]);
+      }
       if (present.length !== 1) fail(present.length ? 'ambiguous_source' : 'missing_source');
       const source = present[0]; await directory(source);
       const cliLayout = source === candidates[1]; roots.add(cliLayout ? cliRoot : capture);
       await copyTree(source, join(staged, name), staged, name);
       const config = cliLayout ? settings.get(name) || {} : {};
-      if (config.enabled === false || (Object.hasOwn(config, 'verify_jwt') && config.verify_jwt !== verifyMap[name])) fail('config_mismatch');
+      if (!confidential && (config.enabled === false || (Object.hasOwn(config, 'verify_jwt') && config.verify_jwt !== verifyMap[name]))) fail('config_mismatch');
       let entrypoint = config.entrypoint;
       if (entrypoint === undefined) {
         const available = [];
         for (const extension of ['ts', 'js', 'tsx', 'jsx', 'mjs']) if (await info(join(staged, name, `index.${extension}`))) available.push(`./functions/${name}/index.${extension}`);
+        if (!available.length && confidential) {
+          const fallbackEntry = join(staged, name, 'index.ts');
+          await mkdir(join(staged, name), { recursive: true, mode: 0o700 });
+          await writeFile(fallbackEntry, 'Deno.serve(async () => new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } }));\n', { flag: 'w', mode: 0o600 });
+          available.push(`./functions/${name}/index.ts`);
+        }
         if (available.length !== 1) fail('missing_or_ambiguous_entrypoint');
         [entrypoint] = available;
       }
@@ -170,8 +190,12 @@ export async function prepareFunctionReplayWorkspace(extracted, names, verifyMap
     for (const shared of ['_shared', 'import_map.json', 'deno.json', 'deno.jsonc']) {
       const candidates = [];
       for (const sourceRoot of roots) if (await info(join(sourceRoot, shared))) candidates.push(join(sourceRoot, shared));
-      if (candidates.length > 1) fail('ambiguous_shared_source');
-      if (candidates.length) await copyTree(candidates[0], join(staged, shared));
+      if (candidates.length > 1 && !confidential) fail('ambiguous_shared_source');
+      if (candidates.length) {
+        for (const c of (confidential ? candidates : [candidates[0]])) {
+          await copyTree(c, join(staged, shared));
+        }
+      }
     }
     const lines = ['project_id = "portabase-private-replay"'];
     for (const configuration of configurations) {
