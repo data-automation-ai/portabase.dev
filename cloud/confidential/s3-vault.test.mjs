@@ -71,9 +71,12 @@ test('uploadCapsuleToS3 uploads files with SHA-256 payload verification', async 
     await fs.promises.writeFile(path.join(tmpDir, 'capsule.pbase'), 'encrypted-payload-data');
 
     const uploaded = [];
+    const objects = new Map();
     let progressReported = null;
     const fetchImpl = async (url, options) => {
+      if (options.method === 'GET') return { ok: true, arrayBuffer: async () => objects.get(url) };
       uploaded.push({ url, headers: options.headers, body: options.body });
+      objects.set(url, options.body);
       return { ok: true, text: async () => '' };
     };
 
@@ -96,6 +99,21 @@ test('uploadCapsuleToS3 uploads files with SHA-256 payload verification', async 
       const expectedSha = crypto.createHash('sha256').update(item.body).digest('hex');
       assert.equal(item.headers['x-amz-content-sha256'], expectedSha);
     }
+  } finally {
+    await fs.promises.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('uploadCapsuleToS3 rejects a corrupted remote readback', async () => {
+  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 's3-readback-test-'));
+  try {
+    await fs.promises.writeFile(path.join(tmpDir, 'capsule.pbase'), 'encrypted-payload-data');
+    await assert.rejects(uploadCapsuleToS3(tmpDir, {
+      bucket: 'my-capsule-bucket', accessKeyId: 'AKIA123', secretAccessKey: 'sec123',
+      fetchImpl: async (_url, options) => options.method === 'GET'
+        ? { ok: true, arrayBuffer: async () => Buffer.from('corrupted') }
+        : { ok: true, text: async () => '' },
+    }), /readback checksum mismatch/);
   } finally {
     await fs.promises.rm(tmpDir, { recursive: true, force: true });
   }

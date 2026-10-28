@@ -115,6 +115,12 @@ export async function uploadCapsuleToS3(capsuleDir, opts = {}) {
     headers['Content-Type'] = 'application/octet-stream';
     const res = await fetchImpl(url, { method: 'PUT', headers, body: buf });
     if (!res.ok) throw new Error(`S3 upload failed for ${name} (${res.status}): ${await res.text()}`);
+    const readHeaders = signS3Request({ method: 'GET', url, ...await resolveS3Credentials(opts) });
+    const readback = await fetchImpl(url, { method: 'GET', headers: readHeaders });
+    if (!readback.ok) throw new Error(`S3 readback failed for ${name} (${readback.status})`);
+    const remote = Buffer.from(await readback.arrayBuffer());
+    if (remote.length !== buf.length || crypto.createHash('sha256').update(remote).digest('hex') !== hash)
+      throw new Error(`S3 readback checksum mismatch for ${name}`);
     bytesReceived += buf.length;
     opts.onProgress?.({ bytesReceived, totalBytes, verifiedBytes: bytesReceived });
     filesUploaded.push({ name, key: s3Key, size: buf.length, sha256: hash, verified: true });
