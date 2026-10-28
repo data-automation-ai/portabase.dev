@@ -113,7 +113,7 @@ export async function testS3Connection(opts = {}) {
   if (opts.simulate === true) return { ok: true, bucket: opts.bucket, region, prefix, simulated: true };
   opts=await resolveS3Credentials(opts);
   const fetchImpl = opts.fetchImpl || globalThis.fetch;
-  const url = buildS3Url(opts, `/?list-type=2&max-keys=1&prefix=${encodeURIComponent(prefix)}`);
+  const url = buildS3Url(opts, `/?list-type=2&max-keys=1&prefix=${encodeURIComponent(prefix + '/')}`);
   const headers = signS3Request({ method: 'GET', url, ...opts });
   const res = await fetchImpl(url, { method: 'GET', headers, redirect:'error' });
   if (!res.ok) throw new Error(`S3 connection test failed (${res.status}): ${await res.text()}`);

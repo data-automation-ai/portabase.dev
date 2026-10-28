@@ -108,6 +108,20 @@ test('testS3Connection validates credentials and calls S3 API', async () => {
   assert.ok(calls[0].options.headers.Authorization.includes('AKIA123'));
 });
 
+test('S3 connection probe stays within the capsule prefix IAM wildcard',async()=>{
+  for(const prefix of ['Portabase/capsules','/Portabase/capsules/']){
+    const result=await testS3Connection({bucket:'fixture',prefix,accessKeyId:'fixture',secretAccessKey:'fixture',
+      fetchImpl:async(url,options)=>{
+        const query=new URL(url).searchParams;
+        // Mirrors an IAM ListBucket condition restricted to Portabase/capsules/*.
+        assert.equal(query.get('prefix'),'Portabase/capsules/');
+        assert.equal(query.get('max-keys'),'1');assert.equal(options.redirect,'error');
+        return {ok:query.get('prefix').startsWith('Portabase/capsules/'),text:async()=>'<ListBucketResult/>'};
+      }});
+    assert.equal(result.ok,true);
+  }
+});
+
 test('uploadCapsuleToS3 uploads files with SHA-256 payload verification', async () => {
   const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 's3-upload-test-'));
   try {
