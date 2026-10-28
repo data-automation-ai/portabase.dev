@@ -98,3 +98,14 @@ These historical worktrees predate this ledger; their original agents, session t
 ## Session closeout
 
 Update every touched entry, then report the exact checkout, branch, HEAD, commits, push/deploy status, dirty paths, and next integration step. Record large `node_modules`, `dist`, or runner artifacts separately from source changes so disk review can be safe and targeted. Never silently abandon a worktree.
+
+## Graphical dashboard recovery takeover — 2026-10-28
+
+- Agent: Codex /root; session 01a1827c-b046-7e40-8e8d-bf2ffa550a66; UTC check-out 2026-10-28T12:48:45Z; state active.
+- Reusing C:\Users\ryanh\git\portabase.dev\.worktrees\enclave-home-20261025, branch codex/enclave-copy-only-20261025, base/HEAD 989d03128e745f1a66ace7f030d4f232f969bbc6. No worktree created. Integration: https://github.com/data-automation-ai/portabase.dev.git main.
+- Prior checkout has only untracked AGENTS.mdx, preserved. Root remains dirty and untouched. All 21 registered paths match the ledger inventory; root HEAD now 563c8a7 and enclave HEAD now 989d031. Missing Claude temporary path remains preserved in Git metadata. Prior rescue check-in is recorded at 989d031; no check-in signed for another agent.
+- Purpose: restore source-left / destination-right graphical dashboard with integrated original picker; undo the accidental replacement with OneTwoThreeDone. Review existing wrapper before reuse because its status and inventory were hardcoded.
+- Deployment evidence: prior picker-rescue release metadata remains in .portabase/picker-rescue/release.json. Live revision to be reverified before any deployment.
+- Expected additional disk use under 100 MB. C: free space approximately 5.5 GB. No backup/restore runs authorized by this UI repair. Next owner: this session.
+
+- Check-in: Codex /root, session 01a1827c-b046-7e40-8e8d-bf2ffa550a66, UTC 2026-10-28T13:00:51.6204316Z. State: awaiting integration. Evidence and preview only; application source unchanged. Task files: docs/WORKTREE-LEDGER.md, docs/GRAPHICAL-RECOVERY-2026-10-28.md, scripts/preview-graphical-recovery.mjs. Remaining unrelated untracked path: AGENTS.mdx, preserved. Worktree disk use 67,093,956 bytes before final documentation; worktree count remains 21. Preview syntax and original graphical markup checks pass; browser identified the original graph/button but disconnected before picker interaction/screenshot. Push: not performed. Deployment: none. Handoff: docs/GRAPHICAL-RECOVERY-2026-10-28.md. Next owner: this Codex session to finish graphical restoration and full-screen regression protection; do not deploy the hardcoded wrapper. Local preview process session 68363 listens on 127.0.0.1:58453, synthetic only.
