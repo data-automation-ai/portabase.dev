@@ -116,7 +116,7 @@ if(action==='plan'){
    for(const sha of draft.required||[]){const file=saved.uploads.find(f=>f.sha===sha);if(!file)throw Error('unrelated_asset_reuse_failed');await op.netlify('/deploys/'+draft.id+'/files'+file.path,{method:'PUT',headers:{'content-type':'application/octet-stream'},body:await readFile(join(stage,sha))});}
    for(const digest of draft.required_functions||[]){const f=saved.functionArtifacts.find(f=>f.digest===digest);await op.netlify('/deploys/'+draft.id+'/functions/'+f.name+'?runtime=nodejs24.x'+(f.invocationMode?'&invocation_mode='+encodeURIComponent(f.invocationMode):''),{method:'PUT',headers:{'content-type':'application/zip'},body:await readFile(f.path)});}
    console.log(JSON.stringify({uploadedAssets:draft.required?.length||0,uploadedFunctions:draft.required_functions?.length||0}));
-  }else if(action==='publish'){
+  }else if(action==='publish'||action==='verify'){
    if(draft.state!=='ready')throw Error('draft_not_ready');
    const scheduleKey=rows=>JSON.stringify((rows||[]).map(s=>[s.name,s.cron]).sort((a,b)=>a[0].localeCompare(b[0])));
    if(scheduleKey(draft.function_schedules)!==scheduleKey(saved.function_schedules))throw Error('function_schedules_changed');
@@ -128,10 +128,25 @@ if(action==='plan'){
     const actual=nextFunctions.functions.find(f=>f.n===expected.name);
     if(!actual||actual.r!==expected.runtime||actual.m!==expected.memory||actual.rg!==expected.region||(actual.im||null)!==expected.invocationMode)throw Error('unrelated_function_metadata_changed');
    }
-   const map=Object.fromEntries(nextFiles.map(f=>[f.path,f.sha]));
-   if(Object.entries(saved.files).some(([path,sha])=>map[path]!==sha))throw Error('asset_set_changed');
-   await op.netlify('/sites/'+SITE_ID+'/deploys/'+draft.id+'/restore',{method:'POST'});
-   saved.publishedAt=new Date().toISOString();await writeFile(evidence,JSON.stringify(saved,null,2));console.log(JSON.stringify({published:draft.id,source:saved.sourceCommit,rollback:saved.base}));
+   // Netlify's file-list API canonicalizes names to lowercase. Keep exact count,
+   // collision and digest checks; also verify original-case URLs actually serve
+   // the intended bytes rather than assuming equivalent URL routing.
+   const expected=Object.entries(saved.files),map=new Map(nextFiles.map(f=>[f.path.toLowerCase(),f]));
+   if(map.size!==nextFiles.length||new Set(expected.map(([path])=>path.toLowerCase())).size!==expected.length)throw Error('asset_path_collision');
+   if(nextFiles.length!==expected.length)throw Error('asset_set_changed');
+   for(const [path,sha]of expected){
+    const actual=map.get(path.toLowerCase());
+    if(actual?.sha!==sha)throw Error('asset_set_changed');
+    if(actual.path!==path){
+     const response=await fetch(draft.deploy_ssl_url+path,{redirect:'error',signal:AbortSignal.timeout(20000)});
+     if(!response.ok||hash(Buffer.from(await response.arrayBuffer()))!==sha)throw Error('asset_url_bytes_changed');
+    }
+   }
+   if(action==='verify')console.log(JSON.stringify({verified:draft.id,source:saved.sourceCommit,functions:nextFunctions.functions.length,files:nextFiles.length,published:false}));
+   else{
+    await op.netlify('/sites/'+SITE_ID+'/deploys/'+draft.id+'/restore',{method:'POST'});
+    saved.publishedAt=new Date().toISOString();await writeFile(evidence,JSON.stringify(saved,null,2));console.log(JSON.stringify({published:draft.id,source:saved.sourceCommit,rollback:saved.base}));
+   }
   }else if(action==='status')console.log(JSON.stringify({id:draft.id,state:draft.state,url:draft.deploy_ssl_url}));
   else throw Error('unknown_release_action');
  }
