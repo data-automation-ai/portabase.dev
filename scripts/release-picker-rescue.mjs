@@ -30,9 +30,17 @@ if(mode==='prepare'){
  let fixed=once(auth,'default:ye=(0,U.jsx)(ru,{...ve});break}','default:ye=(0,U.jsx)(Sl,{...ve});break}');
  fixed=once(fixed,'className:`pb-console pb-single-view`,style:e.page===`dashboard`?{background:`#ffffff`}:void 0,','className:`pb-console pb-single-view`,');
  if(!auth.includes('function Sl(')||!auth.includes('Filter schemas, buckets, or individual object names...'))throw Error('original_picker_missing');
- const newAuth=`auth-pages-picker-${hash(fixed).slice(0,12)}.js`;
- const fixedMain=main.replaceAll(authName,newAuth),newMain=`/assets/index-picker-${hash(fixedMain).slice(0,12)}.js`;
- await add('/assets/'+newAuth,fixed);await add(newMain,fixedMain);await add('/index.html',once(html,mainPath,newMain));
+ // All sibling chunks import the entry's React runtime. Rename the complete
+ // current module graph together so only one React instance is loaded.
+ const mainName=mainPath.split('/').pop();
+ const names=new Set([mainName,authName,...[...main.matchAll(/(?:auth-pages|site-pages|backend-page)-[\w-]+\.js/g)].map(m=>m[0])]);
+ const rename=Object.fromEntries([...names].map(n=>[n,'picker2-'+n]));
+ for(const name of names){
+  let content=name===authName?fixed:name===mainName?main:await load('/assets/'+name);
+  for(const [before,after] of Object.entries(rename))content=content.replaceAll(before,after);
+  await add('/assets/'+rename[name],content);
+ }
+ await add('/index.html',once(html,mainPath,'/assets/'+rename[mainName]));
  const functions=Object.fromEntries(deploy.available_functions.map(f=>[f.n,f.d]));
  const functions_config=Object.fromEntries(deploy.available_functions.map(f=>[f.n,{runtime:f.r,display_name:f.dn,generator:f.g}]));
  await writeFile(stage+'/release.json',JSON.stringify({base,sourceCommit:'c42c8c2',files,uploads,functions,functions_config,function_schedules:deploy.function_schedules||[]},null,2));
@@ -57,4 +65,3 @@ if(mode==='prepare'){
   }else console.log(JSON.stringify({id:d.id,state:d.state,url:d.deploy_ssl_url}));
  }
 }
-
