@@ -8,9 +8,6 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
   const [connectors, setConnectors] = useState(null);
   const [testing, setTesting] = useState(null);
   const [testResult, setTestResult] = useState({});
-  const [activeModal, setActiveModal] = useState(null);
-  const [r2Config, setR2Config] = useState({ accountId: '', bucket: '', accessKeyId: '', secretAccessKey: '' });
-  const [s3Config, setS3Config] = useState({ bucket: '', region: 'us-east-1', accessKeyId: '', secretAccessKey: '' });
   const [localPath, setLocalPath] = useState('./portabase-capsules');
 
   const refreshConnectors = async () => {
@@ -84,22 +81,6 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
       return testResult['google-drive'].success ? 'green' : (gdriveConnected ? 'red-flash' : 'yellow-flash');
     }
     return gdriveConnected ? 'green' : 'red';
-  };
-
-  const getR2State = () => {
-    if (testing === 'r2') return 'yellow';
-    if (testResult['r2']) {
-      return testResult['r2'].success ? 'green' : (r2Config.bucket ? 'red-flash' : 'yellow-flash');
-    }
-    return r2Config.bucket && r2Config.accountId ? 'green' : 'red';
-  };
-
-  const getS3State = () => {
-    if (testing === 's3') return 'yellow';
-    if (testResult['s3']) {
-      return testResult['s3'].success ? 'green' : (s3Config.bucket ? 'red-flash' : 'yellow-flash');
-    }
-    return s3Config.bucket && s3Config.accessKeyId ? 'green' : 'red';
   };
 
   return (
@@ -196,17 +177,17 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
                   <small style={{ color: '#8b949e' }}>Zero-Egress Object Storage (S3 API)</small>
                 </div>
               </div>
-              <LedIndicator state={getR2State()} />
+              <LedIndicator state="red" />
             </div>
             <p style={{ fontSize: '13px', color: '#c9d1d9', lineHeight: 1.5 }}>
               Zero egress fees. S3-compatible endpoints for ultra-low cost storage of multi-gigabyte Postgres &amp; storage backups.
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #30363d' }}>
-            <button type="button" className="pb-btn pb-btn-sm pb-btn-secondary" onClick={() => setActiveModal('r2')}>
-              {r2Config.bucket ? 'Reconfigure R2 Bucket' : 'Configure R2 Bucket'}
+            <button type="button" className="pb-btn pb-btn-sm pb-btn-secondary" onClick={() => navigate('dashboard')}>
+              Choose R2 location in Recovery
             </button>
-            <LedIndicator state={getR2State()} label="" size={10} />
+            <LedIndicator state="red" label="" size={10} />
           </div>
         </div>
 
@@ -270,17 +251,17 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
                   <small style={{ color: '#8b949e' }}>Customer BYO Bucket • IAM / KMS</small>
                 </div>
               </div>
-              <LedIndicator state={getS3State()} />
+              <LedIndicator state="red" />
             </div>
             <p style={{ fontSize: '13px', color: '#c9d1d9', lineHeight: 1.5 }}>
               Standard AWS S3 vaults with customer-managed SSE-KMS keys, object lock compliance, or cross-region replication.
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #30363d' }}>
-            <button type="button" className="pb-btn pb-btn-sm pb-btn-secondary" onClick={() => setActiveModal('s3')}>
-              {s3Config.bucket ? 'Reconfigure S3 Bucket' : 'Configure S3 Bucket'}
+            <button type="button" className="pb-btn pb-btn-sm pb-btn-secondary" onClick={() => navigate('dashboard')}>
+              Choose S3 location in Recovery
             </button>
-            <LedIndicator state={getS3State()} label="" size={10} />
+            <LedIndicator state="red" label="" size={10} />
           </div>
         </div>
 
@@ -324,73 +305,6 @@ export function StorageProvidersPage({ state, setState, toast, navigate }) {
 
       </div>
 
-      {/* R2 Modal */}
-      {activeModal === 'r2' && (
-        <div className="pb-modal-backdrop" onClick={() => setActiveModal(null)}>
-          <div className="pb-modal" style={{ maxWidth: 500 }} onClick={e => e.stopPropagation()}>
-            <div className="pb-modal-head">
-              <h3>Connect Cloudflare R2 Bucket</h3>
-              <button type="button" className="pb-btn-icon" onClick={() => setActiveModal(null)}>✕</button>
-            </div>
-            <div className="pb-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <label>
-                <span style={{ fontSize: 12, color: '#8b949e' }}>Cloudflare Account ID</span>
-                <input type="text" placeholder="e.g. 5f8a..." value={r2Config.accountId} onChange={e => setR2Config({ ...r2Config, accountId: e.target.value })} style={{ width: '100%', padding: '6px 8px', marginTop: 4 }} />
-              </label>
-              <label>
-                <span style={{ fontSize: 12, color: '#8b949e' }}>Bucket Name</span>
-                <input type="text" placeholder="e.g. my-portabase-capsules" value={r2Config.bucket} onChange={e => setR2Config({ ...r2Config, bucket: e.target.value })} style={{ width: '100%', padding: '6px 8px', marginTop: 4 }} />
-              </label>
-              <label>
-                <span style={{ fontSize: 12, color: '#8b949e' }}>Access Key ID</span>
-                <input type="text" value={r2Config.accessKeyId} onChange={e => setR2Config({ ...r2Config, accessKeyId: e.target.value })} style={{ width: '100%', padding: '6px 8px', marginTop: 4 }} />
-              </label>
-              <label>
-                <span style={{ fontSize: 12, color: '#8b949e' }}>Secret Access Key</span>
-                <input type="password" value={r2Config.secretAccessKey} onChange={e => setR2Config({ ...r2Config, secretAccessKey: e.target.value })} style={{ width: '100%', padding: '6px 8px', marginTop: 4 }} />
-              </label>
-            </div>
-            <div className="pb-modal-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
-              <button type="button" className="pb-btn pb-btn-sm" onClick={() => setActiveModal(null)}>Cancel</button>
-              <button type="button" className="pb-btn pb-btn-sm pb-btn-primary" onClick={() => { setActiveModal(null); toast('Cloudflare R2 configuration saved.', 'success'); }}>Save R2 Vault</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* S3 Modal */}
-      {activeModal === 's3' && (
-        <div className="pb-modal-backdrop" onClick={() => setActiveModal(null)}>
-          <div className="pb-modal" style={{ maxWidth: 500 }} onClick={e => e.stopPropagation()}>
-            <div className="pb-modal-head">
-              <h3>Connect Amazon S3 Bucket</h3>
-              <button type="button" className="pb-btn-icon" onClick={() => setActiveModal(null)}>✕</button>
-            </div>
-            <div className="pb-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <label>
-                <span style={{ fontSize: 12, color: '#8b949e' }}>S3 Bucket Name</span>
-                <input type="text" placeholder="e.g. my-company-vault" value={s3Config.bucket} onChange={e => setS3Config({ ...s3Config, bucket: e.target.value })} style={{ width: '100%', padding: '6px 8px', marginTop: 4 }} />
-              </label>
-              <label>
-                <span style={{ fontSize: 12, color: '#8b949e' }}>AWS Region</span>
-                <input type="text" placeholder="us-east-1" value={s3Config.region} onChange={e => setS3Config({ ...s3Config, region: e.target.value })} style={{ width: '100%', padding: '6px 8px', marginTop: 4 }} />
-              </label>
-              <label>
-                <span style={{ fontSize: 12, color: '#8b949e' }}>Access Key ID</span>
-                <input type="text" value={s3Config.accessKeyId} onChange={e => setS3Config({ ...s3Config, accessKeyId: e.target.value })} style={{ width: '100%', padding: '6px 8px', marginTop: 4 }} />
-              </label>
-              <label>
-                <span style={{ fontSize: 12, color: '#8b949e' }}>Secret Access Key</span>
-                <input type="password" value={s3Config.secretAccessKey} onChange={e => setS3Config({ ...s3Config, secretAccessKey: e.target.value })} style={{ width: '100%', padding: '6px 8px', marginTop: 4 }} />
-              </label>
-            </div>
-            <div className="pb-modal-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
-              <button type="button" className="pb-btn pb-btn-sm" onClick={() => setActiveModal(null)}>Cancel</button>
-              <button type="button" className="pb-btn pb-btn-sm pb-btn-primary" onClick={() => { setActiveModal(null); toast('Amazon S3 configuration saved.', 'success'); }}>Save S3 Vault</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
